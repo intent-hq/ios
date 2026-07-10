@@ -1,8 +1,13 @@
-name: iOS PR Checks
-
+name: CI
 on:
+  push:
+    branches: [main]
   pull_request:
-    branches: ['main']
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
 
 # Cancel in progress workflows on pull_requests.
 # https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
@@ -62,3 +67,21 @@ jobs:
         with:
           name: ios-test-results
           path: TestResults
+
+  pr-title:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            refactor
+            test
+            ci
+            perf
