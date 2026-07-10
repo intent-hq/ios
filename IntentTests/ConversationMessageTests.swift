@@ -1,0 +1,367 @@
+import Foundation
+import Testing
+@testable import Intent
+
+// MARK: - AnyCodable Tests
+
+struct AnyCodableTests {
+    @Test func encodeDecodeString() throws {
+        let original = AnyCodable("hello")
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        #expect(decoded.stringValue == "hello")
+    }
+
+    @Test func encodeDecodeInt() throws {
+        let original = AnyCodable(42)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        #expect(decoded.intValue == 42)
+    }
+
+    @Test func encodeDecodeDouble() throws {
+        let original = AnyCodable(3.14)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        #expect(decoded.doubleValue == 3.14)
+    }
+
+    @Test func encodeDecodeBool() throws {
+        let original = AnyCodable(true)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        #expect(decoded.boolValue == true)
+    }
+
+    @Test func encodeDecodeArray() throws {
+        let original = AnyCodable([1, 2, 3])
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        let arr = decoded.arrayValue
+        #expect(arr != nil)
+        #expect(arr?.count == 3)
+    }
+
+    @Test func encodeDecodeDictionary() throws {
+        let original = AnyCodable(["key": "value"])
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        let dict = decoded.dictValue
+        #expect(dict != nil)
+        #expect(dict?["key"] as? String == "value")
+    }
+
+    @Test func encodeDecodeNil() throws {
+        let original = AnyCodable(NSNull())
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodable.self, from: data)
+        #expect(decoded.isNull)
+    }
+
+    @Test func equality() throws {
+        let a = AnyCodable("test")
+        let b = AnyCodable("test")
+        let c = AnyCodable("other")
+        #expect(a == b)
+        #expect(a != c)
+    }
+
+    @Test func convenienceAccessorsReturnNilForWrongType() throws {
+        let str = AnyCodable("hello")
+        #expect(str.intValue == nil)
+        #expect(str.boolValue == nil)
+        #expect(str.doubleValue == nil)
+        #expect(str.arrayValue == nil)
+        #expect(str.dictValue == nil)
+        #expect(str.isNull == false)
+    }
+}
+
+// MARK: - ContentBlock Tests
+
+struct ContentBlockTests {
+    @Test func decodeTextBlock() throws {
+        let json = #"{"type":"text","text":"Hello world"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .text)
+        #expect(block.resolvedText == "Hello world")
+        #expect(!block.id.isEmpty) // auto-generated
+    }
+
+    @Test func decodeToolUseBlock() throws {
+        let json = #"{"type":"tool_use","name":"read_file","input":{"path":"foo.txt"}}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .toolUse)
+        #expect(block.resolvedName == "read_file")
+        #expect(block.input != nil)
+    }
+
+    @Test func decodeToolResultBlock() throws {
+        let json = #"{"type":"tool_result","toolUseId":"tc-1","output":"ok","isError":false}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .toolResult)
+        #expect(block.resolvedToolUseId == "tc-1")
+        #expect(block.resolvedIsError == false)
+    }
+
+    @Test func decodeThinkingBlock() throws {
+        let json = #"{"type":"thinking","text":"Let me think..."}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .thinking)
+        #expect(block.resolvedText == "Let me think...")
+    }
+
+    @Test func decodeImageBlock() throws {
+        let json = #"{"type":"image","data":"base64data","mimeType":"image/png"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .image)
+        #expect(block.data == "base64data")
+        #expect(block.mimeType == "image/png")
+    }
+
+    @Test func legacyContentFallback() throws {
+        let json = #"{"type":"text","content":"legacy text"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.text == nil)
+        #expect(block.resolvedText == "legacy text")
+    }
+
+    @Test func legacyToolNameFallback() throws {
+        let json = #"{"type":"tool_use","toolName":"old_tool"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.name == nil)
+        #expect(block.resolvedName == "old_tool")
+    }
+
+    @Test func legacyToolUseIdFallback() throws {
+        let json = #"{"type":"tool_result","tool_use_id":"tc-legacy"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.toolUseId == nil)
+        #expect(block.resolvedToolUseId == "tc-legacy")
+    }
+
+    @Test func legacyIsErrorFallback() throws {
+        let json = #"{"type":"tool_result","is_error":true}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.isError == nil)
+        #expect(block.resolvedIsError == true)
+    }
+
+    @Test func unknownTypeDefaultsToText() throws {
+        let json = #"{"type":"unknown_type","text":"fallback"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .text)
+    }
+}
+
+// MARK: - ConversationMessage Tests
+
+struct ConversationMessageTests {
+    @Test func parseMessageFull() throws {
+        let dict: [String: Any] = [
+            "id": "msg-1",
+            "role": "assistant",
+            "timestamp": "2025-01-01T00:00:00Z",
+            "turnNumber": 3,
+            "isStreaming": true,
+            "error": "some error",
+            "contentBlocks": [
+                ["type": "text", "text": "Hello"]
+            ],
+            "toolCalls": [
+                ["id": "tc-1", "name": "read_file", "status": "completed"]
+            ],
+            "toolResults": [
+                ["toolCallId": "tc-1", "isError": false]
+            ],
+            "metadata": ["key": "value"]
+        ]
+        let msg = ConversationMessage.parseMessage(dict)
+        #expect(msg != nil)
+        #expect(msg?.id == "msg-1")
+        #expect(msg?.role == .assistant)
+        #expect(msg?.timestamp == "2025-01-01T00:00:00Z")
+        #expect(msg?.turnNumber == 3)
+        #expect(msg?.isStreaming == true)
+        #expect(msg?.error == "some error")
+        #expect(msg?.contentBlocks?.count == 1)
+        #expect(msg?.contentBlocks?.first?.resolvedText == "Hello")
+        #expect(msg?.toolCalls?.count == 1)
+        #expect(msg?.toolCalls?.first?.name == "read_file")
+        #expect(msg?.toolResults?.count == 1)
+        #expect(msg?.metadata?["key"]?.stringValue == "value")
+    }
+
+    @Test func parseMessageMinimal() throws {
+        let dict: [String: Any] = [
+            "id": "msg-2",
+            "role": "user"
+        ]
+        let msg = ConversationMessage.parseMessage(dict)
+        #expect(msg != nil)
+        #expect(msg?.id == "msg-2")
+        #expect(msg?.role == .user)
+        #expect(msg?.timestamp == "")
+        #expect(msg?.contentBlocks == nil)
+        #expect(msg?.toolCalls == nil)
+        #expect(msg?.isStreaming == nil)
+    }
+
+    @Test func parseMessageMissingIdReturnsNil() throws {
+        let dict: [String: Any] = ["role": "user"]
+        let msg = ConversationMessage.parseMessage(dict)
+        #expect(msg == nil)
+    }
+
+    @Test func parseMessageUnknownRoleDefaultsToSystem() throws {
+        let dict: [String: Any] = [
+            "id": "msg-3",
+            "role": "unknown_role"
+        ]
+        let msg = ConversationMessage.parseMessage(dict)
+        #expect(msg?.role == .system)
+    }
+
+    @Test func codableRoundTrip() throws {
+        let original = ConversationMessage(
+            id: "msg-rt",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "test")],
+            timestamp: "2025-01-01T00:00:00Z",
+            turnNumber: 1,
+            isStreaming: false
+        )
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(ConversationMessage.self, from: data)
+        #expect(decoded.id == "msg-rt")
+        #expect(decoded.role == .user)
+        #expect(decoded.contentBlocks?.first?.resolvedText == "test")
+        #expect(decoded.turnNumber == 1)
+    }
+}
+
+// MARK: - User Message Dedup Regression Tests
+
+@MainActor
+struct UserMessageDedupRegressionTests {
+    @Test func regressionDuplicateUserMessageDedup() async {
+        // Regression test: when a user message is added optimistically with one ID,
+        // and the server echoes it back with a different ID but same text,
+        // the store should deduplicate and keep only one copy.
+        let store = ConversationStore()
+
+        // Simulate optimistic add of a user message
+        let optimisticMsg = ConversationMessage(
+            id: "optimistic-1",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "Hello")]
+        )
+        store.messages.append(optimisticMsg)
+
+        // Simulate what handleStreamMessage does: server sends same message with different ID
+        let serverMsg = ConversationMessage(
+            id: "server-msg-456",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "Hello")]
+        )
+
+        // Apply the dedup logic (mirrors handleStreamMessage)
+        let isDuplicate: Bool
+        if serverMsg.role == .user,
+           let firstTextBlock = serverMsg.contentBlocks?.first(where: { $0.type == .text }),
+           let msgText = firstTextBlock.text,
+           store.messages.contains(where: { existing in
+               existing.role == .user &&
+               existing.contentBlocks?.first(where: { $0.type == .text })?.text == msgText
+           }) {
+            isDuplicate = true
+        } else {
+            isDuplicate = false
+        }
+
+        if !isDuplicate {
+            store.messages.append(serverMsg)
+        }
+
+        // Should still have only 1 user message (dedup worked)
+        #expect(store.messages.count == 1)
+        #expect(store.messages[0].id == "optimistic-1")
+    }
+
+    @Test func differentTextMessagesAreNotDeduped() async {
+        // Messages with different text should NOT be deduped — both should be kept
+        let store = ConversationStore()
+
+        let msg1 = ConversationMessage(
+            id: "optimistic-1",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "Hello")]
+        )
+        store.messages.append(msg1)
+
+        let msg2 = ConversationMessage(
+            id: "server-msg-789",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "Goodbye")]
+        )
+
+        // Apply the dedup logic
+        let isDuplicate: Bool
+        if msg2.role == .user,
+           let firstTextBlock = msg2.contentBlocks?.first(where: { $0.type == .text }),
+           let msgText = firstTextBlock.text,
+           store.messages.contains(where: { existing in
+               existing.role == .user &&
+               existing.contentBlocks?.first(where: { $0.type == .text })?.text == msgText
+           }) {
+            isDuplicate = true
+        } else {
+            isDuplicate = false
+        }
+
+        if !isDuplicate {
+            store.messages.append(msg2)
+        }
+
+        // Both messages should be kept (different text)
+        #expect(store.messages.count == 2)
+    }
+}
+
+// MARK: - QueuedMessage Tests
+
+struct QueuedMessageTests {
+    @Test func initAndCodable() throws {
+        let msg = QueuedMessage(id: "q-1", content: "hello", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil)
+        let data = try JSONEncoder().encode(msg)
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: data)
+        #expect(decoded.id == "q-1")
+        #expect(decoded.content == "hello")
+        #expect(decoded.queuedAt == "2025-01-01T00:00:00Z")
+        #expect(decoded.position == 0)
+        #expect(decoded.imageBlocks == nil)
+    }
+
+    @Test func withImageBlocks() throws {
+        let img = ImageBlock(type: "image", data: "abc123", mimeType: "image/jpeg")
+        let msg = QueuedMessage(id: "q-2", content: "see image", queuedAt: "2025-01-01T00:00:00Z", position: 1, imageBlocks: [img])
+        let data = try JSONEncoder().encode(msg)
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: data)
+        #expect(decoded.imageBlocks?.count == 1)
+        #expect(decoded.imageBlocks?.first?.mimeType == "image/jpeg")
+        #expect(decoded.imageBlocks?.first?.data == "abc123")
+    }
+}
+
+// MARK: - ImageBlock Tests
+
+struct ImageBlockTests {
+    @Test func initAndCodable() throws {
+        let block = ImageBlock(type: "image", data: "base64data", mimeType: "image/png")
+        let data = try JSONEncoder().encode(block)
+        let decoded = try JSONDecoder().decode(ImageBlock.self, from: data)
+        #expect(decoded.type == "image")
+        #expect(decoded.data == "base64data")
+        #expect(decoded.mimeType == "image/png")
+    }
+}

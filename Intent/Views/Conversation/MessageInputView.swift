@@ -1,0 +1,183 @@
+import PhotosUI
+import SwiftUI
+
+struct MessageInputView: View {
+    @ObservedObject var viewModel: ConversationViewModel
+    @Environment(\.colorScheme) var colorScheme
+
+    @State private var isFocused: Bool = false
+    @State private var textViewHeight: CGFloat = 36
+
+    // Local text state to decouple TextField from viewModel updates.
+    // This prevents typing lag when the viewModel is rapidly updating
+    // during streaming (every @Published change triggers a re-render).
+    @State private var localText: String = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Pending image thumbnails
+            if !viewModel.pendingImages.isEmpty {
+                pendingImagesRow
+            }
+
+            // Input row
+            HStack(alignment: .center, spacing: 8) {
+                // Left button: photo picker or stop button
+                if viewModel.isStreaming {
+                    // Stop button replaces photo picker during streaming
+                    Button {
+                        HapticManager.impact(.light)
+                        Task { await viewModel.stopStreaming() }
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.destructive(for: colorScheme))
+                    }
+                } else {
+                    // Photo picker (only when not streaming)
+                    PhotosPicker(
+                        selection: $viewModel.selectedPhotoItems,
+                        maxSelectionCount: 5,
+                        matching: .images
+                    ) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    }
+                    .onChange(of: viewModel.selectedPhotoItems) { _, _ in
+                        Task { await viewModel.loadSelectedPhotos() }
+                    }
+                }
+
+                // Text editor — bound to localText to avoid lag during streaming
+                // Uses SubmittableTextView so hardware Enter sends, Shift+Enter inserts newline
+                ZStack(alignment: .topLeading) {
+                    SubmittableTextView(
+                        text: $localText,
+                        isFocused: $isFocused,
+                        onSubmit: { sendCurrentMessage() },
+                        onHeightChange: { newHeight in
+                            textViewHeight = min(max(newHeight, 36), 120)
+                        }
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .frame(height: textViewHeight)
+
+                    // Placeholder (UITextView has no built-in placeholder)
+                    if localText.isEmpty {
+                        Text("Message...")
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .font(.body)
+                            .padding(.horizontal, 17)
+                            .padding(.vertical, 8)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background(Theme.muted(for: colorScheme).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+                // Send button (right side)
+                VStack(spacing: 4) {
+                    let hasText = !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || !viewModel.pendingImages.isEmpty
+
+                    if !viewModel.isStreaming || hasText {
+                        Button {
+                            sendCurrentMessage()
+                        } label: {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(
+                                    hasText
+                                        ? Theme.primary(for: colorScheme)
+                                        : Theme.mutedForeground(for: colorScheme)
+                                )
+                        }
+                        .disabled(!hasText)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .background(Theme.card(for: colorScheme))
+        .onAppear {
+            localText = viewModel.messageText
+        }
+        .onChange(of: localText) { _, newValue in
+            // Push local edits to viewModel (for draft persistence)
+            viewModel.messageText = newValue
+        }
+        .onChange(of: viewModel.messageText) { _, newValue in
+            // Pull viewModel changes (e.g. cleared after send, draft restore)
+            if newValue != localText {
+                localText = newValue
+            }
+        }
+    }
+
+    // MARK: - Pending images
+
+    @ViewBuilder
+    private var pendingImagesRow: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(viewModel.pendingImages.enumerated()), id: \.offset) { index, image in
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 56, height: 56)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+                        Button {
+                            viewModel.removeImage(at: index)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.white)
+                                .background(Circle().fill(.black.opacity(0.5)))
+                        }
+                        .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - Actions
+
+    private func sendCurrentMessage() {
+        // Check if dictation is active — only resign focus if so.
+        // This prevents keyboard users from seeing a focus flicker.
+        let isDictating = UITextInputMode.activeInputModes.contains { $0.primaryLanguage == "dictation" }
+
+        if isDictating {
+            // Resign focus to stop dictation and commit final text
+            isFocused = false
+        }
+
+        // Defer to next run loop to let dictation finalize (if it was active)
+        DispatchQueue.main.async {
+            let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty || !viewModel.pendingImages.isEmpty else {
+                isFocused = true
+                return
+            }
+            HapticManager.impact(.medium)
+            // Capture images before clearing so they're available for the async send
+            let imagesToSend = viewModel.pendingImages
+            localText = ""
+            viewModel.pendingImages.removeAll()
+            // Re-focus after clearing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                isFocused = true
+            }
+            Task { await viewModel.sendMessage(text, images: imagesToSend) }
+        }
+    }
+}
+

@@ -1,0 +1,296 @@
+import Foundation
+import Testing
+@testable import Intent
+
+@MainActor
+struct WorkspaceStoreAgentParsingTests {
+
+    // MARK: - Agent summary parsing within parseWorkspace
+
+    @Test func parseWorkspaceWithFullAgentSummary() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-agent-1",
+            "title": "Agent Workspace",
+            "agentSummary": [
+                "count": 2,
+                "agents": [
+                    [
+                        "id": "agent-001",
+                        "name": "Fix Bug",
+                        "status": "responding",
+                        "specialist": "implementor",
+                        "lastActivity": "2026-03-18T12:00:00Z",
+                        "isStreaming": true,
+                        "isResponding": true
+                    ],
+                    [
+                        "id": "agent-002",
+                        "name": "Write Tests",
+                        "status": "idle",
+                        "specialist": "verifier",
+                        "lastActivity": "2026-03-18T11:00:00Z",
+                        "isStreaming": false,
+                        "isResponding": false
+                    ]
+                ]
+            ] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.agentSummaryCount == 2)
+        #expect(ws?.agentSummaryAgents?.count == 2)
+
+        let first = ws?.agentSummaryAgents?[0]
+        #expect(first?.id == "agent-001")
+        #expect(first?.name == "Fix Bug")
+        #expect(first?.status == "responding")
+        #expect(first?.specialist == "implementor")
+        #expect(first?.lastActivity == "2026-03-18T12:00:00Z")
+        #expect(first?.isStreaming == true)
+        #expect(first?.isResponding == true)
+
+        let second = ws?.agentSummaryAgents?[1]
+        #expect(second?.id == "agent-002")
+        #expect(second?.name == "Write Tests")
+        #expect(second?.status == "idle")
+        #expect(second?.specialist == "verifier")
+        #expect(second?.isStreaming == false)
+        #expect(second?.isResponding == false)
+    }
+
+    @Test func parseWorkspaceWithMinimalAgentFields() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-agent-2",
+            "title": "Minimal Agent",
+            "agentSummary": [
+                "count": 1,
+                "agents": [
+                    ["id": "agent-003", "name": "Helper", "status": "idle"]
+                ]
+            ] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.agentSummaryAgents?.count == 1)
+        let agent = ws?.agentSummaryAgents?[0]
+        #expect(agent?.id == "agent-003")
+        #expect(agent?.name == "Helper")
+        #expect(agent?.status == "idle")
+        #expect(agent?.specialist == nil)
+        #expect(agent?.lastActivity == nil)
+        #expect(agent?.isStreaming == false)
+        #expect(agent?.isResponding == false)
+    }
+
+    @Test func parseWorkspaceSkipsAgentsMissingRequiredFields() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-agent-3",
+            "title": "Partial Agents",
+            "agentSummary": [
+                "count": 3,
+                "agents": [
+                    ["id": "agent-ok", "name": "Good", "status": "idle"],
+                    ["name": "No ID", "status": "idle"],           // missing id
+                    ["id": "agent-no-name", "status": "idle"],     // missing name
+                    ["id": "agent-no-status", "name": "No Status"] // missing status
+                ]
+            ] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.agentSummaryAgents?.count == 1)
+        #expect(ws?.agentSummaryAgents?[0].id == "agent-ok")
+    }
+
+    @Test func parseWorkspaceWithEmptyAgentsArray() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-agent-4",
+            "title": "Empty Agents",
+            "agentSummary": ["count": 0, "agents": [] as [[String: Any]]] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.agentSummaryCount == 0)
+        #expect(ws?.agentSummaryAgents?.count == 0)
+    }
+
+    @Test func parseWorkspaceWithNoAgentSummary() async throws {
+        let dict: [String: Any] = ["id": "ws-agent-5", "title": "No Summary"]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.agentSummaryCount == nil)
+        #expect(ws?.agentSummaryAgents == nil)
+    }
+
+    @Test func agentSummaryCountMatchesDictValue() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-agent-6",
+            "title": "Count Check",
+            "agentSummary": ["count": 5, "agents": [
+                ["id": "a1", "name": "A", "status": "idle"]
+            ]] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        // count comes from dict, not array length
+        #expect(ws?.agentSummaryCount == 5)
+        #expect(ws?.agentSummaryAgents?.count == 1)
+    }
+
+    // MARK: - WorkspaceAgentInfo Codable round-trip
+
+    @Test func agentInfoCodableRoundTrip() async throws {
+        let agent = WorkspaceAgentInfo(
+            id: "agent-rt", name: "Round Trip", status: "responding",
+            specialist: "implementor", lastActivity: "2026-03-18T10:00:00Z",
+            isStreaming: true, isResponding: true
+        )
+        let data = try JSONEncoder().encode(agent)
+        let decoded = try JSONDecoder().decode(WorkspaceAgentInfo.self, from: data)
+        #expect(decoded == agent)
+    }
+
+    @Test func agentInfoCodableWithNilOptionals() async throws {
+        let agent = WorkspaceAgentInfo(
+            id: "agent-nil", name: "Nil Opts", status: "idle",
+            specialist: nil, lastActivity: nil,
+            isStreaming: false, isResponding: false
+        )
+        let data = try JSONEncoder().encode(agent)
+        let decoded = try JSONDecoder().decode(WorkspaceAgentInfo.self, from: data)
+        #expect(decoded == agent)
+        #expect(decoded.specialist == nil)
+        #expect(decoded.lastActivity == nil)
+    }
+
+    // MARK: - WorkspaceAgentInfo Equatable
+
+    @Test func agentInfoEquality() async throws {
+        let a = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
+        let b = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
+        #expect(a == b)
+    }
+
+    @Test func agentInfoInequalityDifferentStatus() async throws {
+        let a = WorkspaceAgentInfo(id: "x", name: "X", status: "idle", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
+        let b = WorkspaceAgentInfo(id: "x", name: "X", status: "responding", specialist: nil, lastActivity: nil, isStreaming: false, isResponding: false)
+        #expect(a != b)
+    }
+}
+
+// MARK: - lastActivityHighWaterMark regression tests
+
+@MainActor
+struct WorkspaceStoreHighWaterMarkTests {
+
+    private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {
+        Workspace(
+            id: id, title: "WS \(id)", branch: nil, baseRef: nil,
+            status: nil, lastActivity: lastActivity, updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
+            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+            taskStatsCompleted: nil, taskStatsInProgress: nil,
+            agentSummaryCount: nil, agentSummaryAgents: nil
+        )
+    }
+
+    // MARK: - updateLocalLastActivity stores max timestamp
+
+    @Test func newerTimestampUpdatesHighWaterMark() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+
+        // First update sets the HWM
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T12:00:00Z")
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
+
+        // Newer timestamp updates the HWM
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T14:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
+    }
+
+    @Test func olderTimestampIsIgnoredByHighWaterMark() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+
+        // Set a HWM with a recent timestamp
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T14:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
+
+        // Older timestamp should NOT overwrite the HWM
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
+        // Workspace should still show the newer timestamp
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
+    }
+
+    // MARK: - _fetchAll merges HWM so timestamps never regress
+
+    @Test func fetchAllMergesHighWaterMarkPreventingRegression() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+
+        // Simulate an optimistic event-driven update with a future timestamp
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T16:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T16:00:00Z")
+
+        // Simulate what _fetchAll does: parse workspaces with older server data,
+        // then apply HWM merge
+        var parsed = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T12:00:00Z")]
+        store.applyHighWaterMarks(to: &parsed)
+        store.workspaces = parsed
+
+        // The HWM timestamp should win over the stale server data
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T16:00:00Z")
+    }
+
+    @Test func fetchAllUsesServerTimestampWhenNewerThanHWM() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+
+        // Set a modest HWM
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+
+        // Server returns a newer timestamp — applyHighWaterMarks should preserve it
+        var parsed = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T18:00:00Z")]
+        store.applyHighWaterMarks(to: &parsed)
+        store.workspaces = parsed
+
+        // Server's newer timestamp should be preserved
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T18:00:00Z")
+    }
+
+    // MARK: - Multiple workspaces maintain independent HWMs
+
+    @Test func multipleWorkspacesMaintainIndependentHighWaterMarks() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [
+            makeWorkspace(id: "ws-A", lastActivity: "2026-03-01T10:00:00Z"),
+            makeWorkspace(id: "ws-B", lastActivity: "2026-03-01T10:00:00Z"),
+            makeWorkspace(id: "ws-C", lastActivity: "2026-03-01T10:00:00Z"),
+        ]
+
+        // Update each workspace with different timestamps
+        store.updateLocalLastActivity(workspaceId: "ws-A", timestamp: "2026-03-01T14:00:00Z")
+        store.updateLocalLastActivity(workspaceId: "ws-B", timestamp: "2026-03-01T16:00:00Z")
+        store.updateLocalLastActivity(workspaceId: "ws-C", timestamp: "2026-03-01T12:00:00Z")
+
+        // Each workspace should have its own independent HWM
+        #expect(store.lastActivityHighWaterMark["ws-A"] == "2026-03-01T14:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-B"] == "2026-03-01T16:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-C"] == "2026-03-01T12:00:00Z")
+
+        // Verify the workspace lastActivity values match
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
+        #expect(store.workspaces[1].lastActivity == "2026-03-01T16:00:00Z")
+        #expect(store.workspaces[2].lastActivity == "2026-03-01T12:00:00Z")
+
+        // Update ws-A with older timestamp — should not affect ws-A or others
+        store.updateLocalLastActivity(workspaceId: "ws-A", timestamp: "2026-03-01T11:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-A"] == "2026-03-01T14:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-B"] == "2026-03-01T16:00:00Z")
+        #expect(store.lastActivityHighWaterMark["ws-C"] == "2026-03-01T12:00:00Z")
+    }
+}
+

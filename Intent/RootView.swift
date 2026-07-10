@@ -1,0 +1,433 @@
+import SwiftUI
+
+struct NoteDestination: Hashable {
+    let id: UUID
+    let noteId: String
+    let workspaceId: String
+    let noteTitle: String
+
+    init(noteId: String, workspaceId: String, noteTitle: String) {
+        self.id = UUID()
+        self.noteId = noteId
+        self.workspaceId = workspaceId
+        self.noteTitle = noteTitle
+    }
+
+    static func == (lhs: NoteDestination, rhs: NoteDestination) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+struct AgentDestination: Hashable, Identifiable {
+    let id: UUID
+    let agentId: String
+    let workspaceId: String
+    let agentName: String
+
+    init(agentId: String, workspaceId: String, agentName: String) {
+        self.id = UUID()
+        self.agentId = agentId
+        self.workspaceId = workspaceId
+        self.agentName = agentName
+    }
+
+    static func == (lhs: AgentDestination, rhs: AgentDestination) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+}
+
+struct RootView: View {
+    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @StateObject private var notificationManager = NotificationManager.shared
+    @State private var showingWorkspaceDetail = false
+    @State private var showingConversation = false
+    @State private var conversationAgentId: String = ""
+    @State private var conversationWorkspaceId: String = ""
+    @State private var conversationAgentName: String = ""
+    // Compact (iPhone) note detail navigation — uses isPresented instead of noteStack
+    @State private var showingNoteDetail = false
+    @State private var noteDetailNoteId: String = ""
+    @State private var noteDetailWorkspaceId: String = ""
+    @State private var noteDetailNoteTitle: String = ""
+    @State private var pendingConversationPush = false
+    @State private var pendingNoteDetailPush = false
+    @State private var noteStack = NavigationPath()
+    /// Parallel array tracking note titles pushed onto noteStack for iPad back-button labels.
+    @State private var stackTitles: [String] = []
+
+    private var isWorkspaceFlow: Bool {
+        switch coordinator.currentScreen {
+        case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
+            return true
+        default:
+            return false
+        }
+    }
+
+    var body: some View {
+        Group {
+            if isWorkspaceFlow {
+                if sizeClass == .compact {
+                    // iPhone: standard NavigationStack with push/pop
+                    compactNavigationView
+                } else {
+                    // iPad: NavigationSplitView with sidebar selection
+                    NavigationSplitView {
+                        WorkspaceListSidebar()
+                            .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+                    } detail: {
+                        detailContent
+                    }
+                    .navigationSplitViewStyle(.automatic)
+                }
+            } else {
+                switch coordinator.currentScreen {
+                case .loading:
+                    LoadingView()
+                case .pairing:
+                    PairingView()
+                case .connecting:
+                    ConnectingView()
+                case .connectionFailed(let error):
+                    ConnectionFailureView(
+                        errorMessage: error,
+                        isCertMismatch: error.contains("certificate")
+                    )
+                case .settings:
+                    SettingsView()
+                case .disconnected:
+                    DisconnectedView()
+                default:
+                    EmptyView()
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.3), value: String(describing: coordinator.currentScreen))
+        .overlay(alignment: .top) {
+            if let toast = notificationManager.currentToast {
+                ToastView(
+                    toast: toast,
+                    onTap: {
+                        notificationManager.dismissToast()
+                        coordinator.onSelectAgent(
+                            toast.agentId,
+                            workspaceId: toast.workspaceId,
+                            agentName: toast.agentName
+                        )
+                    },
+                    onDismiss: {
+                        notificationManager.dismissToast()
+                    }
+                )
+                .padding(.top, 8)
+            }
+        }
+        .overlay {
+            if coordinator.isDisconnected {
+                ZStack {
+                    // Light tinted backdrop — lets blurred content show through
+                    Color.black.opacity(0.15)
+                        .ignoresSafeArea()
+                        .background(.ultraThinMaterial)
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .tint(.primary)
+
+                        Text("Reconnecting...")
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Text("Connection to desktop app was lost")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+
+                        Button("Log Off") {
+                            coordinator.onLogOff()
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.primary)
+                        .padding(.top, 8)
+                    }
+                    .padding(32)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+                }
+                .transition(.opacity)
+                .animation(.easeInOut(duration: 0.3), value: coordinator.isDisconnected)
+            }
+        }
+        .fullScreenCover(isPresented: $coordinator.showCoverflow) {
+            CoverflowContainerView()
+                .environmentObject(coordinator)
+        }
+    }
+
+    @ViewBuilder
+    private var compactNavigationView: some View {
+        NavigationStack(path: $noteStack) {
+            WorkspaceListView()
+                .navigationDestination(isPresented: $showingWorkspaceDetail) {
+                    if let workspaceId = coordinator.selectedWorkspaceId {
+                        WorkspaceDetailView(workspaceId: workspaceId)
+                            .navigationDestination(isPresented: $showingConversation) {
+                                ConversationView(
+                                    agentId: conversationAgentId,
+                                    workspaceId: conversationWorkspaceId,
+                                    agentName: conversationAgentName
+                                )
+                                .id(conversationAgentId)
+                            }
+                            .navigationDestination(isPresented: $showingNoteDetail) {
+                                NoteDetailView(
+                                    noteId: noteDetailNoteId,
+                                    workspaceId: noteDetailWorkspaceId,
+                                    noteTitle: noteDetailNoteTitle,
+                                    onNavigateToNote: { noteId, wsId, title in
+                                        noteDetailNoteId = noteId
+                                        noteDetailWorkspaceId = wsId
+                                        noteDetailNoteTitle = title
+                                    }
+                                )
+                                .id(noteDetailNoteId)
+                            }
+                    }
+                }
+        }
+        .onAppear {
+            syncNavigationState()
+        }
+        .onChange(of: coordinator.currentScreenDescription) { _ in
+            syncNavigationState()
+        }
+        .onChange(of: showingWorkspaceDetail) { newValue in
+            if newValue {
+                if pendingConversationPush {
+                    DispatchQueue.main.async {
+                        showingConversation = true
+                        pendingConversationPush = false
+                    }
+                }
+                if pendingNoteDetailPush {
+                    DispatchQueue.main.async {
+                        showingNoteDetail = true
+                        pendingNoteDetailPush = false
+                    }
+                }
+            }
+            if !newValue, case .workspaceDetail = coordinator.currentScreen {
+                coordinator.onBackToWorkspaceList()
+            }
+            if !newValue, case .agentConversation = coordinator.currentScreen {
+                coordinator.onBackToWorkspaceList()
+            }
+            if !newValue, case .noteDetail = coordinator.currentScreen {
+                coordinator.onBackToWorkspaceList()
+            }
+        }
+        .onChange(of: showingConversation) { newValue in
+            if !newValue, case .agentConversation = coordinator.currentScreen {
+                coordinator.onBackToWorkspaceDetail()
+            }
+        }
+        .onChange(of: showingNoteDetail) { newValue in
+            if !newValue, case .noteDetail = coordinator.currentScreen {
+                coordinator.onBackFromNote()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if let workspaceId = coordinator.selectedWorkspaceId {
+            NavigationStack(path: $noteStack) {
+                WorkspaceDetailView(workspaceId: workspaceId)
+                    .navigationDestination(isPresented: $showingConversation) {
+                        ConversationView(
+                            agentId: conversationAgentId,
+                            workspaceId: conversationWorkspaceId,
+                            agentName: conversationAgentName
+                        )
+                        .id(conversationAgentId)
+                        .navigationBarBackButtonHidden(sizeClass == .regular)
+                        .toolbar {
+                            if sizeClass == .regular {
+                                ToolbarItem(placement: .navigationBarLeading) {
+                                    Button {
+                                        coordinator.onBackToWorkspaceDetail()
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "chevron.left")
+                                            Text("Agents")
+                                        }
+                                        .font(.body)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .navigationDestination(for: NoteDestination.self) { dest in
+                        NoteDetailView(
+                            noteId: dest.noteId,
+                            workspaceId: dest.workspaceId,
+                            noteTitle: dest.noteTitle,
+                            onNavigateToNote: { noteId, wsId, title in
+                                noteStack.append(NoteDestination(noteId: noteId, workspaceId: wsId, noteTitle: title))
+                                stackTitles.append(title)
+                            }
+                        )
+                        .navigationBarBackButtonHidden(sizeClass == .regular)
+                        .toolbar {
+                            if sizeClass == .regular {
+                                ToolbarItem(placement: .navigationBarLeading) {
+                                    Button {
+                                        noteStack.removeLast()
+                                    } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "chevron.left")
+                                            Text(stackBackTitle())
+                                        }
+                                        .font(.body)
+                                    }
+                                }
+                            }
+                        }
+                    }
+            }
+            .onAppear {
+                syncNavigationState()
+            }
+            .onChange(of: coordinator.currentScreenDescription) { _ in
+                syncNavigationState()
+            }
+            .onChange(of: showingWorkspaceDetail) { newValue in
+                if newValue {
+                    if pendingConversationPush {
+                        DispatchQueue.main.async {
+                            showingConversation = true
+                            pendingConversationPush = false
+                        }
+                    }
+                }
+            }
+            .onChange(of: showingConversation) { newValue in
+                // When user taps system back button on iPhone, sync coordinator
+                if !newValue, case .agentConversation = coordinator.currentScreen {
+                    coordinator.onBackToWorkspaceDetail()
+                }
+            }
+            .onChange(of: noteStack) { newStack in
+                if newStack.isEmpty, case .noteDetail = coordinator.currentScreen {
+                    coordinator.onBackFromNote()
+                }
+                // Keep stackTitles in sync when items are popped
+                if stackTitles.count > newStack.count {
+                    stackTitles = Array(stackTitles.prefix(newStack.count))
+                }
+            }
+        } else {
+            Color.clear
+        }
+    }
+
+    /// Compute the back button title using the parallel stackTitles array.
+    /// Shows the previous item's title, or "Context" if this is the first item.
+    private func stackBackTitle() -> String {
+        if stackTitles.count >= 2 {
+            return stackTitles[stackTitles.count - 2]
+        }
+        return "Context"
+    }
+
+    private func syncNavigationState() {
+        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+            let agentChanged = conversationAgentId != agentId
+            conversationAgentId = agentId
+            conversationWorkspaceId = workspaceId
+            conversationAgentName = agentName
+            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+            if showingNoteDetail { showingNoteDetail = false }
+
+            if !showingWorkspaceDetail {
+                showingWorkspaceDetail = true
+                pendingConversationPush = true
+            } else if !showingConversation {
+                showingConversation = true
+            } else if agentChanged && sizeClass == .regular {
+                // iPad NavigationStack rebuild race: when the workspace detail is
+                // rebuilt (different workspace) but showingConversation is still
+                // true, SwiftUI may not push the new conversation. Tear down
+                // first, then re-push on the next runloop tick so the rebuilt
+                // NavigationStack accepts the new destination.
+                showingConversation = false
+                let pendingAgentId = agentId
+                DispatchQueue.main.async {
+                    if conversationAgentId == pendingAgentId {
+                        showingConversation = true
+                    }
+                }
+            }
+            // If showingConversation is already true and agent changed,
+            // the .id(conversationAgentId) modifier forces SwiftUI to
+            // destroy and recreate ConversationView with a fresh @StateObject
+        } else if case .noteDetail(let nId, let wId, let nTitle) = coordinator.currentScreen {
+            if sizeClass == .compact {
+                // iPhone: use isPresented-based navigation (not noteStack)
+                noteDetailNoteId = nId
+                noteDetailWorkspaceId = wId
+                noteDetailNoteTitle = nTitle
+                if showingConversation { showingConversation = false }
+                if !showingWorkspaceDetail {
+                    showingWorkspaceDetail = true
+                    pendingNoteDetailPush = true
+                } else if !showingNoteDetail {
+                    showingNoteDetail = true
+                }
+            } else {
+                // iPad: use noteStack path-based navigation
+                if showingConversation { showingConversation = false }
+                if !showingWorkspaceDetail {
+                    showingWorkspaceDetail = true
+                }
+                // Tear down then rebuild on next runloop tick so a freshly
+                // rebuilt NavigationStack (e.g. after workspace switch) picks
+                // up the new destination reliably.
+                if !noteStack.isEmpty {
+                    noteStack = NavigationPath()
+                    stackTitles.removeAll()
+                }
+                let pendingNoteId = nId
+                let pendingWorkspaceId = wId
+                let pendingTitle = nTitle
+                DispatchQueue.main.async {
+                    if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
+                        noteStack = NavigationPath()
+                        noteStack.append(NoteDestination(noteId: pendingNoteId, workspaceId: pendingWorkspaceId, noteTitle: pendingTitle))
+                        stackTitles = [pendingTitle]
+                    }
+                }
+            }
+        } else if case .workspaceDetail = coordinator.currentScreen {
+            if !showingWorkspaceDetail { showingWorkspaceDetail = true }
+            if showingConversation { showingConversation = false }
+            if showingNoteDetail { showingNoteDetail = false }
+            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+        } else {
+            if showingWorkspaceDetail { showingWorkspaceDetail = false }
+            if showingConversation { showingConversation = false }
+            if showingNoteDetail { showingNoteDetail = false }
+            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+        }
+    }
+}
+

@@ -1,0 +1,124 @@
+import SwiftUI
+
+struct PairingView: View {
+    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(\.colorScheme) var colorScheme
+    @State private var showQRScanner = false
+    @State private var showBonjourDiscovery = false
+    @State private var showManualEntry = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Theme.background(for: colorScheme).ignoresSafeArea()
+
+                VStack(spacing: 32) {
+                    Spacer()
+
+                    // Header
+                    VStack(spacing: 8) {
+                        IntentLogo()
+                            .frame(width: 40, height: 34)
+                            .foregroundStyle(Theme.primary(for: colorScheme))
+
+                        Text("Connect to Intent")
+                            .font(.title2.bold())
+                            .foregroundStyle(Theme.foreground(for: colorScheme))
+
+                        Text("Pair with your desktop app to manage workspaces and chat with agents")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                    }
+
+                    // Options
+                    VStack(spacing: 12) {
+                        PairingOptionButton(
+                            icon: "camera.fill",
+                            title: "Scan QR Code",
+                            subtitle: "Fastest way to connect",
+                            colorScheme: colorScheme
+                        ) {
+                            showQRScanner = true
+                        }
+
+                        PairingOptionButton(
+                            icon: "wifi",
+                            title: "Find on Network",
+                            subtitle: "Discover Intent on your network",
+                            colorScheme: colorScheme
+                        ) {
+                            showBonjourDiscovery = true
+                        }
+
+                        PairingOptionButton(
+                            icon: "keyboard",
+                            title: "Manual Connection",
+                            subtitle: "Enter IP, port, and token",
+                            colorScheme: colorScheme
+                        ) {
+                            showManualEntry = true
+                        }
+
+                    }
+                    .padding(.horizontal, 24)
+
+                    Spacer()
+                    Spacer()
+                }
+            }
+            .sheet(isPresented: $showQRScanner) {
+                QRScannerView()
+            }
+            .sheet(isPresented: $showBonjourDiscovery) {
+                BonjourDiscoveryView()
+            }
+            .sheet(isPresented: $showManualEntry) {
+                ManualTokenEntryView()
+            }
+        }
+    }
+}
+
+struct PairingOptionButton: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundStyle(Theme.primary(for: colorScheme))
+                    .frame(width: 32)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .padding(16)
+            .background(Theme.card(for: colorScheme))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+            )
+        }
+    }
+}
+
