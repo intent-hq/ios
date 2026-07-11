@@ -1,6 +1,6 @@
 # ios
 
-The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the intentd daemon over **WSS/TLS + mDNS** discovery. It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
+The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over **WSS/TLS + mDNS** discovery. It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
 
 > ⚠️ Private Repository — This repo is internal to the Cloudlands engineering team. It is consumed as a git submodule by [cloudlands-ai/monorepo](https://github.com/cloudlands-ai/monorepo).
 
@@ -8,16 +8,16 @@ The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad 
 
 ## What it is
 
-- **Native SwiftUI.** Built for iOS 26.2+ with async/await, SwiftUI lifecycle, and @MainActor isolation. Supports both iPhone and iPad form factors.
-- **Secure pairing.** Discover intentd instances via **mDNS/Bonjour**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. No plaintext; all traffic over **WSS/TLS**.
+- **Native SwiftUI.** Built for iOS 26.2+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports both iPhone and iPad form factors.
+- **Secure pairing.** Discover `intentd` instances via **mDNS/Bonjour**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. No plaintext; all traffic over **WSS/TLS**.
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
-- **JSON-RPC client.** Talks to intentd's WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
+- **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
 
 ## Architecture
 
 A single-target Xcode project with a SwiftUI app, structured as:
 
-
+```text
 Intent/
 ├── IntentApp.swift         Entry point + theme preference
 ├── AppCoordinator.swift    Navigation coordinator
@@ -51,6 +51,7 @@ Intent/
 │   ├── HapticManager.swift       Haptic feedback
 │   └── NotificationManager.swift Local notifications
 └── PersistenceManager.swift      Local storage (UserDefaults + JSON cache)
+```
 
 
 The app uses **Starscream** for WebSocket transport and **MarkdownUI** for rendering notes and conversation messages.
@@ -59,28 +60,29 @@ The app uses **Starscream** for WebSocket transport and **MarkdownUI** for rende
 
 On first launch, the app shows a pairing flow:
 
-1. **mDNS discovery** (BonjourBrowser) finds _intentd._tcp services on the local network.
-2. **Manual or QR entry**: the user picks a discovered host or scans a QR code from the desktop app containing wss://host:port?token=...&fp=...
+1. **mDNS discovery** (`BonjourBrowser`) finds `_intentd._tcp` services on the local network.
+2. **Manual or QR entry**: the user picks a discovered host or scans a QR code from the desktop app containing `wss://host:port?token=...&fp=...`.
 3. **TLS fingerprint verification**: the app computes the SHA-256 fingerprint of the server's self-signed certificate and compares it to the expected fingerprint (from QR or prompt). On mismatch, connection is rejected.
-4. **Bearer auth**: the token is sent in the Authorization: Bearer <token> header.
-5. **Persist credentials**: host, port, token, and fingerprint are saved to UserDefaults for reconnection.
+4. **Bearer auth**: the token is sent in the `Authorization: Bearer <token>` header.
+5. **Persist credentials**: host, port, token, and fingerprint are saved to `UserDefaults` for reconnection.
 
 ## JSON-RPC Surface
 
-The app calls a subset of the intentd JSON-RPC API:
+The app calls a subset of the `intentd` JSON-RPC API:
 
 | Namespace | Methods |
 | --- | --- |
-| workspace.* | list, read, create (limited subset for mobile) |
-| note.* | list, read, create, update (viewing + creation only) |
-| task.* | list, update (task status toggling) |
-| agent.* | list, getConversation, sendMessage (read + send only) |
-| events.* | subscribe, unsubscribe (for push notifications) |
+| `workspace.*` | `list`, `read`, `create` (limited subset for mobile) |
+| `note.*` | `list`, `read`, `create`, `update` (viewing + creation only) |
+| `task.*` | `list`, `update` (task status toggling) |
+| `agent.*` | `list`, `getConversation`, `sendMessage` (read + send only) |
+| `events.*` | `subscribe`, `unsubscribe` (for push notifications) |
 
-The app subscribes to events.event notifications and updates its local cache when workspaces, notes, or agents change on the backend.
+The app subscribes to `events.event` notifications and updates its local cache when workspaces, notes, or agents change on the backend.
 
 ## Quickstart
 
+```bash
 # 1. Open in Xcode
 open Intent.xcodeproj
 
@@ -94,29 +96,34 @@ open Intent.xcodeproj
 # 4. Scan the QR code from the desktop app or enter the token manually
 
 # 5. Once paired, the app shows the workspace list
+```
 
-The app requires an intentd instance listening on WSS with mDNS enabled:
+The app requires an `intentd` instance listening on WSS with mDNS enabled:
 
+```bash
 intentd serve --listen wss --bonjour
+```
 
 ## Dependencies
 
 Managed via Swift Package Manager (integrated in Xcode):
 
-- **[Starscream](https://github.com/daltoniam/Starscream)** ^4.0.8 — WebSocket client for WSS/TLS transport
-- **[swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui)** ^2.4.0 — Markdown rendering for notes and messages
+- **[Starscream](https://github.com/daltoniam/Starscream)** `^4.0.8` — WebSocket client for WSS/TLS transport
+- **[swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui)** `^2.4.0` — Markdown rendering for notes and messages
 
 ## Development
 
+```bash
 # Build in Xcode (Cmd+B) or via xcodebuild
 xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' build
 
 # Run tests
 xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' test
+```
 
-**Conventional commits** are required (feat, fix, chore, docs, refactor, test, ci, perf); PR titles are validated in CI.
+**Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
 
 ## Related Repositories
 
-- [cloudlands-ai/monorepo](https://github.com/cloudlands-ai/monorepo) — engineering monorepo that mounts this repo at packages/ios and holds the cross-cutting docs and tooling.
+- [cloudlands-ai/monorepo](https://github.com/cloudlands-ai/monorepo) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
 - [cloudlands-ai/intentd](https://github.com/cloudlands-ai/intentd) — Rust backend daemon this app connects to.
