@@ -8,6 +8,7 @@ class PersistenceManager {
     private let keychainService = "com.intent.companion"
     private let keychainAccountToken = "apiToken"
     private let keychainAccountServer = "serverInfo"
+    private let syncQueue = DispatchQueue(label: "com.intent.companion.persistence", qos: .userInitiated)
 
     private init() {}
 
@@ -127,27 +128,34 @@ class PersistenceManager {
     private let workspaceScreensKey = "workspaceScreens"
 
     func saveWorkspaceScreen(workspaceId: String, screen: SavedScreen) {
-        var dict = loadWorkspaceScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[workspaceId] = data
+        syncQueue.sync {
+            var dict = loadWorkspaceScreensDict()
+            if let data = try? JSONEncoder().encode(screen) {
+                dict[workspaceId] = data
+            }
+            UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
         }
-        UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
     }
 
     func loadWorkspaceScreen(workspaceId: String) -> SavedScreen? {
-        let dict = loadWorkspaceScreensDict()
-        guard let data = dict[workspaceId] else { return nil }
-        return try? JSONDecoder().decode(SavedScreen.self, from: data)
+        syncQueue.sync {
+            let dict = loadWorkspaceScreensDict()
+            guard let data = dict[workspaceId] else { return nil }
+            return try? JSONDecoder().decode(SavedScreen.self, from: data)
+        }
     }
 
     func clearWorkspaceScreen(workspaceId: String) {
-        var dict = loadWorkspaceScreensDict()
-        dict.removeValue(forKey: workspaceId)
-        UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
+        syncQueue.sync {
+            var dict = loadWorkspaceScreensDict()
+            dict.removeValue(forKey: workspaceId)
+            UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
+        }
     }
 
     private func loadWorkspaceScreensDict() -> [String: Data] {
-        (UserDefaults.standard.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        return (UserDefaults.standard.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
     }
 
     // MARK: - Per-Workspace Tab
@@ -155,17 +163,22 @@ class PersistenceManager {
     private let workspaceTabsKey = "workspaceTabs"
 
     func saveWorkspaceTab(workspaceId: String, tab: Int) {
-        var dict = loadWorkspaceTabsDict()
-        dict[workspaceId] = tab
-        UserDefaults.standard.set(dict, forKey: workspaceTabsKey)
+        syncQueue.sync {
+            var dict = loadWorkspaceTabsDict()
+            dict[workspaceId] = tab
+            UserDefaults.standard.set(dict, forKey: workspaceTabsKey)
+        }
     }
 
     func loadWorkspaceTab(workspaceId: String) -> Int? {
-        loadWorkspaceTabsDict()[workspaceId]
+        syncQueue.sync {
+            loadWorkspaceTabsDict()[workspaceId]
+        }
     }
 
     private func loadWorkspaceTabsDict() -> [String: Int] {
-        (UserDefaults.standard.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        return (UserDefaults.standard.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
     }
 
     // MARK: - Keychain
