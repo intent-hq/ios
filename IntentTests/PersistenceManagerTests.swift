@@ -150,5 +150,54 @@ struct PersistenceManagerTests {
         #expect(loaded?.screen == "note")
         #expect(loaded?.noteId == "n2")
     }
+
+    // MARK: - Concurrency regression test
+
+    @Test func concurrentSavesDoNotCorruptSharedDictionary() {
+        let prefix = "test-ws-concurrent-\(UUID().uuidString)"
+        let iterations = 100
+        var workspaceIds: [String] = []
+        for i in 0..<iterations {
+            workspaceIds.append("\(prefix)-\(i)")
+        }
+        defer { cleanup(workspaceIds: workspaceIds) }
+
+        // Interleave saves across many workspace IDs concurrently
+        DispatchQueue.concurrentPerform(iterations: iterations) { i in
+            let wsId = workspaceIds[i]
+            let screen = PersistenceManager.SavedScreen(
+                screen: "conversation",
+                workspaceId: wsId,
+                agentId: "agent-\(i)",
+                agentName: "Agent\(i)",
+                noteId: nil,
+                noteTitle: nil
+            )
+            PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
+        }
+
+        // Assert ALL entries are present and decodable (no lost updates)
+        for i in 0..<iterations {
+            let wsId = workspaceIds[i]
+            let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
+            #expect(loaded != nil, "Workspace \(wsId) missing (lost update)")
+            #expect(loaded?.screen == "conversation")
+            #expect(loaded?.agentId == "agent-\(i)")
+            #expect(loaded?.agentName == "Agent\(i)")
+        }
+
+        // Also exercise workspaceTabs concurrency
+        DispatchQueue.concurrentPerform(iterations: iterations) { i in
+            let wsId = workspaceIds[i]
+            PersistenceManager.shared.saveWorkspaceTab(workspaceId: wsId, tab: i % 3)
+        }
+
+        // Verify all tabs persisted correctly
+        for i in 0..<iterations {
+            let wsId = workspaceIds[i]
+            let tab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: wsId)
+            #expect(tab == i % 3, "Workspace \(wsId) tab mismatch (lost update)")
+        }
+    }
 }
 
