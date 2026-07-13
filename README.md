@@ -2,7 +2,7 @@
 
 The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over **WSS/TLS + mDNS** discovery. It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
 
-> ⚠️ Private Repository — This repo is internal to the Cloudlands engineering team. It is consumed as a git submodule by [cloudlands-ai/monorepo](https://github.com/cloudlands-ai/monorepo).
+> ⚠️ Private Repository — This repo is internal to the Cloudlands engineering team. It is consumed as a git submodule by [intent-hq/monorepo](https://github.com/intent-hq/monorepo).
 
 **Provenance:** Originally imported from [augmentcode/intent#276](https://github.com/augmentcode/intent/pull/276).
 
@@ -125,5 +125,5 @@ xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS S
 
 ## Related Repositories
 
-- [cloudlands-ai/monorepo](https://github.com/cloudlands-ai/monorepo) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
-- [cloudlands-ai/intentd](https://github.com/cloudlands-ai/intentd) — Rust backend daemon this app connects to.
+- [intent-hq/monorepo](https://github.com/intent-hq/monorepo) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
+- [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
