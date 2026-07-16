@@ -31,9 +31,11 @@ jobs:
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
-      # simctl boot returns immediately; the boot continues in the background.
+      # Run in the background: simctl boot can block for minutes waiting for
+      # the device to reach the Booted state, but CoreSimulator completes the
+      # boot on its own and xcodebuild waits for it if still in progress.
       - name: Pre-boot simulator
-        run: xcrun simctl boot 'iPhone 16' || true
+        run: xcrun simctl boot 'iPhone 16' >/dev/null 2>&1 || true &
 
       - name: Cache SPM packages
         uses: actions/cache@v4
