@@ -29,6 +29,12 @@ jobs:
       - name: Select latest Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
+      # Kick off the simulator boot early so it overlaps with package
+      # resolution and compilation instead of delaying the test step.
+      # simctl boot returns immediately; the boot continues in the background.
+      - name: Pre-boot simulator
+        run: xcrun simctl boot 'iPhone 16' || true
+
       - name: Cache SPM packages
         uses: actions/cache@v4
         with:
@@ -59,6 +65,8 @@ jobs:
           -project Intent.xcodeproj
           -scheme Intent
           -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+          -parallel-testing-enabled YES
+          -maximum-concurrent-test-simulator-destinations 2
           -resultBundlePath TestResults
 
       - name: Upload test results
