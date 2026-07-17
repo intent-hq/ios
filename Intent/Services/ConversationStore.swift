@@ -57,6 +57,12 @@ class ConversationStore: ObservableObject {
         }
     }
 
+    /// Test-only helper: set chatSubscriptionId to bypass real subscribe flow.
+    /// Use in tests alongside setTestReconciler so the strict push gate accepts test payloads.
+    func setTestSubscriptionId(_ id: String) {
+        chatSubscriptionId = id
+    }
+
     // MARK: - Connection observation
 
     private func observeConnection() {
@@ -349,7 +355,12 @@ class ConversationStore: ObservableObject {
 
         // Strict gate: only accept pushes matching our active chatSubscriptionId
         // (No nil-fallthrough to prevent cross-channel contamination during pre-response window)
+        if let subId = chatSubscriptionId, push.subscriptionId != subId {
+            print("[ConversationStore] Ignoring push for subscription \(push.subscriptionId), expected \(subId)")
+            return
+        }
         guard let subId = chatSubscriptionId, push.subscriptionId == subId else {
+            // First-time (no active subscription yet) — silently drop
             return
         }
 

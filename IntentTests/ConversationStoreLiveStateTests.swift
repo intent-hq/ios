@@ -15,7 +15,8 @@ struct ConversationStoreLiveStateTests {
             getId: { dict in dict["id"] as? String },
             normalize: { dict in ConversationMessage.parseMessage(dict) }
         ))
-        
+        await store.setTestSubscriptionId("sub-chat-123")
+
         // Simulate subscription.push snapshot
         let params: [String: Any] = [
             "subscriptionId": "sub-chat-123",
@@ -53,7 +54,8 @@ struct ConversationStoreLiveStateTests {
             getId: { dict in dict["id"] as? String },
             normalize: { dict in ConversationMessage.parseMessage(dict) }
         ))
-        
+        await store.setTestSubscriptionId("sub-chat-123")
+
         // First, apply snapshot
         let snapshotParams: [String: Any] = [
             "subscriptionId": "sub-chat-123",
@@ -104,7 +106,8 @@ struct ConversationStoreLiveStateTests {
             getId: { dict in dict["id"] as? String },
             normalize: { dict in ConversationMessage.parseMessage(dict) }
         ))
-        
+        await store.setTestSubscriptionId("sub-chat-123")
+
         // Apply snapshot
         let snapshotParams: [String: Any] = [
             "subscriptionId": "sub-chat-123",
