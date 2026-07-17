@@ -1,6 +1,6 @@
 # ios
 
-The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over **WSS/TLS**. It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
+The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over WebSocket (**WSS/TLS** when a certificate fingerprint is pinned, plain `ws://` otherwise). It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
 
 > ⚠️ Private Repository — This repo is internal to the Cloudlands engineering team. It is consumed as a git submodule by [intent-hq/monorepo](https://github.com/intent-hq/monorepo).
 
