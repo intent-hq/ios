@@ -25,12 +25,12 @@ struct ConversationStoreLiveStateTests {
                 [
                     "id": "msg-1",
                     "role": "user",
-                    "content": [["type": "text", "text": "Hello"]]
+                    "contentBlocks": [["type": "text", "text": "Hello"]]
                 ],
                 [
                     "id": "msg-2",
                     "role": "assistant",
-                    "content": [["type": "text", "text": "Hi there"]]
+                    "contentBlocks": [["type": "text", "text": "Hi there"]]
                 ]
             ]
         ]
@@ -63,7 +63,7 @@ struct ConversationStoreLiveStateTests {
                 [
                     "id": "msg-1",
                     "role": "user",
-                    "content": [["type": "text", "text": "Hello"]]
+                    "contentBlocks": [["type": "text", "text": "Hello"]]
                 ]
             ]
         ]
@@ -79,7 +79,7 @@ struct ConversationStoreLiveStateTests {
                     [
                         "id": "msg-2",
                         "role": "assistant",
-                        "content": [["type": "text", "text": "Hi"]]
+                        "contentBlocks": [["type": "text", "text": "Hi"]]
                     ]
                 ],
                 "updated": [],
@@ -114,7 +114,7 @@ struct ConversationStoreLiveStateTests {
                 [
                     "id": "msg-1",
                     "role": "user",
-                    "content": [["type": "text", "text": "Hello"]]
+                    "contentBlocks": [["type": "text", "text": "Hello"]]
                 ]
             ]
         ]
@@ -130,7 +130,7 @@ struct ConversationStoreLiveStateTests {
                     [
                         "id": "msg-2",
                         "role": "assistant",
-                        "content": [["type": "text", "text": "Hi"]]
+                        "contentBlocks": [["type": "text", "text": "Hi"]]
                     ]
                 ],
                 "updated": [],

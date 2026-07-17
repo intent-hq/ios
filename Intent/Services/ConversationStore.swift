@@ -347,9 +347,9 @@ class ConversationStore: ObservableObject {
             return
         }
 
-        // Gate on subscriptionId to avoid cross-contamination from other channels
-        // Accept pushes if subscriptionId is nil (tiny window before response returns)
-        if let subId = chatSubscriptionId, push.subscriptionId != subId {
+        // Strict gate: only accept pushes matching our active chatSubscriptionId
+        // (No nil-fallthrough to prevent cross-channel contamination during pre-response window)
+        guard let subId = chatSubscriptionId, push.subscriptionId == subId else {
             return
         }
 
