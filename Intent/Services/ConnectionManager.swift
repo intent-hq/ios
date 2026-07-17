@@ -429,7 +429,10 @@ class ConnectionManager: ObservableObject {
 
             // If subscription.push parse failed (malformed), drop it with a warning
             if method == "subscription.push" {
-                print("[ConnectionManager] Warning: Malformed subscription.push, dropping: \(params)")
+                let paramsDict = params as? [String: Any] ?? [:]
+                let subscriptionId = paramsDict["subscriptionId"] as? String ?? "nil"
+                let keys = paramsDict.keys.sorted().joined(separator: ", ")
+                print("[ConnectionManager] Warning: Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
                 return
             }
 
