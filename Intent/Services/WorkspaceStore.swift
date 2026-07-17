@@ -124,25 +124,13 @@ class WorkspaceStore: ObservableObject {
     }
 
     private func subscribeLiveState() async {
-        // Wait briefly for capability detection to complete
-        var attempts = 0
-        while !ConnectionManager.shared.liveStateCapability && attempts < 10 {
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-            attempts += 1
-        }
-
-        guard ConnectionManager.shared.liveStateCapability else {
-            print("[WorkspaceStore] liveState not available, using legacy events only")
-            return
-        }
-
         // Initialize workspace reconciler
         workspaceReconciler = DeltaReconciler<Workspace>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
         )
 
-        // Subscribe to workspace changes
+        // Try to subscribe - if server doesn't support it, error response falls back to legacy
         do {
             let result = try await ConnectionManager.shared.request("workspace.subscribe", params: [
                 "replaceGroup": "ios-workspaces"
@@ -235,8 +223,8 @@ class WorkspaceStore: ObservableObject {
 
         switch push.kind {
         case .snapshot:
+            guard let rawItems = push.snapshot else { return }
             workspaceLive = true
-            let rawItems = push.snapshot ?? []
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             var parsed = reconciler.values()
             applyHighWaterMarks(to: &parsed)
@@ -255,6 +243,7 @@ class WorkspaceStore: ObservableObject {
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotInProgress {
+                    resnapshotInProgress = true
                     print("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }

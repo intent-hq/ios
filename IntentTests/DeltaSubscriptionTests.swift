@@ -55,6 +55,22 @@ struct DeltaSubscriptionTests {
         let params: [String: Any] = ["kind": "snapshot"] // missing subscriptionId and seq
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
         #expect(push == nil)
+
+        // Snapshot push missing "snapshot" field
+        let snapshotMissingPayload: [String: Any] = [
+            "subscriptionId": "sub-1",
+            "kind": "snapshot",
+            "seq": 0
+        ]
+        #expect(SubscriptionPush.parse(method: "subscription.push", params: snapshotMissingPayload) == nil)
+
+        // Delta push missing "delta" field
+        let deltaMissingPayload: [String: Any] = [
+            "subscriptionId": "sub-1",
+            "kind": "delta",
+            "seq": 1
+        ]
+        #expect(SubscriptionPush.parse(method: "subscription.push", params: deltaMissingPayload) == nil)
     }
     
     // MARK: - DeltaReconciler

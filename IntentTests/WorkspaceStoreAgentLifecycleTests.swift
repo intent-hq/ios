@@ -4,10 +4,10 @@ import Testing
 
 @MainActor
 struct WorkspaceStoreAgentLifecycleTests {
+
+    // MARK: - All 8 agent lifecycle events update high-water mark
     
-    // MARK: - All 8 agent lifecycle events trigger refetch (legacy path)
-    
-    @Test func agentStartedTriggersRefetch() async throws {
+    @Test func agentStartedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
 
         let event: [String: Any] = [
@@ -21,7 +21,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentCompletedTriggersRefetch() async throws {
+    @Test func agentCompletedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:completed",
@@ -32,7 +32,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentFailedTriggersRefetch() async throws {
+    @Test func agentFailedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:failed",
@@ -43,7 +43,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentCreatedTriggersRefetch() async throws {
+    @Test func agentCreatedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:created",
@@ -54,7 +54,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentDeletedTriggersRefetch() async throws {
+    @Test func agentDeletedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:deleted",
@@ -65,7 +65,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentIdleTriggersRefetch() async throws {
+    @Test func agentIdleUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:idle",
@@ -76,7 +76,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentStatusChangedTriggersRefetch() async throws {
+    @Test func agentStatusChangedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:status-changed",
@@ -87,7 +87,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
-    @Test func agentRenamedTriggersRefetch() async throws {
+    @Test func agentRenamedUpdatesHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
             "type": "agent:renamed",
@@ -97,17 +97,31 @@ struct WorkspaceStoreAgentLifecycleTests {
         store.handleEvent(method: "events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
-    @Test func unknownAgentEventIsLogged() async throws {
+
+    // MARK: - Unknown agent events are logged but don't update state
+
+    @Test func unknownAgentEventDoesNotUpdateHighWaterMark() async throws {
         let store = WorkspaceStore(forTesting: true)
-        let event: [String: Any] = [
-            "type": "agent:unknown-future-type",
+
+        // Seed with a known event first
+        let knownEvent: [String: Any] = [
+            "type": "agent:started",
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        // Should log but not crash
-        store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        store.handleEvent(method: "events.event", params: ["event": knownEvent])
+        let initialMark = store.lastActivityHighWaterMark["ws-1"]
+
+        // Feed unknown event
+        let unknownEvent: [String: Any] = [
+            "type": "agent:unknown-future-event",
+            "workspaceId": "ws-1",
+            "timestamp": "2026-07-17T13:00:00Z"
+        ]
+        store.handleEvent(method: "events.event", params: ["event": unknownEvent])
+
+        // High-water mark should be unchanged
+        #expect(store.lastActivityHighWaterMark["ws-1"] == initialMark)
     }
     
     @Test func agentEventUpdatesLastActivityHighWaterMark() async throws {

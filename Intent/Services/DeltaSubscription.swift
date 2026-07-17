@@ -27,9 +27,11 @@ struct SubscriptionPush {
               let seq = dict["seq"] as? Int else {
             return nil
         }
-        
+
         if let kindStr = dict["kind"] as? String, kindStr == "snapshot" {
-            let snapshot = (dict["snapshot"] as? [[String: Any]]) ?? []
+            guard let snapshot = dict["snapshot"] as? [[String: Any]] else {
+                return nil // Malformed: snapshot push must have "snapshot" field
+            }
             return SubscriptionPush(
                 subscriptionId: subscriptionId,
                 kind: .snapshot,
@@ -38,7 +40,9 @@ struct SubscriptionPush {
                 delta: nil
             )
         } else if let kindStr = dict["kind"] as? String, kindStr == "delta" {
-            let deltaDict = dict["delta"] as? [String: Any] ?? [:]
+            guard let deltaDict = dict["delta"] as? [String: Any] else {
+                return nil // Malformed: delta push must have "delta" field
+            }
             let added = (deltaDict["added"] as? [[String: Any]]) ?? []
             let updated = (deltaDict["updated"] as? [[String: Any]]) ?? []
             let removedIds = (deltaDict["removedIds"] as? [String]) ?? []
@@ -108,9 +112,9 @@ class DeltaReconciler<T> {
         return true
     }
 
-    /// Current collection as an array in insertion order.
+    /// Current collection as an array sorted by id for stable ordering.
     func values() -> [T] {
-        return orderedIds.compactMap { items[$0] }
+        return orderedIds.sorted().compactMap { items[$0] }
     }
 
     private func upsert(_ raw: [String: Any]) {
