@@ -10,30 +10,32 @@ struct ConversationStoreIntegrationTests {
     @Test func subscribesOnAgentLoad() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        
+
         fake.requestResponses["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
         fake.requestResponses["conversation.list"] = ["messages": []]
         fake.requestResponses["conversation.queue"] = ["queuedMessages": []]
         fake.requestResponses["agent.get"] = ["agent": ["id": "agent-1", "status": "idle", "isStreaming": false]]
         fake.requestResponses["agent.subscriptions.list"] = ["subscriptions": []]
-        
-        await store.loadConversation(agentId: "agent-1", workspaceId: "ws-test")
+
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-test")
+        await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: 200_000_000)
-        
+
         #expect(fake.didRequest(method: "chat.subscribe"))
     }
     
     @Test func appliesContiguousDelta() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        
+
         fake.requestResponses["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
         fake.requestResponses["conversation.list"] = ["messages": []]
         fake.requestResponses["conversation.queue"] = ["queuedMessages": []]
         fake.requestResponses["agent.get"] = ["agent": ["id": "agent-1", "status": "idle", "isStreaming": false]]
         fake.requestResponses["agent.subscriptions.list"] = ["subscriptions": []]
-        
-        await store.loadConversation(agentId: "agent-1", workspaceId: "ws-test")
+
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-test")
+        await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: 200_000_000)
         
         fake.injectSubscriptionPush(
@@ -74,14 +76,15 @@ struct ConversationStoreIntegrationTests {
     @Test func gapTriggersResnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        
+
         fake.requestResponses["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
         fake.requestResponses["conversation.list"] = ["messages": []]
         fake.requestResponses["conversation.queue"] = ["queuedMessages": []]
         fake.requestResponses["agent.get"] = ["agent": ["id": "agent-1", "status": "idle", "isStreaming": false]]
         fake.requestResponses["agent.subscriptions.list"] = ["subscriptions": []]
-        
-        await store.loadConversation(agentId: "agent-1", workspaceId: "ws-test")
+
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-test")
+        await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: 200_000_000)
         
         fake.injectSubscriptionPush(
@@ -110,14 +113,15 @@ struct ConversationStoreIntegrationTests {
     @Test func wrongSubscriptionIdDropped() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
-        
+
         fake.requestResponses["chat.subscribe"] = ["subscriptionId": "sub-chat-correct"]
         fake.requestResponses["conversation.list"] = ["messages": []]
         fake.requestResponses["conversation.queue"] = ["queuedMessages": []]
         fake.requestResponses["agent.get"] = ["agent": ["id": "agent-1", "status": "idle", "isStreaming": false]]
         fake.requestResponses["agent.subscriptions.list"] = ["subscriptions": []]
-        
-        await store.loadConversation(agentId: "agent-1", workspaceId: "ws-test")
+
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-test")
+        await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: 200_000_000)
         
         fake.injectSubscriptionPush(

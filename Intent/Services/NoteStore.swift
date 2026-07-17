@@ -17,12 +17,12 @@ class NoteStore: ObservableObject {
     private var connectionObserver: AnyCancellable?
 
     // Injectable connection manager for testing
-    private let connectionManager: ConnectionManagerProtocol
+    private let connectionManager: ConnectionManager
 
     /// Optional callback invoked when a note event is received (for detail view refresh)
     var onNoteChanged: (() -> Void)?
 
-    init(connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+    init(connectionManager: ConnectionManager = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
     }

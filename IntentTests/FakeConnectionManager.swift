@@ -6,15 +6,16 @@ import Combine
 /// Allows tests to:
 /// - Control connection state transitions
 /// - Inject RPC responses (subscribe/unsubscribe)
-/// - Inject events (subscription.push)
+/// - Inject events (subscription.push) via router or legacy handlers
 /// - Verify that stores call the correct methods
 @MainActor
-class FakeConnectionManager: ConnectionManagerProtocol {
+class FakeConnectionManager {
     @Published var connectionState: ConnectionState = .disconnected
     var connectionStatePublisher: Published<ConnectionState>.Publisher { $connectionState }
-    
+
     private var eventHandlers: [UUID: (String, Any) -> Void] = [:]
-    
+    private var subscriptionHandlers: [String: (SubscriptionPush) -> Void] = [:]
+
     // Test hooks
     var requestLog: [(method: String, params: [String: Any])] = []
     var requestResponses: [String: Any] = [:]  // method -> response
@@ -54,7 +55,17 @@ class FakeConnectionManager: ConnectionManagerProtocol {
     func removeEventHandler(id: UUID) {
         eventHandlers.removeValue(forKey: id)
     }
-    
+
+    /// Register a subscription handler for the given subscriptionId (router API from PR #15)
+    func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
+        subscriptionHandlers[id] = handler
+    }
+
+    /// Unregister the subscription handler for the given subscriptionId (router API from PR #15)
+    func unregisterSubscriptionHandler(id: String) {
+        subscriptionHandlers.removeValue(forKey: id)
+    }
+
     // Test helpers
     
     /// Simulate a connection event
@@ -74,7 +85,8 @@ class FakeConnectionManager: ConnectionManagerProtocol {
         }
     }
     
-    /// Inject a subscription.push event
+    /// Inject a subscription.push event via the router (mimics PR #15's routing behavior).
+    /// Dispatches directly to the registered handler for the subscriptionId, NOT to legacy eventHandlers.
     func injectSubscriptionPush(
         subscriptionId: String,
         kind: SubscriptionPush.Kind,
@@ -87,11 +99,11 @@ class FakeConnectionManager: ConnectionManagerProtocol {
             "kind": kind == .snapshot ? "snapshot" : "delta",
             "seq": seq
         ]
-        
+
         if let snapshot = snapshot {
             params["snapshot"] = snapshot
         }
-        
+
         if let delta = delta {
             params["delta"] = [
                 "added": delta.added,
@@ -99,8 +111,14 @@ class FakeConnectionManager: ConnectionManagerProtocol {
                 "removedIds": delta.removedIds
             ]
         }
-        
-        injectEvent(method: "subscription.push", params: params)
+
+        // Route via the router (single source of subscription.push dispatch)
+        if let push = SubscriptionPush.parse(method: "subscription.push", params: params) {
+            if let handler = subscriptionHandlers[push.subscriptionId] {
+                handler(push)
+            }
+            // If no handler registered, drop silently (matches router behavior)
+        }
     }
     
     /// Reset test state
@@ -109,6 +127,7 @@ class FakeConnectionManager: ConnectionManagerProtocol {
         requestResponses.removeAll()
         shouldThrowOnRequest.removeAll()
         eventHandlers.removeAll()
+        subscriptionHandlers.removeAll()
         connectionState = .disconnected
     }
     

@@ -13,7 +13,7 @@ class TaskStore: ObservableObject {
     private var eventHandlerId: UUID?
 
     // Injectable connection manager for testing
-    private let connectionManager: ConnectionManagerProtocol
+    private let connectionManager: ConnectionManager
 
     // Live-state tracking
     private var tasksLive = false
@@ -21,7 +21,7 @@ class TaskStore: ObservableObject {
     private var taskReconciler: DeltaReconciler<WorkspaceTask>?
     private var resnapshotInProgress = false
 
-    init(workspaceId: String, connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+    init(workspaceId: String, connectionManager: ConnectionManager = ConnectionManager.shared) {
         self.workspaceId = workspaceId
         self.connectionManager = connectionManager
 

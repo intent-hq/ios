@@ -12,7 +12,7 @@ class CommentStore: ObservableObject {
     private var eventHandlerId: UUID?
 
     // Injectable connection manager for testing
-    private let connectionManager: ConnectionManagerProtocol
+    private let connectionManager: ConnectionManager
 
     // Live-state subscription tracking
     private var commentSubscriptionId: String?
@@ -20,13 +20,13 @@ class CommentStore: ObservableObject {
     private var commentLive = false
     private var resnapshotInProgress = false
 
-    init(connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+    init(connectionManager: ConnectionManager = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
     }
 
     /// Test-only initializer that skips connection observation
-    init(forTesting: Bool, connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+    init(forTesting: Bool, connectionManager: ConnectionManager = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         // No connection observation for unit tests
     }

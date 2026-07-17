@@ -29,7 +29,7 @@ class ConversationStore: ObservableObject {
     private var eventHandlerId: UUID?
 
     // Injectable connection manager for testing
-    private let connectionManager: ConnectionManagerProtocol
+    private let connectionManager: ConnectionManager
 
     /// Live-state tracking for chat.subscribe
     private var chatLive = false
@@ -50,7 +50,7 @@ class ConversationStore: ObservableObject {
     /// (preventing duplicate messages on the server).
     var lastFailedSend: (messageId: String, content: String)?
 
-    init(connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+    init(connectionManager: ConnectionManager = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
     }
