@@ -48,6 +48,7 @@ class WorkspaceStore: ObservableObject {
         workspaceLive = false
         workspaceSubscriptionId = nil
         workspaceReconciler = nil
+        resnapshotInProgress = false
 
         await fetchAll()
         await subscribeToEvents()
