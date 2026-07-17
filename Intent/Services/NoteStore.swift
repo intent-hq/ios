@@ -77,6 +77,10 @@ class NoteStore: ObservableObject {
     private func onConnected() async {
         // Reset live-state tracking on new connection
         noteLive = false
+        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = noteSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         noteSubscriptionId = nil
         noteReconciler = nil
         resnapshotInProgress = false
@@ -157,7 +161,15 @@ class NoteStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
+                // Unregister old handler if we had one
+                if let oldId = noteSubscriptionId {
+                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                }
                 noteSubscriptionId = subId
+                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
+                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                    self?.handleSubscriptionPush(push)
+                }
                 print("[NoteStore] Subscribed to note.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
@@ -196,7 +208,7 @@ class NoteStore: ObservableObject {
     }
 
     private func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates
+        // Handle subscription.push for live-state updates (test injection compatibility)
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
             return
@@ -237,11 +249,9 @@ class NoteStore: ObservableObject {
             return
         }
 
-        // Gate on subscriptionId to avoid cross-contamination from other channels
-        // (ConnectionManager broadcasts all subscription.push to all handlers)
-        if let subId = noteSubscriptionId, push.subscriptionId != subId {
-            return
-        }
+        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
+        // so this handler only receives pushes for our exact subscriptionId.
+        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -275,6 +285,8 @@ class NoteStore: ObservableObject {
         noteReconciler?.reset()
 
         if let subId = noteSubscriptionId {
+            // Unregister handler before unsubscribing
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
                 let _ = try await ConnectionManager.shared.request("note.unsubscribe", params: [
                     "subscriptionId": subId

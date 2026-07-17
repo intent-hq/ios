@@ -53,6 +53,10 @@ class WorkspaceStore: ObservableObject {
     private func onConnected() async {
         // Reset live-state tracking on new connection
         workspaceLive = false
+        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = workspaceSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         workspaceSubscriptionId = nil
         workspaceReconciler = nil
         resnapshotInProgress = false
@@ -145,7 +149,15 @@ class WorkspaceStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
+                // Unregister old handler if we had one
+                if let oldId = workspaceSubscriptionId {
+                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                }
                 workspaceSubscriptionId = subId
+                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
+                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                    self?.handleSubscriptionPush(push)
+                }
                 print("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
             }
         } catch {
@@ -154,7 +166,7 @@ class WorkspaceStore: ObservableObject {
     }
 
     func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates
+        // Handle subscription.push for live-state updates (test injection compatibility)
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
             return
@@ -226,10 +238,9 @@ class WorkspaceStore: ObservableObject {
             return
         }
 
-        // Log subscriptionId mismatch if we already have one (sanity check, not a gate)
-        if let subId = workspaceSubscriptionId, push.subscriptionId != subId {
-            print("[WorkspaceStore] Warning: received push for subscription \(push.subscriptionId), expected \(subId)")
-        }
+        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
+        // so this handler only receives pushes for our exact subscriptionId.
+        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -269,6 +280,8 @@ class WorkspaceStore: ObservableObject {
         workspaceReconciler?.reset()
 
         if let subId = workspaceSubscriptionId {
+            // Unregister handler before unsubscribing
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
                 let _ = try await ConnectionManager.shared.request("workspace.unsubscribe", params: [
                     "subscriptionId": subId

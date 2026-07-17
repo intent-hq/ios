@@ -33,6 +33,14 @@ class ConnectionManager: ObservableObject {
     private var certFingerprint: String?
     var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
+    // MARK: - Subscription Push Routing
+
+    /// Registry of per-subscriptionId handlers for subscription.push dispatch.
+    /// Each store registers its handler after capturing its subscriptionId from the
+    /// subscribe RPC response. This eliminates the need for stores to filter pushes
+    /// themselves and ensures single-source-of-truth routing.
+    private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
+
     private init() {}
 
     // MARK: - Connection lifecycle
@@ -143,8 +151,40 @@ class ConnectionManager: ObservableObject {
         return id
     }
 
+    // MARK: - Subscription Push Routing
+
+    /// Register a handler for subscription.push notifications with the given subscriptionId.
+    /// The handler will be invoked (on MainActor) whenever a subscription.push with matching
+    /// subscriptionId is received. Stores should call this immediately after capturing their
+    /// subscriptionId from the subscribe RPC response, in the same MainActor tick, to ensure
+    /// register-before-first-push.
+    ///
+    /// - Parameters:
+    ///   - id: The subscriptionId returned by the subscribe RPC
+    ///   - handler: The MainActor-isolated handler to invoke for pushes with this subscriptionId
+    func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
+        subscriptionHandlers[id] = handler
+        print("[ConnectionManager] Registered subscription handler for id=\(id)")
+    }
+
+    /// Unregister the handler for the given subscriptionId. After this call, pushes for this
+    /// subscriptionId will be dropped (logged at debug and discarded).
+    ///
+    /// Stores should call this when:
+    /// - Unsubscribing explicitly
+    /// - Changing subscriptionId (unregister old id before registering new one)
+    /// - On disconnect/reset
+    /// - On deinit (if the store is deallocated)
+    ///
+    /// - Parameter id: The subscriptionId to unregister
+    func unregisterSubscriptionHandler(id: String) {
+        subscriptionHandlers.removeValue(forKey: id)
+        print("[ConnectionManager] Unregistered subscription handler for id=\(id)")
+    }
+
     /// Internal entry point for testing message dispatch.
-    func dispatchMessage(_ text: String) async {
+    @MainActor
+    func dispatchMessage(_ text: String) {
         handleTextMessage(text)
     }
 
@@ -343,6 +383,7 @@ class ConnectionManager: ObservableObject {
         }
     }
 
+    @MainActor
     private func handleTextMessage(_ text: String) {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -374,6 +415,28 @@ class ConnectionManager: ObservableObject {
             }
         } else if let method = json["method"] as? String {
             let params = json["params"] as Any
+
+            // Route subscription.push to the registered handler for that subscriptionId.
+            // Legacy eventHandlers must NOT receive subscription.push (router is the single source).
+            if let push = SubscriptionPush.parse(method: method, params: params) {
+                if let handler = subscriptionHandlers[push.subscriptionId] {
+                    handler(push)  // Already on MainActor, call directly
+                } else {
+                    print("[ConnectionManager] Unrouted subscription.push for id=\(push.subscriptionId) (no handler registered)")
+                }
+                return  // Do NOT fall through to legacy eventHandlers
+            }
+
+            // If subscription.push parse failed (malformed), drop it with a warning
+            if method == "subscription.push" {
+                let paramsDict = params as? [String: Any] ?? [:]
+                let subscriptionId = paramsDict["subscriptionId"] as? String ?? "nil"
+                let keys = paramsDict.keys.sorted().joined(separator: ", ")
+                print("[ConnectionManager] Warning: Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
+                return
+            }
+
+            // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)
             for handler in eventHandlers.values {
                 handler(method, params)
             }
