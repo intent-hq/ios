@@ -162,8 +162,15 @@ class NoteStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 noteSubscriptionId = subId
                 print("[NoteStore] Subscribed to note.subscribe: \(subId)")
+            } else {
+                // Response missing subscriptionId - clean up and fall back to legacy
+                noteReconciler = nil
+                noteSubscriptionId = nil
             }
         } catch {
+            // Subscribe failed - clean up reconciler and fall back to legacy
+            noteReconciler = nil
+            noteSubscriptionId = nil
             print("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
         }
     }
@@ -282,6 +289,8 @@ class NoteStore: ObservableObject {
 
         if let workspaceId = workspaceId {
             await subscribeLiveState(workspaceId: workspaceId)
+            // Baseline refetch to bridge the gap during resnapshot
+            await fetchNotes(workspaceId: workspaceId)
         }
     }
 }
