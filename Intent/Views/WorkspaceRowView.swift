@@ -21,10 +21,15 @@ struct WorkspaceRowView: View {
     }
 
     private var hasActiveAgents: Bool {
-        if let activity = workspace.activity?.lowercased() {
-            return activity == "agent_running"
+        switch workspace.activity?.lowercased() {
+        case "agent_running":
+            return true
+        case "idle":
+            return false
+        default:
+            // Unknown or nil activity — fall back to agent-summary check
+            return workspace.agentSummaryAgents?.contains { $0.isStreaming || $0.isResponding } ?? false
         }
-        return workspace.agentSummaryAgents?.contains { $0.isStreaming || $0.isResponding } ?? false
     }
 
     var body: some View {

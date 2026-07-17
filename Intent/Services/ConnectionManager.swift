@@ -350,8 +350,9 @@ class ConnectionManager: ObservableObject {
         if let id = json["id"] as? Int {
             if let continuation = pendingRequests.removeValue(forKey: id) {
                 if let error = json["error"] as? [String: Any] {
-                    let hasCode = error["code"] != nil
-                    let code = error["code"] as? Int ?? -1
+                    let parsedCode = error["code"] as? Int
+                    let code = parsedCode ?? -1
+                    let hasCode = parsedCode != nil
                     let topMessage = error["message"] as? String ?? "Unknown error"
 
                     // Extract error.data.message if present (daemon stashes real cause there)
