@@ -149,7 +149,7 @@ class WorkspaceStore: ObservableObject {
         }
     }
 
-    private func handleEvent(method: String, params: Any) {
+    func handleEvent(method: String, params: Any) {
         // Handle subscription.push for live-state updates
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
