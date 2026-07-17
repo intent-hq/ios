@@ -20,6 +20,7 @@ class WorkspaceStore: ObservableObject {
     private var workspaceSubscriptionId: String?
     private var workspaceReconciler: DeltaReconciler<Workspace>?
     private var workspaceLive = false
+    private var resnapshotInProgress = false
 
     private init() {
         observeConnection()
@@ -245,14 +246,19 @@ class WorkspaceStore: ObservableObject {
                 lastUpdated = Date()
                 print("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
-                // Gap detected — resnapshot
-                print("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
-                Task { await resnapshot() }
+                // Gap detected — resnapshot (guard against storm)
+                if !resnapshotInProgress {
+                    print("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                    Task { await resnapshot() }
+                }
             }
         }
     }
 
     private func resnapshot() async {
+        resnapshotInProgress = true
+        defer { resnapshotInProgress = false }
+
         workspaceLive = false
         workspaceReconciler?.reset()
 

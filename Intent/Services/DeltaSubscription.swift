@@ -55,37 +55,40 @@ struct SubscriptionPush {
     }
 }
 
-/// Reconciles snapshot/delta pushes into an id-keyed collection.
+/// Reconciles snapshot/delta pushes into an id-keyed collection with stable ordering.
 class DeltaReconciler<T> {
     private var items = [String: T]()
+    private var orderedIds = [String]()
     private var expectedSeq = 0
     private var seeded = false
-    
+
     private let getId: ([String: Any]) -> String?
     private let normalize: ([String: Any]) -> T?
-    
+
     init(getId: @escaping ([String: Any]) -> String?, normalize: @escaping ([String: Any]) -> T?) {
         self.getId = getId
         self.normalize = normalize
     }
-    
+
     /// Forget all state so the next snapshot rebuilds from scratch.
     func reset() {
         items.removeAll()
+        orderedIds.removeAll()
         expectedSeq = 0
         seeded = false
     }
-    
+
     /// Replace the whole collection from a snapshot push.
     func applySnapshot(seq: Int, rawItems: [[String: Any]]) {
         items.removeAll()
+        orderedIds.removeAll()
         for raw in rawItems {
             upsert(raw)
         }
         expectedSeq = seq + 1
         seeded = true
     }
-    
+
     /// Apply a contiguous delta; false means a gap → caller should resnapshot.
     func applyDelta(seq: Int, delta: SubscriptionPush.DeltaPayload) -> Bool {
         guard seeded, seq == expectedSeq else {
@@ -99,19 +102,23 @@ class DeltaReconciler<T> {
         }
         for id in delta.removedIds {
             items.removeValue(forKey: id)
+            orderedIds.removeAll { $0 == id }
         }
         expectedSeq = seq + 1
         return true
     }
-    
-    /// Current collection as an array.
+
+    /// Current collection as an array in insertion order.
     func values() -> [T] {
-        return Array(items.values)
+        return orderedIds.compactMap { items[$0] }
     }
-    
+
     private func upsert(_ raw: [String: Any]) {
         guard let id = getId(raw), let normalized = normalize(raw) else {
             return
+        }
+        if items[id] == nil {
+            orderedIds.append(id)
         }
         items[id] = normalized
     }

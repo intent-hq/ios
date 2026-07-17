@@ -81,8 +81,11 @@ class ConnectionManager: ObservableObject {
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         print("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
 
-        // Call client.hello to detect liveState capability
-        detectLiveStateCapability()
+        // Call client.hello to detect liveState capability, then notify handlers
+        Task { @MainActor in
+            await detectLiveStateCapability()
+            onConnectedHandlers.forEach { $0() }
+        }
     }
 
     func disconnect() {
@@ -447,9 +450,12 @@ class ConnectionManager: ObservableObject {
                         self?.host = winningSocket.request.url?.host
                         self?.configureSocketEventHandler()
                         self?.connectionState = .connected
-                        self?.detectLiveStateCapability()
                         self?.subscribeToAllEvents()
                         self?.startPingTimer()
+                        Task { @MainActor [weak self] in
+                            await self?.detectLiveStateCapability()
+                            self?.onConnectedHandlers.forEach { $0() }
+                        }
                         return true
                     }
                     guard genOk else {
@@ -482,23 +488,21 @@ class ConnectionManager: ObservableObject {
         }
     }
 
-    private func detectLiveStateCapability() {
-        Task {
-            do {
-                let result = try await self.request("client.hello")
-                if let dict = result as? [String: Any],
-                   let caps = dict["capabilities"] as? [String: Any],
-                   let liveState = caps["liveState"] as? Bool {
-                    liveStateCapability = liveState
-                    print("[ConnectionManager] Detected liveState capability: \(liveState)")
-                } else {
-                    liveStateCapability = false
-                    print("[ConnectionManager] No liveState capability detected, using legacy path")
-                }
-            } catch {
+    private func detectLiveStateCapability() async {
+        do {
+            let result = try await self.request("client.hello")
+            if let dict = result as? [String: Any],
+               let caps = dict["capabilities"] as? [String: Any],
+               let liveState = caps["liveState"] as? Bool {
+                liveStateCapability = liveState
+                print("[ConnectionManager] Detected liveState capability: \(liveState)")
+            } else {
                 liveStateCapability = false
-                print("[ConnectionManager] client.hello failed: \(error), using legacy path")
+                print("[ConnectionManager] No liveState capability detected, using legacy path")
             }
+        } catch {
+            liveStateCapability = false
+            print("[ConnectionManager] client.hello failed: \(error), using legacy path")
         }
     }
 

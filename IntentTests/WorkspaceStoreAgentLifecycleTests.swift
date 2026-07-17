@@ -9,22 +9,18 @@ struct WorkspaceStoreAgentLifecycleTests {
     
     @Test func agentStartedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
-        let initialCount = store.workspaces.count
-        
+
         let event: [String: Any] = [
             "type": "agent:started",
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        
-        // The actual implementation would call fetchAll(), but in test mode
-        // we just verify handleEvent doesn't crash and processes the event
+
+        // Verify handleEvent doesn't crash and updates high-water mark
         store.handleEvent(method: "events.event", params: ["event": event])
-        
-        // In a real test with mocked ConnectionManager, we would verify fetchAll was called
-        #expect(true) // Event was processed without error
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentCompletedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -33,9 +29,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentFailedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -44,9 +40,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentCreatedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -55,9 +51,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentDeletedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -66,9 +62,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentIdleTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -77,9 +73,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentStatusChangedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -88,9 +84,9 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
-    
+
     @Test func agentRenamedTriggersRefetch() async throws {
         let store = WorkspaceStore(forTesting: true)
         let event: [String: Any] = [
@@ -99,7 +95,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "timestamp": "2026-07-17T12:00:00Z"
         ]
         store.handleEvent(method: "events.event", params: ["event": event])
-        #expect(true)
+        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
     
     @Test func unknownAgentEventIsLogged() async throws {
