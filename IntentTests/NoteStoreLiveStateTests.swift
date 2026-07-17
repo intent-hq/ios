@@ -8,8 +8,6 @@ struct NoteStoreLiveStateTests {
     // MARK: - Snapshot tests
     
     @Test func appliesSnapshot() async throws {
-        let store = NoteStore()
-        
         // Simulate subscription.push snapshot
         let params: [String: Any] = [
             "subscriptionId": "sub-notes-123",
@@ -142,7 +140,7 @@ struct NoteStoreLiveStateTests {
         #expect(success == false)
     }
 
-    @Test func resetsOnReconnect() async throws {
+    @Test func reconcilerResets() async throws {
         let reconciler = DeltaReconciler<Note>(
             getId: { dict in dict["id"] as? String },
             normalize: { dict in Note.parseNote(dict) }

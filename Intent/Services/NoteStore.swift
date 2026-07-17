@@ -120,8 +120,8 @@ class NoteStore: ObservableObject {
         }
         isLoading = false
 
-        // Subscribe to live updates if connected
-        if ConnectionManager.shared.connectionState == .connected {
+        // Subscribe to live updates if connected (skip if already subscribed from onConnected)
+        if ConnectionManager.shared.connectionState == .connected && noteReconciler == nil {
             await subscribeLiveState(workspaceId: workspaceId)
         }
     }
@@ -231,9 +231,10 @@ class NoteStore: ObservableObject {
             return
         }
 
-        // Log subscriptionId mismatch if we already have one (sanity check, not a gate)
+        // Gate on subscriptionId to avoid cross-contamination from other channels
+        // (ConnectionManager broadcasts all subscription.push to all handlers)
         if let subId = noteSubscriptionId, push.subscriptionId != subId {
-            print("[NoteStore] Warning: received push for subscription \(push.subscriptionId), expected \(subId)")
+            return
         }
 
         switch push.kind {
