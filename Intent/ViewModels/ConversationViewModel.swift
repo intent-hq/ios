@@ -106,6 +106,8 @@ class ConversationViewModel: ObservableObject {
         // This prevents a race condition where stream deltas arriving between
         // the fetch and the subscription would be lost.
         await store.subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
+        // Subscribe to live chat updates (chat.subscribe)
+        await store.subscribeLiveChat(agentId: agentId)
 
         // Run all independent fetches concurrently. fetchConversation,
         // fetchQueue, fetchCurrentModel, and fetchSubscriptions have no
