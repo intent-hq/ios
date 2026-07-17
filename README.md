@@ -9,7 +9,7 @@ The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad 
 ## What it is
 
 - **Native SwiftUI.** Built for iOS 26.2+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports both iPhone and iPad form factors.
-- **Secure pairing.** Pair with `intentd` via **QR code or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. No plaintext; all traffic over **WSS/TLS**.
+- **Secure pairing.** Pair with `intentd` via **QR code or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Traffic is **WSS/TLS** when a certificate fingerprint is available; the app falls back to plain `ws://` when none is known (e.g., manual pairing without a fingerprint).
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
 - **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
 
@@ -94,7 +94,7 @@ open Intent.xcodeproj
 # 5. Once paired, the app shows the workspace list
 ```
 
-The app requires an `intentd` instance listening on WSS:
+The app requires an `intentd` instance with its TCP WebSocket listener enabled:
 
 ```bash
 intentd serve --listen tcp
