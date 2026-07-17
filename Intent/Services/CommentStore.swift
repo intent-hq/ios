@@ -85,6 +85,11 @@ class CommentStore: ObservableObject {
         if let subId = commentSubscriptionId {
             await unsubscribe(subscriptionId: subId)
         }
+        // Remove event handler to prevent leak
+        if let handlerId = eventHandlerId {
+            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            eventHandlerId = nil
+        }
         commentSubscriptionId = nil
         commentReconciler = nil
         commentLive = false
@@ -116,11 +121,13 @@ class CommentStore: ObservableObject {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 commentReconciler = nil
                 commentSubscriptionId = nil
+                commentLive = false
             }
         } catch {
             // Subscribe failed - clean up reconciler and fall back to legacy
             commentReconciler = nil
             commentSubscriptionId = nil
+            commentLive = false
             print("[CommentStore] comment.subscribe failed: \(error), falling back to legacy")
         }
     }
