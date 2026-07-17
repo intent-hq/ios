@@ -71,7 +71,7 @@ class ConversationStore: ObservableObject {
     // MARK: - Connection observation
 
     private func observeConnection() {
-        connectionObserver = connectionManager.connectionStatePublisher
+        connectionObserver = connectionManager.$connectionState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {

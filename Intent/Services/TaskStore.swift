@@ -25,7 +25,7 @@ class TaskStore: ObservableObject {
         self.workspaceId = workspaceId
         self.connectionManager = connectionManager
 
-        connectionManager.connectionStatePublisher
+        connectionManager.$connectionState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
