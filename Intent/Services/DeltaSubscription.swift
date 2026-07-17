@@ -112,9 +112,9 @@ class DeltaReconciler<T> {
         return true
     }
 
-    /// Current collection as an array sorted by id for stable ordering.
+    /// Current collection as an array preserving server snapshot/insertion order.
     func values() -> [T] {
-        return orderedIds.sorted().compactMap { items[$0] }
+        return orderedIds.compactMap { items[$0] }
     }
 
     private func upsert(_ raw: [String: Any]) {
