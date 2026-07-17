@@ -98,8 +98,15 @@ class TaskStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 taskSubscriptionId = subId
                 print("[TaskStore] Subscribed to task.subscribe: \(subId)")
+            } else {
+                // Response missing subscriptionId - clean up and fall back to legacy
+                taskReconciler = nil
+                taskSubscriptionId = nil
             }
         } catch {
+            // Subscribe failed - clean up reconciler and fall back to legacy
+            taskReconciler = nil
+            taskSubscriptionId = nil
             print("[TaskStore] task.subscribe failed: \(error), falling back to legacy")
         }
     }
@@ -125,8 +132,12 @@ class TaskStore: ObservableObject {
         guard let eventType = event["type"] as? String else { return }
 
         // Only refetch if not in live mode (avoid double-apply)
+        // Scope task:* events to this workspace to avoid cross-workspace refetches
         if eventType.hasPrefix("task:") && !tasksLive {
-            Task { await fetchAll() }
+            let eventWorkspaceId = event["workspaceId"] as? String
+            if eventWorkspaceId == nil || eventWorkspaceId == workspaceId {
+                Task { await fetchAll() }
+            }
         }
     }
 
@@ -138,9 +149,11 @@ class TaskStore: ObservableObject {
             return
         }
 
-        // Log subscriptionId mismatch if we already have one (sanity check, not a gate)
+        // Gate on subscriptionId to avoid cross-contamination from other channels
+        // (ConnectionManager broadcasts all subscription.push to all handlers)
+        // Accept pushes if subscriptionId is nil (tiny window before response returns)
         if let subId = taskSubscriptionId, push.subscriptionId != subId {
-            print("[TaskStore] Warning: received push for subscription \(push.subscriptionId), expected \(subId)")
+            return
         }
 
         switch push.kind {
@@ -188,5 +201,7 @@ class TaskStore: ObservableObject {
 
         taskSubscriptionId = nil
         await subscribeLiveState()
+        // Baseline refetch to bridge the gap during resnapshot
+        await fetchAll()
     }
 }
