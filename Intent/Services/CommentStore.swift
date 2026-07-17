@@ -86,6 +86,9 @@ class CommentStore: ObservableObject {
             await unsubscribe(subscriptionId: subId)
         }
         commentSubscriptionId = nil
+        commentReconciler = nil
+        commentLive = false
+        resnapshotInProgress = false
         currentNoteId = nil
         threads = []
     }
@@ -109,8 +112,15 @@ class CommentStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 commentSubscriptionId = subId
                 print("[CommentStore] Subscribed to comment.subscribe for note \(noteId): \(subId)")
+            } else {
+                // Response missing subscriptionId - clean up and fall back to legacy
+                commentReconciler = nil
+                commentSubscriptionId = nil
             }
         } catch {
+            // Subscribe failed - clean up reconciler and fall back to legacy
+            commentReconciler = nil
+            commentSubscriptionId = nil
             print("[CommentStore] comment.subscribe failed: \(error), falling back to legacy")
         }
     }
@@ -149,9 +159,11 @@ class CommentStore: ObservableObject {
             return
         }
 
-        // Log subscriptionId mismatch if we already have one (sanity check, not a gate)
+        // Gate on subscriptionId to avoid cross-contamination from other channels
+        // (ConnectionManager broadcasts all subscription.push to all handlers)
+        // Accept pushes if subscriptionId is nil (tiny window before response returns)
         if let subId = commentSubscriptionId, push.subscriptionId != subId {
-            print("[CommentStore] Warning: received push for subscription \(push.subscriptionId), expected \(subId)")
+            return
         }
 
         switch push.kind {
