@@ -12,7 +12,7 @@ struct StatusDerivationTests {
     ) -> Workspace {
         Workspace(
             id: "test", title: "Test", branch: nil, baseRef: nil,
-            status: nil, lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
+            status: nil, activity: nil, lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
             repositoryName: nil, prStatus: prStatus, prNumber: nil,
             diffSummaryTotalFiles: diffSummaryTotalFiles,
             taskStatsTotal: taskStatsTotal,

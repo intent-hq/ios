@@ -15,7 +15,7 @@ struct WorkspaceListViewModelTests {
         taskStatsCompleted: Int? = nil, taskStatsInProgress: Int? = nil
     ) -> Workspace {
         Workspace(id: id, title: title, branch: branch, baseRef: nil, status: status,
-                  lastActivity: lastActivity, updatedAt: nil, repositoryOwner: repositoryOwner,
+                  activity: nil, lastActivity: lastActivity, updatedAt: nil, repositoryOwner: repositoryOwner,
                   repositoryName: repositoryName, prStatus: prStatus, prNumber: prNumber,
                   diffSummaryTotalFiles: diffSummaryTotalFiles, taskStatsTotal: taskStatsTotal,
                   taskStatsCompleted: taskStatsCompleted, taskStatsInProgress: taskStatsInProgress,
