@@ -12,16 +12,20 @@ class TaskStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var eventHandlerId: UUID?
 
+    // Injectable connection manager for testing
+    private let connectionManager: ConnectionManagerProtocol
+
     // Live-state tracking
     private var tasksLive = false
     private var taskSubscriptionId: String?
     private var taskReconciler: DeltaReconciler<WorkspaceTask>?
     private var resnapshotInProgress = false
 
-    init(workspaceId: String) {
+    init(workspaceId: String, connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
         self.workspaceId = workspaceId
+        self.connectionManager = connectionManager
 
-        ConnectionManager.shared.$connectionState
+        connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -56,7 +60,7 @@ class TaskStore: ObservableObject {
     private func _fetchAll() async {
         isLoading = true
         do {
-            let result = try await ConnectionManager.shared.request("task.list", params: [
+            let result = try await connectionManager.request("task.list", params: [
                 "workspaceId": workspaceId
             ])
             if let dict = result as? [String: Any],
@@ -75,11 +79,11 @@ class TaskStore: ObservableObject {
     private func subscribeToEvents() async {
         // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
         }
 
         // Register event handler on ConnectionManager
-        eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor in
                 self?.handleEvent(method, params: params)
             }
@@ -95,7 +99,7 @@ class TaskStore: ObservableObject {
 
         // Try to subscribe - if server doesn't support it, error response falls back to legacy
         do {
-            let result = try await ConnectionManager.shared.request("task.subscribe", params: [
+            let result = try await connectionManager.request("task.subscribe", params: [
                 "workspaceId": workspaceId,
                 "replaceGroup": "ios-tasks-\(workspaceId)"
             ])
@@ -203,7 +207,7 @@ class TaskStore: ObservableObject {
             // Unregister handler before unsubscribing
             ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await ConnectionManager.shared.request("task.unsubscribe", params: [
+                let _ = try await connectionManager.request("task.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {

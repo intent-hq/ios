@@ -27,6 +27,10 @@ class ConversationStore: ObservableObject {
     private var currentStreamId: String?
     private var isSubscribing = false
     private var eventHandlerId: UUID?
+
+    // Injectable connection manager for testing
+    private let connectionManager: ConnectionManagerProtocol
+
     /// Live-state tracking for chat.subscribe
     private var chatLive = false
     private var chatSubscriptionId: String?
@@ -46,7 +50,8 @@ class ConversationStore: ObservableObject {
     /// (preventing duplicate messages on the server).
     var lastFailedSend: (messageId: String, content: String)?
 
-    init() {
+    init(connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         observeConnection()
     }
 
@@ -66,7 +71,7 @@ class ConversationStore: ObservableObject {
     // MARK: - Connection observation
 
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -104,7 +109,7 @@ class ConversationStore: ObservableObject {
     /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.
     private func fetchAgentStreamingState(agentId: String) async {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.get",
                 params: ["agentId": agentId]
             )
@@ -134,7 +139,7 @@ class ConversationStore: ObservableObject {
             if let wsId = workspaceId ?? self.workspaceId {
                 params["workspaceId"] = wsId
             }
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.getConversation",
                 params: params
             )
@@ -282,11 +287,11 @@ class ConversationStore: ObservableObject {
 
         // Remove only our previous handler, not everyone else's
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
         }
 
         // Register event handler
-        eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor [weak self] in
                 self?.handleStreamEvent(method, params: params)
             }
@@ -294,7 +299,7 @@ class ConversationStore: ObservableObject {
 
         // Subscribe to agent stream events
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "events.subscribe",
                 params: [
                     "eventTypes": [
@@ -330,7 +335,7 @@ class ConversationStore: ObservableObject {
         )
 
         do {
-            let result = try await ConnectionManager.shared.request("chat.subscribe", params: [
+            let result = try await connectionManager.request("chat.subscribe", params: [
                 "agentId": agentId,
                 "replaceGroup": "ios-chat-\(agentId)"
             ])
@@ -404,7 +409,7 @@ class ConversationStore: ObservableObject {
             // Unregister handler before unsubscribing
             ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await ConnectionManager.shared.request("chat.unsubscribe", params: [
+                let _ = try await connectionManager.request("chat.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -432,7 +437,7 @@ class ConversationStore: ObservableObject {
         guard let subId = subscriptionId else { return }
         subscriptionId = nil
         do {
-            let _ = try await ConnectionManager.shared.request(
+            let _ = try await connectionManager.request(
                 "events.unsubscribe",
                 params: ["subscriptionId": subId]
             )
@@ -851,7 +856,7 @@ class ConversationStore: ObservableObject {
 
         let result: Any
         do {
-            result = try await ConnectionManager.shared.request(
+            result = try await connectionManager.request(
                 "agent.sendMessage",
                 params: params
             )
@@ -889,7 +894,7 @@ class ConversationStore: ObservableObject {
             params["imageBlocks"] = imageBlocks
         }
 
-        let result = try await ConnectionManager.shared.request(
+        let result = try await connectionManager.request(
             "agent.queueMessage",
             params: params
         )
@@ -907,7 +912,7 @@ class ConversationStore: ObservableObject {
 
     func stopStreaming(agentId: String) async {
         do {
-            let _ = try await ConnectionManager.shared.request(
+            let _ = try await connectionManager.request(
                 "agent.stop",
                 params: ["agentId": agentId]
             )
@@ -920,7 +925,7 @@ class ConversationStore: ObservableObject {
 
     func fetchQueue(agentId: String) async {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.getQueue",
                 params: ["agentId": agentId]
             )
@@ -937,7 +942,7 @@ class ConversationStore: ObservableObject {
     // MARK: - Edit queued message
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connectionManager.request(
             "agent.editQueuedMessage",
             params: [
                 "agentId": agentId,
@@ -956,7 +961,7 @@ class ConversationStore: ObservableObject {
         guard let message = queuedMessages.first(where: { $0.id == messageId }) else { return }
         let content = message.content
 
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connectionManager.request(
             "agent.forceMessage",
             params: [
                 "agentId": agentId,
@@ -971,7 +976,7 @@ class ConversationStore: ObservableObject {
     // MARK: - Remove queued message
 
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connectionManager.request(
             "agent.removeQueuedMessage",
             params: [
                 "agentId": agentId,
@@ -984,7 +989,7 @@ class ConversationStore: ObservableObject {
     // MARK: - Models
 
     func getModels(agentId: String) async throws -> [[String: Any]] {
-        let result = try await ConnectionManager.shared.request(
+        let result = try await connectionManager.request(
             "agent.getModels",
             params: ["agentId": agentId]
         )
@@ -996,7 +1001,7 @@ class ConversationStore: ObservableObject {
     }
 
     func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connectionManager.request(
             "agent.setModel",
             params: [
                 "agentId": agentId,
@@ -1010,7 +1015,7 @@ class ConversationStore: ObservableObject {
 
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.getSubscriptions",
                 params: ["agentId": agentId, "workspaceId": workspaceId]
             )
@@ -1058,7 +1063,7 @@ class ConversationStore: ObservableObject {
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {
         do {
-            let _ = try await ConnectionManager.shared.request(
+            let _ = try await connectionManager.request(
                 "agent.cancelSubscriptions",
                 params: ["agentId": agentId, "workspaceId": workspaceId]
             )
@@ -1077,7 +1082,7 @@ class ConversationStore: ObservableObject {
     private func refreshWatchedAgent(agentId: String) {
         Task { @MainActor in
             do {
-                let result = try await ConnectionManager.shared.request(
+                let result = try await connectionManager.request(
                     "agent.get",
                     params: ["agentId": agentId]
                 )
@@ -1120,7 +1125,7 @@ class ConversationStore: ObservableObject {
             return
         }
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.list",
                 params: ["workspaceId": workspaceId]
             )
@@ -1143,7 +1148,7 @@ class ConversationStore: ObservableObject {
         await cancelSubscriptions(agentId: parentAgentId, workspaceId: workspaceId)
         // Stop parent agent
         do {
-            let _ = try await ConnectionManager.shared.request(
+            let _ = try await connectionManager.request(
                 "agent.stop", params: ["agentId": parentAgentId])
         } catch {
             print("[ConversationStore] Failed to stop parent agent: \(error)")
@@ -1151,7 +1156,7 @@ class ConversationStore: ObservableObject {
         // Stop all watched agents
         for id in agentIds {
             do {
-                let _ = try await ConnectionManager.shared.request(
+                let _ = try await connectionManager.request(
                     "agent.stop", params: ["agentId": id])
             } catch {
                 print("[ConversationStore] Failed to stop agent \(id): \(error)")

@@ -5,24 +5,29 @@ import Combine
 class CommentStore: ObservableObject {
     @Published var threads: [CommentThread] = []
     @Published var isLoading = false
-    
+
     private var workspaceId: String?
     private var currentNoteId: String?
     private var connectionObserver: AnyCancellable?
     private var eventHandlerId: UUID?
-    
+
+    // Injectable connection manager for testing
+    private let connectionManager: ConnectionManagerProtocol
+
     // Live-state subscription tracking
     private var commentSubscriptionId: String?
     private var commentReconciler: DeltaReconciler<CommentThread>?
     private var commentLive = false
     private var resnapshotInProgress = false
-    
-    init() {
+
+    init(connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         observeConnection()
     }
-    
+
     /// Test-only initializer that skips connection observation
-    init(forTesting: Bool) {
+    init(forTesting: Bool, connectionManager: ConnectionManagerProtocol = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         // No connection observation for unit tests
     }
     
@@ -36,7 +41,7 @@ class CommentStore: ObservableObject {
     // MARK: - Connection observation
     
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -76,7 +81,7 @@ class CommentStore: ObservableObject {
         
         // Register event handler if not already registered
         if eventHandlerId == nil {
-            eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+            eventHandlerId = connectionManager.onEvent { [weak self] method, params in
                 Task { @MainActor in
                     self?.handleEvent(method, params: params)
                 }
@@ -93,7 +98,7 @@ class CommentStore: ObservableObject {
         }
         // Remove event handler to prevent leak
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
             eventHandlerId = nil
         }
         commentSubscriptionId = nil
@@ -114,7 +119,7 @@ class CommentStore: ObservableObject {
         )
         
         do {
-            let result = try await ConnectionManager.shared.request("comment.subscribe", params: [
+            let result = try await connectionManager.request("comment.subscribe", params: [
                 "workspaceId": workspaceId,
                 "noteId": noteId,
                 "replaceGroup": "ios-comments-\(noteId)"
@@ -148,7 +153,7 @@ class CommentStore: ObservableObject {
     
     private func unsubscribe(subscriptionId: String) async {
         do {
-            let _ = try await ConnectionManager.shared.request("comment.unsubscribe", params: [
+            let _ = try await connectionManager.request("comment.unsubscribe", params: [
                 "subscriptionId": subscriptionId
             ])
             print("[CommentStore] Unsubscribed: \(subscriptionId)")
