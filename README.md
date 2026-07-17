@@ -1,6 +1,6 @@
 # ios
 
-The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over **WSS/TLS + mDNS** discovery. It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
+The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad that connects to the `intentd` daemon over WebSocket (**WSS/TLS** when a certificate fingerprint is pinned, plain `ws://` otherwise). It provides on-the-go access to workspaces, notes, tasks, and agent conversations from any Intent-enabled desktop on your local network.
 
 > ⚠️ Private Repository — This repo is internal to the Cloudlands engineering team. It is consumed as a git submodule by [intent-hq/monorepo](https://github.com/intent-hq/monorepo).
 
@@ -9,7 +9,7 @@ The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad 
 ## What it is
 
 - **Native SwiftUI.** Built for iOS 26.2+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports both iPhone and iPad form factors.
-- **Secure pairing.** Discover `intentd` instances via **mDNS/Bonjour**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. No plaintext; all traffic over **WSS/TLS**.
+- **Secure pairing.** Pair with `intentd` via **QR code or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Traffic is **WSS/TLS** when a certificate fingerprint is available; the app falls back to plain `ws://` when none is known (e.g., manual pairing without a fingerprint).
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
 - **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
 
@@ -27,7 +27,6 @@ Intent/
 ├── Models/                 Codable domain models (Note, AgentSession, etc.)
 ├── Services/               Business logic + JSON-RPC client
 │   ├── ConnectionManager.swift   WebSocket connection lifecycle + request/response
-│   ├── BonjourBrowser.swift      mDNS discovery
 │   ├── WorkspaceStore.swift      Workspace CRUD + caching
 │   ├── NoteStore.swift           Note CRUD + caching
 │   ├── AgentStore.swift          Agent session tracking
@@ -35,7 +34,6 @@ Intent/
 │   └── CoverflowStore.swift      Coverflow UI state (archived workspace flow)
 ├── Views/                  SwiftUI components
 │   ├── PairingView.swift         Initial pairing flow orchestrator
-│   ├── BonjourDiscoveryView.swift  mDNS service picker
 │   ├── QRScannerView.swift       QR code scanner for token + fingerprint
 │   ├── ManualTokenEntryView.swift  Manual token entry
 │   ├── WorkspaceListView.swift   Workspace list (main screen)
@@ -56,15 +54,14 @@ Intent/
 
 The app uses **Starscream** for WebSocket transport and **MarkdownUI** for rendering notes and conversation messages.
 
-## Pairing & Discovery
+## Pairing
 
 On first launch, the app shows a pairing flow:
 
-1. **mDNS discovery** (`BonjourBrowser`) finds `_intentd._tcp` services on the local network.
-2. **Manual or QR entry**: the user picks a discovered host or scans a QR code from the desktop app containing `wss://host:port?token=...&fp=...`.
-3. **TLS fingerprint verification**: the app computes the SHA-256 fingerprint of the server's self-signed certificate and compares it to the expected fingerprint (from QR or prompt). On mismatch, connection is rejected.
-4. **Bearer auth**: the token is sent in the `Authorization: Bearer <token>` header.
-5. **Persist credentials**: host, port, token, and fingerprint are saved to `UserDefaults` for reconnection.
+1. **QR or manual entry**: the user scans a QR code from the desktop app containing the host, port, token, and cert fingerprint, or enters them manually.
+2. **TLS fingerprint verification**: the app computes the SHA-256 fingerprint of the server's self-signed certificate and compares it to the expected fingerprint (from QR or prompt). On mismatch, connection is rejected.
+3. **Bearer auth**: the token is sent in the `Authorization: Bearer <token>` header.
+4. **Persist credentials**: host, port, token, and fingerprint are saved to `UserDefaults` for reconnection.
 
 ## JSON-RPC Surface
 
@@ -90,18 +87,17 @@ open Intent.xcodeproj
 
 # 3. Build and run (Cmd+R)
 #    - The app will show the pairing screen
-#    - On your Mac, run: intentd serve --listen wss --bonjour
-#    - The iOS app should discover the intentd instance via mDNS
+#    - On your Mac, run: intentd serve --listen tcp
 
 # 4. Scan the QR code from the desktop app or enter the token manually
 
 # 5. Once paired, the app shows the workspace list
 ```
 
-The app requires an `intentd` instance listening on WSS with mDNS enabled:
+The app requires an `intentd` instance with its TCP WebSocket listener enabled:
 
 ```bash
-intentd serve --listen wss --bonjour
+intentd serve --listen tcp
 ```
 
 ## Dependencies
