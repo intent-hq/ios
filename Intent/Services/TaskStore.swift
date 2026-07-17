@@ -27,6 +27,7 @@ class TaskStore: ObservableObject {
                     Task { await self?.onConnected() }
                 }
             }
+            .store(in: &cancellables)
     }
 
     private func onConnected() async {
@@ -55,7 +56,7 @@ class TaskStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let tasksArray = dict["tasks"] as? [[String: Any]] {
-                tasks = tasksArray.compactMap { Task.parseTask($0) }
+                tasks = tasksArray.compactMap { WorkspaceTask.parseTask($0) }
                 lastUpdated = Date()
             }
         } catch {
