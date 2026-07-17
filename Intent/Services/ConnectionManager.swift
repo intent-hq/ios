@@ -183,7 +183,8 @@ class ConnectionManager: ObservableObject {
     }
 
     /// Internal entry point for testing message dispatch.
-    func dispatchMessage(_ text: String) async {
+    @MainActor
+    func dispatchMessage(_ text: String) {
         handleTextMessage(text)
     }
 
@@ -382,6 +383,7 @@ class ConnectionManager: ObservableObject {
         }
     }
 
+    @MainActor
     private func handleTextMessage(_ text: String) {
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
@@ -418,9 +420,7 @@ class ConnectionManager: ObservableObject {
             // Legacy eventHandlers must NOT receive subscription.push (router is the single source).
             if let push = SubscriptionPush.parse(method: method, params: params) {
                 if let handler = subscriptionHandlers[push.subscriptionId] {
-                    Task { @MainActor in
-                        handler(push)
-                    }
+                    handler(push)  // Already on MainActor, call directly
                 } else {
                     print("[ConnectionManager] Unrouted subscription.push for id=\(push.subscriptionId) (no handler registered)")
                 }
