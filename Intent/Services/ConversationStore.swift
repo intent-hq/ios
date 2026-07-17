@@ -464,8 +464,8 @@ class ConversationStore: ObservableObject {
             }
         case "agent:idle":
             isStreaming = false
-            // Re-fetch conversation to get final state
-            if let agentId = self.agentId {
+            // Re-fetch conversation to get final state (unless in live mode)
+            if !chatLive, let agentId = self.agentId {
                 Task { await self.fetchConversation(agentId: agentId) }
             }
         default:
