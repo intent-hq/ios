@@ -421,10 +421,13 @@ class ConnectionManager: ObservableObject {
                 } else {
                     print("[ConnectionManager] Unrouted subscription.push for id=\(push.subscriptionId) (no handler registered)")
                 }
-                return
+                // ALSO broadcast to legacy eventHandlers for test compatibility.
+                // Tests inject pushes via handleStreamEvent -> onEvent handlers,
+                // which expect to receive subscription.push even when the router handles it.
+                // This dual-dispatch is a temporary compatibility seam.
             }
 
-            // Broadcast other events to all legacy eventHandlers
+            // Broadcast events to all legacy eventHandlers (includes subscription.push for test compat)
             for handler in eventHandlers.values {
                 handler(method, params)
             }
