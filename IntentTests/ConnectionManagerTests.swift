@@ -167,5 +167,156 @@ struct ConnectionManagerTests {
         await manager.dispatchMessage("")
         await manager.dispatchMessage("{}")
     }
+
+    // MARK: - Subscription Push Routing
+
+    @Test @MainActor func registerSubscriptionHandlerStoresHandler() async {
+        let manager = ConnectionManager.shared
+        var receivedPush: SubscriptionPush?
+
+        manager.registerSubscriptionHandler(id: "test-sub-1") { push in
+            receivedPush = push
+        }
+
+        // Verify the push is routed correctly
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-1","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushMessage)
+
+        #expect(receivedPush != nil)
+        #expect(receivedPush?.subscriptionId == "test-sub-1")
+        #expect(receivedPush?.kind == .snapshot)
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "test-sub-1")
+    }
+
+    @Test @MainActor func pushForUnknownSubscriptionIsDropped() async {
+        let manager = ConnectionManager.shared
+
+        // No handler registered for this id
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"unknown-sub","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+        // Should not crash, just drop and log
+        await manager.dispatchMessage(pushMessage)
+    }
+
+    @Test @MainActor func unregisterRemovesHandler() async {
+        let manager = ConnectionManager.shared
+        var receivedCount = 0
+
+        manager.registerSubscriptionHandler(id: "test-sub-2") { _ in
+            receivedCount += 1
+        }
+
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-2","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+
+        // First push should be received
+        await manager.dispatchMessage(pushMessage)
+        #expect(receivedCount == 1)
+
+        // Unregister
+        manager.unregisterSubscriptionHandler(id: "test-sub-2")
+
+        // Second push should be dropped
+        await manager.dispatchMessage(pushMessage)
+        #expect(receivedCount == 1) // Still 1, not incremented
+    }
+
+    @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() async {
+        let manager = ConnectionManager.shared
+        var receivedPush1: SubscriptionPush?
+        var receivedPush2: SubscriptionPush?
+
+        manager.registerSubscriptionHandler(id: "test-sub-a") { push in
+            receivedPush1 = push
+        }
+
+        manager.registerSubscriptionHandler(id: "test-sub-b") { push in
+            receivedPush2 = push
+        }
+
+        // Send push for subscription A
+        let pushA = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-a","kind":"snapshot","seq":1,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushA)
+
+        #expect(receivedPush1?.subscriptionId == "test-sub-a")
+        #expect(receivedPush1?.seq == 1)
+        #expect(receivedPush2 == nil) // Handler B should not receive A's push
+
+        // Reset and send push for subscription B
+        receivedPush1 = nil
+        receivedPush2 = nil
+
+        let pushB = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-b","kind":"snapshot","seq":2,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushB)
+
+        #expect(receivedPush1 == nil) // Handler A should not receive B's push
+        #expect(receivedPush2?.subscriptionId == "test-sub-b")
+        #expect(receivedPush2?.seq == 2)
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "test-sub-a")
+        manager.unregisterSubscriptionHandler(id: "test-sub-b")
+    }
+
+    @Test @MainActor func reregisterSameIdReplacesHandler() async {
+        let manager = ConnectionManager.shared
+        var firstHandlerCalled = false
+        var secondHandlerCalled = false
+
+        manager.registerSubscriptionHandler(id: "test-sub-3") { _ in
+            firstHandlerCalled = true
+        }
+
+        // Re-register with new handler
+        manager.registerSubscriptionHandler(id: "test-sub-3") { _ in
+            secondHandlerCalled = true
+        }
+
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-3","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushMessage)
+
+        #expect(!firstHandlerCalled) // Old handler should not be called
+        #expect(secondHandlerCalled) // New handler should be called
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "test-sub-3")
+    }
+
+    @Test @MainActor func subscriptionPushDoesNotReachLegacyEventHandlers() async {
+        let manager = ConnectionManager.shared
+        var legacyHandlerReceivedSubscriptionPush = false
+
+        let handlerId = manager.onEvent { method, _ in
+            if method == "subscription.push" {
+                legacyHandlerReceivedSubscriptionPush = true
+            }
+        }
+
+        // Register a subscription handler to consume the push
+        manager.registerSubscriptionHandler(id: "test-sub-4") { _ in }
+
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-4","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushMessage)
+
+        #expect(!legacyHandlerReceivedSubscriptionPush)
+
+        // Clean up
+        manager.removeEventHandler(id: handlerId)
+        manager.unregisterSubscriptionHandler(id: "test-sub-4")
+    }
 }
 

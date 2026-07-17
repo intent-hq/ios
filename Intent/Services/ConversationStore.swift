@@ -78,6 +78,10 @@ class ConversationStore: ObservableObject {
     private func onReconnected() async {
         // Reset live-state tracking on new connection
         chatLive = false
+        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = chatSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         chatSubscriptionId = nil
         chatReconciler = nil
         resnapshotChatInProgress = false
@@ -332,7 +336,15 @@ class ConversationStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
+                // Unregister old handler if we had one
+                if let oldId = chatSubscriptionId {
+                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                }
                 chatSubscriptionId = subId
+                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
+                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                    self?.handleChatSubscriptionPush(push)
+                }
                 print("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
@@ -353,16 +365,9 @@ class ConversationStore: ObservableObject {
             return
         }
 
-        // Strict gate: only accept pushes matching our active chatSubscriptionId
-        // (No nil-fallthrough to prevent cross-channel contamination during pre-response window)
-        if let subId = chatSubscriptionId, push.subscriptionId != subId {
-            print("[ConversationStore] Ignoring push for subscription \(push.subscriptionId), expected \(subId)")
-            return
-        }
-        guard let subId = chatSubscriptionId, push.subscriptionId == subId else {
-            // First-time (no active subscription yet) — silently drop
-            return
-        }
+        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
+        // so this handler only receives pushes for our exact subscriptionId.
+        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -396,6 +401,8 @@ class ConversationStore: ObservableObject {
         chatReconciler?.reset()
 
         if let subId = chatSubscriptionId {
+            // Unregister handler before unsubscribing
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
                 let _ = try await ConnectionManager.shared.request("chat.unsubscribe", params: [
                     "subscriptionId": subId
@@ -1183,6 +1190,10 @@ class ConversationStore: ObservableObject {
         watchedAgentDigests.removeAll()
         watchedAgentStreamBuffers.removeAll()
         chatLive = false
+        // Unregister handler on reset
+        if let oldId = chatSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         chatSubscriptionId = nil
         chatReconciler = nil
         resnapshotChatInProgress = false

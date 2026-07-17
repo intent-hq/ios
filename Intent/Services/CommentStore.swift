@@ -48,10 +48,14 @@ class CommentStore: ObservableObject {
     private func onConnected() async {
         // Reset live-state tracking on new connection
         commentLive = false
+        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = commentSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         commentSubscriptionId = nil
         commentReconciler = nil
         resnapshotInProgress = false
-        
+
         // Resubscribe if we were viewing a note
         if let wsId = workspaceId, let noteId = currentNoteId {
             await subscribeToNote(workspaceId: wsId, noteId: noteId)
@@ -63,9 +67,10 @@ class CommentStore: ObservableObject {
     func subscribeToNote(workspaceId: String, noteId: String) async {
         // Unsubscribe from previous note if different
         if let prevSubId = commentSubscriptionId, currentNoteId != noteId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: prevSubId)
             await unsubscribe(subscriptionId: prevSubId)
         }
-        
+
         self.workspaceId = workspaceId
         self.currentNoteId = noteId
         
@@ -83,6 +88,7 @@ class CommentStore: ObservableObject {
     
     func unsubscribeFromCurrentNote() async {
         if let subId = commentSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             await unsubscribe(subscriptionId: subId)
         }
         // Remove event handler to prevent leak
@@ -115,7 +121,15 @@ class CommentStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
+                // Unregister old handler if we had one
+                if let oldId = commentSubscriptionId {
+                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                }
                 commentSubscriptionId = subId
+                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
+                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                    self?.handleSubscriptionPush(push)
+                }
                 print("[CommentStore] Subscribed to comment.subscribe for note \(noteId): \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
@@ -146,11 +160,8 @@ class CommentStore: ObservableObject {
     // MARK: - Event handling
 
     func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates
-        if let push = SubscriptionPush.parse(method: method, params: params) {
-            handleSubscriptionPush(push)
-            return
-        }
+        // subscription.push is now routed directly via ConnectionManager.registerSubscriptionHandler
+        // and never reaches this legacy broadcast path
 
         // Legacy event handling (only if not live)
         if !commentLive {
@@ -166,12 +177,9 @@ class CommentStore: ObservableObject {
             return
         }
 
-        // Gate on subscriptionId to avoid cross-contamination from other channels
-        // (ConnectionManager broadcasts all subscription.push to all handlers)
-        // Accept pushes if subscriptionId is nil (tiny window before response returns)
-        if let subId = commentSubscriptionId, push.subscriptionId != subId {
-            return
-        }
+        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
+        // so this handler only receives pushes for our exact subscriptionId.
+        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -205,6 +213,8 @@ class CommentStore: ObservableObject {
         commentReconciler?.reset()
 
         if let subId = commentSubscriptionId {
+            // Unregister handler before unsubscribing
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             await unsubscribe(subscriptionId: subId)
         }
 

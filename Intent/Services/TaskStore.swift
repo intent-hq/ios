@@ -34,6 +34,10 @@ class TaskStore: ObservableObject {
     private func onConnected() async {
         // Reset live-state tracking on new connection
         tasksLive = false
+        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
+        if let oldId = taskSubscriptionId {
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+        }
         taskSubscriptionId = nil
         taskReconciler = nil
         resnapshotInProgress = false
@@ -97,7 +101,15 @@ class TaskStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
+                // Unregister old handler if we had one
+                if let oldId = taskSubscriptionId {
+                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                }
                 taskSubscriptionId = subId
+                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
+                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                    self?.handleSubscriptionPush(push)
+                }
                 print("[TaskStore] Subscribed to task.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
@@ -113,11 +125,8 @@ class TaskStore: ObservableObject {
     }
 
     func handleEvent(_ method: String, params: Any) {
-        // Handle subscription.push for live-state updates
-        if let push = SubscriptionPush.parse(method: method, params: params) {
-            handleSubscriptionPush(push)
-            return
-        }
+        // subscription.push is now routed directly via ConnectionManager.registerSubscriptionHandler
+        // and never reaches this legacy broadcast path
 
         guard let dict = params as? [String: Any] else { return }
 
@@ -150,12 +159,9 @@ class TaskStore: ObservableObject {
             return
         }
 
-        // Gate on subscriptionId to avoid cross-contamination from other channels
-        // (ConnectionManager broadcasts all subscription.push to all handlers)
-        // Accept pushes if subscriptionId is nil (tiny window before response returns)
-        if let subId = taskSubscriptionId, push.subscriptionId != subId {
-            return
-        }
+        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
+        // so this handler only receives pushes for our exact subscriptionId.
+        // No per-store gate needed (single source of truth is the router)
 
         switch push.kind {
         case .snapshot:
@@ -191,6 +197,8 @@ class TaskStore: ObservableObject {
         taskReconciler?.reset()
 
         if let subId = taskSubscriptionId {
+            // Unregister handler before unsubscribing
+            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
             do {
                 let _ = try await ConnectionManager.shared.request("task.unsubscribe", params: [
                     "subscriptionId": subId
