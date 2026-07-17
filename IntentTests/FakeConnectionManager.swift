@@ -3,67 +3,62 @@ import Combine
 @testable import Intent
 
 /// Fake ConnectionManager for testing store subscribe lifecycle.
+/// Subclasses ConnectionManager to provide test hooks while maintaining type compatibility.
 /// Allows tests to:
 /// - Control connection state transitions
 /// - Inject RPC responses (subscribe/unsubscribe)
 /// - Inject events (subscription.push) via router or legacy handlers
 /// - Verify that stores call the correct methods
 @MainActor
-class FakeConnectionManager {
-    @Published var connectionState: ConnectionState = .disconnected
-    var connectionStatePublisher: Published<ConnectionState>.Publisher { $connectionState }
-
-    private var eventHandlers: [UUID: (String, Any) -> Void] = [:]
-    private var subscriptionHandlers: [String: (SubscriptionPush) -> Void] = [:]
-
+class FakeConnectionManager: ConnectionManager {
     // Test hooks
     var requestLog: [(method: String, params: [String: Any])] = []
     var requestResponses: [String: Any] = [:]  // method -> response
     var shouldThrowOnRequest: [String: Error] = [:]  // method -> error
     
-    func request(_ method: String, params: [String: Any]) async throws -> Any {
+    override func request(_ method: String, params: [String: Any]) async throws -> Any {
         requestLog.append((method, params))
-        
+
         if let error = shouldThrowOnRequest[method] {
             throw error
         }
-        
+
         if let response = requestResponses[method] {
             return response
         }
-        
+
         // Default responses for common methods
         if method.hasSuffix(".subscribe") {
             let subId = "fake-sub-\(method)-\(UUID().uuidString.prefix(8))"
             return ["subscriptionId": subId]
         }
-        
+
         if method.hasSuffix(".unsubscribe") {
             return ["ok": true]
         }
-        
+
         return [:]
     }
     
     @discardableResult
-    func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID {
-        let id = UUID()
-        eventHandlers[id] = handler
+    override func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID {
+        // Call super to maintain any parent behavior, then track for tests
+        let id = super.onEvent(handler)
         return id
     }
-    
-    func removeEventHandler(id: UUID) {
-        eventHandlers.removeValue(forKey: id)
+
+    override func removeEventHandler(id: UUID) {
+        super.removeEventHandler(id: id)
     }
 
-    /// Register a subscription handler for the given subscriptionId (router API from PR #15)
-    func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
-        subscriptionHandlers[id] = handler
+    /// Override router API from PR #15 to track subscriptions
+    override func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
+        super.registerSubscriptionHandler(id: id, handler: handler)
     }
 
-    /// Unregister the subscription handler for the given subscriptionId (router API from PR #15)
-    func unregisterSubscriptionHandler(id: String) {
-        subscriptionHandlers.removeValue(forKey: id)
+    /// Override router API from PR #15
+    override func unregisterSubscriptionHandler(id: String) {
+        super.unregisterSubscriptionHandler(id: id)
     }
 
     // Test helpers
@@ -86,7 +81,7 @@ class FakeConnectionManager {
     }
     
     /// Inject a subscription.push event via the router (mimics PR #15's routing behavior).
-    /// Dispatches directly to the registered handler for the subscriptionId, NOT to legacy eventHandlers.
+    /// Constructs a JSON-RPC message and dispatches through the parent's dispatchMessage.
     func injectSubscriptionPush(
         subscriptionId: String,
         kind: SubscriptionPush.Kind,
@@ -112,12 +107,16 @@ class FakeConnectionManager {
             ]
         }
 
-        // Route via the router (single source of subscription.push dispatch)
-        if let push = SubscriptionPush.parse(method: "subscription.push", params: params) {
-            if let handler = subscriptionHandlers[push.subscriptionId] {
-                handler(push)
-            }
-            // If no handler registered, drop silently (matches router behavior)
+        // Build JSON-RPC message and dispatch through parent
+        let message: [String: Any] = [
+            "jsonrpc": "2.0",
+            "method": "subscription.push",
+            "params": params
+        ]
+
+        if let jsonData = try? JSONSerialization.data(withJSONObject: message),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            dispatchMessage(jsonString)
         }
     }
     
@@ -126,8 +125,6 @@ class FakeConnectionManager {
         requestLog.removeAll()
         requestResponses.removeAll()
         shouldThrowOnRequest.removeAll()
-        eventHandlers.removeAll()
-        subscriptionHandlers.removeAll()
         connectionState = .disconnected
     }
     
