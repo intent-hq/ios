@@ -119,11 +119,8 @@ class NoteStore: ObservableObject {
             print("[NoteStore] Failed to fetch notes: \(error)")
         }
         isLoading = false
-
-        // Subscribe to live updates if connected (skip if already subscribed from onConnected)
-        if ConnectionManager.shared.connectionState == .connected && noteReconciler == nil {
-            await subscribeLiveState(workspaceId: workspaceId)
-        }
+        // Note: live-state subscription is owned by onConnected() lifecycle.
+        // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
     }
 
     func fetchNote(noteId: String, workspaceId: String) async -> Note? {
@@ -166,11 +163,13 @@ class NoteStore: ObservableObject {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 noteReconciler = nil
                 noteSubscriptionId = nil
+                noteLive = false
             }
         } catch {
             // Subscribe failed - clean up reconciler and fall back to legacy
             noteReconciler = nil
             noteSubscriptionId = nil
+            noteLive = false
             print("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
         }
     }
