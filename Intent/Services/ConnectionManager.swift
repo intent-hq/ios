@@ -350,10 +350,21 @@ class ConnectionManager: ObservableObject {
         if let id = json["id"] as? Int {
             if let continuation = pendingRequests.removeValue(forKey: id) {
                 if let error = json["error"] as? [String: Any] {
+                    let code = error["code"] as? Int ?? -1
+                    let topMessage = error["message"] as? String ?? "Unknown error"
+
+                    // Extract error.data.message if present (daemon stashes real cause there)
+                    var effectiveMessage = topMessage
+                    if let errorData = error["data"] as? [String: Any],
+                       let dataMessage = errorData["message"] as? String,
+                       !dataMessage.isEmpty {
+                        effectiveMessage = dataMessage
+                    }
+
                     continuation.resume(throwing: NSError(
                         domain: "WebSocket",
-                        code: error["code"] as? Int ?? -1,
-                        userInfo: [NSLocalizedDescriptionKey: error["message"] as? String ?? "Unknown error"]))
+                        code: code,
+                        userInfo: [NSLocalizedDescriptionKey: "\(effectiveMessage) (\(code))"]))
                 } else {
                     continuation.resume(returning: json["result"] as Any)
                 }
