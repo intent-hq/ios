@@ -16,6 +16,11 @@ class WorkspaceStore: ObservableObject {
     /// event-driven timestamps are never overwritten by stale server data.
     var lastActivityHighWaterMark: [String: String] = [:]
 
+    // Live-state subscription tracking
+    private var workspaceSubscriptionId: String?
+    private var workspaceReconciler: DeltaReconciler<Workspace>?
+    private var workspaceLive = false
+
     private init() {
         observeConnection()
     }
@@ -38,8 +43,14 @@ class WorkspaceStore: ObservableObject {
     }
 
     private func onConnected() async {
+        // Reset live-state tracking on new connection
+        workspaceLive = false
+        workspaceSubscriptionId = nil
+        workspaceReconciler = nil
+
         await fetchAll()
         await subscribeToEvents()
+        await subscribeLiveState()
     }
 
     // MARK: - Fetch
@@ -106,12 +117,45 @@ class WorkspaceStore: ObservableObject {
         // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
         eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
             Task { @MainActor in
-                self?.handleEvent(params)
+                self?.handleEvent(method: method, params: params)
             }
         }
     }
 
-    private func handleEvent(_ params: Any) {
+    private func subscribeLiveState() async {
+        guard ConnectionManager.shared.liveStateCapability else {
+            print("[WorkspaceStore] liveState not available, using legacy events only")
+            return
+        }
+
+        // Initialize workspace reconciler
+        workspaceReconciler = DeltaReconciler<Workspace>(
+            getId: { dict in dict["id"] as? String },
+            normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
+        )
+
+        // Subscribe to workspace changes
+        do {
+            let result = try await ConnectionManager.shared.request("workspace.subscribe", params: [
+                "replaceGroup": "ios-workspaces"
+            ])
+            if let dict = result as? [String: Any],
+               let subId = dict["subscriptionId"] as? String {
+                workspaceSubscriptionId = subId
+                print("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
+            }
+        } catch {
+            print("[WorkspaceStore] workspace.subscribe failed: \(error), falling back to legacy")
+        }
+    }
+
+    private func handleEvent(method: String, params: Any) {
+        // Handle subscription.push for live-state updates
+        if let push = SubscriptionPush.parse(method: method, params: params) {
+            handleSubscriptionPush(push)
+            return
+        }
+
         guard let dict = params as? [String: Any] else { return }
 
         // Events from websocket-event-bridge are wrapped:
@@ -131,13 +175,17 @@ class WorkspaceStore: ObservableObject {
         let eventWorkspaceId = event["workspaceId"] as? String
 
         switch eventType {
-        case "agent:idle", "agent:started", "agent:status-changed":
+        // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS)
+        case "agent:started", "agent:completed", "agent:failed", "agent:created",
+             "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed":
             // Update lastActivity locally for immediate UI feedback
             if let wsId = eventWorkspaceId {
                 updateLocalLastActivity(workspaceId: wsId, timestamp: eventTimestamp)
             }
-            // Also re-fetch to get updated agentSummary
-            Task { await fetchAll() }
+            // Only refetch if not in live mode (avoid double-apply)
+            if !workspaceLive {
+                Task { await fetchAll() }
+            }
 
         case let t where t.hasPrefix("workspace:"):
             // Check for workspace:updated with lastActivity changes
@@ -148,20 +196,81 @@ class WorkspaceStore: ObservableObject {
                let wsId = eventWorkspaceId {
                 updateLocalLastActivity(workspaceId: wsId, timestamp: lastActivity)
             }
-            // Refetch on events that change workspace list or visible state
-            if eventType == "workspace:activity-changed" ||
-               eventType == "workspace:updated" ||
-               eventType == "workspace:deleted" {
-                Task { await fetchAll() }
+            // Only refetch if not in live mode (avoid double-apply)
+            if !workspaceLive {
+                if eventType == "workspace:activity-changed" ||
+                   eventType == "workspace:updated" ||
+                   eventType == "workspace:deleted" {
+                    Task { await fetchAll() }
+                }
             }
 
         case let t where t.hasPrefix("agent:"):
-            // Handled by specific cases above (agent:idle, agent:started, agent:status-changed)
-            break
+            // Unknown agent event — log and ignore (all known types handled above)
+            print("[WorkspaceStore] Ignoring unknown agent event: \(t)")
 
         default:
             break
         }
+    }
+
+    private func handleSubscriptionPush(_ push: SubscriptionPush) {
+        // Only process pushes for our workspace subscription
+        guard let subId = workspaceSubscriptionId, push.subscriptionId == subId else {
+            return
+        }
+
+        guard let reconciler = workspaceReconciler else {
+            print("[WorkspaceStore] Received push but reconciler not initialized")
+            return
+        }
+
+        switch push.kind {
+        case .snapshot:
+            workspaceLive = true
+            let rawItems = push.snapshot ?? []
+            reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
+            var parsed = reconciler.values()
+            applyHighWaterMarks(to: &parsed)
+            workspaces = parsed
+            lastUpdated = Date()
+            print("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
+
+        case .delta:
+            guard let delta = push.delta else { return }
+            if reconciler.applyDelta(seq: push.seq, delta: delta) {
+                var parsed = reconciler.values()
+                applyHighWaterMarks(to: &parsed)
+                workspaces = parsed
+                lastUpdated = Date()
+                print("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+            } else {
+                // Gap detected — resnapshot
+                print("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                Task { await resnapshot() }
+            }
+        }
+    }
+
+    private func resnapshot() async {
+        workspaceLive = false
+        workspaceReconciler?.reset()
+
+        if let subId = workspaceSubscriptionId {
+            do {
+                let _ = try await ConnectionManager.shared.request("workspace.unsubscribe", params: [
+                    "subscriptionId": subId
+                ])
+            } catch {
+                print("[WorkspaceStore] workspace.unsubscribe failed: \(error)")
+            }
+        }
+
+        workspaceSubscriptionId = nil
+
+        // Re-subscribe and refetch to bridge
+        await subscribeLiveState()
+        await fetchAll()
     }
 
     func updateLocalLastActivity(workspaceId: String, timestamp: String) {

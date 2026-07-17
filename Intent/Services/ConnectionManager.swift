@@ -33,6 +33,9 @@ class ConnectionManager: ObservableObject {
     private var certFingerprint: String?
     var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
+    // Live-state capability from client.hello
+    private(set) var liveStateCapability: Bool = false
+
     private init() {}
 
     // MARK: - Connection lifecycle
@@ -77,6 +80,9 @@ class ConnectionManager: ObservableObject {
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         print("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
+
+        // Call client.hello to detect liveState capability
+        detectLiveStateCapability()
     }
 
     func disconnect() {
@@ -86,6 +92,7 @@ class ConnectionManager: ObservableObject {
         socket?.disconnect(closeCode: CloseCode.normal.rawValue)
         socket = nil
         connectionState = .disconnected
+        liveStateCapability = false
         failAllPending(error: "Connection closed")
     }
 
@@ -440,6 +447,7 @@ class ConnectionManager: ObservableObject {
                         self?.host = winningSocket.request.url?.host
                         self?.configureSocketEventHandler()
                         self?.connectionState = .connected
+                        self?.detectLiveStateCapability()
                         self?.subscribeToAllEvents()
                         self?.startPingTimer()
                         return true
@@ -470,6 +478,26 @@ class ConnectionManager: ObservableObject {
                     print("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")
                 }
                 attempt += 1
+            }
+        }
+    }
+
+    private func detectLiveStateCapability() {
+        Task {
+            do {
+                let result = try await self.request("client.hello")
+                if let dict = result as? [String: Any],
+                   let caps = dict["capabilities"] as? [String: Any],
+                   let liveState = caps["liveState"] as? Bool {
+                    liveStateCapability = liveState
+                    print("[ConnectionManager] Detected liveState capability: \(liveState)")
+                } else {
+                    liveStateCapability = false
+                    print("[ConnectionManager] No liveState capability detected, using legacy path")
+                }
+            } catch {
+                liveStateCapability = false
+                print("[ConnectionManager] client.hello failed: \(error), using legacy path")
             }
         }
     }
