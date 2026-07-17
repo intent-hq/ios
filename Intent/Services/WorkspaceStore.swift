@@ -31,6 +31,13 @@ class WorkspaceStore: ObservableObject {
         // No connection observation for unit tests
     }
 
+    /// Test-only helper to set reconciler for race condition testing
+    func setTestReconciler(_ reconciler: DeltaReconciler<Workspace>) async {
+        await MainActor.run {
+            workspaceReconciler = reconciler
+        }
+    }
+
     // MARK: - Connection observation
 
     private func observeConnection() {
@@ -212,14 +219,16 @@ class WorkspaceStore: ObservableObject {
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
-        // Only process pushes for our workspace subscription
-        guard let subId = workspaceSubscriptionId, push.subscriptionId == subId else {
+        // Only process pushes if we have a reconciler ready
+        // (reconciler is initialized synchronously before subscribe request, so any
+        // push arriving between subscribe-sent and response-received is safe to process)
+        guard let reconciler = workspaceReconciler else {
             return
         }
 
-        guard let reconciler = workspaceReconciler else {
-            print("[WorkspaceStore] Received push but reconciler not initialized")
-            return
+        // Log subscriptionId mismatch if we already have one (sanity check, not a gate)
+        if let subId = workspaceSubscriptionId, push.subscriptionId != subId {
+            print("[WorkspaceStore] Warning: received push for subscription \(push.subscriptionId), expected \(subId)")
         }
 
         switch push.kind {

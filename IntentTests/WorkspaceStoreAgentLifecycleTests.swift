@@ -145,4 +145,32 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
         #expect(store.workspaces[0].lastActivity == "2026-07-17T12:00:00Z")
     }
+
+    // MARK: - Subscription.push race condition prevention
+
+    @Test func snapshotPushBeforeSubscriptionIdReturnsIsProcessed() async throws {
+        let store = WorkspaceStore(forTesting: true)
+
+        // Initialize reconciler manually (simulates subscribeLiveState's synchronous init)
+        await store.setTestReconciler(DeltaReconciler<Workspace>(
+            getId: { dict in dict["id"] as? String },
+            normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
+        ))
+
+        // Feed a snapshot push BEFORE workspaceSubscriptionId is set (simulates race)
+        let snapshotParams: [String: Any] = [
+            "subscriptionId": "sub-123",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": [
+                ["id": "ws-1", "title": "Test Workspace", "lastActivity": "2026-07-17T12:00:00Z"]
+            ]
+        ]
+        store.handleEvent("subscription.push", params: snapshotParams)
+
+        // Verify the snapshot was processed even though subscriptionId wasn't set yet
+        #expect(store.workspaces.count == 1)
+        #expect(store.workspaces[0].id == "ws-1")
+        #expect(store.workspaces[0].title == "Test Workspace")
+    }
 }
