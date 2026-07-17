@@ -160,8 +160,11 @@ class CommentStore: ObservableObject {
     // MARK: - Event handling
 
     func handleEvent(_ method: String, params: Any) {
-        // subscription.push is now routed directly via ConnectionManager.registerSubscriptionHandler
-        // and never reaches this legacy broadcast path
+        // Handle subscription.push for live-state updates (test injection compatibility)
+        if let push = SubscriptionPush.parse(method: method, params: params) {
+            handleSubscriptionPush(push)
+            return
+        }
 
         // Legacy event handling (only if not live)
         if !commentLive {
