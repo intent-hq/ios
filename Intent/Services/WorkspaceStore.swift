@@ -124,6 +124,13 @@ class WorkspaceStore: ObservableObject {
     }
 
     private func subscribeLiveState() async {
+        // Wait briefly for capability detection to complete
+        var attempts = 0
+        while !ConnectionManager.shared.liveStateCapability && attempts < 10 {
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            attempts += 1
+        }
+
         guard ConnectionManager.shared.liveStateCapability else {
             print("[WorkspaceStore] liveState not available, using legacy events only")
             return

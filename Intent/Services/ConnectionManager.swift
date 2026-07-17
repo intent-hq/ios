@@ -81,10 +81,9 @@ class ConnectionManager: ObservableObject {
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         print("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
 
-        // Call client.hello to detect liveState capability, then notify handlers
+        // Call client.hello to detect liveState capability
         Task { @MainActor in
             await detectLiveStateCapability()
-            onConnectedHandlers.forEach { $0() }
         }
     }
 
@@ -454,7 +453,6 @@ class ConnectionManager: ObservableObject {
                         self?.startPingTimer()
                         Task { @MainActor [weak self] in
                             await self?.detectLiveStateCapability()
-                            self?.onConnectedHandlers.forEach { $0() }
                         }
                         return true
                     }
