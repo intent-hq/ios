@@ -32,6 +32,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let branch: String?
     let baseRef: String?
     let status: String?
+    let activity: String?      // "idle" | "agent_running" from daemon
     let lastActivity: String?
     let updatedAt: String?
     let repositoryOwner: String?

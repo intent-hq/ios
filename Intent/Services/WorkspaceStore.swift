@@ -76,6 +76,7 @@ class WorkspaceStore: ObservableObject {
                     branch: ws.branch,
                     baseRef: ws.baseRef,
                     status: ws.status,
+                    activity: ws.activity,
                     lastActivity: hwm,
                     updatedAt: ws.updatedAt,
                     repositoryOwner: ws.repositoryOwner,
@@ -147,7 +148,12 @@ class WorkspaceStore: ObservableObject {
                let wsId = eventWorkspaceId {
                 updateLocalLastActivity(workspaceId: wsId, timestamp: lastActivity)
             }
-            Task { await fetchAll() }
+            // Refetch on events that change workspace list or visible state
+            if eventType == "workspace:activity-changed" ||
+               eventType == "workspace:updated" ||
+               eventType == "workspace:deleted" {
+                Task { await fetchAll() }
+            }
 
         case let t where t.hasPrefix("agent:"):
             // Handled by specific cases above (agent:idle, agent:started, agent:status-changed)
@@ -178,6 +184,7 @@ class WorkspaceStore: ObservableObject {
                 branch: ws.branch,
                 baseRef: ws.baseRef,
                 status: ws.status,
+                activity: ws.activity,
                 lastActivity: effectiveTimestamp,
                 updatedAt: ws.updatedAt,
                 repositoryOwner: ws.repositoryOwner,
@@ -246,6 +253,7 @@ class WorkspaceStore: ObservableObject {
             branch: dict["branch"] as? String,
             baseRef: dict["baseRef"] as? String,
             status: dict["status"] as? String,
+            activity: dict["activity"] as? String,
             lastActivity: dict["lastActivity"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             repositoryOwner: dict["repositoryOwner"] as? String,

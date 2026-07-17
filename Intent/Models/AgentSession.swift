@@ -18,12 +18,12 @@ struct AgentSession: Identifiable, Equatable {
     let createdByAgentId: String?
 
     private static let activeStatuses: Set<String> = [
-        "active", "Active", "pending", "Processing",
-        "streaming", "processing", "busy", "responding"
+        "active", "pending", "processing",
+        "streaming", "busy", "responding", "waiting"
     ]
 
     var isActive: Bool {
-        isStreaming || isProcessing || isResponding || Self.activeStatuses.contains(status)
+        isStreaming || isProcessing || isResponding || Self.activeStatuses.contains(status.lowercased())
     }
 
     var displayMessage: String? {

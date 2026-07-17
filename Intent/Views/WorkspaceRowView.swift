@@ -21,7 +21,15 @@ struct WorkspaceRowView: View {
     }
 
     private var hasActiveAgents: Bool {
-        workspace.agentSummaryAgents?.contains { $0.isStreaming || $0.isResponding } ?? false
+        switch workspace.activity?.lowercased() {
+        case "agent_running":
+            return true
+        case "idle":
+            return false
+        default:
+            // Unknown or nil activity — fall back to agent-summary check
+            return workspace.agentSummaryAgents?.contains { $0.isStreaming || $0.isResponding } ?? false
+        }
     }
 
     var body: some View {
@@ -97,12 +105,14 @@ struct WorkspaceRowView: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
         .onAppear {
-            print("[WorkspaceRowView] '\(workspace.title)': agentCount=\(workspace.agentSummaryCount ?? 0), agents=\(workspace.agentSummaryAgents?.count ?? 0), hasActive=\(hasActiveAgents)")
+            #if DEBUG
+            print("[WorkspaceRowView] '\(workspace.title)': activity=\(workspace.activity ?? "nil"), agentCount=\(workspace.agentSummaryCount ?? 0), agents=\(workspace.agentSummaryAgents?.count ?? 0), hasActive=\(hasActiveAgents)")
             if let agents = workspace.agentSummaryAgents {
                 for agent in agents {
                     print("[WorkspaceRowView]   Agent: \(agent.name) status=\(agent.status) isStreaming=\(agent.isStreaming) isResponding=\(agent.isResponding)")
                 }
             }
+            #endif
         }
     }
 
