@@ -17,7 +17,7 @@ struct WorkspaceStoreAgentLifecycleTests {
         ]
 
         // Verify handleEvent doesn't crash and updates high-water mark
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -28,7 +28,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -39,7 +39,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -50,7 +50,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -61,7 +61,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -72,7 +72,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -83,7 +83,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -94,7 +94,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
+        store.handleEvent("events.event", params: ["event": event])
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
     }
 
@@ -109,7 +109,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": knownEvent])
+        store.handleEvent("events.event", params: ["event": knownEvent])
         let initialMark = store.lastActivityHighWaterMark["ws-1"]
 
         // Feed unknown event
@@ -118,7 +118,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T13:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": unknownEvent])
+        store.handleEvent("events.event", params: ["event": unknownEvent])
 
         // High-water mark should be unchanged
         #expect(store.lastActivityHighWaterMark["ws-1"] == initialMark)
@@ -140,8 +140,8 @@ struct WorkspaceStoreAgentLifecycleTests {
             "workspaceId": "ws-1",
             "timestamp": "2026-07-17T12:00:00Z"
         ]
-        store.handleEvent(method: "events.event", params: ["event": event])
-        
+        store.handleEvent("events.event", params: ["event": event])
+
         #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-07-17T12:00:00Z")
         #expect(store.workspaces[0].lastActivity == "2026-07-17T12:00:00Z")
     }

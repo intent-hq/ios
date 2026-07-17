@@ -119,7 +119,7 @@ class WorkspaceStore: ObservableObject {
         // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
         eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
             Task { @MainActor in
-                self?.handleEvent(method: method, params: params)
+                self?.handleEvent(method, params: params)
             }
         }
     }
@@ -146,7 +146,7 @@ class WorkspaceStore: ObservableObject {
         }
     }
 
-    func handleEvent(method: String, params: Any) {
+    func handleEvent(_ method: String, params: Any) {
         // Handle subscription.push for live-state updates
         if let push = SubscriptionPush.parse(method: method, params: params) {
             handleSubscriptionPush(push)
