@@ -406,7 +406,7 @@ class CoverflowStore: ObservableObject {
             if let wsId = workspaceId {
                 let data = event["data"] as? [String: Any]
                 let wsStatus = (data?["status"] as? String)?.lowercased() ?? ""
-                if wsStatus == "archived" || wsStatus == "deleted" {
+                if wsStatus == "archived" || wsStatus == "deleted" || eventType == "workspace:deleted" {
                     // Clean up agents from this workspace
                     let removedAgents = queue.filter { $0.workspaceId == wsId }
                     for agent in removedAgents {

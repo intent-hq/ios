@@ -148,8 +148,13 @@ class WorkspaceStore: ObservableObject {
                let wsId = eventWorkspaceId {
                 updateLocalLastActivity(workspaceId: wsId, timestamp: lastActivity)
             }
-            // Also refetch on workspace:activity-changed (or rely on workspace:updated)
-            Task { await fetchAll() }
+            // Refetch on events that change workspace list or visible state
+            if eventType == "workspace:activity-changed" ||
+               eventType == "workspace:updated" ||
+               eventType == "workspace:archived" ||
+               eventType == "workspace:deleted" {
+                Task { await fetchAll() }
+            }
 
         case let t where t.hasPrefix("agent:"):
             // Handled by specific cases above (agent:idle, agent:started, agent:status-changed)
