@@ -50,6 +50,13 @@ class ConversationStore: ObservableObject {
         observeConnection()
     }
 
+    /// Test-only helper to set reconciler for testing
+    func setTestReconciler(_ reconciler: DeltaReconciler<ConversationMessage>) async {
+        await MainActor.run {
+            chatReconciler = reconciler
+        }
+    }
+
     // MARK: - Connection observation
 
     private func observeConnection() {
@@ -417,7 +424,7 @@ class ConversationStore: ObservableObject {
         }
     }
 
-    private func handleStreamEvent(_ method: String, params: Any) {
+    func handleStreamEvent(_ method: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         // Handle subscription.push for live-state chat updates
