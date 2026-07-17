@@ -22,6 +22,7 @@ class TaskStore: ObservableObject {
         self.workspaceId = workspaceId
 
         ConnectionManager.shared.$connectionState
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
                     Task { await self?.onConnected() }
@@ -135,7 +136,7 @@ class TaskStore: ObservableObject {
         // Scope task:* events to this workspace to avoid cross-workspace refetches
         if eventType.hasPrefix("task:") && !tasksLive {
             let eventWorkspaceId = event["workspaceId"] as? String
-            if eventWorkspaceId == nil || eventWorkspaceId == workspaceId {
+            if eventWorkspaceId == workspaceId {
                 Task { await fetchAll() }
             }
         }
