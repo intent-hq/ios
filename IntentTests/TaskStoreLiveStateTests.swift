@@ -7,7 +7,7 @@ struct TaskStoreLiveStateTests {
     
     @Test func appliesSnapshot() async throws {
         let store = TaskStore(workspaceId: "ws-test")
-        
+
         let push = SubscriptionPush(
             subscriptionId: "sub-123",
             kind: .snapshot,
@@ -18,14 +18,14 @@ struct TaskStoreLiveStateTests {
             ],
             delta: nil
         )
-        
+
         // Directly initialize reconciler and apply push (simulating what subscribeLiveState does)
-        let reconciler = DeltaReconciler<Task>(
+        let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in Task.parseTask(dict) }
+            normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
         reconciler.applySnapshot(seq: push.seq, rawItems: push.snapshot!)
-        
+
         let values = reconciler.values()
         #expect(values.count == 2)
         #expect(values[0].id == "task-1")
@@ -37,9 +37,9 @@ struct TaskStoreLiveStateTests {
     }
     
     @Test func appliesContiguousDelta() async throws {
-        let reconciler = DeltaReconciler<Task>(
+        let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in Task.parseTask(dict) }
+            normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
         
         // Start with snapshot
@@ -68,9 +68,9 @@ struct TaskStoreLiveStateTests {
     }
     
     @Test func detectsGapAndReturnsFalse() async throws {
-        let reconciler = DeltaReconciler<Task>(
+        let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in Task.parseTask(dict) }
+            normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
         
         // Start with snapshot
@@ -90,9 +90,9 @@ struct TaskStoreLiveStateTests {
     }
     
     @Test func resetsOnReconnect() async throws {
-        let reconciler = DeltaReconciler<Task>(
+        let reconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in Task.parseTask(dict) }
+            normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
         
         // Apply snapshot

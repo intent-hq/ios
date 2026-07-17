@@ -4,7 +4,7 @@ import Combine
 /// ObservableObject managing task state for a single workspace
 @MainActor
 class TaskStore: ObservableObject {
-    @Published var tasks: [Task] = []
+    @Published var tasks: [WorkspaceTask] = []
     @Published var isLoading = false
     @Published var lastUpdated: Date?
 
@@ -15,7 +15,7 @@ class TaskStore: ObservableObject {
     // Live-state tracking
     private var tasksLive = false
     private var taskSubscriptionId: String?
-    private var taskReconciler: DeltaReconciler<Task>?
+    private var taskReconciler: DeltaReconciler<WorkspaceTask>?
     private var resnapshotInProgress = false
 
     init(workspaceId: String) {
@@ -82,9 +82,9 @@ class TaskStore: ObservableObject {
 
     private func subscribeLiveState() async {
         // Initialize task reconciler
-        taskReconciler = DeltaReconciler<Task>(
+        taskReconciler = DeltaReconciler<WorkspaceTask>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in Task.parseTask(dict) }
+            normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
 
         // Try to subscribe - if server doesn't support it, error response falls back to legacy
