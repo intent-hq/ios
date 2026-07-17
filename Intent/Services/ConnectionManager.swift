@@ -414,20 +414,26 @@ class ConnectionManager: ObservableObject {
         } else if let method = json["method"] as? String {
             let params = json["params"] as Any
 
-            // Route subscription.push to the registered handler for that subscriptionId
+            // Route subscription.push to the registered handler for that subscriptionId.
+            // Legacy eventHandlers must NOT receive subscription.push (router is the single source).
             if let push = SubscriptionPush.parse(method: method, params: params) {
                 if let handler = subscriptionHandlers[push.subscriptionId] {
-                    handler(push)
+                    Task { @MainActor in
+                        handler(push)
+                    }
                 } else {
                     print("[ConnectionManager] Unrouted subscription.push for id=\(push.subscriptionId) (no handler registered)")
                 }
-                // ALSO broadcast to legacy eventHandlers for test compatibility.
-                // Tests inject pushes via handleStreamEvent -> onEvent handlers,
-                // which expect to receive subscription.push even when the router handles it.
-                // This dual-dispatch is a temporary compatibility seam.
+                return  // Do NOT fall through to legacy eventHandlers
             }
 
-            // Broadcast events to all legacy eventHandlers (includes subscription.push for test compat)
+            // If subscription.push parse failed (malformed), drop it with a warning
+            if method == "subscription.push" {
+                print("[ConnectionManager] Warning: Malformed subscription.push, dropping: \(params)")
+                return
+            }
+
+            // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)
             for handler in eventHandlers.values {
                 handler(method, params)
             }

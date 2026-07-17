@@ -294,7 +294,7 @@ struct ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "test-sub-3")
     }
 
-    @Test @MainActor func subscriptionPushAlsoReachesLegacyEventHandlers() async {
+    @Test @MainActor func subscriptionPushDoesNotReachLegacyEventHandlers() async {
         let manager = ConnectionManager.shared
         var legacyHandlerReceivedSubscriptionPush = false
         var routerHandlerReceivedPush = false
@@ -315,14 +315,67 @@ struct ConnectionManagerTests {
         """
         await manager.dispatchMessage(pushMessage)
 
-        // Dual-dispatch: both the router handler and legacy event handlers should receive the push
-        // (this is for test compatibility, allowing tests to inject pushes via handleEvent)
+        // Router is the SINGLE source of subscription.push dispatch.
+        // Legacy eventHandlers must NOT receive subscription.push.
         #expect(routerHandlerReceivedPush)
-        #expect(legacyHandlerReceivedSubscriptionPush)
+        #expect(!legacyHandlerReceivedSubscriptionPush)
 
         // Clean up
         manager.removeEventHandler(id: handlerId)
         manager.unregisterSubscriptionHandler(id: "test-sub-4")
+    }
+
+    @Test @MainActor func malformedSubscriptionPushIsDropped() async {
+        let manager = ConnectionManager.shared
+        var legacyHandlerReceivedSubscriptionPush = false
+        var routerHandlerCalled = false
+
+        let handlerId = manager.onEvent { method, _ in
+            if method == "subscription.push" {
+                legacyHandlerReceivedSubscriptionPush = true
+            }
+        }
+
+        manager.registerSubscriptionHandler(id: "test-sub-5") { _ in
+            routerHandlerCalled = true
+        }
+
+        // Missing required fields (no "seq" or "kind")
+        let malformedPushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-5"}}
+        """
+        await manager.dispatchMessage(malformedPushMessage)
+
+        // Malformed push should be dropped entirely: no router dispatch, no legacy broadcast
+        #expect(!routerHandlerCalled)
+        #expect(!legacyHandlerReceivedSubscriptionPush)
+
+        // Clean up
+        manager.removeEventHandler(id: handlerId)
+        manager.unregisterSubscriptionHandler(id: "test-sub-5")
+    }
+
+    @Test @MainActor func unregisteredSubscriptionIdIsDropped() async {
+        let manager = ConnectionManager.shared
+        var legacyHandlerReceivedSubscriptionPush = false
+
+        let handlerId = manager.onEvent { method, _ in
+            if method == "subscription.push" {
+                legacyHandlerReceivedSubscriptionPush = true
+            }
+        }
+
+        // Do NOT register a handler for "test-sub-6"
+        let pushMessage = """
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-6","kind":"snapshot","seq":0,"snapshot":[]}}
+        """
+        await manager.dispatchMessage(pushMessage)
+
+        // Unregistered push should be dropped (logged at debug but not dispatched)
+        #expect(!legacyHandlerReceivedSubscriptionPush)
+
+        // Clean up
+        manager.removeEventHandler(id: handlerId)
     }
 }
 
