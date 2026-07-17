@@ -27,6 +27,11 @@ class ConversationStore: ObservableObject {
     private var currentStreamId: String?
     private var isSubscribing = false
     private var eventHandlerId: UUID?
+    /// Live-state tracking for chat.subscribe
+    private var chatLive = false
+    private var chatSubscriptionId: String?
+    private var chatReconciler: DeltaReconciler<ConversationMessage>?
+    private var resnapshotChatInProgress = false
     /// Tracks the last time we refreshed each watched agent (for debouncing stream:chunk refreshes)
     private var watchedAgentLastRefresh: [String: Date] = [:]
     /// Locally-extracted digests from watched agent stream chunks
@@ -45,6 +50,19 @@ class ConversationStore: ObservableObject {
         observeConnection()
     }
 
+    /// Test-only helper to set reconciler for testing
+    func setTestReconciler(_ reconciler: DeltaReconciler<ConversationMessage>) async {
+        await MainActor.run {
+            chatReconciler = reconciler
+        }
+    }
+
+    /// Test-only helper: set chatSubscriptionId to bypass real subscribe flow.
+    /// Use in tests alongside setTestReconciler so the strict push gate accepts test payloads.
+    func setTestSubscriptionId(_ id: String) {
+        chatSubscriptionId = id
+    }
+
     // MARK: - Connection observation
 
     private func observeConnection() {
@@ -58,6 +76,12 @@ class ConversationStore: ObservableObject {
     }
 
     private func onReconnected() async {
+        // Reset live-state tracking on new connection
+        chatLive = false
+        chatSubscriptionId = nil
+        chatReconciler = nil
+        resnapshotChatInProgress = false
+
         // Re-fetch conversation on reconnection
         guard let agentId = agentId else { return }
         // Parallel fetch of independent data
@@ -68,6 +92,7 @@ class ConversationStore: ObservableObject {
         _ = await (conv, queue, streaming)
         if let workspaceId = workspaceId {
             await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
+            await subscribeLiveChat(agentId: agentId)
             await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
         }
     }
@@ -291,6 +316,104 @@ class ConversationStore: ObservableObject {
         }
     }
 
+    // MARK: - Live chat subscription
+
+    func subscribeLiveChat(agentId: String) async {
+        // Initialize chat reconciler synchronously before await to eliminate race
+        chatReconciler = DeltaReconciler<ConversationMessage>(
+            getId: { dict in dict["id"] as? String },
+            normalize: { dict in ConversationMessage.parseMessage(dict) }
+        )
+
+        do {
+            let result = try await ConnectionManager.shared.request("chat.subscribe", params: [
+                "agentId": agentId,
+                "replaceGroup": "ios-chat-\(agentId)"
+            ])
+            if let dict = result as? [String: Any],
+               let subId = dict["subscriptionId"] as? String {
+                chatSubscriptionId = subId
+                print("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
+            } else {
+                // Response missing subscriptionId - clean up and fall back to legacy
+                chatReconciler = nil
+                chatSubscriptionId = nil
+            }
+        } catch {
+            // Subscribe failed - clean up reconciler and fall back to legacy
+            chatReconciler = nil
+            chatSubscriptionId = nil
+            print("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
+        }
+    }
+
+    private func handleChatSubscriptionPush(_ push: SubscriptionPush) {
+        // Only process pushes if we have a reconciler ready
+        guard let reconciler = chatReconciler else {
+            return
+        }
+
+        // Strict gate: only accept pushes matching our active chatSubscriptionId
+        // (No nil-fallthrough to prevent cross-channel contamination during pre-response window)
+        if let subId = chatSubscriptionId, push.subscriptionId != subId {
+            print("[ConversationStore] Ignoring push for subscription \(push.subscriptionId), expected \(subId)")
+            return
+        }
+        guard let subId = chatSubscriptionId, push.subscriptionId == subId else {
+            // First-time (no active subscription yet) — silently drop
+            return
+        }
+
+        switch push.kind {
+        case .snapshot:
+            guard let rawItems = push.snapshot else { return }
+            chatLive = true
+            reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
+            messages = reconciler.values()
+            print("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq)")
+
+        case .delta:
+            guard let delta = push.delta else { return }
+            if reconciler.applyDelta(seq: push.seq, delta: delta) {
+                messages = reconciler.values()
+                print("[ConversationStore] Applied chat delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+            } else {
+                // Gap detected — resnapshot (guard against storm)
+                if !resnapshotChatInProgress {
+                    resnapshotChatInProgress = true
+                    print("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
+                    Task { await resnapshotChat() }
+                }
+            }
+        }
+    }
+
+    private func resnapshotChat() async {
+        resnapshotChatInProgress = true
+        defer { resnapshotChatInProgress = false }
+
+        chatLive = false
+        chatReconciler?.reset()
+
+        if let subId = chatSubscriptionId {
+            do {
+                let _ = try await ConnectionManager.shared.request("chat.unsubscribe", params: [
+                    "subscriptionId": subId
+                ])
+            } catch {
+                print("[ConversationStore] chat.unsubscribe failed: \(error)")
+            }
+        }
+
+        chatSubscriptionId = nil
+
+        if let agentId = agentId {
+            await subscribeLiveChat(agentId: agentId)
+            // Baseline refetch to bridge the gap during resnapshot
+            await fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        }
+    }
+
     /// Unsubscribe the previous server-side event subscription to prevent duplicate event delivery.
     private func unsubscribePrevious() async {
         // Clean up active store registry
@@ -312,8 +435,14 @@ class ConversationStore: ObservableObject {
         }
     }
 
-    private func handleStreamEvent(_ method: String, params: Any) {
+    func handleStreamEvent(_ method: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
+
+        // Handle subscription.push for live-state chat updates
+        if let push = SubscriptionPush.parse(method: method, params: params) {
+            handleChatSubscriptionPush(push)
+            return
+        }
 
         // Early agent ID filter: skip events not meant for our agent.
         // This is critical when multiple ConversationStore instances exist
@@ -464,8 +593,8 @@ class ConversationStore: ObservableObject {
             }
         case "agent:idle":
             isStreaming = false
-            // Re-fetch conversation to get final state
-            if let agentId = self.agentId {
+            // Re-fetch conversation to get final state (unless in live mode)
+            if !chatLive, let agentId = self.agentId {
                 Task { await self.fetchConversation(agentId: agentId) }
             }
         default:
@@ -528,8 +657,8 @@ class ConversationStore: ObservableObject {
             messages[lastIndex].isStreaming = false
         }
 
-        // Re-fetch to get the final server-side state
-        if let agentId = agentId {
+        // Re-fetch to get the final server-side state (unless in live mode)
+        if !chatLive, let agentId = agentId {
             Task { await fetchConversation(agentId: agentId) }
         }
     }
@@ -1053,6 +1182,10 @@ class ConversationStore: ObservableObject {
         watchedAgentLastRefresh.removeAll()
         watchedAgentDigests.removeAll()
         watchedAgentStreamBuffers.removeAll()
+        chatLive = false
+        chatSubscriptionId = nil
+        chatReconciler = nil
+        resnapshotChatInProgress = false
     }
 
     // MARK: - Digest Extraction
