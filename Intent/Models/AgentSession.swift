@@ -19,7 +19,7 @@ struct AgentSession: Identifiable, Equatable {
 
     private static let activeStatuses: Set<String> = [
         "active", "Active", "pending", "Processing",
-        "streaming", "processing", "busy", "responding"
+        "streaming", "processing", "busy", "responding", "Waiting"
     ]
 
     var isActive: Bool {
