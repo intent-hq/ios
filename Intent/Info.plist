@@ -9,10 +9,6 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_intent-ws._tcp</string>
-	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

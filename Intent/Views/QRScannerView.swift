@@ -1,6 +1,5 @@
 import SwiftUI
 import AVFoundation
-import Network
 
 struct QRScannerView: View {
     @EnvironmentObject var coordinator: AppCoordinator
@@ -53,20 +52,6 @@ struct QRScannerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-        }
-        .onAppear {
-            triggerLocalNetworkPermission()
-        }
-    }
-
-    /// Starts a brief Bonjour browse to trigger the iOS local network permission dialog.
-    /// The browse is cancelled after 2 seconds — we only need the permission prompt, not results.
-    private func triggerLocalNetworkPermission() {
-        let browser = NWBrowser(for: .bonjour(type: "_intent-ws._tcp", domain: nil), using: .tcp)
-        browser.stateUpdateHandler = { _ in }
-        browser.start(queue: .main)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            browser.cancel()
         }
     }
 

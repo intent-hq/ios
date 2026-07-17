@@ -4,7 +4,6 @@ struct PairingView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var showQRScanner = false
-    @State private var showBonjourDiscovery = false
     @State private var showManualEntry = false
 
     var body: some View {
@@ -44,15 +43,6 @@ struct PairingView: View {
                         }
 
                         PairingOptionButton(
-                            icon: "wifi",
-                            title: "Find on Network",
-                            subtitle: "Discover Intent on your network",
-                            colorScheme: colorScheme
-                        ) {
-                            showBonjourDiscovery = true
-                        }
-
-                        PairingOptionButton(
                             icon: "keyboard",
                             title: "Manual Connection",
                             subtitle: "Enter IP, port, and token",
@@ -70,9 +60,6 @@ struct PairingView: View {
             }
             .sheet(isPresented: $showQRScanner) {
                 QRScannerView()
-            }
-            .sheet(isPresented: $showBonjourDiscovery) {
-                BonjourDiscoveryView()
             }
             .sheet(isPresented: $showManualEntry) {
                 ManualTokenEntryView()
