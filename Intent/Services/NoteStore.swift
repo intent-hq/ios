@@ -8,6 +8,7 @@ class NoteStore: ObservableObject {
 
     private var workspaceId: String?
     private var eventHandlerId: UUID?
+    private let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking (subscription.push)
     private var noteLive = false
@@ -19,7 +20,8 @@ class NoteStore: ObservableObject {
     /// Optional callback invoked when a note event is received (for detail view refresh)
     var onNoteChanged: (() -> Void)?
 
-    init() {
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         observeConnection()
     }
 
@@ -65,7 +67,7 @@ class NoteStore: ObservableObject {
     // MARK: - Connection observation
 
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -79,7 +81,7 @@ class NoteStore: ObservableObject {
         noteLive = false
         // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
         if let oldId = noteSubscriptionId {
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+            connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         noteSubscriptionId = nil
         noteReconciler = nil
@@ -111,7 +113,7 @@ class NoteStore: ObservableObject {
             isLoading = true
         }
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "note.list",
                 params: ["workspaceId": workspaceId]
             )
@@ -129,7 +131,7 @@ class NoteStore: ObservableObject {
 
     func fetchNote(noteId: String, workspaceId: String) async -> Note? {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
@@ -155,7 +157,7 @@ class NoteStore: ObservableObject {
 
         // Try to subscribe - if server doesn't support it, error response falls back to legacy
         do {
-            let result = try await ConnectionManager.shared.request("note.subscribe", params: [
+            let result = try await connectionManager.request("note.subscribe", params: [
                 "workspaceId": workspaceId,
                 "replaceGroup": "ios-notes-\(workspaceId)"
             ])
@@ -163,11 +165,11 @@ class NoteStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
                 if let oldId = noteSubscriptionId {
-                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                    connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
                 noteSubscriptionId = subId
                 // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
-                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
                 print("[NoteStore] Subscribed to note.subscribe: \(subId)")
@@ -195,12 +197,12 @@ class NoteStore: ObservableObject {
 
         // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
         }
 
         // Register event handler on ConnectionManager
         // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
-        eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor [weak self] in
                 self?.handleEvent(method, params: params)
             }
@@ -286,9 +288,9 @@ class NoteStore: ObservableObject {
 
         if let subId = noteSubscriptionId {
             // Unregister handler before unsubscribing
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
+            connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await ConnectionManager.shared.request("note.unsubscribe", params: [
+                let _ = try await connectionManager.request("note.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
