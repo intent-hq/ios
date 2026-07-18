@@ -10,19 +10,22 @@ class CommentStore: ObservableObject {
     private var currentNoteId: String?
     private var connectionObserver: AnyCancellable?
     private var eventHandlerId: UUID?
-    
+    private let connectionManager: ConnectionManagerRouting
+
     // Live-state subscription tracking
     private var commentSubscriptionId: String?
     private var commentReconciler: DeltaReconciler<CommentThread>?
     private var commentLive = false
     private var resnapshotInProgress = false
-    
-    init() {
+
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         observeConnection()
     }
-    
+
     /// Test-only initializer that skips connection observation
     init(forTesting: Bool) {
+        self.connectionManager = ConnectionManager.shared
         // No connection observation for unit tests
     }
     
@@ -36,7 +39,7 @@ class CommentStore: ObservableObject {
     // MARK: - Connection observation
     
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -44,13 +47,13 @@ class CommentStore: ObservableObject {
                 }
             }
     }
-    
+
     private func onConnected() async {
         // Reset live-state tracking on new connection
         commentLive = false
         // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
         if let oldId = commentSubscriptionId {
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+            connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         commentSubscriptionId = nil
         commentReconciler = nil
@@ -67,33 +70,33 @@ class CommentStore: ObservableObject {
     func subscribeToNote(workspaceId: String, noteId: String) async {
         // Unsubscribe from previous note if different
         if let prevSubId = commentSubscriptionId, currentNoteId != noteId {
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: prevSubId)
+            connectionManager.unregisterSubscriptionHandler(id: prevSubId)
             await unsubscribe(subscriptionId: prevSubId)
         }
 
         self.workspaceId = workspaceId
         self.currentNoteId = noteId
-        
+
         // Register event handler if not already registered
         if eventHandlerId == nil {
-            eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+            eventHandlerId = connectionManager.onEvent { [weak self] method, params in
                 Task { @MainActor in
                     self?.handleEvent(method, params: params)
                 }
             }
         }
-        
+
         await subscribeLiveState(workspaceId: workspaceId, noteId: noteId)
     }
-    
+
     func unsubscribeFromCurrentNote() async {
         if let subId = commentSubscriptionId {
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
+            connectionManager.unregisterSubscriptionHandler(id: subId)
             await unsubscribe(subscriptionId: subId)
         }
         // Remove event handler to prevent leak
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
             eventHandlerId = nil
         }
         commentSubscriptionId = nil
@@ -114,7 +117,7 @@ class CommentStore: ObservableObject {
         )
         
         do {
-            let result = try await ConnectionManager.shared.request("comment.subscribe", params: [
+            let result = try await connectionManager.request("comment.subscribe", params: [
                 "workspaceId": workspaceId,
                 "noteId": noteId,
                 "replaceGroup": "ios-comments-\(noteId)"
@@ -123,11 +126,11 @@ class CommentStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
                 if let oldId = commentSubscriptionId {
-                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                    connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
                 commentSubscriptionId = subId
                 // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
-                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
                 print("[CommentStore] Subscribed to comment.subscribe for note \(noteId): \(subId)")
@@ -148,7 +151,7 @@ class CommentStore: ObservableObject {
     
     private func unsubscribe(subscriptionId: String) async {
         do {
-            let _ = try await ConnectionManager.shared.request("comment.unsubscribe", params: [
+            let _ = try await connectionManager.request("comment.unsubscribe", params: [
                 "subscriptionId": subscriptionId
             ])
             print("[CommentStore] Unsubscribed: \(subscriptionId)")
@@ -217,7 +220,7 @@ class CommentStore: ObservableObject {
 
         if let subId = commentSubscriptionId {
             // Unregister handler before unsubscribing
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
+            connectionManager.unregisterSubscriptionHandler(id: subId)
             await unsubscribe(subscriptionId: subId)
         }
 

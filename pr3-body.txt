@@ -1,0 +1,21 @@
+Add store-level integration tests for TaskStore on top of the ConnectionManagerRouting seam from PR #17.
+
+## Changes
+
+- Update **TaskStore** to accept injected ConnectionManagerRouting (default = ConnectionManager.shared)
+- Add **TaskStoreIntegrationTests** with 6 test cases:
+  1. **subscribeOnConnect**: connect → subscribe → snapshot delivered → tasks populated, tasksLive flag true
+  2. **contiguousDeltaAdvancesState**: deliver snapshot then contiguous delta → state advances correctly
+  3. **gapTriggersResnapshotWithBaselineRefetch**: deliver delta with gap → store unsubscribes, resubscribes, AND calls baseline refetch (task.list)
+  4. **connectionLossClearsLiveThenReconnectResubscribes**: disconnect → tasksLive cleared. Reconnect → fresh subscribe + snapshot → state consistent
+  5. **legacyEventSuppressedWhileLive**: with tasksLive==true, deliver task.updated event → store does NOT double-apply or refetch
+  6. **crossIdPushIsolation**: deliver push to unregistered subscriptionId → store state unchanged
+
+All tests use FakeConnectionManager to control connection state, mock request responses, and verify subscription push routing isolation.
+
+## Follow-up
+
+- PR 4: CommentStore integration tests
+- PR 5: ConversationStore integration tests
+
+Related task: 1a01079a-2616-47f2-826e-aabc1e509b97
