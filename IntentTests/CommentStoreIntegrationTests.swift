@@ -41,10 +41,17 @@ class CommentStoreIntegrationTests {
         #expect(store.threads.count == 1)
         
         // Contiguous delta (seq 0 → 1)
-        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .delta, seq: 1, snapshot: nil, delta: [
-            "prev": 0,
-            "ops": [["op": "upsert", "item": ["threadId": "t2", "noteId": "note-1", "anchor": ["anchorText": "world"], "comments": []]]]
-        ]))
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .delta,
+            seq: 1,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(
+                added: [["threadId": "t2", "noteId": "note-1", "anchor": ["anchorText": "world"], "comments": []]],
+                updated: [],
+                removedIds: []
+            )
+        ))
         try await Task.sleep(nanoseconds: 50_000_000)
         
         #expect(store.threads.count == 2)
@@ -70,12 +77,19 @@ class CommentStoreIntegrationTests {
         
         fake.clearRequestLog()
         fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-B", "seq": 5, "snapshot": []]
-        
+
         // Gap delta (seq 0 → 10)
-        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-A", kind: .delta, seq: 10, snapshot: nil, delta: [
-            "prev": 0,
-            "ops": []
-        ]))
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-A",
+            kind: .delta,
+            seq: 10,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(
+                added: [],
+                updated: [],
+                removedIds: []
+            )
+        ))
         try await Task.sleep(nanoseconds: 200_000_000)
         
         // Verify unsubscribe + subscribe
@@ -188,10 +202,17 @@ class CommentStoreIntegrationTests {
         #expect(store.threads[0].id == "t2")
 
         // Deliver late push for note-1 (should be ignored)
-        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-note1", kind: .delta, seq: 1, snapshot: nil, delta: [
-            "prev": 0,
-            "ops": [["op": "upsert", "item": ["threadId": "t99", "noteId": "note-1", "anchor": ["anchorText": "late"], "comments": []]]]
-        ]))
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-note1",
+            kind: .delta,
+            seq: 1,
+            snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(
+                added: [["threadId": "t99", "noteId": "note-1", "anchor": ["anchorText": "late"], "comments": []]],
+                updated: [],
+                removedIds: []
+            )
+        ))
         try await Task.sleep(nanoseconds: 50_000_000)
 
         // Verify state unchanged (late push ignored)

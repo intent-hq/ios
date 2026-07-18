@@ -1,0 +1,20 @@
+Add store-level integration tests for CommentStore on top of the ConnectionManagerRouting seam from PR #17.
+
+## Changes
+
+- Update **CommentStore** to accept injected ConnectionManagerRouting (default = ConnectionManager.shared)
+- Add **CommentStoreIntegrationTests** with 6 test cases:
+  1. **subscribeOnConnect**: connect → subscribe → snapshot delivered → threads populated
+  2. **contiguousDeltaAdvancesState**: deliver snapshot then contiguous delta → state advances correctly
+  3. **gapTriggersResnapshotWithBaselineRefetch**: deliver delta with gap → store unsubscribes, resubscribes
+  4. **connectionLossClearsLiveThenReconnectResubscribes**: disconnect → commentLive cleared. Reconnect → fresh subscribe + snapshot → state consistent
+  5. **crossIdPushIsolation**: deliver push to unregistered subscriptionId → store state unchanged
+  6. **noteSwitchClearsPreviousSubscription**: switching notes (subscribeToNote with different noteId) → old subscription unregistered and unsubscribed, new subscription registered → late pushes for old note ignored
+
+All tests use FakeConnectionManager to control connection state, mock request responses, and verify subscription push routing isolation.
+
+## Follow-up
+
+- PR 5: ConversationStore integration tests
+
+Related task: 1a01079a-2616-47f2-826e-aabc1e509b97
