@@ -132,8 +132,45 @@ struct CommentStoreIntegrationTests {
         #expect(fake.didCallMethod("comment.subscribe"))
     }
     
+    // MARK: - legacyEventSuppressedWhileLive
+
+    @Test func legacyEventSuppressedWhileLive() async throws {
+        let fake = FakeConnectionManager()
+        let store = CommentStore(connectionManager: fake)
+
+        fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.responseMap["comment.unsubscribe"] = [:] as [String: Any]
+        fake.simulateConnect()
+        await store.subscribeToNote(workspaceId: "ws-1", noteId: "note-1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Snapshot establishes live state
+        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
+            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+        ], delta: nil))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.threads.count == 1)
+
+        fake.clearRequestLog()
+
+        // Deliver legacy event (should be suppressed)
+        fake.deliverEvent(method: "comment.created", params: [
+            "event": [
+                "type": "comment:created",
+                "workspaceId": "ws-1",
+                "noteId": "note-1",
+                "threadId": "t99"
+            ]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Verify no resubscribe (legacy event suppressed)
+        #expect(!fake.didCallMethod("comment.subscribe"))
+        #expect(store.threads.count == 1)
+    }
+
     // MARK: - crossIdPushIsolation
-    
+
     @Test func crossIdPushIsolation() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
