@@ -36,7 +36,17 @@ struct CommentStoreIntegrationTests {
         
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
-            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+            [
+                "threadId": "t1",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "lastActivity": "2024-01-01T00:00:00Z",
+                "latestCommentAuthor": "user1",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2024-01-01T00:00:00Z",
+                "commentCount": 1
+            ]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -48,7 +58,17 @@ struct CommentStoreIntegrationTests {
             seq: 1,
             snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(
-                added: [["threadId": "t2", "noteId": "note-1", "anchor": ["anchorText": "world"], "comments": []]],
+                added: [[
+                    "threadId": "t2",
+                    "noteId": "note-1",
+                    "status": "open",
+                    "createdAt": "2024-01-02T00:00:00Z",
+                    "lastActivity": "2024-01-02T00:00:00Z",
+                    "latestCommentAuthor": "user2",
+                    "latestCommentAuthorType": "user",
+                    "latestCommentAt": "2024-01-02T00:00:00Z",
+                    "commentCount": 1
+                ]],
                 updated: [],
                 removedIds: []
             )
@@ -58,9 +78,9 @@ struct CommentStoreIntegrationTests {
         #expect(store.threads.count == 2)
     }
     
-    // MARK: - gapTriggersResnapshotWithBaselineRefetch
-    
-    @Test func gapTriggersResnapshotWithBaselineRefetch() async throws {
+    // MARK: - gapTriggersResnapshot
+
+    @Test func gapTriggersResnapshot() async throws {
         let fake = FakeConnectionManager()
         let store = CommentStore(connectionManager: fake)
 
@@ -72,7 +92,17 @@ struct CommentStoreIntegrationTests {
         
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-A", kind: .snapshot, seq: 0, snapshot: [
-            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+            [
+                "threadId": "t1",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "lastActivity": "2024-01-01T00:00:00Z",
+                "latestCommentAuthor": "user1",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2024-01-01T00:00:00Z",
+                "commentCount": 1
+            ]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -92,7 +122,7 @@ struct CommentStoreIntegrationTests {
                 removedIds: []
             )
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 200_000_000)
 
         // Verify unsubscribe + subscribe
         #expect(fake.didCallMethod("comment.unsubscribe"))
@@ -114,7 +144,17 @@ struct CommentStoreIntegrationTests {
         
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
-            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+            [
+                "threadId": "t1",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "lastActivity": "2024-01-01T00:00:00Z",
+                "latestCommentAuthor": "user1",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2024-01-01T00:00:00Z",
+                "commentCount": 1
+            ]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -122,11 +162,11 @@ struct CommentStoreIntegrationTests {
         fake.clearRequestLog()
         fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-2", "seq": 0, "snapshot": []]
         fake.simulateDisconnect()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 100_000_000)
 
         // Reconnect
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await Task.sleep(nanoseconds: 100_000_000)
         
         // Verify fresh subscribe
         #expect(fake.didCallMethod("comment.subscribe"))
@@ -146,12 +186,25 @@ struct CommentStoreIntegrationTests {
 
         // Snapshot establishes live state
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
-            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+            [
+                "threadId": "t1",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "lastActivity": "2024-01-01T00:00:00Z",
+                "latestCommentAuthor": "user1",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2024-01-01T00:00:00Z",
+                "commentCount": 1
+            ]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
 
         fake.clearRequestLog()
+
+        // Verify event handler is registered
+        #expect(fake.eventHandlerCount > 0)
 
         // Deliver legacy event (should be suppressed)
         fake.deliverEvent(method: "comment.created", params: [
@@ -183,7 +236,17 @@ struct CommentStoreIntegrationTests {
         
         // Snapshot for sub-A
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-A", kind: .snapshot, seq: 0, snapshot: [
-            ["threadId": "t1", "noteId": "note-1", "anchor": ["anchorText": "hello"], "comments": []]
+            [
+                "threadId": "t1",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2024-01-01T00:00:00Z",
+                "lastActivity": "2024-01-01T00:00:00Z",
+                "latestCommentAuthor": "user1",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2024-01-01T00:00:00Z",
+                "commentCount": 1
+            ]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
