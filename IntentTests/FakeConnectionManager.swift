@@ -65,6 +65,11 @@ class FakeConnectionManager: ConnectionManagerRouting {
     
     /// Deliver a legacy event to all registered handlers (does NOT deliver subscription.push).
     func deliverEvent(method: String, params: Any) {
+        // Do not deliver subscription.push through legacy event handlers.
+        // ConnectionManager routes subscription.push separately via registerSubscriptionHandler.
+        if method == "subscription.push" {
+            return
+        }
         let handlers = Array(eventHandlers.values)
         for handler in handlers {
             handler(method, params)
