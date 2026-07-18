@@ -10,6 +10,21 @@ enum ConnectionState: Equatable {
     case reconnecting(attempt: Int)
 }
 
+// MARK: - ConnectionManagerRouting
+
+/// The subset of ConnectionManager surface that subscribe-channel stores depend on.
+/// Exists to allow tests to inject a fake; ConnectionManager conforms as-is.
+@MainActor
+protocol ConnectionManagerRouting: AnyObject {
+    var connectionState: ConnectionState { get }
+    var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
+    func request(_ method: String, params: [String: Any]) async throws -> Any
+    @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
+    func removeEventHandler(id: UUID)
+    func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void)
+    func unregisterSubscriptionHandler(id: String)
+}
+
 @MainActor
 class ConnectionManager: ObservableObject {
     static let shared = ConnectionManager()
@@ -42,6 +57,11 @@ class ConnectionManager: ObservableObject {
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
     private init() {}
+
+    /// Publisher for connectionState changes. Satisfies ConnectionManagerRouting protocol.
+    var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
+        $connectionState.eraseToAnyPublisher()
+    }
 
     // MARK: - Connection lifecycle
 
@@ -626,4 +646,11 @@ class CertFingerprintPinner: CertificatePinning {
             completion(.failed(nil))
         }
     }
+}
+
+// MARK: - ConnectionManagerRouting Conformance
+
+extension ConnectionManager: ConnectionManagerRouting {
+    // ConnectionManager already implements all required methods and properties.
+    // This extension provides explicit conformance to the protocol.
 }
