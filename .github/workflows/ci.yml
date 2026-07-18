@@ -67,8 +67,7 @@ jobs:
           -project Intent.xcodeproj
           -scheme Intent
           -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
-          -parallel-testing-enabled YES
-          -maximum-concurrent-test-simulator-destinations 2
+          -parallel-testing-enabled NO
           -resultBundlePath TestResults
 
       - name: Upload test results
