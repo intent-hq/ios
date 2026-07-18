@@ -117,7 +117,7 @@ class FakeConnectionManager: ConnectionManagerRouting {
         return requestLog.filter { $0.method == method }.map { $0.params }
     }
     
-    /// Count of handlers registered for a given subscriptionId.
+    /// Check if a handler is registered for a given subscriptionId.
     func hasSubscriptionHandler(id: String) -> Bool {
         return subscriptionHandlers[id] != nil
     }
