@@ -25,6 +25,13 @@ protocol ConnectionManagerRouting: AnyObject {
     func unregisterSubscriptionHandler(id: String)
 }
 
+extension ConnectionManagerRouting {
+    /// Convenience for calling request without params. Preserves existing call sites.
+    func request(_ method: String) async throws -> Any {
+        return try await request(method, params: [:])
+    }
+}
+
 @MainActor
 class ConnectionManager: ObservableObject {
     static let shared = ConnectionManager()
