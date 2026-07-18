@@ -92,8 +92,8 @@ struct CommentStoreIntegrationTests {
                 removedIds: []
             )
         ))
-        try await Task.sleep(nanoseconds: 200_000_000)
-        
+        try await Task.sleep(nanoseconds: 50_000_000)
+
         // Verify unsubscribe + subscribe
         #expect(fake.didCallMethod("comment.unsubscribe"))
         #expect(fake.didCallMethod("comment.subscribe"))
