@@ -3,9 +3,8 @@ import Foundation
 @testable import Intent
 
 /// Integration tests for CommentStore using FakeConnectionManager to verify end-to-end subscription behavior
-@Suite("CommentStore Integration Tests")
 @MainActor
-class CommentStoreIntegrationTests {
+struct CommentStoreIntegrationTests {
     
     // MARK: - subscribeOnConnect
     
