@@ -157,8 +157,13 @@ struct ConversationStoreIntegrationTests {
         // The connection state change triggers onReconnected via a Combine publisher,
         // which schedules the async task. We must yield to let the run loop dispatch
         // the sink callback and then wait for all async operations to finish.
-        // Under full test suite load, this can take longer than expected.
-        try await Task.sleep(nanoseconds: 300_000_000) // 300ms
+        await Task.yield()
+        for _ in 0..<40 {
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
+            if fake.didCallMethod("chat.subscribe") && fake.didCallMethod("agent.getConversation") {
+                break
+            }
+        }
 
         // Verify fresh subscribe + getConversation (both called from onReconnected)
         #expect(fake.didCallMethod("chat.subscribe"))
