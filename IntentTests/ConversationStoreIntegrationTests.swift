@@ -25,9 +25,19 @@ struct ConversationStoreIntegrationTests {
         // Start connected and fetch conversation (triggers onReconnected)
         fake.simulateConnect()
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        // Verify chat.subscribe was called
+        // Yield to allow Combine publisher callbacks to run, then wait for operations
+        // Wait for the subscription handler to be registered (post-completion signal)
+        // rather than just the request log entry which happens at request start
+        await Task.yield()
+        for _ in 0..<40 {
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
+            if fake.hasSubscriptionHandler(id: "sub-1") {
+                break
+            }
+        }
+
+        // Verify chat.subscribe was called and handler registered
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
     }
@@ -144,7 +154,20 @@ struct ConversationStoreIntegrationTests {
 
         // Reconnect (triggers onReconnected which calls everything)
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Wait for async onReconnected operations to complete.
+        // The connection state change triggers onReconnected via a Combine publisher,
+        // which schedules the async task. We must yield to let the run loop dispatch
+        // the sink callback and then wait for all async operations to finish.
+        // Poll for the subscription handler to be registered (post-completion signal)
+        // rather than just the request log which is appended at request start.
+        await Task.yield()
+        for _ in 0..<40 {
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
+            if fake.hasSubscriptionHandler(id: "sub-1") {
+                break
+            }
+        }
 
         // Verify fresh subscribe + getConversation (both called from onReconnected)
         #expect(fake.didCallMethod("chat.subscribe"))
