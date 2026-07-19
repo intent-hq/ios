@@ -1029,8 +1029,13 @@ class ConversationStore: ObservableObject {
                 }
             }
             for sub in subs {
-                if let filter = sub["filter"] as? [String: Any],
-                   let actorIds = filter["actorIds"] as? [String] {
+                // Read top-level actorIds (current wire shape from intentd)
+                if let actorIds = sub["actorIds"] as? [String] {
+                    agentIds.formUnion(actorIds)
+                }
+                // Fallback: legacy filter.actorIds for backward compatibility
+                else if let filter = sub["filter"] as? [String: Any],
+                        let actorIds = filter["actorIds"] as? [String] {
                     agentIds.formUnion(actorIds)
                 }
             }
