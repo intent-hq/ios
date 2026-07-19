@@ -150,4 +150,104 @@ struct ConversationStoreIntegrationTests {
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.didCallMethod("agent.getConversation"))
     }
+
+    // MARK: - Agent Subscriptions with Top-Level actorIds
+
+    @Test func parsesTopLevelActorIdsFromSubscriptions() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        // Configure agent.getSubscriptions response with PROTOCOL-shaped payload:
+        // subscriptions with top-level actorIds (no filter object)
+        fake.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [
+                [
+                    "id": "sub-1",
+                    "agentId": "agent-parent",
+                    "agentName": "Parent Agent",
+                    "workspaceId": "ws-1",
+                    "createdAt": "2024-01-01T00:00:00Z",
+                    "oneShot": true,
+                    "actorIds": ["agent-child-1"],
+                    "eventTypes": ["agent:idle", "agent:failed"],
+                    "description": "Waiting for agent-child-1"
+                ]
+            ],
+            "delegationGroups": []
+        ]
+
+        // Fetch subscriptions
+        await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
+
+        // Assert that watchedAgentIds contains the child agent from top-level actorIds
+        #expect(store.watchedAgentIds.contains("agent-child-1"))
+        #expect(store.isWaitingForAgents == true)
+    }
+
+    @Test func fallsBackToFilterActorIdsForLegacyFormat() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        // Configure agent.getSubscriptions response with legacy filter.actorIds format
+        fake.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [
+                [
+                    "id": "sub-1",
+                    "agentId": "agent-parent",
+                    "filter": [
+                        "actorIds": ["agent-child-2"]
+                    ]
+                ]
+            ],
+            "delegationGroups": []
+        ]
+
+        // Fetch subscriptions
+        await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
+
+        // Assert that watchedAgentIds contains the child agent from filter.actorIds
+        #expect(store.watchedAgentIds.contains("agent-child-2"))
+        #expect(store.isWaitingForAgents == true)
+    }
+
+    @Test func combinesActorIdsFromSubscriptionsAndDelegationGroups() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        // Configure agent.getSubscriptions response with both subscriptions and delegation groups
+        fake.responseMap["agent.getSubscriptions"] = [
+            "subscriptions": [
+                [
+                    "id": "sub-1",
+                    "agentId": "agent-parent",
+                    "actorIds": ["agent-child-1"]
+                ]
+            ],
+            "delegationGroups": [
+                [
+                    "groupId": "group-1",
+                    "parentAgentId": "agent-parent",
+                    "awaitMode": "all",
+                    "expectedAgentIds": ["agent-child-2", "agent-child-3"],
+                    "completedAgentIds": [],
+                    "deletedAgentIds": [],
+                    "delivered": false
+                ]
+            ]
+        ]
+
+        // Fetch subscriptions
+        await store.fetchSubscriptions(agentId: "agent-parent", workspaceId: "ws-1")
+
+        // Assert that watchedAgentIds contains agents from both sources
+        #expect(store.watchedAgentIds.contains("agent-child-1"))
+        #expect(store.watchedAgentIds.contains("agent-child-2"))
+        #expect(store.watchedAgentIds.contains("agent-child-3"))
+        #expect(store.isWaitingForAgents == true)
+
+        // Verify delegation group status is computed
+        #expect(store.delegationGroupStatus != nil)
+        #expect(store.delegationGroupStatus?.completed == 0)
+        #expect(store.delegationGroupStatus?.total == 2)
+    }
 }
