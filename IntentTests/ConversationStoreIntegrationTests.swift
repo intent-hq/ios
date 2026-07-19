@@ -25,7 +25,15 @@ struct ConversationStoreIntegrationTests {
         // Start connected and fetch conversation (triggers onReconnected)
         fake.simulateConnect()
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
-        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Yield to allow Combine publisher callbacks to run, then wait for operations
+        await Task.yield()
+        for _ in 0..<20 {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            if fake.didCallMethod("chat.subscribe") {
+                break
+            }
+        }
 
         // Verify chat.subscribe was called
         #expect(fake.didCallMethod("chat.subscribe"))
@@ -144,7 +152,13 @@ struct ConversationStoreIntegrationTests {
 
         // Reconnect (triggers onReconnected which calls everything)
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Wait for async onReconnected operations to complete.
+        // The connection state change triggers onReconnected via a Combine publisher,
+        // which schedules the async task. We must yield to let the run loop dispatch
+        // the sink callback and then wait for all async operations to finish.
+        // Under full test suite load, this can take longer than expected.
+        try await Task.sleep(nanoseconds: 300_000_000) // 300ms
 
         // Verify fresh subscribe + getConversation (both called from onReconnected)
         #expect(fake.didCallMethod("chat.subscribe"))
