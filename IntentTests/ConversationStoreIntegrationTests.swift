@@ -27,15 +27,17 @@ struct ConversationStoreIntegrationTests {
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
 
         // Yield to allow Combine publisher callbacks to run, then wait for operations
+        // Wait for the subscription handler to be registered (post-completion signal)
+        // rather than just the request log entry which happens at request start
         await Task.yield()
-        for _ in 0..<20 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            if fake.didCallMethod("chat.subscribe") {
+        for _ in 0..<40 {
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
+            if fake.hasSubscriptionHandler(id: "sub-1") {
                 break
             }
         }
 
-        // Verify chat.subscribe was called
+        // Verify chat.subscribe was called and handler registered
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
     }
@@ -157,10 +159,12 @@ struct ConversationStoreIntegrationTests {
         // The connection state change triggers onReconnected via a Combine publisher,
         // which schedules the async task. We must yield to let the run loop dispatch
         // the sink callback and then wait for all async operations to finish.
+        // Poll for the subscription handler to be registered (post-completion signal)
+        // rather than just the request log which is appended at request start.
         await Task.yield()
         for _ in 0..<40 {
             try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
-            if fake.didCallMethod("chat.subscribe") && fake.didCallMethod("agent.getConversation") {
+            if fake.hasSubscriptionHandler(id: "sub-1") {
                 break
             }
         }
