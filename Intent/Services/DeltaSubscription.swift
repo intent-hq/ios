@@ -74,6 +74,15 @@ class DeltaReconciler<T> {
         self.normalize = normalize
     }
 
+    // Workaround for a swift-frontend (6.3.3) SIGSEGV: the EarlyPerfInliner SIL pass
+    // crashes in isCallerAndCalleeLayoutConstraintsCompatible while optimizing the
+    // compiler-generated deinit of this generic class in Release builds
+    // (-O -enable-default-cmo). An explicit deinit marked @_optimize(none) keeps the
+    // optimizer out of this one function; behavior is identical (stored properties
+    // are still released normally).
+    @_optimize(none)
+    deinit {}
+
     /// Forget all state so the next snapshot rebuilds from scratch.
     func reset() {
         items.removeAll()
