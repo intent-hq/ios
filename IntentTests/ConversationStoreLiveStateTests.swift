@@ -322,6 +322,39 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].isStreaming == true)
     }
 
+    @Test func idleSnapshotClearsStaleStreaming() async throws {
+        let (store, _) = makeStore()
+
+        // Turn in flight at first snapshot.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(
+            messages: [
+                [
+                    "id": "msg-1", "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z"
+                ]
+            ],
+            meta: ["turnInFlight": true]
+        ))
+        #expect(store.isStreaming == true)
+
+        // Resnapshot after the turn ended: no in-flight message, no activity flags.
+        // The snapshot is authoritative — stale streaming state must clear.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z"
+            ],
+            [
+                "id": "msg-2", "role": "assistant",
+                "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Done"]],
+                "timestamp": "2026-06-27T01:00:01.000Z"
+            ]
+        ]))
+        #expect(store.isStreaming == false)
+    }
+
     // MARK: - Firehose gating while chat channel is live
 
     @Test func firehoseChunkIgnoredWhenChatLive() async throws {

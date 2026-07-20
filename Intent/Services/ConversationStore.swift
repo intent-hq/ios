@@ -435,13 +435,13 @@ class ConversationStore: ObservableObject {
 
         // Mid-turn hydration: streaming is on when the snapshot carries a synthetic
         // in-flight assistant message or the activity flags say a turn is in flight.
+        // The snapshot is authoritative both ways — an idle snapshot clears any
+        // stale streaming state (e.g. after a resnapshot or re-entry).
         let hasInFlightMessage = messages.contains { $0.isStreaming == true }
         let meta = push.snapshotMeta
         let isResponding = meta?["isResponding"] as? Bool ?? false
         let turnInFlight = meta?["turnInFlight"] as? Bool ?? false
-        if hasInFlightMessage || isResponding || turnInFlight {
-            isStreaming = true
-        }
+        isStreaming = hasInFlightMessage || isResponding || turnInFlight
         print("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
     }
 
