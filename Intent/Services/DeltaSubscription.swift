@@ -7,6 +7,11 @@ struct SubscriptionPush {
     let seq: Int
     let snapshot: [[String: Any]]?
     let delta: DeltaPayload?
+    /// Snapshot-level metadata for object-shaped snapshots (chat channel):
+    /// agentId, truncated, totalMessages, nextToken, plus activity flags like
+    /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
+    /// Nil for array-shaped snapshots (collection channels).
+    var snapshotMeta: [String: Any]? = nil
     
     enum Kind {
         case snapshot
@@ -29,16 +34,32 @@ struct SubscriptionPush {
         }
 
         if let kindStr = dict["kind"] as? String, kindStr == "snapshot" {
-            guard let snapshot = dict["snapshot"] as? [[String: Any]] else {
-                return nil // Malformed: snapshot push must have "snapshot" field
+            // Collection channels: snapshot is an array of entities.
+            if let snapshot = dict["snapshot"] as? [[String: Any]] {
+                return SubscriptionPush(
+                    subscriptionId: subscriptionId,
+                    kind: .snapshot,
+                    seq: seq,
+                    snapshot: snapshot,
+                    delta: nil
+                )
             }
-            return SubscriptionPush(
-                subscriptionId: subscriptionId,
-                kind: .snapshot,
-                seq: seq,
-                snapshot: snapshot,
-                delta: nil
-            )
+            // Chat channel: snapshot is an object with a "messages" array plus
+            // snapshot-level metadata/activity flags (PROTOCOL §7.1).
+            if let snapshotObj = dict["snapshot"] as? [String: Any],
+               let messages = snapshotObj["messages"] as? [[String: Any]] {
+                var meta = snapshotObj
+                meta.removeValue(forKey: "messages")
+                return SubscriptionPush(
+                    subscriptionId: subscriptionId,
+                    kind: .snapshot,
+                    seq: seq,
+                    snapshot: messages,
+                    delta: nil,
+                    snapshotMeta: meta
+                )
+            }
+            return nil // Malformed: no snapshot array and no snapshot.messages
         } else if let kindStr = dict["kind"] as? String, kindStr == "delta" {
             guard let deltaDict = dict["delta"] as? [String: Any] else {
                 return nil // Malformed: delta push must have "delta" field
