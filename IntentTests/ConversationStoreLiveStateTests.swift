@@ -321,4 +321,64 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].id == "msg-2")
         #expect(store.messages[1].isStreaming == true)
     }
+
+    // MARK: - Firehose gating while chat channel is live
+
+    @Test func firehoseChunkIgnoredWhenChatLive() async throws {
+        let (store, _) = makeStore()
+
+        // Snapshot applied → chatLive; deltas own the transcript from here on.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z"
+            ]
+        ]))
+        #expect(store.messages.count == 1)
+
+        // Firehose stream events for the same turn must NOT mutate the transcript —
+        // a chunk-created block would carry a client-generated id that the terminal
+        // delta's removedIds cannot remove (duplicate text block).
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
+        ])
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:chunk", "data": ["content": "duplicate text"]]
+        ])
+
+        #expect(store.messages.count == 1)
+        #expect(store.isStreaming == false)
+
+        // The delta channel still applies normally afterwards.
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "Real content"])
+        ]))
+        #expect(store.messages.count == 2)
+        #expect(store.messages[1].contentBlocks?.count == 1)
+        #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Real content")
+    }
+
+    @Test func firehoseChunkStillAppliesWhenChatNotLive() async throws {
+        // No chat.subscribe snapshot applied → chatLive is false (legacy fallback).
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
+        ])
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:chunk", "data": ["content": "fallback text"]]
+        ])
+
+        #expect(store.messages.count == 1)
+        #expect(store.messages[0].role == .assistant)
+        #expect(store.messages[0].isStreaming == true)
+        #expect(store.isStreaming == true)
+        let text = (store.messages[0].contentBlocks ?? [])
+            .compactMap { $0.resolvedText }
+            .joined()
+        #expect(text == "fallback text")
+    }
 }

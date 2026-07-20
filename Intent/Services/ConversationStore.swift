@@ -220,6 +220,10 @@ class ConversationStore: ObservableObject {
         streamEventBuffer.removeAll()
         guard !buffer.isEmpty else { return }
 
+        // If the chat.subscribe channel went live while events were buffered, the
+        // snapshot/deltas already cover this content — discard the firehose buffer.
+        if chatLive { return }
+
         // Replay user message events — these may not be in the fetch snapshot
         // if the message was created after the fetch started.
         // handleStreamMessage and handleUserMessageSent both deduplicate, so this is safe.
@@ -686,6 +690,14 @@ class ConversationStore: ObservableObject {
         default:
             // Agent-specific events — only handle for our agent
             guard eventAgentId == agentId else { return }
+        }
+
+        // When the chat.subscribe channel is live, block-level deltas own the transcript.
+        // Drop firehose agent:stream:* mutations so they cannot create duplicate blocks
+        // with client-generated ids that the terminal delta's removedIds cannot remove.
+        // agent:stream:end stays as a benign safety net (its refetch is gated on !chatLive).
+        if chatLive, eventType.hasPrefix("agent:stream:"), eventType != "agent:stream:end" {
+            return
         }
 
         // Buffer stream events while the initial conversation fetch is in progress
