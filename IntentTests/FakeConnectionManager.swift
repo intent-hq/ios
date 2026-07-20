@@ -29,10 +29,18 @@ class FakeConnectionManager: ConnectionManagerRouting {
     
     /// Recorded request log: [(method, params, timestamp)]
     var requestLog: [(method: String, params: [String: Any], timestamp: Date)] = []
-    
+
+    /// Optional per-method artificial delay (nanoseconds) applied before responding,
+    /// for tests that need to interleave work while a request is in flight.
+    var delayMap: [String: UInt64] = [:]
+
     func request(_ method: String, params: [String: Any] = [:]) async throws -> Any {
         requestLog.append((method, params, Date()))
-        
+
+        if let delay = delayMap[method] {
+            try? await Task.sleep(nanoseconds: delay)
+        }
+
         if let error = errorMap[method] {
             throw error
         }

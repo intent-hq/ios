@@ -162,7 +162,10 @@ class ConversationStore: ObservableObject {
                 isTruncated = dict["truncated"] as? Bool ?? false
                 totalMessageCount = dict["totalMessages"] as? Int ?? fetchedMessages.count
 
-                if isInitialLoad {
+                // Re-check emptiness after the await: a chat.subscribe snapshot may
+                // have seeded the transcript while the fetch was in flight — merge
+                // instead of clobbering the just-applied live state.
+                if messages.isEmpty {
                     messages = fetchedMessages
                 } else {
                     // Merge: update existing messages in-place, append new ones, remove deleted ones.
@@ -498,17 +501,26 @@ class ConversationStore: ObservableObject {
         if let existing = messages.firstIndex(where: { $0.id == messageId }) {
             messageIndex = existing
         } else {
-            // First block of a new (in-flight) message — create it
+            // First block of a new (in-flight) message — create it. Fall back to
+            // the current time when the entity carries no timestamp; the terminal
+            // frame's server timestamp is adopted below when it arrives.
             let roleStr = entity["role"] as? String ?? "assistant"
             let msg = ConversationMessage(
                 id: messageId,
                 role: MessageRole(rawValue: roleStr) ?? .assistant,
                 contentBlocks: [],
-                timestamp: entity["timestamp"] as? String ?? "",
+                timestamp: entity["timestamp"] as? String
+                    ?? ISO8601DateFormatter().string(from: Date()),
                 isStreaming: !streamingComplete
             )
             messages.append(msg)
             messageIndex = messages.count - 1
+        }
+
+        // Adopt the server timestamp when the entity carries one (terminal frames
+        // include it), correcting any locally-synthesized creation timestamp.
+        if let ts = entity["timestamp"] as? String, !ts.isEmpty {
+            messages[messageIndex].timestamp = ts
         }
 
         var blocks = messages[messageIndex].contentBlocks ?? []

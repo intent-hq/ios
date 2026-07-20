@@ -355,6 +355,71 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == false)
     }
 
+    @Test func terminalFrameTimestampAdopted() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+
+        // First block delta carries no timestamp — a local one is synthesized.
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-1",
+                        block: ["type": "text", "id": "msg-1:0", "text": "Working"])
+        ]))
+        #expect(store.messages.count == 1)
+        #expect(!store.messages[0].timestamp.isEmpty)
+
+        // Terminal frame carries the server timestamp — it must be adopted.
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-1",
+                        block: ["type": "text", "id": "msg-1:0", "text": "Working done"],
+                        streamingComplete: true,
+                        timestamp: "2026-06-27T01:00:05.000Z")
+        ]))
+        #expect(store.messages[0].timestamp == "2026-06-27T01:00:05.000Z")
+    }
+
+    @Test func initialFetchDoesNotClobberLiveSnapshot() async throws {
+        let (store, fake) = makeStore()
+        fake.delayMap["agent.getConversation"] = 100_000_000
+        fake.responseMap["agent.getConversation"] = [
+            "messages": [
+                [
+                    "id": "msg-1", "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z"
+                ]
+            ]
+        ]
+
+        // Start the initial fetch (messages is empty → pre-await initial load).
+        let fetchTask = Task { await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1") }
+
+        // While the fetch is in flight, the chat snapshot seeds the transcript
+        // including an in-flight assistant message the server page lacks.
+        try await Task.sleep(nanoseconds: 20_000_000)
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z"
+            ],
+            [
+                "id": "msg-2", "role": "assistant",
+                "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Working"]],
+                "timestamp": "2026-06-27T01:00:01.000Z",
+                "isStreaming": true
+            ]
+        ]))
+
+        await fetchTask.value
+
+        // The completed fetch must merge, not wholesale-replace the live snapshot.
+        #expect(store.messages.count == 2)
+        #expect(store.messages[0].id == "msg-1")
+        #expect(store.messages[1].id == "msg-2")
+        #expect(store.messages[1].isStreaming == true)
+    }
+
     // MARK: - Firehose gating while chat channel is live
 
     @Test func firehoseChunkIgnoredWhenChatLive() async throws {

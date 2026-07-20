@@ -99,7 +99,7 @@ struct ConversationMessage: Identifiable, Codable {
     let id: String
     let role: MessageRole
     var contentBlocks: [ContentBlock]?
-    let timestamp: String  // ISO 8601 string from server
+    var timestamp: String  // ISO 8601 string from server
     var turnNumber: Int?
     var toolCalls: [ToolCall]?
     var toolResults: [ToolResult]?
