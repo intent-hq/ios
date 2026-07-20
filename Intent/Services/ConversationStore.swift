@@ -378,13 +378,17 @@ class ConversationStore: ObservableObject {
                 }
                 print("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
             } else {
-                // Response missing subscriptionId - clean up and fall back to legacy
+                // Response missing subscriptionId - clean up and fall back to legacy.
+                // Clear chatLive too so firehose events are not gated by a stale flag.
                 chatChannelActive = false
+                chatLive = false
                 chatSubscriptionId = nil
             }
         } catch {
-            // Subscribe failed - clean up and fall back to legacy
+            // Subscribe failed - clean up and fall back to legacy.
+            // Clear chatLive too so firehose events are not gated by a stale flag.
             chatChannelActive = false
+            chatLive = false
             chatSubscriptionId = nil
             print("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
         }

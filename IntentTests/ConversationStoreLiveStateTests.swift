@@ -509,4 +509,33 @@ struct ConversationStoreLiveStateTests {
             .joined()
         #expect(text == "fallback text")
     }
+
+    @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async throws {
+        let (store, _) = makeStore()
+
+        // Chat channel goes live via a snapshot.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z"
+            ]
+        ]))
+        #expect(store.messages.count == 1)
+
+        // A re-subscribe fails (no response configured → request throws).
+        // The legacy-fallback cleanup must clear chatLive so firehose events apply.
+        await store.subscribeLiveChat(agentId: "agent-1")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
+        ])
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:chunk", "data": ["content": "fallback text"]]
+        ])
+
+        #expect(store.messages.count == 2)
+        #expect(store.messages[1].role == .assistant)
+        #expect(store.isStreaming == true)
+    }
 }

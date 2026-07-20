@@ -11,19 +11,29 @@ struct SubscriptionPush {
     /// agentId, truncated, totalMessages, nextToken, plus activity flags like
     /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
     /// Nil for array-shaped snapshots (collection channels).
-    var snapshotMeta: [String: Any]? = nil
-    
+    let snapshotMeta: [String: Any]?
+
     enum Kind {
         case snapshot
         case delta
     }
-    
+
     struct DeltaPayload {
         let added: [[String: Any]]
         let updated: [[String: Any]]
         let removedIds: [String]
     }
-    
+
+    init(subscriptionId: String, kind: Kind, seq: Int, snapshot: [[String: Any]]?,
+         delta: DeltaPayload?, snapshotMeta: [String: Any]? = nil) {
+        self.subscriptionId = subscriptionId
+        self.kind = kind
+        self.seq = seq
+        self.snapshot = snapshot
+        self.delta = delta
+        self.snapshotMeta = snapshotMeta
+    }
+
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
     static func parse(method: String, params: Any) -> SubscriptionPush? {
         guard method == "subscription.push",
