@@ -94,6 +94,36 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == false)
     }
 
+    @Test func snapshotWithoutMetaResetsTruncationDefaults() async throws {
+        let (store, _) = makeStore()
+
+        // First snapshot marks the transcript truncated.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(
+            messages: [
+                [
+                    "id": "msg-1", "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z"
+                ]
+            ],
+            meta: ["truncated": true, "totalMessages": 50]
+        ))
+        #expect(store.isTruncated == true)
+        #expect(store.totalMessageCount == 50)
+
+        // A later snapshot omitting the meta keys is still authoritative:
+        // stale truncation state must reset to defaults.
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z"
+            ]
+        ]))
+        #expect(store.isTruncated == false)
+        #expect(store.totalMessageCount == 1)
+    }
+
     // MARK: - Mid-turn hydration
 
     @Test func midTurnSnapshotShowsPartialAndStreaming() async throws {

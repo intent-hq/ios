@@ -38,6 +38,9 @@ class ConversationStore: ObservableObject {
     /// Next expected delta seq (snapshot seq + 1, then +1 per applied delta).
     private var chatExpectedSeq = 0
     private var resnapshotChatInProgress = false
+    /// Cached decoders/formatters for the hot block-delta path (many frames per second).
+    private let chatBlockDecoder = JSONDecoder()
+    private let chatTimestampFormatter = ISO8601DateFormatter()
     /// Tracks the last time we refreshed each watched agent (for debouncing stream:chunk refreshes)
     private var watchedAgentLastRefresh: [String: Date] = [:]
     /// Locally-extracted digests from watched agent stream chunks
@@ -427,14 +430,10 @@ class ConversationStore: ObservableObject {
 
         messages = rawItems.compactMap { ConversationMessage.parseMessage($0) }
 
-        if let meta = push.snapshotMeta {
-            if let truncated = meta["truncated"] as? Bool {
-                isTruncated = truncated
-            }
-            if let total = meta["totalMessages"] as? Int {
-                totalMessageCount = total
-            }
-        }
+        // The snapshot is authoritative: absent meta keys reset to their defaults
+        // (not truncated, total = page size) rather than retaining stale values.
+        isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
+        totalMessageCount = push.snapshotMeta?["totalMessages"] as? Int ?? messages.count
 
         // Mid-turn hydration: streaming is on when the snapshot carries a synthetic
         // in-flight assistant message or the activity flags say a turn is in flight.
@@ -458,10 +457,12 @@ class ConversationStore: ObservableObject {
         var sawTerminal = false
         var sawUpsert = false
 
-        for entity in delta.added + delta.updated {
-            let (applied, terminal) = upsertChatBlock(entity)
-            sawUpsert = sawUpsert || applied
-            sawTerminal = sawTerminal || terminal
+        for entities in [delta.added, delta.updated] {
+            for entity in entities {
+                let (applied, terminal) = upsertChatBlock(entity)
+                sawUpsert = sawUpsert || applied
+                sawTerminal = sawTerminal || terminal
+            }
         }
 
         if !delta.removedIds.isEmpty {
@@ -492,7 +493,7 @@ class ConversationStore: ObservableObject {
         guard let messageId = entity["messageId"] as? String,
               let blockDict = entity["block"] as? [String: Any],
               let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
-              let block = try? JSONDecoder().decode(ContentBlock.self, from: blockData) else {
+              let block = try? chatBlockDecoder.decode(ContentBlock.self, from: blockData) else {
             return (false, false)
         }
         let streamingComplete = entity["streamingComplete"] as? Bool ?? false
@@ -510,7 +511,7 @@ class ConversationStore: ObservableObject {
                 role: MessageRole(rawValue: roleStr) ?? .assistant,
                 contentBlocks: [],
                 timestamp: entity["timestamp"] as? String
-                    ?? ISO8601DateFormatter().string(from: Date()),
+                    ?? chatTimestampFormatter.string(from: Date()),
                 isStreaming: !streamingComplete
             )
             messages.append(msg)
