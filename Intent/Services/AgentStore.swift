@@ -6,6 +6,7 @@ struct SpecialistInfo: Identifiable {
     let name: String
     let description: String
     let modelTier: String?  // "fast", "balanced", "smart"
+    let model: String?      // Configured model from specialist definition
 }
 
 @MainActor
@@ -89,7 +90,8 @@ class AgentStore: ObservableObject {
                         id: id,
                         name: name,
                         description: description,
-                        modelTier: item["modelTier"] as? String
+                        modelTier: item["modelTier"] as? String,
+                        model: item["model"] as? String
                     )
                 }
             }
