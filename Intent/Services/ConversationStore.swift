@@ -461,12 +461,15 @@ class ConversationStore: ObservableObject {
         var sawTerminal = false
         var sawUpsert = false
 
-        for entities in [delta.added, delta.updated] {
-            for entity in entities {
-                let (applied, terminal) = upsertChatBlock(entity)
-                sawUpsert = sawUpsert || applied
-                sawTerminal = sawTerminal || terminal
-            }
+        for entity in delta.added {
+            let (applied, terminal) = upsertChatBlock(entity)
+            sawUpsert = sawUpsert || applied
+            sawTerminal = sawTerminal || terminal
+        }
+        for entity in delta.updated {
+            let (applied, terminal) = upsertChatBlock(entity)
+            sawUpsert = sawUpsert || applied
+            sawTerminal = sawTerminal || terminal
         }
 
         if !delta.removedIds.isEmpty {
