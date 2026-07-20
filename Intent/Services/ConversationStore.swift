@@ -487,7 +487,9 @@ class ConversationStore: ObservableObject {
             isStreaming = true
             streamingUpdateCount += 1
         }
+        #if DEBUG
         print("[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
+        #endif
     }
 
     /// Upsert one delta entity's full block into its owning message.
