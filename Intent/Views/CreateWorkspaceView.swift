@@ -31,6 +31,7 @@ struct CreateWorkspaceView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var idempotencyKey = UUID().uuidString
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -118,6 +119,10 @@ struct CreateWorkspaceView: View {
         }
         .task {
             await fetchRepos()
+        }
+        .onChange(of: selectedRepo?.id) { _, _ in
+            // Reset idempotency key when repo changes
+            idempotencyKey = UUID().uuidString
         }
     }
 
@@ -218,6 +223,10 @@ struct CreateWorkspaceView: View {
         }
         .task {
             await fetchBranches()
+        }
+        .onChange(of: selectedBranch) { _, _ in
+            // Reset idempotency key when branch changes
+            idempotencyKey = UUID().uuidString
         }
     }
 
@@ -438,7 +447,7 @@ struct CreateWorkspaceView: View {
                 var params: [String: Any] = [
                     "repositoryPath": repo.path,
                     "baseRef": normalizedBranch,
-                    "idempotencyKey": UUID().uuidString
+                    "idempotencyKey": idempotencyKey
                 ]
 
                 // Build initialAgent if specialist or message provided
@@ -454,13 +463,21 @@ struct CreateWorkspaceView: View {
                     }
                     // Only send model if it differs from the specialist's configured model
                     // This lets the daemon's model resolution win when the user hasn't overridden
-                    if let model = selectedModel, let specialist = selectedSpecialist {
-                        if specialist.model != model.id {
+                    if let model = selectedModel {
+                        if let specialist = selectedSpecialist {
+                            // If specialist has a configured model, only send if different
+                            if let configuredModel = specialist.model {
+                                if configuredModel != model.id {
+                                    initialAgent["model"] = model.id
+                                }
+                            } else {
+                                // Specialist has no configured model; omit model to let daemon resolve
+                                // (the tier-based default we're showing is just UI guidance)
+                            }
+                        } else {
+                            // No specialist, send the model
                             initialAgent["model"] = model.id
                         }
-                    } else if let model = selectedModel {
-                        // No specialist, send the model
-                        initialAgent["model"] = model.id
                     }
                     if hasMessage {
                         initialAgent["prompt"] = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -476,6 +493,8 @@ struct CreateWorkspaceView: View {
                     // Add to workspace store
                     WorkspaceStore.shared.workspaces.insert(workspace, at: 0)
                     HapticManager.notification(.success)
+                    // Reset idempotency key on success
+                    idempotencyKey = UUID().uuidString
                     dismiss()
                     coordinator.onSelectWorkspace(workspace.id)
                 } else {
