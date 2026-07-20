@@ -31,6 +31,7 @@ struct CreateWorkspaceView: View {
     @State private var isCreating = false
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var idempotencyKey = UUID().uuidString
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -118,6 +119,10 @@ struct CreateWorkspaceView: View {
         }
         .task {
             await fetchRepos()
+        }
+        .onChange(of: selectedRepo?.id) { _, _ in
+            // Reset idempotency key when repo changes
+            idempotencyKey = UUID().uuidString
         }
     }
 
@@ -219,6 +224,10 @@ struct CreateWorkspaceView: View {
         .task {
             await fetchBranches()
         }
+        .onChange(of: selectedBranch) { _, _ in
+            // Reset idempotency key when branch changes
+            idempotencyKey = UUID().uuidString
+        }
     }
 
 
@@ -248,9 +257,9 @@ struct CreateWorkspaceView: View {
                             get: { selectedSpecialist?.id ?? "" },
                             set: { newId in
                                 selectedSpecialist = specialists.first(where: { $0.id == newId })
-                                // Auto-select the specialist's default model based on its tier
+                                // Auto-select the specialist's configured model or tier-based default
                                 if let specialist = selectedSpecialist {
-                                    selectedModel = modelForTier(specialist.modelTier)
+                                    selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
                                 }
                             }
                         )) {
@@ -394,9 +403,9 @@ struct CreateWorkspaceView: View {
                 $0.id == "spec-writer" || $0.name.lowercased().contains("coordinator")
             }) ?? specialists.first
         }
-        // If models already loaded, update selection based on specialist tier
+        // If models already loaded, update selection based on specialist's configured model or tier
         if !models.isEmpty, let specialist = selectedSpecialist {
-            selectedModel = modelForTier(specialist.modelTier)
+            selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
         }
         isLoadingSpecialists = false
     }
@@ -412,10 +421,10 @@ struct CreateWorkspaceView: View {
                     let provider = item["provider"] as? String ?? "Unknown"
                     return ModelInfo(id: id, name: name, provider: provider)
                 }
-                // Pre-select model based on selected specialist's tier, or sonnet4.5 as fallback
+                // Pre-select model based on selected specialist's configured model or tier, or sonnet4.5 as fallback
                 if selectedModel == nil {
                     if let specialist = selectedSpecialist {
-                        selectedModel = modelForTier(specialist.modelTier)
+                        selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
                     } else {
                         selectedModel = models.first(where: { $0.id.contains("sonnet4.5") }) ?? models.first
                     }
@@ -432,9 +441,13 @@ struct CreateWorkspaceView: View {
 
         Task {
             do {
+                // Normalize branch name: strip "origin/" or other known remote prefixes
+                let normalizedBranch = normalizeBranchName(branch)
+
                 var params: [String: Any] = [
                     "repositoryPath": repo.path,
-                    "branch": branch
+                    "baseRef": normalizedBranch,
+                    "idempotencyKey": idempotencyKey
                 ]
 
                 // Build initialAgent if specialist or message provided
@@ -448,8 +461,23 @@ struct CreateWorkspaceView: View {
                     if let specialist = selectedSpecialist {
                         initialAgent["specialist"] = specialist.id
                     }
+                    // Only send model if it differs from the specialist's configured model
+                    // This lets the daemon's model resolution win when the user hasn't overridden
                     if let model = selectedModel {
-                        initialAgent["model"] = model.id
+                        if let specialist = selectedSpecialist {
+                            // If specialist has a configured model, only send if different
+                            if let configuredModel = specialist.model {
+                                if configuredModel != model.id {
+                                    initialAgent["model"] = model.id
+                                }
+                            } else {
+                                // Specialist has no configured model; omit model to let daemon resolve
+                                // (the tier-based default we're showing is just UI guidance)
+                            }
+                        } else {
+                            // No specialist, send the model
+                            initialAgent["model"] = model.id
+                        }
                     }
                     if hasMessage {
                         initialAgent["prompt"] = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -465,6 +493,8 @@ struct CreateWorkspaceView: View {
                     // Add to workspace store
                     WorkspaceStore.shared.workspaces.insert(workspace, at: 0)
                     HapticManager.notification(.success)
+                    // Reset idempotency key on success
+                    idempotencyKey = UUID().uuidString
                     dismiss()
                     coordinator.onSelectWorkspace(workspace.id)
                 } else {
@@ -479,8 +509,26 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    /// Returns the model matching a specialist's tier, falling back to sonnet4.5 or the first available model.
-    private func modelForTier(_ tier: String?) -> ModelInfo? {
+    /// Normalize a branch name by stripping known remote prefixes (e.g., "origin/main" -> "main")
+    private func normalizeBranchName(_ branch: String) -> String {
+        let knownRemotes = ["origin/", "upstream/", "fork/"]
+        for remote in knownRemotes {
+            if branch.hasPrefix(remote) {
+                return String(branch.dropFirst(remote.count))
+            }
+        }
+        return branch
+    }
+
+    /// Returns the model matching a specialist's configured model or tier, falling back to sonnet4.5 or the first available model.
+    private func modelForTier(_ tier: String?, configuredModel: String? = nil) -> ModelInfo? {
+        // First, try the specialist's explicitly configured model
+        if let configuredModel = configuredModel,
+           let model = models.first(where: { $0.id == configuredModel }) {
+            return model
+        }
+
+        // Fall back to tier-based mapping
         let modelId: String
         switch tier {
         case "fast": modelId = "haiku4.5"
