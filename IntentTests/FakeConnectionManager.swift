@@ -38,7 +38,7 @@ class FakeConnectionManager: ConnectionManagerRouting {
         requestLog.append((method, params, Date()))
 
         if let delay = delayMap[method] {
-            try? await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delay)
         }
 
         if let error = errorMap[method] {
