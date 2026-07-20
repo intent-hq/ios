@@ -31,7 +31,12 @@ class ConversationStore: ObservableObject {
     /// Live-state tracking for chat.subscribe
     private var chatLive = false
     private var chatSubscriptionId: String?
-    private var chatReconciler: DeltaReconciler<ConversationMessage>?
+    /// True while a chat.subscribe channel is (being) established; gates push processing.
+    private var chatChannelActive = false
+    /// True once the seq-0 snapshot has been applied; deltas before it are a gap.
+    private var chatSeeded = false
+    /// Next expected delta seq (snapshot seq + 1, then +1 per applied delta).
+    private var chatExpectedSeq = 0
     private var resnapshotChatInProgress = false
     /// Tracks the last time we refreshed each watched agent (for debouncing stream:chunk refreshes)
     private var watchedAgentLastRefresh: [String: Date] = [:]
@@ -52,17 +57,12 @@ class ConversationStore: ObservableObject {
         observeConnection()
     }
 
-    /// Test-only helper to set reconciler for testing
-    func setTestReconciler(_ reconciler: DeltaReconciler<ConversationMessage>) async {
-        await MainActor.run {
-            chatReconciler = reconciler
-        }
-    }
-
-    /// Test-only helper: set chatSubscriptionId to bypass real subscribe flow.
-    /// Use in tests alongside setTestReconciler so the strict push gate accepts test payloads.
-    func setTestSubscriptionId(_ id: String) {
-        chatSubscriptionId = id
+    /// Test-only helper: activate the chat channel and set its subscriptionId,
+    /// bypassing the real subscribe flow, so the strict push gate accepts test payloads.
+    func setTestChatChannel(subscriptionId: String) {
+        chatChannelActive = true
+        chatSeeded = false
+        chatSubscriptionId = subscriptionId
     }
 
     // MARK: - Connection observation
@@ -85,7 +85,8 @@ class ConversationStore: ObservableObject {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         chatSubscriptionId = nil
-        chatReconciler = nil
+        chatChannelActive = false
+        chatSeeded = false
         resnapshotChatInProgress = false
 
         // Re-fetch conversation on reconnection
@@ -104,7 +105,12 @@ class ConversationStore: ObservableObject {
     }
 
     /// Fetch the agent's current state via `agent.get` and restore `isStreaming`.
-    private func fetchAgentStreamingState(agentId: String) async {
+    /// Considers the STAB-125 `turnInFlight` turn-liveness flag alongside
+    /// `isStreaming`/`isResponding` (the headless daemon reports liveness via
+    /// `turnInFlight`; `isStreaming`/`isResponding` may always be false).
+    /// With `raiseOnly` the flag is only ever raised, never cleared — used as a
+    /// backstop on view load so it cannot clobber snapshot/optimistic state.
+    func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
         do {
             let result = try await connectionManager.request(
                 "agent.get",
@@ -112,8 +118,16 @@ class ConversationStore: ObservableObject {
             )
             if let dict = result as? [String: Any],
                let agentDict = dict["agent"] as? [String: Any] {
-                let serverIsStreaming = agentDict["isStreaming"] as? Bool ?? false
-                isStreaming = serverIsStreaming
+                let serverIsStreaming = (agentDict["isStreaming"] as? Bool ?? false)
+                    || (agentDict["isResponding"] as? Bool ?? false)
+                    || (agentDict["turnInFlight"] as? Bool ?? false)
+                if raiseOnly {
+                    if serverIsStreaming {
+                        isStreaming = true
+                    }
+                } else {
+                    isStreaming = serverIsStreaming
+                }
             }
         } catch {
             print("[ConversationStore] Failed to fetch agent streaming state: \(error)")
@@ -155,8 +169,14 @@ class ConversationStore: ObservableObject {
                     // This avoids replacing the array wholesale which causes a UI flash.
                     let fetchedIds = Set(fetchedMessages.map { $0.id })
 
-                    // Remove messages that no longer exist on server
-                    messages.removeAll { !fetchedIds.contains($0.id) }
+                    // Remove messages that no longer exist on server, but preserve a
+                    // local in-flight streaming assistant message the server page does
+                    // not yet contain (mid-turn content is not persisted until stream end).
+                    messages.removeAll { existing in
+                        if fetchedIds.contains(existing.id) { return false }
+                        if existing.role == .assistant && existing.isStreaming == true { return false }
+                        return true
+                    }
 
                     // Update existing messages and append new ones
                     for fetched in fetchedMessages {
@@ -167,7 +187,8 @@ class ConversationStore: ObservableObject {
                         }
                     }
 
-                    // Ensure order matches server order
+                    // Ensure order matches server order; locally-preserved in-flight
+                    // messages (not in the page) sort last, keeping the partial visible.
                     let orderMap = Dictionary(uniqueKeysWithValues: fetchedMessages.enumerated().map { ($1.id, $0) })
                     messages.sort { a, b in
                         let aOrder = orderMap[a.id] ?? Int.max
@@ -325,11 +346,9 @@ class ConversationStore: ObservableObject {
     // MARK: - Live chat subscription
 
     func subscribeLiveChat(agentId: String) async {
-        // Initialize chat reconciler synchronously before await to eliminate race
-        chatReconciler = DeltaReconciler<ConversationMessage>(
-            getId: { dict in dict["id"] as? String },
-            normalize: { dict in ConversationMessage.parseMessage(dict) }
-        )
+        // Mark the channel active synchronously before await to eliminate race
+        chatChannelActive = true
+        chatSeeded = false
 
         do {
             let result = try await connectionManager.request("chat.subscribe", params: [
@@ -350,40 +369,35 @@ class ConversationStore: ObservableObject {
                 print("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
-                chatReconciler = nil
+                chatChannelActive = false
                 chatSubscriptionId = nil
             }
         } catch {
-            // Subscribe failed - clean up reconciler and fall back to legacy
-            chatReconciler = nil
+            // Subscribe failed - clean up and fall back to legacy
+            chatChannelActive = false
             chatSubscriptionId = nil
             print("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
         }
     }
 
     private func handleChatSubscriptionPush(_ push: SubscriptionPush) {
-        // Only process pushes if we have a reconciler ready
-        guard let reconciler = chatReconciler else {
+        // Only process pushes when the chat channel is active
+        guard chatChannelActive else { return }
+        // Strict gate: only accept pushes for our exact subscriptionId (tests route
+        // pushes through handleStreamEvent, which does not filter by id).
+        if let mySubId = chatSubscriptionId, push.subscriptionId != mySubId {
             return
         }
 
-        // ConnectionManager now routes pushes by subscriptionId at the transport layer,
-        // so this handler only receives pushes for our exact subscriptionId.
-        // No per-store gate needed (single source of truth is the router)
-
         switch push.kind {
         case .snapshot:
-            guard let rawItems = push.snapshot else { return }
-            chatLive = true
-            reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            messages = reconciler.values()
-            print("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq)")
+            applyChatSnapshot(push)
 
         case .delta:
             guard let delta = push.delta else { return }
-            if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                messages = reconciler.values()
-                print("[ConversationStore] Applied chat delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+            if chatSeeded && push.seq == chatExpectedSeq {
+                applyChatDelta(delta)
+                chatExpectedSeq = push.seq + 1
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotChatInProgress {
@@ -395,12 +409,122 @@ class ConversationStore: ObservableObject {
         }
     }
 
+    /// Apply the seq-0 snapshot (PROTOCOL §7.1): seed the transcript from
+    /// `snapshot.messages` and derive streaming state from the synthetic in-flight
+    /// assistant message plus the snapshot-level activity flags.
+    private func applyChatSnapshot(_ push: SubscriptionPush) {
+        guard let rawItems = push.snapshot else { return }
+        chatLive = true
+        chatSeeded = true
+        chatExpectedSeq = push.seq + 1
+
+        messages = rawItems.compactMap { ConversationMessage.parseMessage($0) }
+
+        if let meta = push.snapshotMeta {
+            if let truncated = meta["truncated"] as? Bool {
+                isTruncated = truncated
+            }
+            if let total = meta["totalMessages"] as? Int {
+                totalMessageCount = total
+            }
+        }
+
+        // Mid-turn hydration: streaming is on when the snapshot carries a synthetic
+        // in-flight assistant message or the activity flags say a turn is in flight.
+        let hasInFlightMessage = messages.contains { $0.isStreaming == true }
+        let meta = push.snapshotMeta
+        let isResponding = meta?["isResponding"] as? Bool ?? false
+        let turnInFlight = meta?["turnInFlight"] as? Bool ?? false
+        if hasInFlightMessage || isResponding || turnInFlight {
+            isStreaming = true
+        }
+        print("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
+    }
+
+    /// Reduce one block-granularity delta onto the transcript (PROTOCOL §7.1).
+    /// Each entity carries `{ agentId, messageId, role, block }` plus
+    /// `messageSeq`/`timestamp`/`streamingComplete` on the terminal frame; the
+    /// block is the FULL current block, upserted by `block.id` into the owning
+    /// message (created on first appearance). `removedIds` are block ids the
+    /// persisted message does not contain (orphan self-heal).
+    private func applyChatDelta(_ delta: SubscriptionPush.DeltaPayload) {
+        var sawTerminal = false
+        var sawUpsert = false
+
+        for entity in delta.added + delta.updated {
+            let (applied, terminal) = upsertChatBlock(entity)
+            sawUpsert = sawUpsert || applied
+            sawTerminal = sawTerminal || terminal
+        }
+
+        if !delta.removedIds.isEmpty {
+            let removed = Set(delta.removedIds)
+            for index in messages.indices {
+                guard var blocks = messages[index].contentBlocks else { continue }
+                blocks.removeAll { removed.contains($0.id) }
+                messages[index].contentBlocks = blocks
+            }
+        }
+
+        if sawTerminal {
+            // Terminal frame: the turn is done
+            isStreaming = false
+            streamingUpdateCount = 0
+        } else if sawUpsert {
+            // A live (non-terminal) block upsert always means a turn is in flight
+            isStreaming = true
+            streamingUpdateCount += 1
+        }
+        print("[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
+    }
+
+    /// Upsert one delta entity's full block into its owning message.
+    /// Returns (applied, terminal): whether the entity was applied and whether it
+    /// carries the terminal `streamingComplete` flag.
+    private func upsertChatBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
+        guard let messageId = entity["messageId"] as? String,
+              let blockDict = entity["block"] as? [String: Any],
+              let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
+              let block = try? JSONDecoder().decode(ContentBlock.self, from: blockData) else {
+            return (false, false)
+        }
+        let streamingComplete = entity["streamingComplete"] as? Bool ?? false
+
+        let messageIndex: Int
+        if let existing = messages.firstIndex(where: { $0.id == messageId }) {
+            messageIndex = existing
+        } else {
+            // First block of a new (in-flight) message — create it
+            let roleStr = entity["role"] as? String ?? "assistant"
+            let msg = ConversationMessage(
+                id: messageId,
+                role: MessageRole(rawValue: roleStr) ?? .assistant,
+                contentBlocks: [],
+                timestamp: entity["timestamp"] as? String ?? "",
+                isStreaming: !streamingComplete
+            )
+            messages.append(msg)
+            messageIndex = messages.count - 1
+        }
+
+        var blocks = messages[messageIndex].contentBlocks ?? []
+        if let blockIndex = blocks.firstIndex(where: { $0.id == block.id }) {
+            blocks[blockIndex] = block
+        } else {
+            blocks.append(block)
+        }
+        messages[messageIndex].contentBlocks = blocks
+        messages[messageIndex].isStreaming = !streamingComplete
+
+        return (true, streamingComplete)
+    }
+
     private func resnapshotChat() async {
         resnapshotChatInProgress = true
         defer { resnapshotChatInProgress = false }
 
         chatLive = false
-        chatReconciler?.reset()
+        chatSeeded = false
 
         if let subId = chatSubscriptionId {
             // Unregister handler before unsubscribing
@@ -1202,7 +1326,9 @@ class ConversationStore: ObservableObject {
             connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         chatSubscriptionId = nil
-        chatReconciler = nil
+        chatChannelActive = false
+        chatSeeded = false
+        chatExpectedSeq = 0
         resnapshotChatInProgress = false
     }
 

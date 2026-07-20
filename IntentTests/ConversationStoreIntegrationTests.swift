@@ -53,29 +53,35 @@ struct ConversationStoreIntegrationTests {
 
         await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: 50_000_000)
-        
+
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
-            ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
+            ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
         ], delta: nil))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.messages.count == 1)
-        
-        // Contiguous delta
+
+        // Contiguous block-level delta (PROTOCOL §7.1)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
             kind: .delta,
             seq: 1,
             snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(
-                added: [["id": "msg-2", "role": "assistant", "contentBlocks": [["type": "text", "text": "World"]], "timestamp": "2024-01-02T00:00:00Z"]],
+                added: [[
+                    "agentId": "agent-1",
+                    "messageId": "msg-2",
+                    "role": "assistant",
+                    "block": ["type": "text", "id": "msg-2:0", "text": "World"]
+                ]],
                 updated: [],
                 removedIds: []
             )
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
-        
+
         #expect(store.messages.count == 2)
+        #expect(store.messages[1].contentBlocks?.first?.resolvedText == "World")
     }
     
     // MARK: - gapTriggersResnapshotWithBaselineRefetch
@@ -102,19 +108,22 @@ struct ConversationStoreIntegrationTests {
         fake.clearRequestLog()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2", "seq": 5, "snapshot": []]
 
-        // Gap (seq 5 instead of 1) triggers resnapshot
-        fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-1",
-            kind: .delta,
-            seq: 5,
-            snapshot: nil,
-            delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
-        ))
+        // Two gap deltas in quick succession (seq 5/6 instead of 1) must trigger
+        // exactly ONE resnapshot (storm guard)
+        for seq in [5, 6] {
+            fake.deliverSubscriptionPush(SubscriptionPush(
+                subscriptionId: "sub-1",
+                kind: .delta,
+                seq: seq,
+                snapshot: nil,
+                delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
+            ))
+        }
         try await Task.sleep(nanoseconds: 200_000_000)
-        
-        // Verify resnapshot: unsubscribe, subscribe, getConversation
-        #expect(fake.didCallMethod("chat.unsubscribe"))
-        #expect(fake.didCallMethod("chat.subscribe"))
+
+        // Verify resnapshot: unsubscribe, subscribe, getConversation — once each
+        #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
+        #expect(fake.paramsForMethod("chat.subscribe").count == 1)
         #expect(fake.didCallMethod("agent.getConversation"))
     }
     

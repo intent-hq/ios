@@ -116,8 +116,11 @@ class ConversationViewModel: ObservableObject {
         async let queue: () = store.fetchQueue(agentId: agentId)
         async let model: () = fetchCurrentModel()
         async let subscriptions: () = store.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
+        // Backstop for mid-turn entry: restore the thinking indicator from the
+        // agent's live state (raise-only, so it never clears snapshot/optimistic state).
+        async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true)
 
-        _ = await (conversation, queue, model, subscriptions)
+        _ = await (conversation, queue, model, subscriptions, streamingState)
     }
 
     func cancelWait() async {
