@@ -7,18 +7,33 @@ struct SubscriptionPush {
     let seq: Int
     let snapshot: [[String: Any]]?
     let delta: DeltaPayload?
-    
+    /// Snapshot-level metadata for object-shaped snapshots (chat channel):
+    /// agentId, truncated, totalMessages, nextToken, plus activity flags like
+    /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
+    /// Nil for array-shaped snapshots (collection channels).
+    let snapshotMeta: [String: Any]?
+
     enum Kind {
         case snapshot
         case delta
     }
-    
+
     struct DeltaPayload {
         let added: [[String: Any]]
         let updated: [[String: Any]]
         let removedIds: [String]
     }
-    
+
+    init(subscriptionId: String, kind: Kind, seq: Int, snapshot: [[String: Any]]?,
+         delta: DeltaPayload?, snapshotMeta: [String: Any]? = nil) {
+        self.subscriptionId = subscriptionId
+        self.kind = kind
+        self.seq = seq
+        self.snapshot = snapshot
+        self.delta = delta
+        self.snapshotMeta = snapshotMeta
+    }
+
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
     static func parse(method: String, params: Any) -> SubscriptionPush? {
         guard method == "subscription.push",
@@ -29,16 +44,32 @@ struct SubscriptionPush {
         }
 
         if let kindStr = dict["kind"] as? String, kindStr == "snapshot" {
-            guard let snapshot = dict["snapshot"] as? [[String: Any]] else {
-                return nil // Malformed: snapshot push must have "snapshot" field
+            // Collection channels: snapshot is an array of entities.
+            if let snapshot = dict["snapshot"] as? [[String: Any]] {
+                return SubscriptionPush(
+                    subscriptionId: subscriptionId,
+                    kind: .snapshot,
+                    seq: seq,
+                    snapshot: snapshot,
+                    delta: nil
+                )
             }
-            return SubscriptionPush(
-                subscriptionId: subscriptionId,
-                kind: .snapshot,
-                seq: seq,
-                snapshot: snapshot,
-                delta: nil
-            )
+            // Chat channel: snapshot is an object with a "messages" array plus
+            // snapshot-level metadata/activity flags (PROTOCOL §7.1).
+            if let snapshotObj = dict["snapshot"] as? [String: Any],
+               let messages = snapshotObj["messages"] as? [[String: Any]] {
+                var meta = snapshotObj
+                meta.removeValue(forKey: "messages")
+                return SubscriptionPush(
+                    subscriptionId: subscriptionId,
+                    kind: .snapshot,
+                    seq: seq,
+                    snapshot: messages,
+                    delta: nil,
+                    snapshotMeta: meta
+                )
+            }
+            return nil // Malformed: no snapshot array and no snapshot.messages
         } else if let kindStr = dict["kind"] as? String, kindStr == "delta" {
             guard let deltaDict = dict["delta"] as? [String: Any] else {
                 return nil // Malformed: delta push must have "delta" field

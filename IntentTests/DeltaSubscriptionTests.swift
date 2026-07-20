@@ -22,8 +22,73 @@ struct DeltaSubscriptionTests {
         #expect(push?.subscriptionId == "sub-123")
         #expect(push?.seq == 0)
         #expect(push?.snapshot?.count == 2)
+        #expect(push?.snapshotMeta == nil) // Array snapshots carry no metadata
     }
-    
+
+    @Test func parseObjectSnapshotPush() async throws {
+        // Chat channel seq-0 snapshot: object with messages + metadata/activity flags (PROTOCOL §7.1)
+        let params: [String: Any] = [
+            "subscriptionId": "sub-chat",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": [
+                "agentId": "agent-123",
+                "messages": [
+                    [
+                        "id": "0190a1b2-user", "agentId": "agent-123", "seq": 0, "role": "user",
+                        "contentBlocks": [["type": "text", "id": "0190a1b2-user:0", "text": "Run the tests"]],
+                        "timestamp": "2026-06-27T01:00:00.000Z"
+                    ]
+                ],
+                "truncated": false,
+                "totalMessages": 1,
+                "nextToken": NSNull(),
+                "isResponding": true,
+                "isWaitingOnTool": false,
+                "turnInFlight": true,
+                "lastStreamActivityAt": "2026-06-27T01:00:05.000Z"
+            ]
+        ]
+
+        let push = SubscriptionPush.parse(method: "subscription.push", params: params)
+        #expect(push != nil)
+        #expect(push?.subscriptionId == "sub-chat")
+        #expect(push?.kind == .snapshot)
+        #expect(push?.seq == 0)
+        #expect(push?.snapshot?.count == 1)
+        #expect(push?.snapshot?.first?["id"] as? String == "0190a1b2-user")
+
+        let meta = push?.snapshotMeta
+        #expect(meta != nil)
+        #expect(meta?["agentId"] as? String == "agent-123")
+        #expect(meta?["truncated"] as? Bool == false)
+        #expect(meta?["totalMessages"] as? Int == 1)
+        #expect(meta?["isResponding"] as? Bool == true)
+        #expect(meta?["isWaitingOnTool"] as? Bool == false)
+        #expect(meta?["turnInFlight"] as? Bool == true)
+        #expect(meta?["lastStreamActivityAt"] as? String == "2026-06-27T01:00:05.000Z")
+        #expect(meta?["messages"] == nil) // messages are lifted into .snapshot, not duplicated in meta
+    }
+
+    @Test func parseObjectSnapshotWithEmptyMessages() async throws {
+        let params: [String: Any] = [
+            "subscriptionId": "sub-chat",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": [
+                "agentId": "agent-123",
+                "messages": [[String: Any]](),
+                "truncated": false,
+                "totalMessages": 0
+            ]
+        ]
+
+        let push = SubscriptionPush.parse(method: "subscription.push", params: params)
+        #expect(push != nil)
+        #expect(push?.snapshot?.isEmpty == true)
+        #expect(push?.snapshotMeta?["agentId"] as? String == "agent-123")
+    }
+
     @Test func parseDeltaPush() async throws {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
@@ -71,8 +136,84 @@ struct DeltaSubscriptionTests {
             "seq": 1
         ]
         #expect(SubscriptionPush.parse(method: "subscription.push", params: deltaMissingPayload) == nil)
+
+        // Snapshot object without a "messages" array is malformed
+        let objectSnapshotNoMessages: [String: Any] = [
+            "subscriptionId": "sub-1",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": ["agentId": "agent-123", "truncated": false]
+        ]
+        #expect(SubscriptionPush.parse(method: "subscription.push", params: objectSnapshotNoMessages) == nil)
+
+        // Snapshot object whose "messages" is not an array is malformed
+        let objectSnapshotBadMessages: [String: Any] = [
+            "subscriptionId": "sub-1",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": ["agentId": "agent-123", "messages": "nope"]
+        ]
+        #expect(SubscriptionPush.parse(method: "subscription.push", params: objectSnapshotBadMessages) == nil)
+
+        // Scalar snapshot is malformed
+        let scalarSnapshot: [String: Any] = [
+            "subscriptionId": "sub-1",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": 42
+        ]
+        #expect(SubscriptionPush.parse(method: "subscription.push", params: scalarSnapshot) == nil)
     }
-    
+
+    @Test func parseBlockShapedDeltaPassthrough() async throws {
+        // Chat channel delta: block-level entities with { agentId, messageId, role, block } (PROTOCOL §7.1)
+        let params: [String: Any] = [
+            "subscriptionId": "sub-chat",
+            "kind": "delta",
+            "seq": 6,
+            "delta": [
+                "added": [
+                    [
+                        "agentId": "agent-123", "messageId": "0190a200-asst", "role": "assistant",
+                        "block": ["type": "tool_use", "id": "0190a200-asst:1", "name": "view", "input": ["path": "a.txt"]]
+                    ]
+                ],
+                "updated": [
+                    [
+                        "agentId": "agent-123", "messageId": "0190a200-asst", "role": "assistant",
+                        "block": ["type": "text", "id": "0190a200-asst:0", "text": "Let me check the logs first."],
+                        "messageSeq": 4,
+                        "timestamp": "2026-06-27T01:00:10.000Z",
+                        "streamingComplete": true
+                    ]
+                ],
+                "removedIds": ["0190a200-asst:2"]
+            ]
+        ]
+
+        let push = SubscriptionPush.parse(method: "subscription.push", params: params)
+        #expect(push != nil)
+        #expect(push?.kind == .delta)
+        #expect(push?.seq == 6)
+
+        // Raw dictionaries pass through untouched so a block-level reducer can consume them
+        let added = push?.delta?.added.first
+        #expect(added?["messageId"] as? String == "0190a200-asst")
+        #expect(added?["role"] as? String == "assistant")
+        let addedBlock = added?["block"] as? [String: Any]
+        #expect(addedBlock?["id"] as? String == "0190a200-asst:1")
+        #expect(addedBlock?["type"] as? String == "tool_use")
+
+        let updated = push?.delta?.updated.first
+        #expect(updated?["messageSeq"] as? Int == 4)
+        #expect(updated?["streamingComplete"] as? Bool == true)
+        let updatedBlock = updated?["block"] as? [String: Any]
+        #expect(updatedBlock?["id"] as? String == "0190a200-asst:0")
+        #expect(updatedBlock?["text"] as? String == "Let me check the logs first.")
+
+        #expect(push?.delta?.removedIds == ["0190a200-asst:2"])
+    }
+
     // MARK: - DeltaReconciler
     
     @Test func reconcilerSnapshot() async throws {
