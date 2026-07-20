@@ -34,7 +34,7 @@ struct ToolCallView: View {
             n = String(n[range.upperBound...])
         }
         // Strip common suffixes
-        for suffix in ["_workspace-mcp", "-workspace-mcp", "_augment", "-augment"] {
+        for suffix in ["_workspace-mcp", "-workspace-mcp"] {
             if n.hasSuffix(suffix) { n = String(n.dropLast(suffix.count)) }
         }
         return n
