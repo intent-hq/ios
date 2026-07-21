@@ -567,12 +567,13 @@ class ConversationStore: ObservableObject {
     /// titled block from first sight and the in-flight row renders as a bare
     /// spanner for the rest of the turn. An empty incoming name marks such a
     /// progress-only tick (mirrors the desktop firehose bridge's merge
-    /// policy): keep the prior block's name/input/toolKind, adopt only the
-    /// new status. Authoritative updates (non-empty name) replace as before.
+    /// policy, regardless of whether the prior block carries a name): keep
+    /// the prior block's name/input/toolKind, adopt only the new status.
+    /// Authoritative updates (non-empty name) replace as before.
     private func mergedToolUseBlock(prior: ContentBlock, incoming: ContentBlock) -> ContentBlock {
         guard incoming.type == .toolUse, prior.type == .toolUse,
               incoming.toolCallId != nil, incoming.toolCallId == prior.toolCallId,
-              (incoming.resolvedName ?? "").isEmpty, !(prior.resolvedName ?? "").isEmpty else {
+              (incoming.resolvedName ?? "").isEmpty else {
             return incoming
         }
         var merged = incoming
