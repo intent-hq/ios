@@ -549,7 +549,7 @@ class ConversationStore: ObservableObject {
 
         var blocks = messages[messageIndex].contentBlocks ?? []
         if let blockIndex = blocks.firstIndex(where: { $0.id == block.id }) {
-            blocks[blockIndex] = block
+            blocks[blockIndex] = mergedToolUseBlock(prior: blocks[blockIndex], incoming: block)
         } else {
             blocks.append(block)
         }
@@ -557,6 +557,33 @@ class ConversationStore: ObservableObject {
         messages[messageIndex].isStreaming = !streamingComplete
 
         return (true, streamingComplete)
+    }
+
+    /// Merge a sparse `tool_use` upsert onto the prior block. The daemon's
+    /// chat.subscribe `tool_delta` synthesizes the FULL block from each
+    /// `agent:tool:call` event, but a sparse ACP `tool_call_update` (progress
+    /// or completion tick) maps every unset field to its default — `name:""`,
+    /// `input:{}`, `toolKind:"other"` — so upserting it verbatim clobbers the
+    /// titled block from first sight and the in-flight row renders as a bare
+    /// spanner for the rest of the turn. An empty incoming name marks such a
+    /// progress-only tick (mirrors the desktop firehose bridge's merge
+    /// policy): keep the prior block's name/input/toolKind, adopt only the
+    /// new status. Authoritative updates (non-empty name) replace as before.
+    private func mergedToolUseBlock(prior: ContentBlock, incoming: ContentBlock) -> ContentBlock {
+        guard incoming.type == .toolUse, prior.type == .toolUse,
+              incoming.toolCallId != nil, incoming.toolCallId == prior.toolCallId,
+              (incoming.resolvedName ?? "").isEmpty, !(prior.resolvedName ?? "").isEmpty else {
+            return incoming
+        }
+        var merged = incoming
+        merged.name = prior.resolvedName
+        merged.input = prior.input
+        var metadata = merged.metadata ?? [:]
+        if let priorKind = prior.metadata?["toolKind"] {
+            metadata["toolKind"] = priorKind
+        }
+        merged.metadata = metadata
+        return merged
     }
 
     private func resnapshotChat() async {
