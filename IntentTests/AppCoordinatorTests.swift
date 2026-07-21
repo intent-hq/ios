@@ -427,6 +427,17 @@ struct AppCoordinatorTests {
         #expect(!repush, "A stale re-push for a superseded agent must be dropped")
     }
 
+    @Test @MainActor func shouldRepushConversation_falseWhenCoordinatorMovedToAnotherAgent() {
+        // Coordinator moved on to a different agent before the view state re-synced:
+        // the screen match must reject the stale re-push even though the pending
+        // and view-state agent ids still agree.
+        let repush = RootView.shouldRepushConversation(
+            currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
+            pendingAgentId: "agent-1",
+            conversationAgentId: "agent-1")
+        #expect(!repush, "Re-push must be dropped when the coordinator now shows a different conversation")
+    }
+
     @Test @MainActor func onBackToWorkspaceDetail_fromConversation_setsWorkspaceDetail() {
         let wsId = "test-coord-back-from-conv-\(UUID().uuidString)"
         defer {

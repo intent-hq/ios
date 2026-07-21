@@ -330,9 +330,14 @@ struct RootView: View {
             .onChange(of: showingConversation) { newValue in
                 // When user taps the back button, sync coordinator. Skip when the
                 // dismissal is the programmatic iPad tear-down/re-push, which is
-                // not a user-initiated back navigation.
-                if !newValue, !programmaticConversationDismiss,
-                   case .agentConversation = coordinator.currentScreen {
+                // not a user-initiated back navigation. Consume the flag here so
+                // it only ever suppresses the single tear-down dismissal; the
+                // deferred re-push block clears it again as a backstop.
+                if !newValue, programmaticConversationDismiss {
+                    programmaticConversationDismiss = false
+                    return
+                }
+                if !newValue, case .agentConversation = coordinator.currentScreen {
                     coordinator.onBackToWorkspaceDetail()
                 }
             }
@@ -382,6 +387,10 @@ struct RootView: View {
                 programmaticConversationDismiss = true
                 showingConversation = false
                 let pendingAgentId = agentId
+                // Ordering note: the onChange(of: showingConversation) pass for the
+                // tear-down above runs in the current runloop's view update, before
+                // this next-tick block, so the flag is normally consumed there and
+                // the clear below is just a backstop.
                 DispatchQueue.main.async {
                     programmaticConversationDismiss = false
                     if RootView.shouldRepushConversation(
@@ -450,6 +459,8 @@ struct RootView: View {
     /// tear-down/re-push branch in `syncNavigationState()`. Only re-push when
     /// the coordinator is still showing the same conversation; if the user has
     /// navigated back in the meantime, the re-push must be dropped.
+    /// The screen match compares agent ids only, which assumes agent ids are
+    /// globally unique across workspaces (`agent-{uuid}`).
     static func shouldRepushConversation(
         currentScreen: AppScreen,
         pendingAgentId: String,
