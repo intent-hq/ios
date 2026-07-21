@@ -245,8 +245,16 @@ class ConnectionManager: ObservableObject {
     private func bufferUnroutedPush(_ push: SubscriptionPush) {
         pruneExpiredBufferedPushes()
         if recentlyUnregisteredIds[push.subscriptionId] != nil {
-            print("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
-            return
+            // An initial snapshot (seq 0) means the daemon legitimately reused the id
+            // for a brand-new subscription (ids reset on daemon restart) — revive it
+            // so the fresh snapshot isn't lost to the tombstone. Anything else is a
+            // straggler from the dead subscription.
+            if push.kind == .snapshot && push.seq == 0 {
+                recentlyUnregisteredIds.removeValue(forKey: push.subscriptionId)
+            } else {
+                print("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
+                return
+            }
         }
         unroutedPushBuffer.append(BufferedPush(push: push, receivedAt: Date()))
         if unroutedPushBuffer.count > Self.unroutedPushBufferLimit {

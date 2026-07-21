@@ -539,6 +539,32 @@ struct ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-fresh")
     }
 
+    @Test @MainActor func reusedIdRevivedByFreshSnapshotAfterUnregister() async {
+        let manager = ConnectionManager.shared
+
+        manager.registerSubscriptionHandler(id: "buf-sub-reused") { _ in }
+        manager.unregisterSubscriptionHandler(id: "buf-sub-reused")
+
+        // A seq-0 snapshot for the tombstoned id means the daemon reused it for a
+        // brand-new subscription (ids reset on daemon restart) — it must be buffered
+        // and replayed, not dropped
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-reused") { push in
+            receivedSeqs.append(push.seq)
+        }
+        #expect(receivedSeqs == [0, 1])
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-reused")
+    }
+
     @Test @MainActor func collectionChannelPushesUnaffectedByBuffering() async {
         let manager = ConnectionManager.shared
         var received: [(kind: SubscriptionPush.Kind, seq: Int, count: Int)] = []
