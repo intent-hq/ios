@@ -35,15 +35,48 @@ enum ToolClassifier {
         let query = input["query"]?.value as? String
         let infoReq = input["information_request"]?.value as? String
         let url = input["url"]?.value as? String
+        // ACP human-readable title echoed by the daemon (input._acpTitle) —
+        // often the ONLY input available mid-turn (providers send raw_input: null).
+        let acpTitle = (input["_acpTitle"]?.value as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // workspace_api: prefer human-readable label over the raw tool name
+        // (detected by name, or by input shape: code + summary)
+        let summary = input["summary"]?.value as? String
+        if clean == "workspace_api"
+            || (input["code"]?.value as? String != nil && summary != nil) {
+            let titleIsRawName = acpTitle == nil || acpTitle!.isEmpty
+                || cleanToolName(acpTitle!).lowercased() == "workspace_api"
+            if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary),
+               !label.isEmpty {
+                return ToolDisplay(icon: "📁", verb: String(label.prefix(80)), subject: nil, path: nil)
+            }
+        }
 
         // File read
-        if (clean.contains("view") || clean.contains("read")) && p != nil
+        if (clean.contains("view") || clean.contains("read"))
             && !clean.contains("terminal") && !clean.contains("process")
             && !clean.contains("agent") && !clean.contains("note") {
             let isDir = (input["type"]?.value as? String) == "directory"
-            let hasSearch = input["search_query_regex"]?.value as? String != nil
-            let verb = hasSearch ? "Search" : isDir ? "List" : "Read"
-            return ToolDisplay(icon: "📄", verb: verb, subject: filename(p!), path: dirname(p!))
+            if let p = p {
+                let hasSearch = input["search_query_regex"]?.value as? String != nil
+                let verb = hasSearch ? "Search" : isDir ? "List" : "Read"
+                return ToolDisplay(icon: "📄", verb: verb, subject: filename(p), path: dirname(p))
+            }
+            // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
+            if let title = acpTitle,
+               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)$"#, in: title) {
+                let candidate = captured
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
+                if candidate.contains(".") || candidate.contains("/") {
+                    let titleIsDir = isDir
+                        || title.range(of: #"^List\s+Contents?"#,
+                                       options: [.regularExpression, .caseInsensitive]) != nil
+                    return ToolDisplay(icon: "📄", verb: titleIsDir ? "List" : "Read",
+                                       subject: filename(candidate), path: dirname(candidate))
+                }
+            }
         }
 
         // File write/edit
@@ -77,7 +110,12 @@ enum ToolClassifier {
             if clean.contains("write") { return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil) }
             if clean.contains("kill") { return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil) }
             if clean.contains("list") { return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil) }
-            let cmd = command.map { String($0.split(separator: "\n").first ?? "").prefix(80) }.map(String.init)
+            var cmd = command.map { String($0.split(separator: "\n").first ?? "").prefix(80) }.map(String.init)
+            if cmd == nil, let title = acpTitle,
+               let captured = firstCapture(#"^(?:Run|Launch)\s+`?(.+?)`?\s*$"#, in: title) {
+                // _acpTitle fallback: extract the command from e.g. "Run `cargo test`"
+                cmd = String(String(captured.split(separator: "\n").first ?? "").prefix(80))
+            }
             return ToolDisplay(icon: "▶️", verb: "Run", subject: cmd, path: nil)
         }
 
@@ -199,6 +237,18 @@ enum ToolClassifier {
             return ToolDisplay(icon: "📦", verb: "Git", subject: nil, path: nil)
         }
 
+        // Prose _acpTitle fallback: render the human-readable title verbatim
+        // rather than the generic spanner row (mid-turn blocks often carry
+        // ONLY the title — providers send raw_input: null)
+        if let title = acpTitle, !title.isEmpty {
+            let lower = title.lowercased()
+            let icon = lower.contains("agent") ? "🤖"
+                : lower.contains("note") ? "📝"
+                : lower.contains("workspace") ? "📁"
+                : "🔧"
+            return ToolDisplay(icon: icon, verb: String(title.prefix(120)), subject: nil, path: nil)
+        }
+
         // Generic fallback: use tool name as verb, first meaningful input as subject
         let fallbackSubject = (pathVal ?? query ?? infoReq ?? command ?? url).map { String($0.prefix(50)) }
         let cleanedName = cleanToolName(name)
@@ -208,6 +258,20 @@ enum ToolClassifier {
             .map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }
             .joined(separator: " ")
         return ToolDisplay(icon: "🔧", verb: cleanedName, subject: fallbackSubject, path: nil)
+    }
+
+    /// First capture group of a case-insensitive regex match, or nil.
+    private static func firstCapture(_ pattern: String, in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              match.numberOfRanges > 1,
+              let captureRange = Range(match.range(at: 1), in: text) else {
+            return nil
+        }
+        return String(text[captureRange])
     }
 
     static func filename(_ path: String) -> String {
