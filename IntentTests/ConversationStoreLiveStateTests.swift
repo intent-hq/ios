@@ -622,4 +622,92 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[0].contentBlocks?.first?.resolvedText == "Working more")
         #expect(!fake.didCallMethod("chat.unsubscribe"))
     }
+
+    // MARK: - Mid-turn tool title classification (STAB: generic spanner fallback)
+
+    /// Daemon-shaped live `tool_use` delta: auggie sends `raw_input: null`, so the
+    /// daemon coerces input to `{}` carrying only `_acpTitle` (tool_block.rs). The
+    /// classifier must derive a meaningful title from `_acpTitle` instead of
+    /// falling through to the generic "🔧" fallback.
+    @Test func midTurnFileReadToolWithAcpTitleOnlyClassifiesAsRead() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "input": ["_acpTitle": "Read `crates/intent-core/src/lib.rs`"],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "read", "status": "started"]
+            ])
+        ]))
+
+        let block = try #require(store.messages.first?.contentBlocks?.first)
+        #expect(block.type == .toolUse)
+        #expect(block.input?["_acpTitle"]?.value as? String == "Read `crates/intent-core/src/lib.rs`")
+
+        let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
+        #expect(display.icon == "📄")
+        #expect(display.verb == "Read")
+        #expect(display.subject == "lib.rs")
+        #expect(display.path == "crates/intent-core/src")
+    }
+
+    @Test func terminalToolWithAcpTitleOnlyExtractsCommand() async throws {
+        let display = ToolClassifier.classify(name: "launch-process", input: [
+            "_acpTitle": AnyCodable("Run `cargo test --workspace`")
+        ])
+        #expect(display.icon == "▶️")
+        #expect(display.verb == "Run")
+        #expect(display.subject == "cargo test --workspace")
+    }
+
+    @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async throws {
+        let display = ToolClassifier.classify(name: "workspace_api", input: [
+            "_acpTitle": AnyCodable("Read spec and task note")
+        ])
+        #expect(display.icon != "🔧")
+        #expect(display.verb == "Read spec and task note")
+    }
+
+    @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() async throws {
+        let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
+            "_acpTitle": AnyCodable("Summarize recent activity for the user")
+        ])
+        #expect(display.verb == "Summarize recent activity for the user")
+        #expect(display.subject == nil)
+    }
+
+    /// The completed `agent:tool:call` update arrives as an `updated` entity with
+    /// fuller input; the store must replace the block so re-classification picks
+    /// up the raw args mid-turn.
+    @Test func completedUpdatedToolBlockReplacesInputAndReclassifies() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "input": ["_acpTitle": "Read `src/main.rs`"],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "read", "status": "started"]
+            ])
+        ]))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "input": ["_acpTitle": "Read `src/main.rs`", "path": "src/main.rs"],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "read", "status": "completed"]
+            ])
+        ]))
+
+        let block = try #require(store.messages.first?.contentBlocks?.first)
+        #expect(block.input?["path"]?.value as? String == "src/main.rs")
+
+        let display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
+        #expect(display.icon == "📄")
+        #expect(display.verb == "Read")
+        #expect(display.subject == "main.rs")
+    }
 }
