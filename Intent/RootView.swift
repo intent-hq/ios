@@ -372,7 +372,11 @@ struct RootView: View {
                 showingConversation = false
                 let pendingAgentId = agentId
                 DispatchQueue.main.async {
-                    if conversationAgentId == pendingAgentId {
+                    if RootView.shouldRepushConversation(
+                        currentScreen: coordinator.currentScreen,
+                        pendingAgentId: pendingAgentId,
+                        conversationAgentId: conversationAgentId
+                    ) {
                         showingConversation = true
                     }
                 }
@@ -428,6 +432,16 @@ struct RootView: View {
             if showingNoteDetail { showingNoteDetail = false }
             if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
         }
+    }
+
+    /// Guard for the deferred iPad conversation re-push scheduled by the
+    /// tear-down/re-push branch in `syncNavigationState()`.
+    static func shouldRepushConversation(
+        currentScreen: AppScreen,
+        pendingAgentId: String,
+        conversationAgentId: String
+    ) -> Bool {
+        conversationAgentId == pendingAgentId
     }
 }
 
