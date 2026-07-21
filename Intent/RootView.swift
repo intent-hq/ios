@@ -60,6 +60,9 @@ struct RootView: View {
     @State private var noteDetailNoteTitle: String = ""
     @State private var pendingConversationPush = false
     @State private var pendingNoteDetailPush = false
+    /// True while syncNavigationState() tears down the conversation for the iPad
+    /// re-push dance, so the user-back onChange handler doesn't misfire.
+    @State private var programmaticConversationDismiss = false
     @State private var noteStack = NavigationPath()
     /// Parallel array tracking note titles pushed onto noteStack for iPad back-button labels.
     @State private var stackTitles: [String] = []
@@ -264,6 +267,10 @@ struct RootView: View {
                             if sizeClass == .regular {
                                 ToolbarItem(placement: .navigationBarLeading) {
                                     Button {
+                                        // Pop directly so the back action works even if the
+                                        // coordinator is already on .workspaceDetail (no
+                                        // reliance on a screen-description change alone).
+                                        showingConversation = false
                                         coordinator.onBackToWorkspaceDetail()
                                     } label: {
                                         HStack(spacing: 4) {
@@ -321,8 +328,11 @@ struct RootView: View {
                 }
             }
             .onChange(of: showingConversation) { newValue in
-                // When user taps system back button on iPhone, sync coordinator
-                if !newValue, case .agentConversation = coordinator.currentScreen {
+                // When user taps the back button, sync coordinator. Skip when the
+                // dismissal is the programmatic iPad tear-down/re-push, which is
+                // not a user-initiated back navigation.
+                if !newValue, !programmaticConversationDismiss,
+                   case .agentConversation = coordinator.currentScreen {
                     coordinator.onBackToWorkspaceDetail()
                 }
             }
@@ -369,9 +379,11 @@ struct RootView: View {
                 // true, SwiftUI may not push the new conversation. Tear down
                 // first, then re-push on the next runloop tick so the rebuilt
                 // NavigationStack accepts the new destination.
+                programmaticConversationDismiss = true
                 showingConversation = false
                 let pendingAgentId = agentId
                 DispatchQueue.main.async {
+                    programmaticConversationDismiss = false
                     if RootView.shouldRepushConversation(
                         currentScreen: coordinator.currentScreen,
                         pendingAgentId: pendingAgentId,
@@ -435,13 +447,19 @@ struct RootView: View {
     }
 
     /// Guard for the deferred iPad conversation re-push scheduled by the
-    /// tear-down/re-push branch in `syncNavigationState()`.
+    /// tear-down/re-push branch in `syncNavigationState()`. Only re-push when
+    /// the coordinator is still showing the same conversation; if the user has
+    /// navigated back in the meantime, the re-push must be dropped.
     static func shouldRepushConversation(
         currentScreen: AppScreen,
         pendingAgentId: String,
         conversationAgentId: String
     ) -> Bool {
-        conversationAgentId == pendingAgentId
+        guard conversationAgentId == pendingAgentId else { return false }
+        if case .agentConversation(let agentId, _, _) = currentScreen, agentId == pendingAgentId {
+            return true
+        }
+        return false
     }
 }
 
