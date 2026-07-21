@@ -367,8 +367,10 @@ class ConversationStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
-                // Unregister old handler if we had one
-                if let oldId = chatSubscriptionId {
+                // Unregister old handler if we had one. Guard against id reuse
+                // (daemon ids reset on restart) so we never drop the new
+                // subscription's buffered snapshot before registration replays it.
+                if let oldId = chatSubscriptionId, oldId != subId {
                     connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
                 chatSubscriptionId = subId
@@ -394,7 +396,9 @@ class ConversationStore: ObservableObject {
         }
     }
 
-    private func handleChatSubscriptionPush(_ push: SubscriptionPush) {
+    /// Internal (not private) so tests can drive the real ConnectionManager
+    /// registration/replay path into the store.
+    func handleChatSubscriptionPush(_ push: SubscriptionPush) {
         // Only process pushes when the chat channel is active
         guard chatChannelActive else { return }
         // Strict gate: only accept pushes for our exact subscriptionId (tests route
@@ -405,6 +409,12 @@ class ConversationStore: ObservableObject {
 
         switch push.kind {
         case .snapshot:
+            // Ignore stale snapshot re-delivery on an already-seeded channel when it
+            // would rewind chatExpectedSeq (deltas past it have been applied): applying
+            // it would roll the transcript back and make the next live delta read as a
+            // gap. Snapshots at the current position stay authoritative; legitimate
+            // (re)snapshots also always follow a chatSeeded reset.
+            if chatSeeded && push.seq + 1 < chatExpectedSeq { return }
             applyChatSnapshot(push)
 
         case .delta:
@@ -412,8 +422,12 @@ class ConversationStore: ObservableObject {
             if chatSeeded && push.seq == chatExpectedSeq {
                 applyChatDelta(delta)
                 chatExpectedSeq = push.seq + 1
+            } else if chatSeeded && push.seq < chatExpectedSeq {
+                // Stale/duplicate re-delivery (already applied) — not a gap, ignore silently.
+                return
             } else {
-                // Gap detected — resnapshot (guard against storm)
+                // Genuine gap (seq > expected, or delta before any snapshot) —
+                // resnapshot (guard against storm)
                 if !resnapshotChatInProgress {
                     resnapshotChatInProgress = true
                     print("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")

@@ -371,11 +371,270 @@ struct ConnectionManagerTests {
         """
         await manager.dispatchMessage(pushMessage)
 
-        // Unregistered push should be dropped (logged at debug but not dispatched)
+        // Unregistered push should not be dispatched to legacy handlers (it is buffered
+        // for potential replay, never broadcast)
         #expect(!legacyHandlerReceivedSubscriptionPush)
 
         // Clean up
         manager.removeEventHandler(id: handlerId)
+        manager.unroutedPushBuffer.removeAll { $0.push.subscriptionId == "test-sub-6" }
+    }
+
+    // MARK: - Unrouted push buffering (dropped seq-0 snapshot race)
+
+    @Test @MainActor func bufferedPushesReplayedInOrderOnRegistration() async {
+        let manager = ConnectionManager.shared
+        var received: [(kind: SubscriptionPush.Kind, seq: Int)] = []
+
+        // Snapshot + deltas arrive BEFORE any handler is registered (the race)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"delta","seq":2,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+
+        manager.registerSubscriptionHandler(id: "buf-sub-1") { push in
+            received.append((push.kind, push.seq))
+        }
+
+        // Replayed synchronously on registration, in arrival order
+        #expect(received.count == 3)
+        #expect(received[0].kind == .snapshot && received[0].seq == 0)
+        #expect(received[1].kind == .delta && received[1].seq == 1)
+        #expect(received[2].kind == .delta && received[2].seq == 2)
+        // Buffer cleared after replay
+        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-1" })
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-1")
+    }
+
+    @Test @MainActor func bufferEvictionRespectsBounds() async {
+        let manager = ConnectionManager.shared
+        manager.unroutedPushBuffer.removeAll()
+
+        let limit = ConnectionManager.unroutedPushBufferLimit
+        let total = limit + 6
+        for seq in 0..<total {
+            await manager.dispatchMessage("""
+            {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-evict","kind":"delta","seq":\(seq),"delta":{"added":[],"updated":[],"removedIds":[]}}}
+            """)
+        }
+        #expect(manager.unroutedPushBuffer.count == limit)
+
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-evict") { push in
+            receivedSeqs.append(push.seq)
+        }
+
+        // Oldest frames evicted; the most recent `limit` frames replayed in order
+        #expect(receivedSeqs == Array((total - limit)..<total))
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-evict")
+    }
+
+    @Test @MainActor func bufferTTLExpiresOldPushes() async {
+        let manager = ConnectionManager.shared
+
+        // Fresh push arrives unrouted → buffered
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-ttl","kind":"delta","seq":2,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+        // Seed a push that exceeded the TTL
+        let stalePush = SubscriptionPush(
+            subscriptionId: "buf-sub-ttl", kind: .delta, seq: 1, snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: []))
+        manager.unroutedPushBuffer.append(ConnectionManager.BufferedPush(
+            push: stalePush,
+            receivedAt: Date(timeIntervalSinceNow: -(ConnectionManager.unroutedPushBufferTTL + 1))))
+
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-ttl") { push in
+            receivedSeqs.append(push.seq)
+        }
+
+        // Only the fresh push replays; the expired one is pruned
+        #expect(receivedSeqs == [2])
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-ttl")
+    }
+
+    @Test @MainActor func noDoubleDeliveryWhenHandlerRegisteredMidStream() async {
+        let manager = ConnectionManager.shared
+        var receivedSeqs: [Int] = []
+
+        // seq 0 arrives pre-registration → buffered
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-mid","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+
+        manager.registerSubscriptionHandler(id: "buf-sub-mid") { push in
+            receivedSeqs.append(push.seq)
+        }
+        // Replay delivered seq 0 exactly once
+        #expect(receivedSeqs == [0])
+
+        // seq 1 arrives post-registration → routed live, never buffered
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-mid","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+        #expect(receivedSeqs == [0, 1])
+        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-mid" })
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-mid")
+    }
+
+    @Test @MainActor func unregisterDropsBufferedPushes() async {
+        let manager = ConnectionManager.shared
+
+        // Push buffered for a subscription that then gets unregistered (e.g. resnapshot)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-unreg","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        manager.unregisterSubscriptionHandler(id: "buf-sub-unreg")
+
+        var receivedCount = 0
+        manager.registerSubscriptionHandler(id: "buf-sub-unreg") { _ in
+            receivedCount += 1
+        }
+        // Buffered push for the dead subscription must not replay
+        #expect(receivedCount == 0)
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-unreg")
+    }
+
+    @Test @MainActor func stragglerPushesAfterUnregisterAreNotBuffered() async {
+        let manager = ConnectionManager.shared
+
+        manager.registerSubscriptionHandler(id: "buf-sub-dead") { _ in }
+        manager.unregisterSubscriptionHandler(id: "buf-sub-dead")
+
+        // Straggler pushes for the dead id (unsubscribe still in flight on the daemon)
+        // must be dropped, not buffered — they can never replay and would only add
+        // eviction pressure on the shared buffer
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-dead","kind":"delta","seq":7,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-dead" })
+
+        // A brand-new subscriptionId is unaffected by the tombstone
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-fresh","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-fresh") { push in
+            receivedSeqs.append(push.seq)
+        }
+        #expect(receivedSeqs == [0])
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-fresh")
+    }
+
+    @Test @MainActor func reusedIdRevivedByFreshSnapshotAfterUnregister() async {
+        let manager = ConnectionManager.shared
+
+        manager.registerSubscriptionHandler(id: "buf-sub-reused") { _ in }
+        manager.unregisterSubscriptionHandler(id: "buf-sub-reused")
+
+        // A seq-0 snapshot for the tombstoned id means the daemon reused it for a
+        // brand-new subscription (ids reset on daemon restart) — it must be buffered
+        // and replayed, not dropped
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-reused") { push in
+            receivedSeqs.append(push.seq)
+        }
+        #expect(receivedSeqs == [0, 1])
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-reused")
+    }
+
+    @Test @MainActor func collectionChannelPushesUnaffectedByBuffering() async {
+        let manager = ConnectionManager.shared
+        var received: [(kind: SubscriptionPush.Kind, seq: Int, count: Int)] = []
+
+        // Registered-first (normal collection-channel flow): pushes route live
+        manager.registerSubscriptionHandler(id: "col-sub-1") { push in
+            received.append((push.kind, push.seq, push.snapshot?.count ?? 0))
+        }
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-1","kind":"snapshot","seq":0,"snapshot":[{"id":"note-1"},{"id":"note-2"}]}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-1","kind":"delta","seq":1,"delta":{"added":[],"updated":[{"id":"note-1"}],"removedIds":[]}}}
+        """)
+        #expect(received.count == 2)
+        #expect(received[0].kind == .snapshot && received[0].seq == 0 && received[0].count == 2)
+        #expect(received[1].kind == .delta && received[1].seq == 1)
+        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "col-sub-1" })
+
+        // Array-shaped (collection) snapshot arriving pre-registration replays intact
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-2","kind":"snapshot","seq":0,"snapshot":[{"id":"task-1"}]}}
+        """)
+        var replayedSnapshot: [[String: Any]]?
+        manager.registerSubscriptionHandler(id: "col-sub-2") { push in
+            replayedSnapshot = push.snapshot
+        }
+        #expect(replayedSnapshot?.count == 1)
+        #expect(replayedSnapshot?.first?["id"] as? String == "task-1")
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "col-sub-1")
+        manager.unregisterSubscriptionHandler(id: "col-sub-2")
+    }
+
+    @Test @MainActor func bufferedChatSnapshotReplayedIntoConversationStore() async {
+        let manager = ConnectionManager.shared
+        let store = ConversationStore(connectionManager: manager)
+        store.setTestChatChannel(subscriptionId: "buf-chat-race")
+
+        // Snapshot + first delta arrive BEFORE the store registers its handler
+        // (the seq-0 race this fix addresses)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"snapshot","seq":0,"snapshot":{"agentId":"agent-1","messages":[{"id":"msg-1","role":"user","contentBlocks":[{"type":"text","id":"msg-1:0","text":"Hello"}],"timestamp":"2026-07-21T01:00:00.000Z"}]}}}
+        """)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":1,"delta":{"added":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working"}}],"updated":[],"removedIds":[]}}}
+        """)
+
+        // The store registers its handler (as subscribeLiveChat does after the
+        // subscribe response resumes) → buffered pushes replay and apply
+        manager.registerSubscriptionHandler(id: "buf-chat-race") { [weak store] push in
+            store?.handleChatSubscriptionPush(push)
+        }
+
+        #expect(store.messages.count == 2)
+        #expect(store.messages[0].id == "msg-1")
+        #expect(store.messages[1].id == "msg-2")
+        #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Working")
+        #expect(store.isStreaming == true)
+
+        // The channel is seeded correctly: the next live delta continues the
+        // sequence without a gap (no resnapshot wiped the seeded state)
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":2,"delta":{"added":[],"updated":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working on it."}}],"removedIds":[]}}}
+        """)
+        #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Working on it.")
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-chat-race")
     }
 }
 
