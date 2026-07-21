@@ -37,18 +37,18 @@ enum ToolClassifier {
         let url = input["url"]?.value as? String
         // ACP human-readable title echoed by the daemon (input._acpTitle) —
         // often the ONLY input available mid-turn (providers send raw_input: null).
-        let acpTitle = (input["_acpTitle"]?.value as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let acpTitle = nonEmpty((input["_acpTitle"]?.value as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
 
         // workspace_api: prefer human-readable label over the raw tool name
         // (detected by name, or by input shape: code + summary)
-        let summary = input["summary"]?.value as? String
+        let summary = nonEmpty((input["summary"]?.value as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines))
         if clean == "workspace_api"
             || (input["code"]?.value as? String != nil && summary != nil) {
-            let titleIsRawName = acpTitle == nil || acpTitle!.isEmpty
+            let titleIsRawName = acpTitle == nil
                 || cleanToolName(acpTitle!).lowercased() == "workspace_api"
-            if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary),
-               !label.isEmpty {
+            if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary) {
                 return ToolDisplay(icon: "📁", verb: String(label.prefix(80)), subject: nil, path: nil)
             }
         }
@@ -64,8 +64,9 @@ enum ToolClassifier {
                 return ToolDisplay(icon: "📄", verb: verb, subject: filename(p), path: dirname(p))
             }
             // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
+            // (no end anchor: multi-line titles match on the first line, like desktop)
             if let title = acpTitle,
-               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)$"#, in: title) {
+               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)"#, in: title) {
                 let candidate = captured
                     .trimmingCharacters(in: .whitespaces)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
@@ -82,11 +83,23 @@ enum ToolClassifier {
         // File write/edit
         if (clean.contains("edit") || clean.contains("str-replace") || clean.contains("str_replace")
             || clean.contains("save") || clean.contains("write"))
-            && (p != nil || input["file_content"]?.value != nil || input["old_str_1"]?.value != nil)
             && !clean.contains("note") && !clean.contains("process") {
             let verb = (clean.contains("save") || clean.contains("write")) ? "Save" : "Edit"
-            let file = p ?? ""
-            return ToolDisplay(icon: "✏️", verb: verb, subject: filename(file), path: dirname(file))
+            if p != nil || input["file_content"]?.value != nil || input["old_str_1"]?.value != nil {
+                let file = p ?? ""
+                return ToolDisplay(icon: "✏️", verb: verb, subject: filename(file), path: dirname(file))
+            }
+            // _acpTitle fallback: extract the path from e.g. "Edit `src/foo.ts`"
+            if let title = acpTitle,
+               let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title) {
+                let candidate = captured
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
+                if candidate.contains(".") || candidate.contains("/") {
+                    return ToolDisplay(icon: "✏️", verb: verb,
+                                       subject: filename(candidate), path: dirname(candidate))
+                }
+            }
         }
 
         // File delete
@@ -110,13 +123,30 @@ enum ToolClassifier {
             if clean.contains("write") { return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil) }
             if clean.contains("kill") { return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil) }
             if clean.contains("list") { return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil) }
+            var verb = "Run"
             var cmd = command.map { String($0.split(separator: "\n").first ?? "").prefix(80) }.map(String.init)
-            if cmd == nil, let title = acpTitle,
-               let captured = firstCapture(#"^(?:Run|Launch)\s+`?(.+?)`?\s*$"#, in: title) {
-                // _acpTitle fallback: extract the command from e.g. "Run `cargo test`"
-                cmd = String(String(captured.split(separator: "\n").first ?? "").prefix(80))
+            if cmd == nil, let title = acpTitle {
+                // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
+                // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity)
+                let pattern = #"^(Run|Launch|Read|List|Kill|Write)\s+`?(.+?)`?\s*$"#
+                if let titleVerb = firstCapture(pattern, in: title, group: 1)?.lowercased(),
+                   let rest = firstCapture(pattern, in: title, group: 2)?
+                       .trimmingCharacters(in: .whitespaces),
+                   !rest.isEmpty {
+                    switch titleVerb {
+                    case "list": verb = "List"; cmd = rest
+                    case "read": verb = "Read"; cmd = rest
+                    case "kill": verb = "Kill"; cmd = rest
+                    case "write": verb = "Write to"; cmd = rest
+                    case "launch":
+                        verb = "Launch"
+                        cmd = String(String(rest.split(separator: "\n").first ?? "").prefix(80))
+                    default:
+                        cmd = String(String(rest.split(separator: "\n").first ?? "").prefix(80))
+                    }
+                }
             }
-            return ToolDisplay(icon: "▶️", verb: "Run", subject: cmd, path: nil)
+            return ToolDisplay(icon: "▶️", verb: verb, subject: cmd, path: nil)
         }
 
         // Script operations
@@ -239,8 +269,9 @@ enum ToolClassifier {
 
         // Prose _acpTitle fallback: render the human-readable title verbatim
         // rather than the generic spanner row (mid-turn blocks often carry
-        // ONLY the title — providers send raw_input: null)
-        if let title = acpTitle, !title.isEmpty {
+        // ONLY the title — providers send raw_input: null). Guarded by a prose
+        // check so raw tool-name-shaped titles keep the cleaned-name fallback.
+        if let title = acpTitle, isProseTitle(title) {
             let lower = title.lowercased()
             let icon = lower.contains("agent") ? "🤖"
                 : lower.contains("note") ? "📝"
@@ -260,18 +291,35 @@ enum ToolClassifier {
         return ToolDisplay(icon: "🔧", verb: cleanedName, subject: fallbackSubject, path: nil)
     }
 
-    /// First capture group of a case-insensitive regex match, or nil.
-    private static func firstCapture(_ pattern: String, in text: String) -> String? {
+    /// Nth capture group of a case-insensitive regex match, or nil.
+    private static func firstCapture(_ pattern: String, in text: String, group: Int = 1) -> String? {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
             return nil
         }
         let range = NSRange(text.startIndex..., in: text)
         guard let match = regex.firstMatch(in: text, range: range),
-              match.numberOfRanges > 1,
-              let captureRange = Range(match.range(at: 1), in: text) else {
+              match.numberOfRanges > group,
+              let captureRange = Range(match.range(at: group), in: text) else {
             return nil
         }
         return String(text[captureRange])
+    }
+
+    private static func nonEmpty(_ s: String?) -> String? {
+        guard let s = s, !s.isEmpty else { return nil }
+        return s
+    }
+
+    /// Detect prose ACP titles (human-readable, not tool identifiers): either
+    /// colon-prefixed like "sub-agent-explore: Explore …" or 3+ words. Mirrors
+    /// the desktop classifier's isProseToolName.
+    static func isProseTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else { return false }
+        if trimmed.range(of: #"^[A-Za-z0-9._-]+:\s"#, options: .regularExpression) != nil {
+            return true
+        }
+        return trimmed.split(whereSeparator: { $0.isWhitespace }).count >= 3
     }
 
     static func filename(_ path: String) -> String {

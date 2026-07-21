@@ -678,6 +678,35 @@ struct ConversationStoreLiveStateTests {
         #expect(display.subject == nil)
     }
 
+    /// A raw tool-name-shaped title (single token) must NOT be rendered verbatim;
+    /// the cleaned-name generic fallback wins (desktop isProseToolName parity).
+    @Test func nonProseAcpTitleKeepsCleanedNameFallback() async throws {
+        let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
+            "_acpTitle": AnyCodable("zz_unrecognized_tool")
+        ])
+        #expect(display.icon == "🔧")
+        #expect(display.verb == "Zz Unrecognized Tool")
+    }
+
+    @Test func editToolWithAcpTitleOnlyExtractsPath() async throws {
+        let display = ToolClassifier.classify(name: "str-replace-editor", input: [
+            "_acpTitle": AnyCodable("Edit `src/foo/bar.ts`")
+        ])
+        #expect(display.icon == "✏️")
+        #expect(display.verb == "Edit")
+        #expect(display.subject == "bar.ts")
+        #expect(display.path == "src/foo")
+    }
+
+    @Test func terminalKillAcpTitleUsesTitleVerbAndSubject() async throws {
+        let display = ToolClassifier.classify(name: "launch-process", input: [
+            "_acpTitle": AnyCodable("Kill terminal 5")
+        ])
+        #expect(display.icon == "▶️")
+        #expect(display.verb == "Kill")
+        #expect(display.subject == "terminal 5")
+    }
+
     /// The completed `agent:tool:call` update arrives as an `updated` entity with
     /// fuller input; the store must replace the block so re-classification picks
     /// up the raw args mid-turn.
@@ -693,10 +722,12 @@ struct ConversationStoreLiveStateTests {
                 "metadata": ["toolKind": "read", "status": "started"]
             ])
         ]))
+        // Title deliberately disagrees with path: raw input must win over the
+        // _acpTitle fallback (pins raw-input-wins precedence).
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(messageId: "msg-2", block: [
                 "type": "tool_use", "id": "msg-2:0", "name": "view",
-                "input": ["_acpTitle": "Read `src/main.rs`", "path": "src/main.rs"],
+                "input": ["_acpTitle": "Read `other.rs`", "path": "src/main.rs"],
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "read", "status": "completed"]
             ])
