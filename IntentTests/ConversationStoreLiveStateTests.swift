@@ -750,4 +750,67 @@ struct ConversationStoreLiveStateTests {
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
     }
+
+    /// Regression (bare spanner): sparse `tool_call_update` ticks reach the
+    /// chat.subscribe delta path as FULL blocks with every unset field mapped
+    /// to its default (`name:""`, `input:{}`, `toolKind:"other"` — see the
+    /// daemon's `tool_delta`/`map_tool_call_update`). Upserting such a block
+    /// verbatim clobbers the titled block from first sight, and every later
+    /// sparse tick keeps it clobbered — the in-flight row renders as a bare
+    /// 🔧 with no title for the rest of the turn. A progress-only tick (empty
+    /// name, same toolCallId) must preserve the prior block's name/input/
+    /// toolKind and only adopt the new status (desktop bridge merge parity).
+    @Test func sparseProgressTickPreservesPriorToolBlockFields() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "input": ["_acpTitle": "Read `src/main.rs`"],
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "read", "status": "started"]
+            ])
+        ]))
+
+        // Sparse in-progress tick: name/input/toolKind collapse to defaults.
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "",
+                "input": [String: Any](),
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "other", "status": "started"]
+            ])
+        ]))
+
+        var block = try #require(store.messages.first?.contentBlocks?.first)
+        #expect(block.resolvedName == "view")
+        #expect(block.input?["_acpTitle"]?.value as? String == "Read `src/main.rs`")
+        #expect(block.metadata?["toolKind"]?.value as? String == "read")
+
+        var display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
+        #expect(display.icon == "📄")
+        #expect(display.verb == "Read")
+        #expect(display.subject == "main.rs")
+
+        // Sparse completion tick (status + output only) must also preserve
+        // the retained fields while adopting the terminal status.
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 3, updated: [
+            blockEntity(messageId: "msg-2", block: [
+                "type": "tool_use", "id": "msg-2:0", "name": "",
+                "input": [String: Any](),
+                "toolCallId": "call-1",
+                "metadata": ["toolKind": "other", "status": "completed"]
+            ])
+        ]))
+
+        block = try #require(store.messages.first?.contentBlocks?.first)
+        #expect(block.resolvedName == "view")
+        #expect(block.input?["_acpTitle"]?.value as? String == "Read `src/main.rs`")
+        #expect(block.metadata?["status"]?.value as? String == "completed")
+
+        display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
+        #expect(display.verb == "Read")
+        #expect(display.subject == "main.rs")
+    }
 }
