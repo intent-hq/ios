@@ -63,6 +63,22 @@ class ConnectionManager: ObservableObject {
     /// themselves and ensures single-source-of-truth routing.
     private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
 
+    /// A subscription.push that arrived before any handler was registered for its
+    /// subscriptionId (e.g. the seq-0 snapshot racing the store's handler registration,
+    /// which runs one or more actor hops after the subscribe response continuation resumes).
+    struct BufferedPush {
+        let push: SubscriptionPush
+        let receivedAt: Date
+    }
+
+    /// Unrouted pushes buffered in arrival order, replayed when a handler is registered
+    /// for their subscriptionId. Bounded: at most `unroutedPushBufferLimit` frames total
+    /// (oldest evicted first) and each frame held at most `unroutedPushBufferTTL` seconds.
+    /// Internal for test visibility.
+    var unroutedPushBuffer: [BufferedPush] = []
+    static let unroutedPushBufferLimit = 64
+    static let unroutedPushBufferTTL: TimeInterval = 30
+
     private init() {}
 
     /// Publisher for connectionState changes. Satisfies ConnectionManagerRouting protocol.
@@ -192,6 +208,7 @@ class ConnectionManager: ObservableObject {
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionHandlers[id] = handler
         print("[ConnectionManager] Registered subscription handler for id=\(id)")
+        replayBufferedPushes(for: id, to: handler)
     }
 
     /// Unregister the handler for the given subscriptionId. After this call, pushes for this
@@ -206,7 +223,41 @@ class ConnectionManager: ObservableObject {
     /// - Parameter id: The subscriptionId to unregister
     func unregisterSubscriptionHandler(id: String) {
         subscriptionHandlers.removeValue(forKey: id)
+        // Any buffered pushes belong to the now-dead subscription — drop them so they
+        // can never replay into a future handler.
+        unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
         print("[ConnectionManager] Unregistered subscription handler for id=\(id)")
+    }
+
+    /// Buffer an unrouted subscription.push so it can be replayed when a handler is
+    /// registered for its subscriptionId (fixes the dropped seq-0 snapshot race).
+    private func bufferUnroutedPush(_ push: SubscriptionPush) {
+        pruneExpiredBufferedPushes()
+        unroutedPushBuffer.append(BufferedPush(push: push, receivedAt: Date()))
+        if unroutedPushBuffer.count > Self.unroutedPushBufferLimit {
+            unroutedPushBuffer.removeFirst(unroutedPushBuffer.count - Self.unroutedPushBufferLimit)
+        }
+        print("[ConnectionManager] Buffered unrouted subscription.push for id=\(push.subscriptionId) seq=\(push.seq) (no handler registered yet, buffered=\(unroutedPushBuffer.count))")
+    }
+
+    /// Replay buffered pushes for the given subscriptionId, in arrival order, to the
+    /// newly registered handler. Buffered entries are removed before delivery so a push
+    /// is either routed live or replayed once — never both.
+    private func replayBufferedPushes(for id: String, to handler: @MainActor (SubscriptionPush) -> Void) {
+        pruneExpiredBufferedPushes()
+        let matching = unroutedPushBuffer.filter { $0.push.subscriptionId == id }
+        guard !matching.isEmpty else { return }
+        unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
+        print("[ConnectionManager] Replaying \(matching.count) buffered push(es) for id=\(id)")
+        for entry in matching {
+            handler(entry.push)
+        }
+    }
+
+    /// Drop buffered pushes older than the TTL. Internal for test visibility.
+    func pruneExpiredBufferedPushes(now: Date = Date()) {
+        let cutoff = now.addingTimeInterval(-Self.unroutedPushBufferTTL)
+        unroutedPushBuffer.removeAll { $0.receivedAt < cutoff }
     }
 
     /// Internal entry point for testing message dispatch.
@@ -449,7 +500,10 @@ class ConnectionManager: ObservableObject {
                 if let handler = subscriptionHandlers[push.subscriptionId] {
                     handler(push)  // Already on MainActor, call directly
                 } else {
-                    print("[ConnectionManager] Unrouted subscription.push for id=\(push.subscriptionId) (no handler registered)")
+                    // No handler yet — buffer for replay on registration instead of dropping.
+                    // Dropping here loses the seq-0 snapshot when the push races the store's
+                    // handler registration after the subscribe response resumes.
+                    bufferUnroutedPush(push)
                 }
                 return  // Do NOT fall through to legacy eventHandlers
             }

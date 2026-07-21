@@ -394,7 +394,9 @@ class ConversationStore: ObservableObject {
         }
     }
 
-    private func handleChatSubscriptionPush(_ push: SubscriptionPush) {
+    /// Internal (not private) so tests can drive the real ConnectionManager
+    /// registration/replay path into the store.
+    func handleChatSubscriptionPush(_ push: SubscriptionPush) {
         // Only process pushes when the chat channel is active
         guard chatChannelActive else { return }
         // Strict gate: only accept pushes for our exact subscriptionId (tests route
@@ -412,8 +414,12 @@ class ConversationStore: ObservableObject {
             if chatSeeded && push.seq == chatExpectedSeq {
                 applyChatDelta(delta)
                 chatExpectedSeq = push.seq + 1
+            } else if chatSeeded && push.seq < chatExpectedSeq {
+                // Stale/duplicate re-delivery (already applied) — not a gap, ignore silently.
+                return
             } else {
-                // Gap detected — resnapshot (guard against storm)
+                // Genuine gap (seq > expected, or delta before any snapshot) —
+                // resnapshot (guard against storm)
                 if !resnapshotChatInProgress {
                     resnapshotChatInProgress = true
                     print("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")

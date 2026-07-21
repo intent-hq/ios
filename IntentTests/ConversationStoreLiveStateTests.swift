@@ -538,4 +538,62 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].role == .assistant)
         #expect(store.isStreaming == true)
     }
+
+    // MARK: - Stale-seq tolerance
+
+    @Test func staleSeqDeltaIgnoredWithoutResubscribe() async throws {
+        let (store, fake) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "Working"])
+        ]))
+        #expect(store.messages.count == 1)
+
+        // Stale re-delivery: seq 1 already applied (expected is now 2) — must be
+        // silently ignored, not treated as a gap
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-stale",
+                        block: ["type": "text", "id": "msg-stale:0", "text": "dup"])
+        ]))
+
+        // Give any (wrongly) spawned resnapshot task a chance to run
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(store.messages.count == 1) // stale entity not applied
+        #expect(!fake.didCallMethod("chat.unsubscribe"))
+        #expect(!fake.didCallMethod("chat.subscribe"))
+
+        // The live sequence continues normally after the stale frame
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "Working more"])
+        ]))
+        #expect(store.messages[0].contentBlocks?.first?.resolvedText == "Working more")
+    }
+
+    @Test func gapAheadStillResnapshotsExactlyOnce() async throws {
+        let (store, fake) = makeStore()
+        fake.responseMap["chat.unsubscribe"] = [String: Any]()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+
+        // Gap: expected seq 1, got 5 — genuine loss, must resnapshot
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 5, added: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "lost"])
+        ]))
+        // A second gapped frame while the resnapshot is in flight must not
+        // trigger another one (storm guard)
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 6, added: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:1", "text": "also lost"])
+        ]))
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(store.messages.isEmpty) // gapped deltas not applied
+        #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
+    }
 }
