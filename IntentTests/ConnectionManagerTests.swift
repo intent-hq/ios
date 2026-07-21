@@ -511,6 +511,34 @@ struct ConnectionManagerTests {
         manager.unregisterSubscriptionHandler(id: "buf-sub-unreg")
     }
 
+    @Test @MainActor func stragglerPushesAfterUnregisterAreNotBuffered() async {
+        let manager = ConnectionManager.shared
+
+        manager.registerSubscriptionHandler(id: "buf-sub-dead") { _ in }
+        manager.unregisterSubscriptionHandler(id: "buf-sub-dead")
+
+        // Straggler pushes for the dead id (unsubscribe still in flight on the daemon)
+        // must be dropped, not buffered — they can never replay and would only add
+        // eviction pressure on the shared buffer
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-dead","kind":"delta","seq":7,"delta":{"added":[],"updated":[],"removedIds":[]}}}
+        """)
+        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-dead" })
+
+        // A brand-new subscriptionId is unaffected by the tombstone
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-fresh","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
+        """)
+        var receivedSeqs: [Int] = []
+        manager.registerSubscriptionHandler(id: "buf-sub-fresh") { push in
+            receivedSeqs.append(push.seq)
+        }
+        #expect(receivedSeqs == [0])
+
+        // Clean up
+        manager.unregisterSubscriptionHandler(id: "buf-sub-fresh")
+    }
+
     @Test @MainActor func collectionChannelPushesUnaffectedByBuffering() async {
         let manager = ConnectionManager.shared
         var received: [(kind: SubscriptionPush.Kind, seq: Int, count: Int)] = []

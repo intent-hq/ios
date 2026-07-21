@@ -79,6 +79,13 @@ class ConnectionManager: ObservableObject {
     static let unroutedPushBufferLimit = 64
     static let unroutedPushBufferTTL: TimeInterval = 30
 
+    /// SubscriptionIds recently unregistered, mapped to when. Unrouted pushes for these
+    /// ids are dropped instead of buffered — they belong to a dead subscription that will
+    /// never be re-registered (server ids are unique per subscribe), so buffering them
+    /// would only add eviction pressure on the shared buffer. Entries expire after
+    /// `unroutedPushBufferTTL`. Internal for test visibility.
+    var recentlyUnregisteredIds: [String: Date] = [:]
+
     private init() {}
 
     /// Publisher for connectionState changes. Satisfies ConnectionManagerRouting protocol.
@@ -207,6 +214,7 @@ class ConnectionManager: ObservableObject {
     ///   - handler: The MainActor-isolated handler to invoke for pushes with this subscriptionId
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionHandlers[id] = handler
+        recentlyUnregisteredIds.removeValue(forKey: id)
         print("[ConnectionManager] Registered subscription handler for id=\(id)")
         replayBufferedPushes(for: id, to: handler)
     }
@@ -224,8 +232,10 @@ class ConnectionManager: ObservableObject {
     func unregisterSubscriptionHandler(id: String) {
         subscriptionHandlers.removeValue(forKey: id)
         // Any buffered pushes belong to the now-dead subscription — drop them so they
-        // can never replay into a future handler.
+        // can never replay into a future handler, and tombstone the id so straggler
+        // pushes arriving before the daemon processes the unsubscribe are not buffered.
         unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
+        recentlyUnregisteredIds[id] = Date()
         print("[ConnectionManager] Unregistered subscription handler for id=\(id)")
     }
 
@@ -233,6 +243,10 @@ class ConnectionManager: ObservableObject {
     /// registered for its subscriptionId (fixes the dropped seq-0 snapshot race).
     private func bufferUnroutedPush(_ push: SubscriptionPush) {
         pruneExpiredBufferedPushes()
+        if recentlyUnregisteredIds[push.subscriptionId] != nil {
+            print("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
+            return
+        }
         unroutedPushBuffer.append(BufferedPush(push: push, receivedAt: Date()))
         if unroutedPushBuffer.count > Self.unroutedPushBufferLimit {
             unroutedPushBuffer.removeFirst(unroutedPushBuffer.count - Self.unroutedPushBufferLimit)
@@ -254,10 +268,12 @@ class ConnectionManager: ObservableObject {
         }
     }
 
-    /// Drop buffered pushes older than the TTL. Internal for test visibility.
+    /// Drop buffered pushes and unregister tombstones older than the TTL.
+    /// Internal for test visibility.
     func pruneExpiredBufferedPushes(now: Date = Date()) {
         let cutoff = now.addingTimeInterval(-Self.unroutedPushBufferTTL)
         unroutedPushBuffer.removeAll { $0.receivedAt < cutoff }
+        recentlyUnregisteredIds = recentlyUnregisteredIds.filter { $0.value >= cutoff }
     }
 
     /// Internal entry point for testing message dispatch.

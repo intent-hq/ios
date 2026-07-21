@@ -407,6 +407,12 @@ class ConversationStore: ObservableObject {
 
         switch push.kind {
         case .snapshot:
+            // Ignore stale snapshot re-delivery on an already-seeded channel when it
+            // would rewind chatExpectedSeq (deltas past it have been applied): applying
+            // it would roll the transcript back and make the next live delta read as a
+            // gap. Snapshots at the current position stay authoritative; legitimate
+            // (re)snapshots also always follow a chatSeeded reset.
+            if chatSeeded && push.seq + 1 < chatExpectedSeq { return }
             applyChatSnapshot(push)
 
         case .delta:

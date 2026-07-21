@@ -596,4 +596,30 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages.isEmpty) // gapped deltas not applied
         #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
     }
+
+    @Test func staleSnapshotRedeliveryIgnoredAfterDeltasApplied() async throws {
+        let (store, fake) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "Working"])
+        ]))
+        #expect(store.messages.count == 1)
+
+        // A duplicate/late seq-0 snapshot after deltas were applied would rewind
+        // chatExpectedSeq and roll the transcript back — it must be ignored
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        #expect(store.messages.count == 1)
+        #expect(store.messages[0].id == "msg-2")
+
+        // The live sequence continues without a gap
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
+            blockEntity(messageId: "msg-2",
+                        block: ["type": "text", "id": "msg-2:0", "text": "Working more"])
+        ]))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.messages[0].contentBlocks?.first?.resolvedText == "Working more")
+        #expect(!fake.didCallMethod("chat.unsubscribe"))
+    }
 }
