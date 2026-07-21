@@ -66,17 +66,13 @@ enum ToolClassifier {
             // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
             // (no end anchor: multi-line titles match on the first line, like desktop)
             if let title = acpTitle,
-               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)"#, in: title) {
-                let candidate = captured
-                    .trimmingCharacters(in: .whitespaces)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
-                if candidate.contains(".") || candidate.contains("/") {
-                    let titleIsDir = isDir
-                        || title.range(of: #"^List\s+Contents?"#,
-                                       options: [.regularExpression, .caseInsensitive]) != nil
-                    return ToolDisplay(icon: "📄", verb: titleIsDir ? "List" : "Read",
-                                       subject: filename(candidate), path: dirname(candidate))
-                }
+               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)"#, in: title),
+               let candidate = pathCandidate(captured) {
+                let titleIsDir = isDir
+                    || title.range(of: #"^List\s+Contents?"#,
+                                   options: [.regularExpression, .caseInsensitive]) != nil
+                return ToolDisplay(icon: "📄", verb: titleIsDir ? "List" : "Read",
+                                   subject: filename(candidate), path: dirname(candidate))
             }
         }
 
@@ -91,14 +87,10 @@ enum ToolClassifier {
             }
             // _acpTitle fallback: extract the path from e.g. "Edit `src/foo.ts`"
             if let title = acpTitle,
-               let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title) {
-                let candidate = captured
-                    .trimmingCharacters(in: .whitespaces)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "`"))
-                if candidate.contains(".") || candidate.contains("/") {
-                    return ToolDisplay(icon: "✏️", verb: verb,
-                                       subject: filename(candidate), path: dirname(candidate))
-                }
+               let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title),
+               let candidate = pathCandidate(captured) {
+                return ToolDisplay(icon: "✏️", verb: verb,
+                                   subject: filename(candidate), path: dirname(candidate))
             }
         }
 
@@ -292,10 +284,19 @@ enum ToolClassifier {
     }
 
     /// Nth capture group of a case-insensitive regex match, or nil.
+    /// Compiled regexes are cached by pattern (rows re-render often mid-turn).
+    private static var regexCache: [String: NSRegularExpression] = [:]
+    private static let regexCacheLock = NSLock()
+
     private static func firstCapture(_ pattern: String, in text: String, group: Int = 1) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
-            return nil
+        regexCacheLock.lock()
+        var regex = regexCache[pattern]
+        if regex == nil {
+            regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            if let regex = regex { regexCache[pattern] = regex }
         }
+        regexCacheLock.unlock()
+        guard let regex = regex else { return nil }
         let range = NSRange(text.startIndex..., in: text)
         guard let match = regex.firstMatch(in: text, range: range),
               match.numberOfRanges > group,
@@ -303,6 +304,19 @@ enum ToolClassifier {
             return nil
         }
         return String(text[captureRange])
+    }
+
+    /// Treat a captured title fragment as a file path when it looks like one:
+    /// contains "." or "/", or is a single backtick-quoted token (extensionless
+    /// filenames like "Read `LICENSE`" / "Edit `Makefile`").
+    private static func pathCandidate(_ captured: String) -> String? {
+        let raw = captured.trimmingCharacters(in: .whitespaces)
+        let wasQuoted = raw.count > 2 && raw.hasPrefix("`") && raw.hasSuffix("`")
+        let candidate = raw.trimmingCharacters(in: CharacterSet(charactersIn: "`"))
+        guard !candidate.isEmpty else { return nil }
+        if candidate.contains(".") || candidate.contains("/") { return candidate }
+        if wasQuoted && !candidate.contains(" ") { return candidate }
+        return nil
     }
 
     private static func nonEmpty(_ s: String?) -> String? {

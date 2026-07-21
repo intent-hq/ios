@@ -688,6 +688,15 @@ struct ConversationStoreLiveStateTests {
         #expect(display.verb == "Zz Unrecognized Tool")
     }
 
+    @Test func readToolWithQuotedExtensionlessFilenameClassifiesAsRead() async throws {
+        let display = ToolClassifier.classify(name: "view", input: [
+            "_acpTitle": AnyCodable("Read `LICENSE`")
+        ])
+        #expect(display.icon == "📄")
+        #expect(display.verb == "Read")
+        #expect(display.subject == "LICENSE")
+    }
+
     @Test func editToolWithAcpTitleOnlyExtractsPath() async throws {
         let display = ToolClassifier.classify(name: "str-replace-editor", input: [
             "_acpTitle": AnyCodable("Edit `src/foo/bar.ts`")
