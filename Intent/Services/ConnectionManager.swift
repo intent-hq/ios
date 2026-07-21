@@ -234,6 +234,7 @@ class ConnectionManager: ObservableObject {
         // Any buffered pushes belong to the now-dead subscription — drop them so they
         // can never replay into a future handler, and tombstone the id so straggler
         // pushes arriving before the daemon processes the unsubscribe are not buffered.
+        pruneExpiredBufferedPushes()
         unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
         recentlyUnregisteredIds[id] = Date()
         print("[ConnectionManager] Unregistered subscription handler for id=\(id)")

@@ -367,8 +367,10 @@ class ConversationStore: ObservableObject {
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
-                // Unregister old handler if we had one
-                if let oldId = chatSubscriptionId {
+                // Unregister old handler if we had one. Guard against id reuse
+                // (daemon ids reset on restart) so we never drop the new
+                // subscription's buffered snapshot before registration replays it.
+                if let oldId = chatSubscriptionId, oldId != subId {
                     connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
                 chatSubscriptionId = subId
