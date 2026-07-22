@@ -444,46 +444,14 @@ struct CreateWorkspaceView: View {
                 // Normalize branch name: strip "origin/" or other known remote prefixes
                 let normalizedBranch = normalizeBranchName(branch)
 
-                var params: [String: Any] = [
-                    "repositoryPath": repo.path,
-                    "baseRef": normalizedBranch,
-                    "idempotencyKey": idempotencyKey
-                ]
-
-                // Build initialAgent if specialist or message provided
-                let hasSpecialist = selectedSpecialist != nil
-                let hasMessage = !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                let hasModel = selectedModel != nil
-                if hasSpecialist || hasMessage || hasModel {
-                    var initialAgent: [String: Any] = [
-                        "agentId": "agent-\(UUID().uuidString.lowercased())"
-                    ]
-                    if let specialist = selectedSpecialist {
-                        initialAgent["specialist"] = specialist.id
-                    }
-                    // Only send model if it differs from the specialist's configured model
-                    // This lets the daemon's model resolution win when the user hasn't overridden
-                    if let model = selectedModel {
-                        if let specialist = selectedSpecialist {
-                            // If specialist has a configured model, only send if different
-                            if let configuredModel = specialist.model {
-                                if configuredModel != model.id {
-                                    initialAgent["model"] = model.id
-                                }
-                            } else {
-                                // Specialist has no configured model; omit model to let daemon resolve
-                                // (the tier-based default we're showing is just UI guidance)
-                            }
-                        } else {
-                            // No specialist, send the model
-                            initialAgent["model"] = model.id
-                        }
-                    }
-                    if hasMessage {
-                        initialAgent["prompt"] = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-                    }
-                    params["initialAgent"] = initialAgent
-                }
+                let params = Self.buildCreateWorkspaceParams(
+                    repositoryPath: repo.path,
+                    baseRef: normalizedBranch,
+                    idempotencyKey: idempotencyKey,
+                    specialist: selectedSpecialist,
+                    model: selectedModel,
+                    message: messageText
+                )
 
                 let result = try await ConnectionManager.shared.request("workspace.create", params: params)
 
@@ -507,6 +475,57 @@ struct CreateWorkspaceView: View {
             }
             isCreating = false
         }
+    }
+
+    /// Builds the `workspace.create` params. Agent IDs are server-assigned, so
+    /// `initialAgent` must never contain an `agentId` (the server returns the minted id).
+    static func buildCreateWorkspaceParams(
+        repositoryPath: String,
+        baseRef: String,
+        idempotencyKey: String,
+        specialist: SpecialistInfo?,
+        model: ModelInfo?,
+        message: String
+    ) -> [String: Any] {
+        var params: [String: Any] = [
+            "repositoryPath": repositoryPath,
+            "baseRef": baseRef,
+            "idempotencyKey": idempotencyKey
+        ]
+
+        // Build initialAgent if specialist or message provided
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasMessage = !trimmedMessage.isEmpty
+        if specialist != nil || hasMessage || model != nil {
+            var initialAgent: [String: Any] = [:]
+            if let specialist = specialist {
+                initialAgent["specialist"] = specialist.id
+            }
+            // Only send model if it differs from the specialist's configured model
+            // This lets the daemon's model resolution win when the user hasn't overridden
+            if let model = model {
+                if let specialist = specialist {
+                    // If specialist has a configured model, only send if different
+                    if let configuredModel = specialist.model {
+                        if configuredModel != model.id {
+                            initialAgent["model"] = model.id
+                        }
+                    } else {
+                        // Specialist has no configured model; omit model to let daemon resolve
+                        // (the tier-based default we're showing is just UI guidance)
+                    }
+                } else {
+                    // No specialist, send the model
+                    initialAgent["model"] = model.id
+                }
+            }
+            if hasMessage {
+                initialAgent["prompt"] = trimmedMessage
+            }
+            params["initialAgent"] = initialAgent
+        }
+
+        return params
     }
 
     /// Normalize a branch name by stripping known remote prefixes (e.g., "origin/main" -> "main")
