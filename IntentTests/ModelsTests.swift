@@ -57,5 +57,54 @@ struct ModelsTests {
         let ws2 = Workspace(id: "2", title: "Test", branch: nil, baseRef: nil, status: nil, activity: nil, lastActivity: nil, updatedAt: nil, repositoryOwner: nil, repositoryName: nil, prStatus: nil, prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil, taskStatsCompleted: nil, taskStatsInProgress: nil, agentSummaryCount: nil, agentSummaryAgents: nil)
         #expect(ws1 != ws2)
     }
+
+    // MARK: - SpecialistInfo wire decoding (specialist.list)
+
+    @Test func specialistInfoWireDecodesWithoutHidden() async throws {
+        let info = SpecialistInfo(wire: [
+            "id": "implementor",
+            "name": "Implementor",
+            "description": "Implements tasks",
+            "modelTier": "balanced",
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.id == "implementor")
+        #expect(specialist.hidden == false)
+    }
+
+    @Test func specialistInfoWireDecodesHiddenTrue() async throws {
+        let info = SpecialistInfo(wire: [
+            "id": "chief-of-staff",
+            "name": "Chief of Staff",
+            "description": "Chief workspace specialist",
+            "hidden": true,
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.hidden == true)
+    }
+
+    @Test func specialistInfoWireDecodesHiddenFalse() async throws {
+        let info = SpecialistInfo(wire: [
+            "id": "verifier",
+            "name": "Verifier",
+            "description": "Verifies work",
+            "hidden": false,
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.hidden == false)
+    }
+
+    @Test func specialistInfoWireRejectsMissingRequiredFields() async throws {
+        #expect(SpecialistInfo(wire: ["id": "x", "name": "X"]) == nil)
+    }
+
+    @Test func hiddenSpecialistsAreFilteredFromPickerList() async throws {
+        let specialists = [
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", modelTier: nil, model: nil),
+            SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", modelTier: nil, model: nil, hidden: true),
+        ]
+        let visible = specialists.filter { !$0.hidden }
+        #expect(visible.map(\.id) == ["spec-writer"])
+    }
 }
 

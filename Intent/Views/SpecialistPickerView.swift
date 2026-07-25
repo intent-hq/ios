@@ -103,7 +103,7 @@ struct SpecialistPickerView: View {
             }
         }
         .task {
-            specialists = await agentStore.fetchSpecialists()
+            specialists = await agentStore.fetchSpecialists().filter { !$0.hidden }
             isLoadingSpecialists = false
             // Default to Coordinator specialist
             if let coordinatorSpecialist = specialists.first(where: { $0.id == "spec-writer" }) {

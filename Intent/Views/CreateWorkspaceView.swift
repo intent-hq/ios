@@ -388,7 +388,7 @@ struct CreateWorkspaceView: View {
     private func fetchSpecialists() async {
         isLoadingSpecialists = true
         let agentStore = AgentStore()
-        var fetched = await agentStore.fetchSpecialists()
+        var fetched = await agentStore.fetchSpecialists().filter { !$0.hidden }
         // Sort so Coordinator (spec-writer) is first
         fetched.sort { a, b in
             let aIsCoordinator = a.id == "spec-writer"
