@@ -10,6 +10,15 @@ struct SpecialistInfo: Identifiable {
     var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
 }
 
+extension Array where Element == SpecialistInfo {
+    /// Specialists eligible for picker surfaces — drops `hidden` ones
+    /// (mirrors the FE's `filterPickableSpecialists`). By-id lookups
+    /// should keep using the unfiltered list.
+    var pickable: [SpecialistInfo] {
+        filter { !$0.hidden }
+    }
+}
+
 extension SpecialistInfo {
     /// Decodes one `specialist.list` entry. Missing `hidden` means not hidden.
     init?(wire item: [String: Any]) {

@@ -103,13 +103,14 @@ struct SpecialistPickerView: View {
             }
         }
         .task {
-            specialists = await agentStore.fetchSpecialists().filter { !$0.hidden }
+            specialists = await agentStore.fetchSpecialists().pickable
             isLoadingSpecialists = false
-            // Default to Coordinator specialist
-            if let coordinatorSpecialist = specialists.first(where: { $0.id == "spec-writer" }) {
-                selectedSpecialist = coordinatorSpecialist
+            // Default to Coordinator specialist, falling back to the first
+            // pickable specialist (matches CreateWorkspaceView)
+            if let defaultSpecialist = specialists.first(where: { $0.id == "spec-writer" }) ?? specialists.first {
+                selectedSpecialist = defaultSpecialist
                 isSettingNameFromSpecialist = true
-                agentName = coordinatorSpecialist.name
+                agentName = defaultSpecialist.name
             }
         }
     }

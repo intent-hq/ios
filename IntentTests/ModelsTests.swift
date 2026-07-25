@@ -98,13 +98,21 @@ struct ModelsTests {
         #expect(SpecialistInfo(wire: ["id": "x", "name": "X"]) == nil)
     }
 
-    @Test func hiddenSpecialistsAreFilteredFromPickerList() async throws {
+    @Test func pickableDropsHiddenSpecialists() async throws {
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", modelTier: nil, model: nil),
             SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", modelTier: nil, model: nil, hidden: true),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", modelTier: nil, model: nil, hidden: false),
         ]
-        let visible = specialists.filter { !$0.hidden }
-        #expect(visible.map(\.id) == ["spec-writer"])
+        #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
+    }
+
+    @Test func pickableKeepsAllWhenNoneHidden() async throws {
+        let specialists = [
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", modelTier: nil, model: nil),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", modelTier: nil, model: nil),
+        ]
+        #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }
 }
 
