@@ -56,3 +56,33 @@ struct KnownRepo: Identifiable {
     var id: String { path }
 }
 
+/// A model available for the agent.
+struct ModelInfo: Identifiable {
+    let id: String       // model id (e.g. "sonnet4.5")
+    let name: String     // display name (e.g. "sonnet4.5 (balanced)")
+    let provider: String // provider id (e.g. "auggie")
+    var isDefault: Bool = false // provider-reported default model (models.list)
+}
+
+/// An agent provider from `host.providerAuthStatus` (PROTOCOL §5.14).
+struct ProviderInfo: Identifiable, Equatable {
+    let id: String
+    /// Tri-state: true (signed in), false (signed out), nil (unknown — probe failed or not installed).
+    let authenticated: Bool?
+
+    var displayName: String { ProviderInfo.displayName(for: id) }
+
+    static func displayName(for id: String) -> String {
+        switch id {
+        case "auggie": return "Auggie"
+        case "claude-code": return "Claude Code"
+        case "codex": return "Codex"
+        case "opencode": return "OpenCode"
+        case "droid": return "Droid"
+        case "grok": return "Grok"
+        case "pi": return "Pi"
+        default: return id.capitalized
+        }
+    }
+}
+

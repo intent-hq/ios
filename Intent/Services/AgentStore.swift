@@ -41,9 +41,14 @@ class AgentStore: ObservableObject {
     @Published var agents: [AgentSession] = []
     @Published var isLoading = false
 
+    private let connectionManager: ConnectionManagerRouting
     private var workspaceId: String?
     private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?
+
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
+    }
 
     func fetchAgents(workspaceId: String) async {
         let workspaceChanged = self.workspaceId != workspaceId
@@ -78,7 +83,7 @@ class AgentStore: ObservableObject {
             isLoading = true
         }
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connectionManager.request(
                 "agent.list",
                 params: ["workspaceId": workspaceId]
             )
@@ -95,9 +100,9 @@ class AgentStore: ObservableObject {
     func startObservingEvents() {
         // Remove old handler to prevent accumulation
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
         }
-        eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor [weak self] in
                 self?.handleEvent(method, params: params)
             }
@@ -106,7 +111,7 @@ class AgentStore: ObservableObject {
 
     func fetchSpecialists() async -> [SpecialistInfo] {
         do {
-            let result = try await ConnectionManager.shared.request("specialist.list")
+            let result = try await connectionManager.request("specialist.list")
             if let dict = result as? [String: Any],
                let items = dict["specialists"] as? [[String: Any]] {
                 return items.compactMap { SpecialistInfo(wire: $0) }
@@ -117,7 +122,57 @@ class AgentStore: ObservableObject {
         return []
     }
 
-    func createAgent(workspaceId: String, specialistId: String?, name: String? = nil) async throws -> AgentSession? {
+    /// Fetches provider auth verdicts via `host.providerAuthStatus` (PROTOCOL §5.14).
+    /// `authenticated` is tri-state: true / false / nil (unknown).
+    func fetchProviders() async -> [ProviderInfo] {
+        do {
+            let result = try await connectionManager.request("host.providerAuthStatus")
+            if let dict = result as? [String: Any],
+               let items = dict["providers"] as? [[String: Any]] {
+                return items.compactMap { item in
+                    guard let id = item["id"] as? String else { return nil }
+                    return ProviderInfo(id: id, authenticated: item["authenticated"] as? Bool)
+                }
+            }
+        } catch {
+            print("[AgentStore] Failed to fetch providers: \(error)")
+        }
+        return []
+    }
+
+    /// Fetches the per-provider model catalog via `models.list { providerId }` (PROTOCOL §5.30).
+    func fetchModels(providerId: String) async -> [ModelInfo] {
+        do {
+            let result = try await connectionManager.request(
+                "models.list",
+                params: ["providerId": providerId]
+            )
+            if let dict = result as? [String: Any],
+               let items = dict["models"] as? [[String: Any]] {
+                return items.compactMap { item in
+                    guard let id = item["id"] as? String,
+                          let name = item["name"] as? String else { return nil }
+                    return ModelInfo(
+                        id: id,
+                        name: name,
+                        provider: item["provider"] as? String ?? providerId,
+                        isDefault: item["isDefault"] as? Bool ?? false
+                    )
+                }
+            }
+        } catch {
+            print("[AgentStore] Failed to fetch models for provider \(providerId): \(error)")
+        }
+        return []
+    }
+
+    func createAgent(
+        workspaceId: String,
+        specialistId: String?,
+        name: String? = nil,
+        provider: String? = nil,
+        model: String? = nil
+    ) async throws -> AgentSession? {
         var params: [String: Any] = ["workspaceId": workspaceId]
         if let specialistId = specialistId {
             params["specialistId"] = specialistId
@@ -125,8 +180,14 @@ class AgentStore: ObservableObject {
         if let name = name {
             params["name"] = name
         }
+        if let provider = provider {
+            params["provider"] = provider
+        }
+        if let model = model {
+            params["model"] = model
+        }
 
-        let result = try await ConnectionManager.shared.request("agent.create", params: params)
+        let result = try await connectionManager.request("agent.create", params: params)
         if let dict = result as? [String: Any],
            let agentDict = dict["agent"] as? [String: Any] {
             let agent = AgentSession.parseAgent(agentDict)
@@ -138,7 +199,7 @@ class AgentStore: ObservableObject {
     }
 
     func deleteAgent(agentId: String, workspaceId: String) async throws {
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connectionManager.request(
             "agent.delete",
             params: ["agentId": agentId, "workspaceId": workspaceId]
         )
