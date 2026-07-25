@@ -7,6 +7,33 @@ struct SpecialistInfo: Identifiable {
     let description: String
     let modelTier: String?  // "fast", "balanced", "smart"
     let model: String?      // Configured model from specialist definition
+    var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
+}
+
+extension Array where Element == SpecialistInfo {
+    /// Specialists eligible for picker surfaces — drops `hidden` ones
+    /// (mirrors the FE's `filterPickableSpecialists`). By-id lookups
+    /// should keep using the unfiltered list.
+    var pickable: [SpecialistInfo] {
+        filter { !$0.hidden }
+    }
+}
+
+extension SpecialistInfo {
+    /// Decodes one `specialist.list` entry. Missing `hidden` means not hidden.
+    init?(wire item: [String: Any]) {
+        guard let id = item["id"] as? String,
+              let name = item["name"] as? String,
+              let description = item["description"] as? String else { return nil }
+        self.init(
+            id: id,
+            name: name,
+            description: description,
+            modelTier: item["modelTier"] as? String,
+            model: item["model"] as? String,
+            hidden: item["hidden"] as? Bool ?? false
+        )
+    }
 }
 
 @MainActor
@@ -82,18 +109,7 @@ class AgentStore: ObservableObject {
             let result = try await ConnectionManager.shared.request("specialist.list")
             if let dict = result as? [String: Any],
                let items = dict["specialists"] as? [[String: Any]] {
-                return items.compactMap { item in
-                    guard let id = item["id"] as? String,
-                          let name = item["name"] as? String,
-                          let description = item["description"] as? String else { return nil }
-                    return SpecialistInfo(
-                        id: id,
-                        name: name,
-                        description: description,
-                        modelTier: item["modelTier"] as? String,
-                        model: item["model"] as? String
-                    )
-                }
+                return items.compactMap { SpecialistInfo(wire: $0) }
             }
         } catch {
             print("[AgentStore] Failed to fetch specialists: \(error)")
