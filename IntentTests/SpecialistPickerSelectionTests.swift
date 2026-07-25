@@ -138,13 +138,25 @@ struct SpecialistPickerSelectionTests {
         #expect(noModel.model == nil)
     }
 
-    @Test func sendsProviderAndModelWhenAuggieModelOverridden() {
+    @Test func sendsModelOnlyWhenAuggieModelOverridden() {
+        // Matches CreateWorkspaceView: auggie is the daemon default, so the
+        // provider is omitted and only the bare model override is sent.
         let selection = SpecialistPickerView.buildCreateAgentSelection(
             specialist: makeSpecialist(model: "sonnet4.5"),
             provider: ProviderInfo(id: "auggie", authenticated: true),
             model: makeModel("opus4.6")
         )
-        #expect(selection.provider == "auggie")
+        #expect(selection.provider == nil)
+        #expect(selection.model == "opus4.6")
+    }
+
+    @Test func sendsModelOnlyWhenAuggieTierDefaultOverridden() {
+        let selection = SpecialistPickerView.buildCreateAgentSelection(
+            specialist: makeSpecialist(tier: "fast"),
+            provider: ProviderInfo(id: "auggie", authenticated: true),
+            model: makeModel("opus4.6")
+        )
+        #expect(selection.provider == nil)
         #expect(selection.model == "opus4.6")
     }
 
