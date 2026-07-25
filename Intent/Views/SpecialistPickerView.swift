@@ -338,10 +338,11 @@ struct SpecialistPickerView: View {
         return models.first(where: { $0.isDefault }) ?? models.first
     }
 
-    /// Builds the provider/model params for `agent.create`. Both are omitted when
-    /// the provider is auggie (or none) and the model matches the specialist's
-    /// default, letting the daemon's model resolution win (matches
-    /// CreateWorkspaceView's omission logic).
+    /// Builds the provider/model params for `agent.create`. For auggie (the
+    /// daemon default) the provider is always omitted: both are omitted when
+    /// the model matches the specialist's default (letting the daemon's model
+    /// resolution win), and only the bare `model` is sent on an override —
+    /// matching CreateWorkspaceView's omission logic.
     static func buildCreateAgentSelection(
         specialist: SpecialistInfo?,
         provider: ProviderInfo?,
@@ -352,7 +353,7 @@ struct SpecialistPickerView: View {
             guard let model = model, model.id != defaultAuggieModelId(for: specialist) else {
                 return (nil, nil)
             }
-            return (provider.id, model.id)
+            return (nil, model.id)
         }
         return (provider.id, model?.id)
     }
