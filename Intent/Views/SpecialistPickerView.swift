@@ -271,11 +271,16 @@ struct SpecialistPickerView: View {
         isLoadingModels = true
         selectedModel = nil
         let fetched = await agentStore.fetchModels(providerId: provider.id)
-        // Ignore stale results if the provider changed while fetching
-        guard selectedProvider?.id == provider.id else { return }
-        models = fetched
-        selectedModel = Self.defaultModel(in: fetched, providerId: provider.id, specialist: selectedSpecialist)
-        isLoadingModels = false
+        let outcome = Self.modelFetchOutcome(
+            fetched: fetched,
+            requestedProviderId: provider.id,
+            selectedProviderId: selectedProvider?.id,
+            specialist: selectedSpecialist
+        )
+        isLoadingModels = outcome.isLoadingModels
+        guard let applied = outcome.models else { return }
+        models = applied
+        selectedModel = outcome.selectedModel
     }
 
     // MARK: - Selection helpers (testable)
@@ -297,14 +302,29 @@ struct SpecialistPickerView: View {
     }
 
     /// The auggie model id a specialist resolves to by default: its configured
-    /// model, else the tier default (mirrors CreateWorkspaceView.modelForTier).
+    /// model, else the tier default (shared with CreateWorkspaceView via
+    /// `SpecialistInfo.modelId(forTier:)`).
     static func defaultAuggieModelId(for specialist: SpecialistInfo?) -> String {
-        if let configured = specialist?.model { return configured }
-        switch specialist?.modelTier {
-        case "fast": return "haiku4.5"
-        case "smart": return "opus4.6"
-        default: return "sonnet4.5" // balanced or nil
+        specialist?.model ?? SpecialistInfo.modelId(forTier: specialist?.modelTier)
+    }
+
+    /// Outcome of a completed model fetch. Stale fetches (the selected
+    /// provider changed — or was cleared — while the fetch was in flight)
+    /// return nil `models` so the current catalog is kept, but
+    /// `isLoadingModels` is always false: no newer fetch may take over the
+    /// flag (e.g. a provider refresh resolved the selection to nil) and the
+    /// Create button is disabled while it is set.
+    static func modelFetchOutcome(
+        fetched: [ModelInfo],
+        requestedProviderId: String,
+        selectedProviderId: String?,
+        specialist: SpecialistInfo?
+    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool) {
+        guard selectedProviderId == requestedProviderId else {
+            return (nil, nil, false)
         }
+        let selection = defaultModel(in: fetched, providerId: requestedProviderId, specialist: specialist)
+        return (fetched, selection, false)
     }
 
     /// Default model selection for a provider's catalog: for auggie, the

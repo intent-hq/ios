@@ -167,4 +167,45 @@ struct SpecialistPickerSelectionTests {
         #expect(selection.provider == "grok")
         #expect(selection.model == nil)
     }
+
+    // MARK: - modelFetchOutcome (stale-response guard + loading reset)
+
+    @Test func modelFetchOutcomeAppliesCurrentProviderResults() {
+        let fetched = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.6")]
+        let outcome = SpecialistPickerView.modelFetchOutcome(
+            fetched: fetched,
+            requestedProviderId: "auggie",
+            selectedProviderId: "auggie",
+            specialist: makeSpecialist(tier: "smart")
+        )
+        #expect(outcome.models?.map(\.id) == ["sonnet4.5", "opus4.6"])
+        #expect(outcome.selectedModel?.id == "opus4.6")
+        #expect(!outcome.isLoadingModels)
+    }
+
+    @Test func modelFetchOutcomeDropsStaleProviderResults() {
+        let outcome = SpecialistPickerView.modelFetchOutcome(
+            fetched: [makeModel("grok-4", provider: "grok")],
+            requestedProviderId: "grok",
+            selectedProviderId: "auggie",
+            specialist: nil
+        )
+        #expect(outcome.models == nil)
+        #expect(outcome.selectedModel == nil)
+        #expect(!outcome.isLoadingModels)
+    }
+
+    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() {
+        // Regression: a provider refresh can resolve the selection to nil while
+        // a fetch is in flight; the loading flag must still clear so the
+        // Create button doesn't wedge disabled.
+        let outcome = SpecialistPickerView.modelFetchOutcome(
+            fetched: [makeModel("sonnet4.5")],
+            requestedProviderId: "auggie",
+            selectedProviderId: nil,
+            specialist: makeSpecialist()
+        )
+        #expect(outcome.models == nil)
+        #expect(!outcome.isLoadingModels)
+    }
 }

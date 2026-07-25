@@ -20,6 +20,18 @@ extension Array where Element == SpecialistInfo {
 }
 
 extension SpecialistInfo {
+    /// Tier→auggie-model-id mapping shared by the agent and workspace
+    /// creation flows.
+    static func modelId(forTier tier: String?) -> String {
+        switch tier {
+        case "fast": return "haiku4.5"
+        case "smart": return "opus4.6"
+        default: return "sonnet4.5" // balanced or nil
+        }
+    }
+}
+
+extension SpecialistInfo {
     /// Decodes one `specialist.list` entry. Missing `hidden` means not hidden.
     init?(wire item: [String: Any]) {
         guard let id = item["id"] as? String,

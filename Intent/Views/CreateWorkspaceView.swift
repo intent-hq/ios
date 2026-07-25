@@ -261,7 +261,7 @@ struct CreateWorkspaceView: View {
                                 selectedSpecialist = specialists.first(where: { $0.id == newId })
                                 // Auto-select the specialist's configured model or tier-based default (auggie only)
                                 if let specialist = selectedSpecialist, isAuggieSelected {
-                                    selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
+                                    selectedModel = Self.modelForTier(specialist.modelTier, configuredModel: specialist.model, in: models)
                                 }
                             }
                         )) {
@@ -447,7 +447,7 @@ struct CreateWorkspaceView: View {
         }
         // If models already loaded, update selection based on specialist's configured model or tier (auggie only)
         if !models.isEmpty, isAuggieSelected, let specialist = selectedSpecialist {
-            selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
+            selectedModel = Self.modelForTier(specialist.modelTier, configuredModel: specialist.model, in: models)
         }
         isLoadingSpecialists = false
     }
@@ -481,13 +481,16 @@ struct CreateWorkspaceView: View {
 
     private func fetchModels(providerId: String) async {
         let agentStore = AgentStore()
-        models = await agentStore.fetchModels(providerId: providerId)
-        // Reset selection: specialist-driven preselection for auggie, provider default otherwise
-        if providerId == "auggie", let specialist = selectedSpecialist {
-            selectedModel = modelForTier(specialist.modelTier, configuredModel: specialist.model)
-        } else {
-            selectedModel = models.first(where: { $0.isDefault }) ?? models.first
-        }
+        let fetched = await agentStore.fetchModels(providerId: providerId)
+        // Drop stale results if the provider changed while fetching
+        guard let outcome = Self.modelFetchOutcome(
+            fetched: fetched,
+            requestedProviderId: providerId,
+            selectedProviderId: selectedProvider?.id,
+            specialist: selectedSpecialist
+        ) else { return }
+        models = outcome.models
+        selectedModel = outcome.selectedModel
     }
 
     private func createWorkspace() {
@@ -607,20 +610,35 @@ struct CreateWorkspaceView: View {
     }
 
     /// Returns the model matching a specialist's configured model or tier, falling back to sonnet4.5 or the first available model.
-    private func modelForTier(_ tier: String?, configuredModel: String? = nil) -> ModelInfo? {
+    private static func modelForTier(_ tier: String?, configuredModel: String? = nil, in models: [ModelInfo]) -> ModelInfo? {
         // First, try the specialist's explicitly configured model
         if let configuredModel = configuredModel,
            let model = models.first(where: { $0.id == configuredModel }) {
             return model
         }
 
-        // Fall back to tier-based mapping
-        let modelId: String
-        switch tier {
-        case "fast": modelId = "haiku4.5"
-        case "smart": modelId = "opus4.6"
-        default: modelId = "sonnet4.5" // balanced or nil
-        }
+        // Fall back to the shared tier-based mapping
+        let modelId = SpecialistInfo.modelId(forTier: tier)
         return models.first(where: { $0.id == modelId }) ?? models.first
+    }
+
+    /// Outcome of a completed model fetch, or nil when the fetch is stale
+    /// (the selected provider changed while it was in flight) so rapid
+    /// provider switching can't apply another provider's catalog/selection.
+    static func modelFetchOutcome(
+        fetched: [ModelInfo],
+        requestedProviderId: String,
+        selectedProviderId: String?,
+        specialist: SpecialistInfo?
+    ) -> (models: [ModelInfo], selectedModel: ModelInfo?)? {
+        guard selectedProviderId == requestedProviderId else { return nil }
+        // Reset selection: specialist-driven preselection for auggie, provider default otherwise
+        let selection: ModelInfo?
+        if requestedProviderId == "auggie", let specialist = specialist {
+            selection = modelForTier(specialist.modelTier, configuredModel: specialist.model, in: fetched)
+        } else {
+            selection = fetched.first(where: { $0.isDefault }) ?? fetched.first
+        }
+        return (fetched, selection)
     }
 }

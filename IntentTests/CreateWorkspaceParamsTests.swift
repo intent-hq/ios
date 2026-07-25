@@ -169,4 +169,43 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["provider"] == nil)
         #expect(initialAgent["model"] == nil)
     }
+
+    // MARK: - modelFetchOutcome (stale-response guard)
+
+    @Test func modelFetchOutcomeDropsStaleProviderResults() {
+        // Provider A's catalog must not apply after the user switched to B.
+        let outcome = CreateWorkspaceView.modelFetchOutcome(
+            fetched: [makeModel(id: "grok-4", provider: "grok")],
+            requestedProviderId: "grok",
+            selectedProviderId: "claude-code",
+            specialist: makeSpecialist()
+        )
+        #expect(outcome == nil)
+    }
+
+    @Test func modelFetchOutcomeAppliesAuggieTierSelection() throws {
+        let fetched = [makeModel(id: "sonnet4.5"), makeModel(id: "opus4.6")]
+        let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
+            fetched: fetched,
+            requestedProviderId: "auggie",
+            selectedProviderId: "auggie",
+            specialist: makeSpecialist(model: "opus4.6")
+        ))
+        #expect(outcome.models.map(\.id) == ["sonnet4.5", "opus4.6"])
+        #expect(outcome.selectedModel?.id == "opus4.6")
+    }
+
+    @Test func modelFetchOutcomeAppliesProviderDefaultForNonAuggie() throws {
+        let fetched = [
+            makeModel(id: "opus-4.5", provider: "claude-code"),
+            ModelInfo(id: "sonnet-4.6", name: "sonnet-4.6", provider: "claude-code", isDefault: true)
+        ]
+        let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
+            fetched: fetched,
+            requestedProviderId: "claude-code",
+            selectedProviderId: "claude-code",
+            specialist: makeSpecialist()
+        ))
+        #expect(outcome.selectedModel?.id == "sonnet-4.6")
+    }
 }
