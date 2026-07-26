@@ -113,6 +113,8 @@ xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS S
 xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' test
 ```
 
+Tests run **serially** by default — the shared `Intent` scheme pins `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/monorepo#759](https://github.com/intent-hq/monorepo/issues/759)).
+
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
 
 ## Related Repositories
