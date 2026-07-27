@@ -101,6 +101,7 @@ class WorkspaceStore: ObservableObject {
                     baseRef: ws.baseRef,
                     status: ws.status,
                     activity: ws.activity,
+                    displayStatus: ws.displayStatus,
                     lastActivity: hwm,
                     updatedAt: ws.updatedAt,
                     repositoryOwner: ws.repositoryOwner,
@@ -215,6 +216,7 @@ class WorkspaceStore: ObservableObject {
             // Only refetch if not in live mode (avoid double-apply)
             if !workspaceLive {
                 if eventType == "workspace:activity-changed" ||
+                   eventType == "workspace:displayStatus-changed" ||
                    eventType == "workspace:updated" ||
                    eventType == "workspace:deleted" {
                     Task { await fetchAll() }
@@ -319,6 +321,7 @@ class WorkspaceStore: ObservableObject {
                 baseRef: ws.baseRef,
                 status: ws.status,
                 activity: ws.activity,
+                displayStatus: ws.displayStatus,
                 lastActivity: effectiveTimestamp,
                 updatedAt: ws.updatedAt,
                 repositoryOwner: ws.repositoryOwner,
@@ -388,6 +391,7 @@ class WorkspaceStore: ObservableObject {
             baseRef: dict["baseRef"] as? String,
             status: dict["status"] as? String,
             activity: dict["activity"] as? String,
+            displayStatus: dict["displayStatus"] as? String,
             lastActivity: dict["lastActivity"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             repositoryOwner: dict["repositoryOwner"] as? String,

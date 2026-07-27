@@ -11,14 +11,30 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     case notStarted
     case inProgress
     case complete
+    case prReady
     case prOpen
     case prMerged
+
+    /// Maps the BE-owned wire value (snake_case) to a display status.
+    /// Returns nil for unknown values so callers fall back to local derivation.
+    init?(wireValue: String) {
+        switch wireValue {
+        case "not_started": self = .notStarted
+        case "in_progress": self = .inProgress
+        case "complete": self = .complete
+        case "pr_ready": self = .prReady
+        case "pr_open": self = .prOpen
+        case "pr_merged": self = .prMerged
+        default: return nil
+        }
+    }
 
     var color: Color {
         switch self {
         case .notStarted: return Color.gray.opacity(0.4)
         case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
         case .complete: return Color(red: 0.0, green: 0.74, blue: 0.49) // Green #00BD7D
+        case .prReady: return Color(red: 0.13, green: 0.77, blue: 0.37) // Green #22C55E
         case .prOpen: return Color(red: 0.43, green: 0.50, blue: 0.96) // Indigo
         case .prMerged: return Color.purple
         }
@@ -29,6 +45,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .notStarted: return "No Code Changes"
         case .inProgress: return "In Progress"
         case .complete: return "Complete"
+        case .prReady: return "PR Mergeable"
         case .prOpen: return "PR Open"
         case .prMerged: return "PR Merged"
         }
@@ -38,14 +55,27 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     var sortOrder: Int {
         switch self {
         case .inProgress: return 0
-        case .prOpen: return 1
-        case .notStarted: return 2
-        case .complete: return 3
-        case .prMerged: return 4
+        case .prReady: return 1
+        case .prOpen: return 2
+        case .notStarted: return 3
+        case .complete: return 4
+        case .prMerged: return 5
         }
     }
 }
 
+/// Resolves the display status for a workspace: prefers the BE-owned
+/// `displayStatus` wire value when present and recognized; falls back to
+/// local derivation for older daemons that don't emit the field.
+func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
+    if let wire = workspace.displayStatus, let status = WorkspaceDisplayStatus(wireValue: wire) {
+        return status
+    }
+    return deriveDisplayStatus(from: workspace)
+}
+
+/// Fallback derivation for older daemons that don't emit `displayStatus`.
+/// Prefer `resolveDisplayStatus(for:)`, which uses the BE-owned value when present.
 func deriveDisplayStatus(from workspace: Workspace) -> WorkspaceDisplayStatus {
     // PR merged
     if workspace.prStatus == "Merged" {
@@ -118,7 +148,7 @@ class WorkspaceListViewModel: ObservableObject {
     }
 
     var groupedByStatus: [(String, [Workspace])] {
-        let dict = Dictionary(grouping: filteredWorkspaces) { deriveDisplayStatus(from: $0) }
+        let dict = Dictionary(grouping: filteredWorkspaces) { resolveDisplayStatus(for: $0) }
         return dict.sorted { $0.key.sortOrder < $1.key.sortOrder }
             .map { ($0.key.label, $0.value) }
     }

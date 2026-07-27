@@ -33,6 +33,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let baseRef: String?
     let status: String?
     let activity: String?      // "idle" | "agent_running" from daemon
+    let displayStatus: String? // BE-owned wire value (snake_case, e.g. "pr_open"); nil on older daemons
     let lastActivity: String?
     let updatedAt: String?
     let repositoryOwner: String?
