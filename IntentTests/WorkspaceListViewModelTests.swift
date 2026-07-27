@@ -8,14 +8,15 @@ struct WorkspaceListViewModelTests {
 
     private func makeWorkspace(
         id: String = "1", title: String = "Test", branch: String? = nil,
-        status: String? = nil, lastActivity: String? = nil,
+        status: String? = nil, displayStatus: String? = nil, lastActivity: String? = nil,
         repositoryOwner: String? = nil, repositoryName: String? = nil,
         prStatus: String? = nil, prNumber: Int? = nil,
         diffSummaryTotalFiles: Int? = nil, taskStatsTotal: Int? = nil,
         taskStatsCompleted: Int? = nil, taskStatsInProgress: Int? = nil
     ) -> Workspace {
         Workspace(id: id, title: title, branch: branch, baseRef: nil, status: status,
-                  activity: nil, lastActivity: lastActivity, updatedAt: nil, repositoryOwner: repositoryOwner,
+                  activity: nil, displayStatus: displayStatus, lastActivity: lastActivity,
+                  updatedAt: nil, repositoryOwner: repositoryOwner,
                   repositoryName: repositoryName, prStatus: prStatus, prNumber: prNumber,
                   diffSummaryTotalFiles: diffSummaryTotalFiles, taskStatsTotal: taskStatsTotal,
                   taskStatsCompleted: taskStatsCompleted, taskStatsInProgress: taskStatsInProgress,
@@ -136,10 +137,32 @@ struct WorkspaceListViewModelTests {
 
         let groups = vm.groupedByStatus
         #expect(groups.count == 3)
-        // Sorted by sortOrder: inProgress(0), prOpen(1), notStarted(2)
+        // Sorted by sortOrder: inProgress(0), prOpen(2), notStarted(3)
         #expect(groups[0].0 == "In Progress")
         #expect(groups[1].0 == "PR Open")
         #expect(groups[2].0 == "No Code Changes")
+    }
+
+    @Test @MainActor func groupedByStatus_prefersBackendDisplayStatus() {
+        let ws = [
+            // BE says in_progress even though local derivation would say prMerged
+            makeWorkspace(id: "1", title: "Reopened", displayStatus: "in_progress", prStatus: "Merged"),
+            // BE-only prReady status (sortOrder 1, between inProgress and prOpen)
+            makeWorkspace(id: "2", title: "Mergeable", displayStatus: "pr_ready", prStatus: "Open"),
+            // No BE value — falls back to local derivation (prOpen)
+            makeWorkspace(id: "3", title: "Legacy", prStatus: "Open")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        let groups = vm.groupedByStatus
+        #expect(groups.count == 3)
+        #expect(groups[0].0 == "In Progress")
+        #expect(groups[0].1.map(\.id) == ["1"])
+        #expect(groups[1].0 == "PR Mergeable")
+        #expect(groups[1].1.map(\.id) == ["2"])
+        #expect(groups[2].0 == "PR Open")
+        #expect(groups[2].1.map(\.id) == ["3"])
     }
 }
 
