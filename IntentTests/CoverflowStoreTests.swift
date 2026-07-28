@@ -6,6 +6,8 @@ import Testing
 @MainActor
 struct CoverflowStoreTests {
 
+    // Fixtures deliberately omit workspaceId so the handler's re-fetch paths
+    // (network calls via ConnectionManager) stay out of these unit tests.
     private func idleEvent(agentId: String, data: [String: Any]) -> [String: Any] {
         ["type": "agent:idle", "agentId": agentId, "data": data]
     }
