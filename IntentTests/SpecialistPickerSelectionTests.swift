@@ -65,6 +65,35 @@ struct SpecialistPickerSelectionTests {
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: []) == nil)
     }
 
+    // MARK: - noneSelectable (desktop-setup guidance state, monorepo#985)
+
+    @Test func noneSelectableWhenAllProvidersSignedOut() {
+        let providers = [
+            ProviderInfo(id: "auggie", authenticated: false),
+            ProviderInfo(id: "codex", authenticated: false),
+        ]
+        #expect(providers.noneSelectable)
+    }
+
+    @Test func notNoneSelectableWhenEmpty() {
+        #expect(![ProviderInfo]().noneSelectable)
+    }
+
+    @Test func notNoneSelectableWhenAnyProviderSelectable() {
+        let signedIn = [
+            ProviderInfo(id: "auggie", authenticated: false),
+            ProviderInfo(id: "claude-code", authenticated: true),
+        ]
+        #expect(!signedIn.noneSelectable)
+
+        // nil (unknown) stays selectable since probes can fail transiently
+        let unknown = [
+            ProviderInfo(id: "auggie", authenticated: false),
+            ProviderInfo(id: "grok", authenticated: nil),
+        ]
+        #expect(!unknown.noneSelectable)
+    }
+
     // MARK: - defaultAuggieModelId
 
     @Test func defaultAuggieModelIdPrefersConfiguredModel() {

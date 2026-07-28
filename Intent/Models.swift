@@ -71,6 +71,10 @@ struct ProviderInfo: Identifiable, Equatable {
     /// Tri-state: true (signed in), false (signed out), nil (unknown — probe failed or not installed).
     let authenticated: Bool?
 
+    /// Providers with `authenticated == false` are not selectable;
+    /// `nil` (unknown) stays selectable since probes can fail transiently.
+    var isSelectable: Bool { authenticated != false }
+
     var displayName: String { ProviderInfo.displayName(for: id) }
 
     static func displayName(for id: String) -> String {
@@ -84,6 +88,15 @@ struct ProviderInfo: Identifiable, Equatable {
         case "pi": return "Pi"
         default: return id.capitalized
         }
+    }
+}
+
+extension Array where Element == ProviderInfo {
+    /// True when the daemon returned providers but none can be selected (all
+    /// signed out). The pickers show desktop-setup guidance instead of an
+    /// empty-value menu in that state (monorepo#985).
+    var noneSelectable: Bool {
+        !isEmpty && !contains(where: { $0.isSelectable })
     }
 }
 

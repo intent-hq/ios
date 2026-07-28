@@ -130,6 +130,18 @@ struct SpecialistPickerView: View {
             if isLoadingProviders {
                 ProgressView("Loading providers...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if providers.noneSelectable {
+                // No selectable provider: replace the Provider picker (and the
+                // dependent Model section) with desktop-setup guidance instead
+                // of rendering a menu with no valid selection (monorepo#985).
+                List {
+                    Section("Provider") {
+                        noProvidersSignedInPlaceholder
+                            .listRowBackground(Theme.card(for: colorScheme))
+                    }
+                }
+                .listStyle(.insetGrouped)
+                .scrollContentBackground(.hidden)
             } else {
                 List {
                     Section("Provider") {
@@ -263,12 +275,26 @@ struct SpecialistPickerView: View {
         selectedModel = outcome.selectedModel
     }
 
+    /// Guidance shown when providers exist but none are signed in; provider
+    /// sign-in flows run on the desktop seat and are not available on iOS.
+    private var noProvidersSignedInPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("No providers are signed in")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text("Set up a provider in the Intent desktop app, then come back and try again.")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+        .padding(.vertical, 4)
+    }
+
     // MARK: - Selection helpers (testable)
 
     /// Providers with `authenticated == false` are not selectable;
     /// `nil` (unknown) stays selectable since probes can fail transiently.
     static func isSelectable(_ provider: ProviderInfo) -> Bool {
-        provider.authenticated != false
+        provider.isSelectable
     }
 
     /// Keeps the current selection when it is still selectable, otherwise falls
