@@ -273,8 +273,16 @@ struct CreateWorkspaceView: View {
                         .listRowBackground(Theme.card(for: colorScheme))
                     }
 
-                    // Provider dropdown picker
-                    if !providers.isEmpty {
+                    // Provider dropdown picker. When providers exist but none
+                    // are signed in, show desktop-setup guidance instead of a
+                    // menu with no valid selection (monorepo#985); the Model
+                    // section stays hidden since no catalog is fetched.
+                    if providers.noneSelectable {
+                        Section("Provider") {
+                            noProvidersSignedInPlaceholder
+                                .listRowBackground(Theme.card(for: colorScheme))
+                        }
+                    } else if !providers.isEmpty {
                         Section("Provider") {
                             Picker("Provider", selection: Binding(
                                 get: { selectedProvider?.id ?? "" },
@@ -360,6 +368,20 @@ struct CreateWorkspaceView: View {
     /// Whether the effective provider is auggie (no explicit selection defaults to auggie).
     private var isAuggieSelected: Bool {
         (selectedProvider?.id ?? "auggie") == "auggie"
+    }
+
+    /// Guidance shown when providers exist but none are signed in; provider
+    /// sign-in flows run on the desktop seat and are not available on iOS.
+    private var noProvidersSignedInPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("No providers are signed in")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text("Set up a provider in the Intent desktop app, then come back and try again.")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+        .padding(.vertical, 4)
     }
 
     // MARK: - Data Fetching
@@ -456,6 +478,12 @@ struct CreateWorkspaceView: View {
         }
         if let provider = selectedProvider {
             await fetchModels(providerId: provider.id)
+        } else {
+            // No selectable provider: drop any stale catalog/selection so the
+            // Model section can't render (or ship a model) next to the
+            // desktop-setup guidance.
+            models = []
+            selectedModel = nil
         }
     }
 
