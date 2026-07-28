@@ -208,4 +208,43 @@ struct CreateWorkspaceParamsTests {
         ))
         #expect(outcome.selectedModel?.id == "sonnet-4.6")
     }
+
+    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
+
+    private func isCreateDisabled(
+        isCreating: Bool = false,
+        isLoadingProviders: Bool = false,
+        providers: [ProviderInfo]
+    ) -> Bool {
+        CreateWorkspaceView.isCreateDisabled(
+            isCreating: isCreating,
+            isLoadingProviders: isLoadingProviders,
+            providers: providers
+        )
+    }
+
+    @Test func createDisabledWhenNoProviderSelectable() {
+        let providers = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(isCreateDisabled(providers: providers))
+    }
+
+    @Test func createEnabledWhenAProviderIsSelectable() {
+        #expect(!isCreateDisabled(providers: [makeProvider()]))
+        // nil (unknown) stays selectable since probes can fail transiently
+        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: nil)]))
+    }
+
+    @Test func createEnabledWhenProviderListEmptyAfterLoad() {
+        // Empty list after load is not the guidance state: the daemon default is used
+        #expect(!isCreateDisabled(providers: []))
+    }
+
+    @Test func createDisabledWhileCreatingOrLoadingProviders() {
+        #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+        // An empty in-flight list can't be told apart from a seat with no providers
+        #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
+    }
 }

@@ -26,6 +26,7 @@ struct CreateWorkspaceView: View {
     @State private var isLoadingSpecialists = true
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var providers: [ProviderInfo] = []
+    @State private var isLoadingProviders = true
     @State private var selectedProvider: ProviderInfo?
     @State private var models: [ModelInfo] = []
     @State private var selectedModel: ModelInfo?
@@ -350,7 +351,11 @@ struct CreateWorkspaceView: View {
                 Button("Create") {
                     createWorkspace()
                 }
-                .disabled(isCreating)
+                .disabled(Self.isCreateDisabled(
+                    isCreating: isCreating,
+                    isLoadingProviders: isLoadingProviders,
+                    providers: providers
+                ))
             }
         }
         .alert("Error", isPresented: $showError) {
@@ -382,6 +387,15 @@ struct CreateWorkspaceView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, 4)
+    }
+
+    /// The Create action is unavailable while a create is in flight, the
+    /// provider list is still loading (an empty in-flight list can't be told
+    /// apart from a seat with no providers), or no provider is selectable —
+    /// the desktop-setup guidance state, where submission would only fail
+    /// daemon-side (monorepo#1003).
+    static func isCreateDisabled(isCreating: Bool, isLoadingProviders: Bool, providers: [ProviderInfo]) -> Bool {
+        isCreating || isLoadingProviders || providers.noneSelectable
     }
 
     // MARK: - Data Fetching
@@ -465,6 +479,8 @@ struct CreateWorkspaceView: View {
     }
 
     private func fetchProviders() async {
+        isLoadingProviders = true
+        defer { isLoadingProviders = false }
         let agentStore = AgentStore()
         providers = await agentStore.fetchProviders()
         let selectable = providers.filter { $0.authenticated != false }
