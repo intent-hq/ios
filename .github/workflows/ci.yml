@@ -38,7 +38,7 @@ jobs:
         run: xcrun simctl boot 'iPhone 16' >/dev/null 2>&1 || true &
 
       - name: Cache SPM packages
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/SourcePackages
           key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
