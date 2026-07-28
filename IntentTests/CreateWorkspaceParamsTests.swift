@@ -211,26 +211,40 @@ struct CreateWorkspaceParamsTests {
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
+    private func isCreateDisabled(
+        isCreating: Bool = false,
+        isLoadingProviders: Bool = false,
+        providers: [ProviderInfo]
+    ) -> Bool {
+        CreateWorkspaceView.isCreateDisabled(
+            isCreating: isCreating,
+            isLoadingProviders: isLoadingProviders,
+            providers: providers
+        )
+    }
+
     @Test func createDisabledWhenNoProviderSelectable() {
         let providers = [
             makeProvider(id: "auggie", authenticated: false),
             makeProvider(id: "codex", authenticated: false),
         ]
-        #expect(CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: providers))
+        #expect(isCreateDisabled(providers: providers))
     }
 
     @Test func createEnabledWhenAProviderIsSelectable() {
-        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: [makeProvider()]))
+        #expect(!isCreateDisabled(providers: [makeProvider()]))
         // nil (unknown) stays selectable since probes can fail transiently
-        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: [makeProvider(id: "grok", authenticated: nil)]))
+        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: nil)]))
     }
 
-    @Test func createEnabledWhenProviderListEmpty() {
-        // Empty list is not the guidance state: the daemon default is used
-        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: []))
+    @Test func createEnabledWhenProviderListEmptyAfterLoad() {
+        // Empty list after load is not the guidance state: the daemon default is used
+        #expect(!isCreateDisabled(providers: []))
     }
 
-    @Test func createDisabledWhileCreating() {
-        #expect(CreateWorkspaceView.isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+    @Test func createDisabledWhileCreatingOrLoadingProviders() {
+        #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+        // An empty in-flight list can't be told apart from a seat with no providers
+        #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
     }
 }
