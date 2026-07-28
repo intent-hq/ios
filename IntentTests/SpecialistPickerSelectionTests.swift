@@ -94,6 +94,51 @@ struct SpecialistPickerSelectionTests {
         #expect(!unknown.noneSelectable)
     }
 
+    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
+
+    private func isCreateDisabled(
+        hasSpecialist: Bool = true,
+        isCreating: Bool = false,
+        isLoadingProviders: Bool = false,
+        isLoadingModels: Bool = false,
+        providers: [ProviderInfo]
+    ) -> Bool {
+        SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: hasSpecialist,
+            isCreating: isCreating,
+            isLoadingProviders: isLoadingProviders,
+            isLoadingModels: isLoadingModels,
+            providers: providers
+        )
+    }
+
+    @Test func createDisabledWhenNoProviderSelectable() {
+        let providers = [
+            ProviderInfo(id: "auggie", authenticated: false),
+            ProviderInfo(id: "codex", authenticated: false),
+        ]
+        #expect(isCreateDisabled(providers: providers))
+    }
+
+    @Test func createEnabledWhenAProviderIsSelectable() {
+        #expect(!isCreateDisabled(providers: [ProviderInfo(id: "auggie", authenticated: true)]))
+        // nil (unknown) stays selectable since probes can fail transiently
+        #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: nil)]))
+    }
+
+    @Test func createEnabledWhenProviderListEmpty() {
+        // Empty list is not the guidance state: the daemon default is used
+        #expect(!isCreateDisabled(providers: []))
+    }
+
+    @Test func createDisabledWhileLoadingCreatingOrWithoutSpecialist() {
+        let providers = [ProviderInfo(id: "auggie", authenticated: true)]
+        #expect(isCreateDisabled(hasSpecialist: false, providers: providers))
+        #expect(isCreateDisabled(isCreating: true, providers: providers))
+        #expect(isCreateDisabled(isLoadingProviders: true, providers: providers))
+        #expect(isCreateDisabled(isLoadingModels: true, providers: providers))
+    }
+
     // MARK: - defaultAuggieModelId
 
     @Test func defaultAuggieModelIdPrefersConfiguredModel() {

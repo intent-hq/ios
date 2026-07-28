@@ -26,6 +26,8 @@ struct SpecialistPickerView: View {
     @State private var isLoadingModels = false
     @State private var selectedModel: ModelInfo?
     @State private var isCreating = false
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -232,9 +234,20 @@ struct SpecialistPickerView: View {
                         createAgentWithSpecialist(specialist)
                     }
                 }
-                .disabled(selectedSpecialist == nil || isCreating || isLoadingProviders || isLoadingModels)
+                .disabled(Self.isCreateDisabled(
+                    hasSpecialist: selectedSpecialist != nil,
+                    isCreating: isCreating,
+                    isLoadingProviders: isLoadingProviders,
+                    isLoadingModels: isLoadingModels,
+                    providers: providers
+                ))
                 .fontWeight(.semibold)
             }
+        }
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred.")
         }
         .task {
             await fetchProviders()
@@ -295,6 +308,20 @@ struct SpecialistPickerView: View {
     /// `nil` (unknown) stays selectable since probes can fail transiently.
     static func isSelectable(_ provider: ProviderInfo) -> Bool {
         provider.isSelectable
+    }
+
+    /// The Create action is unavailable while no specialist is selected, a
+    /// create is in flight, providers/models are still loading, or no provider
+    /// is selectable — the desktop-setup guidance state, where submission
+    /// would only fail daemon-side (monorepo#1003).
+    static func isCreateDisabled(
+        hasSpecialist: Bool,
+        isCreating: Bool,
+        isLoadingProviders: Bool,
+        isLoadingModels: Bool,
+        providers: [ProviderInfo]
+    ) -> Bool {
+        !hasSpecialist || isCreating || isLoadingProviders || isLoadingModels || providers.noneSelectable
     }
 
     /// Keeps the current selection when it is still selectable, otherwise falls
@@ -416,6 +443,8 @@ struct SpecialistPickerView: View {
                 }
             } catch {
                 print("[SpecialistPicker] Failed to create agent: \(error)")
+                errorMessage = error.localizedDescription
+                showError = true
             }
             isCreating = false
         }

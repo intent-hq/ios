@@ -350,7 +350,7 @@ struct CreateWorkspaceView: View {
                 Button("Create") {
                     createWorkspace()
                 }
-                .disabled(isCreating)
+                .disabled(Self.isCreateDisabled(isCreating: isCreating, providers: providers))
             }
         }
         .alert("Error", isPresented: $showError) {
@@ -382,6 +382,13 @@ struct CreateWorkspaceView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .padding(.vertical, 4)
+    }
+
+    /// The Create action is unavailable while a create is in flight or no
+    /// provider is selectable — the desktop-setup guidance state, where
+    /// submission would only fail daemon-side (monorepo#1003).
+    static func isCreateDisabled(isCreating: Bool, providers: [ProviderInfo]) -> Bool {
+        isCreating || providers.noneSelectable
     }
 
     // MARK: - Data Fetching

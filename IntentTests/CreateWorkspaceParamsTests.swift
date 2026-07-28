@@ -208,4 +208,29 @@ struct CreateWorkspaceParamsTests {
         ))
         #expect(outcome.selectedModel?.id == "sonnet-4.6")
     }
+
+    // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
+
+    @Test func createDisabledWhenNoProviderSelectable() {
+        let providers = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: providers))
+    }
+
+    @Test func createEnabledWhenAProviderIsSelectable() {
+        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: [makeProvider()]))
+        // nil (unknown) stays selectable since probes can fail transiently
+        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: [makeProvider(id: "grok", authenticated: nil)]))
+    }
+
+    @Test func createEnabledWhenProviderListEmpty() {
+        // Empty list is not the guidance state: the daemon default is used
+        #expect(!CreateWorkspaceView.isCreateDisabled(isCreating: false, providers: []))
+    }
+
+    @Test func createDisabledWhileCreating() {
+        #expect(CreateWorkspaceView.isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+    }
 }
