@@ -82,19 +82,70 @@ class NotificationManager: ObservableObject {
             return
         }
 
-        // Check if background agent — skip entirely
-        let isBackground = data["isBackground"] as? Bool ?? false
-        print("[NotificationManager] agent:idle — agentId=\(agentId), isBackground=\(isBackground), currentAgentId=\(currentAgentId ?? "nil")")
-        if isBackground { return }
-
-        // Check if agent is waiting on sub-agents — skip notification
-        let isWaitingForAgents = data["isWaitingForAgents"] as? Bool ?? false
-        if isWaitingForAgents { return }
+        // Emit-time fast paths: background agents and agents the payload
+        // already marks as waiting on sub-agents never alert.
+        print("[NotificationManager] agent:idle — agentId=\(agentId), currentAgentId=\(currentAgentId ?? "nil")")
+        if Self.shouldSkipIdleEventFastPath(data) { return }
 
         let agentName = data["agentName"] as? String
             ?? event["actor"].flatMap { ($0 as? [String: Any])?["name"] as? String }
             ?? "Agent"
 
+        // Fresh agent.list read (desktop parity): suppress when the idle agent
+        // is still waiting on delegated sub-agents, another agent is active, or
+        // the idle agent is background per metadata. Fail-open on read failure.
+        Task { @MainActor [weak self] in
+            let agents = await self?.fetchWorkspaceAgents(workspaceId: workspaceId)
+            guard let self else { return }
+            if Self.shouldSuppressIdleAlert(idleAgentId: agentId, agents: agents) {
+                print("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
+                return
+            }
+            self.presentIdleAlert(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+        }
+    }
+
+    /// Emit-time fast path over the raw `agent:idle` payload: skip background
+    /// agents, and agents the daemon already marks as waiting on sub-agents.
+    nonisolated static func shouldSkipIdleEventFastPath(_ data: [String: Any]) -> Bool {
+        if data["isBackground"] as? Bool ?? false { return true }
+        if data["isWaitingForOtherAgents"] as? Bool ?? false { return true }
+        return false
+    }
+
+    /// Pure suppress-or-alert decision over a fresh `agent.list` read.
+    /// `agents == nil` means the read failed — fail open (alert).
+    nonisolated static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]?) -> Bool {
+        guard let agents else { return false }
+        if let idleAgent = agents.first(where: { $0.id == idleAgentId }) {
+            if idleAgent.isBackground { return true }
+            if idleAgent.isWaitingForOtherAgents || !idleAgent.waitingForAgentIds.isEmpty { return true }
+        }
+        return agents.contains { agent in
+            agent.id != idleAgentId && (agent.isStreaming || agent.isResponding || agent.isProcessing)
+        }
+    }
+
+    /// Fetches the workspace's agents for the suppression decision.
+    /// Returns nil when the read fails or the response is malformed.
+    private func fetchWorkspaceAgents(workspaceId: String) async -> [AgentSession]? {
+        do {
+            let result = try await ConnectionManager.shared.request(
+                "agent.list",
+                params: ["workspaceId": workspaceId]
+            )
+            if let dict = result as? [String: Any],
+               let items = dict["agents"] as? [[String: Any]] {
+                return items.compactMap { AgentSession.parseAgent($0) }
+            }
+            return nil
+        } catch {
+            print("[NotificationManager] agent.list failed, falling back to alert: \(error)")
+            return nil
+        }
+    }
+
+    private func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         // Look up workspace name
         let workspaceName = WorkspaceStore.shared.workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
