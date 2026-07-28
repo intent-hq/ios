@@ -139,9 +139,26 @@ struct SpecialistPickerView: View {
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .listRowBackground(Theme.card(for: colorScheme))
                         } else {
-                            ForEach(providers) { provider in
-                                providerRow(provider)
+                            Picker("Provider", selection: Binding(
+                                get: { selectedProvider?.id ?? "" },
+                                set: { newId in
+                                    // Unauthenticated providers can never become the
+                                    // selection; the onChange handler refetches models
+                                    guard let provider = providers.first(where: { $0.id == newId }),
+                                          Self.isSelectable(provider) else { return }
+                                    selectedProvider = provider
+                                }
+                            )) {
+                                ForEach(providers) { provider in
+                                    Text(provider.authenticated == false
+                                        ? "\(provider.displayName) (not signed in)"
+                                        : provider.displayName)
+                                        .tag(provider.id)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            .disabled(isCreating)
+                            .listRowBackground(Theme.card(for: colorScheme))
                         }
                     }
 
@@ -218,43 +235,6 @@ struct SpecialistPickerView: View {
                 selectedModel = nil
             }
         }
-    }
-
-    @ViewBuilder
-    private func providerRow(_ provider: ProviderInfo) -> some View {
-        let isDisabled = provider.authenticated == false
-        Button {
-            selectedProvider = provider
-        } label: {
-            HStack {
-                Text(provider.displayName)
-                    .font(.body)
-                    .foregroundStyle(isDisabled
-                        ? Theme.mutedForeground(for: colorScheme)
-                        : Theme.foreground(for: colorScheme))
-
-                Spacer()
-
-                if isDisabled {
-                    Text("Not signed in")
-                        .font(.caption)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .clipShape(Capsule())
-                }
-
-                if selectedProvider?.id == provider.id {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .fontWeight(.semibold)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-        .disabled(isDisabled || isCreating)
-        .listRowBackground(Theme.card(for: colorScheme))
     }
 
     // MARK: - Data Fetching
