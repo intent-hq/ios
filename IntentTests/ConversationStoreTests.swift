@@ -20,6 +20,7 @@ struct ConversationStoreTests {
             id: id, name: name, status: status,
             isBackground: false, isStreaming: isStreaming,
             isProcessing: isProcessing, isResponding: isResponding,
+            isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: nil, lastUserMessage: nil,
             digest: nil, specialist: nil, createdByAgentId: nil
