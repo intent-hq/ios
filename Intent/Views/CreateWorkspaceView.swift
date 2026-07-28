@@ -478,6 +478,12 @@ struct CreateWorkspaceView: View {
         }
         if let provider = selectedProvider {
             await fetchModels(providerId: provider.id)
+        } else {
+            // No selectable provider: drop any stale catalog/selection so the
+            // Model section can't render (or ship a model) next to the
+            // desktop-setup guidance.
+            models = []
+            selectedModel = nil
         }
     }
 
