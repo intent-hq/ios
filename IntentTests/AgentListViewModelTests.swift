@@ -26,6 +26,7 @@ struct AgentListViewModelTests {
             id: id, name: name, status: status,
             isBackground: isBackground, isStreaming: isStreaming,
             isProcessing: isProcessing, isResponding: isResponding,
+            isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: createdAt, updatedAt: updatedAt,
             lastActivity: lastActivity,
             lastAgentResponse: lastAgentResponse,

@@ -6,7 +6,7 @@ struct WorkspaceRowView: View {
     var showRepo: Bool = true
 
     private var displayStatus: WorkspaceDisplayStatus {
-        deriveDisplayStatus(from: workspace)
+        resolveDisplayStatus(for: workspace)
     }
 
     private var prPillColor: Color? {
@@ -150,8 +150,8 @@ struct WorkspaceRowView: View {
             }
             .frame(width: size, height: size)
 
-        case .prOpen:
-            // Filled circle with PR icon
+        case .prOpen, .prReady:
+            // Filled circle with PR icon (prReady shows the same icon in green)
             ZStack {
                 Circle()
                     .fill(color)

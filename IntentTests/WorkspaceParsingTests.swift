@@ -15,6 +15,7 @@ struct WorkspaceParsingTests {
             "repositoryName": "app",
             "prStatus": "Open",
             "prNumber": 42,
+            "displayStatus": "pr_open",
             "diffSummary": ["totalFiles": 5],
             "taskStats": ["total": 10, "completed": 3, "inProgress": 2]
         ]
@@ -30,10 +31,20 @@ struct WorkspaceParsingTests {
         #expect(ws?.repositoryName == "app")
         #expect(ws?.prStatus == "Open")
         #expect(ws?.prNumber == 42)
+        #expect(ws?.displayStatus == "pr_open")
         #expect(ws?.diffSummaryTotalFiles == 5)
         #expect(ws?.taskStatsTotal == 10)
         #expect(ws?.taskStatsCompleted == 3)
         #expect(ws?.taskStatsInProgress == 2)
+    }
+
+    @Test func parseUnknownDisplayStatusTolerated() async throws {
+        // Unknown future wire values are kept as-is; mapping to the enum
+        // (and the fallback derivation) happens at display time.
+        let dict: [String: Any] = ["id": "ws-4", "title": "Future", "displayStatus": "some_future_status"]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.displayStatus == "some_future_status")
     }
 
     @Test func parseMinimalWorkspace() async throws {
@@ -43,6 +54,7 @@ struct WorkspaceParsingTests {
         #expect(ws?.id == "ws-2")
         #expect(ws?.title == "Minimal")
         #expect(ws?.branch == nil)
+        #expect(ws?.displayStatus == nil)
         #expect(ws?.prStatus == nil)
         #expect(ws?.diffSummaryTotalFiles == nil)
         #expect(ws?.taskStatsTotal == nil)

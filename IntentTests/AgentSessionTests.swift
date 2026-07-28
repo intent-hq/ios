@@ -15,6 +15,8 @@ struct AgentSessionTests {
             "isStreaming": true,
             "isProcessing": false,
             "isResponding": true,
+            "isWaitingForOtherAgents": true,
+            "waitingForAgentIds": ["agent-9"],
             "createdAt": "2026-01-01T00:00:00Z",
             "updatedAt": "2026-01-02T00:00:00Z",
             "lastActivity": "2026-01-02T12:00:00Z",
@@ -36,6 +38,8 @@ struct AgentSessionTests {
         #expect(agent?.isStreaming == true)
         #expect(agent?.isProcessing == false)
         #expect(agent?.isResponding == true)
+        #expect(agent?.isWaitingForOtherAgents == true)
+        #expect(agent?.waitingForAgentIds == ["agent-9"])
         #expect(agent?.createdAt == "2026-01-01T00:00:00Z")
         #expect(agent?.updatedAt == "2026-01-02T00:00:00Z")
         #expect(agent?.lastActivity == "2026-01-02T12:00:00Z")
@@ -57,6 +61,8 @@ struct AgentSessionTests {
         #expect(agent?.isStreaming == false)
         #expect(agent?.isProcessing == false)
         #expect(agent?.isResponding == false)
+        #expect(agent?.isWaitingForOtherAgents == false)
+        #expect(agent?.waitingForAgentIds == [])
         #expect(agent?.createdAt == nil)
         #expect(agent?.specialist == nil)
         #expect(agent?.createdByAgentId == nil)
@@ -180,6 +186,7 @@ struct AgentSessionTests {
             id: "test", name: "Test", status: status,
             isBackground: false, isStreaming: isStreaming,
             isProcessing: isProcessing, isResponding: isResponding,
+            isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: lastAgentResponse, lastUserMessage: nil,
             digest: digest, specialist: nil, createdByAgentId: nil

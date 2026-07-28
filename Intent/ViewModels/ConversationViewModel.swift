@@ -2,13 +2,6 @@ import Combine
 import PhotosUI
 import SwiftUI
 
-/// A model available for the agent.
-struct ModelInfo: Identifiable {
-    let id: String       // model id (e.g. "sonnet4.5")
-    let name: String     // display name (e.g. "sonnet4.5 (balanced)")
-    let provider: String // provider id (e.g. "auggie")
-}
-
 @MainActor
 class ConversationViewModel: ObservableObject {
     @Published var store = ConversationStore()

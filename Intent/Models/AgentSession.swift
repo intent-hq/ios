@@ -8,6 +8,8 @@ struct AgentSession: Identifiable, Equatable {
     let isStreaming: Bool
     let isProcessing: Bool
     let isResponding: Bool
+    let isWaitingForOtherAgents: Bool
+    let waitingForAgentIds: [String]
     let createdAt: String?
     let updatedAt: String?
     let lastActivity: String?
@@ -68,6 +70,7 @@ struct AgentSession: Identifiable, Equatable {
         AgentSession(
             id: id, name: name, status: status, isBackground: isBackground,
             isStreaming: isStreaming, isProcessing: isProcessing, isResponding: isResponding,
+            isWaitingForOtherAgents: isWaitingForOtherAgents, waitingForAgentIds: waitingForAgentIds,
             createdAt: createdAt, updatedAt: updatedAt, lastActivity: lastActivity,
             lastAgentResponse: lastAgentResponse, lastUserMessage: lastUserMessage,
             digest: newDigest, specialist: specialist, createdByAgentId: createdByAgentId
@@ -86,6 +89,8 @@ struct AgentSession: Identifiable, Equatable {
             isStreaming: dict["isStreaming"] as? Bool ?? false,
             isProcessing: dict["isProcessing"] as? Bool ?? false,
             isResponding: dict["isResponding"] as? Bool ?? false,
+            isWaitingForOtherAgents: dict["isWaitingForOtherAgents"] as? Bool ?? false,
+            waitingForAgentIds: dict["waitingForAgentIds"] as? [String] ?? [],
             createdAt: dict["createdAt"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             lastActivity: dict["lastActivity"] as? String,
