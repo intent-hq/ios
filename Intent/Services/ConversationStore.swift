@@ -1164,7 +1164,7 @@ class ConversationStore: ObservableObject {
                     "messageId": messageId,
                 ]
             )
-        } catch let error as NSError where error.code == -32602 {
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
             // Queued message not found on the daemon — refresh the queue instead of
             // mutating local state (`agent:queue:updated` reconciles thereafter).
             await fetchQueue(agentId: agentId)

@@ -332,4 +332,24 @@ struct ConversationStoreIntegrationTests {
         #expect(fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-server"])
     }
+
+    @Test func sendQueuedMessageNowOtherErrorPropagatesWithoutRefreshOrRemoval() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+        ]
+        fake.errorMap["agent.sendQueuedMessageNow"] = NSError(
+            domain: "WebSocket", code: -32603,
+            userInfo: [NSLocalizedDescriptionKey: "internal error (-32603)"])
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
+        }
+
+        // No refresh, no local mutation — the error just propagates
+        #expect(!fake.didCallMethod("agent.getQueue"))
+        #expect(store.queuedMessages.map(\.id) == ["q-1"])
+    }
 }
