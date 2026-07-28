@@ -282,4 +282,54 @@ struct ConversationStoreIntegrationTests {
         #expect(store.delegationGroupStatus?.completed == 0)
         #expect(store.delegationGroupStatus?.total == 2)
     }
+
+    // MARK: - Send queued message now (agent.sendQueuedMessageNow)
+
+    @Test func sendQueuedMessageNowMakesSingleRPCAndPreservesRest() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+            QueuedMessage(id: "q-2", content: "second", queuedAt: "2025-01-01T00:00:01Z", position: 1, imageBlocks: nil),
+        ]
+        fake.responseMap["agent.sendQueuedMessageNow"] = ["ok": true]
+
+        try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
+
+        // Exactly one RPC, carrying only identifiers (the daemon owns the payload)
+        let calls = fake.paramsForMethod("agent.sendQueuedMessageNow")
+        #expect(calls.count == 1)
+        #expect(calls.first?["agentId"] as? String == "agent-1")
+        #expect(calls.first?["workspaceId"] as? String == "ws-1")
+        #expect(calls.first?["messageId"] as? String == "q-1")
+        #expect(calls.first?["content"] == nil)
+        #expect(fake.requestLog.count == 1)
+
+        // Only the sent entry is dropped; the rest of the queue is preserved
+        #expect(store.queuedMessages.map(\.id) == ["q-2"])
+    }
+
+    @Test func sendQueuedMessageNowNotFoundRefreshesQueueNonDestructively() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-stale", content: "stale", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+        ]
+        fake.errorMap["agent.sendQueuedMessageNow"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "queued message not found (-32602)"])
+        fake.responseMap["agent.getQueue"] = ["queue": [
+            ["id": "q-server", "content": "authoritative", "queuedAt": "2025-01-01T00:00:02Z", "position": 0],
+        ]]
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-stale", workspaceId: "ws-1")
+        }
+
+        // The queue was refreshed from the daemon rather than mutated locally
+        #expect(fake.didCallMethod("agent.getQueue"))
+        #expect(store.queuedMessages.map(\.id) == ["q-server"])
+    }
 }
