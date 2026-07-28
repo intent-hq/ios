@@ -116,6 +116,17 @@ class NotificationManager: ObservableObject {
 
     /// Pure suppress-or-alert decision over a fresh `agent.list` read.
     /// `agents == nil` means the read failed — fail open (alert).
+    ///
+    /// The waiting-on-children gate is an iOS extension beyond the desktop
+    /// port (desktop only honors the emit-time flag). It is safe because the
+    /// list read can only under-suppress relative to the emit-time flag (a
+    /// consumed watch clears the flag), and over-suppression self-heals: the
+    /// awaited child's completion wakes the parent, whose next turn emits a
+    /// fresh `agent:idle` with the flag cleared.
+    ///
+    /// The other-agents gate includes `isProcessing` in addition to desktop's
+    /// `isStreaming || isResponding` — a deliberate divergence matching
+    /// `AgentSession.isActive` semantics; do not "fix" it back in a parity sweep.
     nonisolated static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]?) -> Bool {
         guard let agents else { return false }
         if let idleAgent = agents.first(where: { $0.id == idleAgentId }) {
