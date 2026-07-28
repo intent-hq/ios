@@ -185,7 +185,8 @@ struct WorkspaceStoreHighWaterMarkTests {
     private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {
         Workspace(
             id: id, title: "WS \(id)", branch: nil, baseRef: nil,
-            status: nil, activity: nil, lastActivity: lastActivity, updatedAt: nil,
+            status: nil, activity: nil, displayStatus: nil,
+            lastActivity: lastActivity, updatedAt: nil,
             repositoryOwner: nil, repositoryName: nil, prStatus: nil,
             prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
             taskStatsCompleted: nil, taskStatsInProgress: nil,
