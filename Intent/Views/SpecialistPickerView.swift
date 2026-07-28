@@ -422,7 +422,7 @@ struct SpecialistPickerView: View {
         guard !isCreating else { return }
         isCreating = true
 
-        Task {
+        Task { @MainActor in
             do {
                 let selection = Self.buildCreateAgentSelection(
                     specialist: specialist,
