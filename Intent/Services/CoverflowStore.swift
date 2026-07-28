@@ -250,7 +250,7 @@ class CoverflowStore: ObservableObject {
         }
     }
 
-    private func handleEvent(_ params: Any) {
+    func handleEvent(_ params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         // Events from websocket-event-bridge are wrapped:
@@ -282,9 +282,9 @@ class CoverflowStore: ObservableObject {
                 // Skip background agents and agents waiting for sub-agents
                 let data = event["data"] as? [String: Any]
                 let isBackground = data?["isBackground"] as? Bool ?? false
-                let isWaitingForAgents = data?["isWaitingForAgents"] as? Bool ?? false
+                let isWaitingForOtherAgents = data?["isWaitingForOtherAgents"] as? Bool ?? false
 
-                if isWaitingForAgents {
+                if isWaitingForOtherAgents {
                     // Agent is idle but waiting for sub-agents — show stars
                     waitingAgentIds.insert(agentId)
                 } else {
@@ -292,7 +292,7 @@ class CoverflowStore: ObservableObject {
                     waitingAgentIds.remove(agentId)
                 }
 
-                if wasStreaming && focusedAgentId != agentId && !isBackground && !isWaitingForAgents {
+                if wasStreaming && focusedAgentId != agentId && !isBackground && !isWaitingForOtherAgents {
                     unreviewedAgentIds.insert(agentId)
                 }
                 // Re-fetch to update status display
@@ -340,8 +340,8 @@ class CoverflowStore: ObservableObject {
 
                 if let idx = queue.firstIndex(where: { $0.id == agentId }) {
                     // NOTE: Don't add to unreviewedAgentIds here.
-                    // The agent:idle handler does this with the correct isWaitingForAgents check.
-                    // agent:status-changed events don't include isWaitingForAgents in their payload.
+                    // The agent:idle handler does this with the correct isWaitingForOtherAgents check.
+                    // agent:status-changed events don't include isWaitingForOtherAgents in their payload.
 
                     // Only refetch on idle transition (to update timestamps/status display).
                     // Don't refetch during streaming — streamingAgentIds already tracks it
