@@ -110,6 +110,7 @@ class NotificationManager: ObservableObject {
     nonisolated static func shouldSkipIdleEventFastPath(_ data: [String: Any]) -> Bool {
         if data["isBackground"] as? Bool ?? false { return true }
         if data["isWaitingForOtherAgents"] as? Bool ?? false { return true }
+        if let waitingIds = data["waitingForAgentIds"] as? [String], !waitingIds.isEmpty { return true }
         return false
     }
 

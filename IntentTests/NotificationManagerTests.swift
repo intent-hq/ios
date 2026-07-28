@@ -89,6 +89,14 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["isWaitingForOtherAgents": true]) == true)
     }
 
+    @Test func nonEmptyWaitingIdsOnEventSkips() {
+        #expect(NotificationManager.shouldSkipIdleEventFastPath(["waitingForAgentIds": ["child"]]) == true)
+    }
+
+    @Test func emptyWaitingIdsOnEventDoesNotSkip() {
+        #expect(NotificationManager.shouldSkipIdleEventFastPath(["waitingForAgentIds": [String]()]) == false)
+    }
+
     @Test func plainIdleEventDoesNotSkip() {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["agentId": "a", "isBackground": false]) == false)
     }
