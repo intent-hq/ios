@@ -1155,18 +1155,22 @@ class ConversationStore: ObservableObject {
     // MARK: - Send queued message now
 
     func sendQueuedMessageNow(agentId: String, messageId: String, workspaceId: String) async throws {
-        guard let message = queuedMessages.first(where: { $0.id == messageId }) else { return }
-        let content = message.content
-
-        let _ = try await connectionManager.request(
-            "agent.forceMessage",
-            params: [
-                "agentId": agentId,
-                "messageId": messageId,
-                "content": content,
-                "workspaceId": workspaceId,
-            ]
-        )
+        do {
+            let _ = try await connectionManager.request(
+                "agent.sendQueuedMessageNow",
+                params: [
+                    "agentId": agentId,
+                    "workspaceId": workspaceId,
+                    "messageId": messageId,
+                ]
+            )
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+            // Queued message not found on the daemon — refresh the queue instead of
+            // mutating local state (`agent:queue:updated` reconciles thereafter).
+            await fetchQueue(agentId: agentId)
+            throw error
+        }
+        // Drop only the sent entry; the daemon preserves the rest of the queue.
         queuedMessages.removeAll { $0.id == messageId }
     }
 
