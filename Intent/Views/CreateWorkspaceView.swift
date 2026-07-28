@@ -273,38 +273,28 @@ struct CreateWorkspaceView: View {
                         .listRowBackground(Theme.card(for: colorScheme))
                     }
 
-                    // Provider selection
+                    // Provider dropdown picker
                     if !providers.isEmpty {
                         Section("Provider") {
-                            ForEach(providers) { provider in
-                                let selectable = provider.authenticated != false
-                                Button {
-                                    selectProvider(provider)
-                                } label: {
-                                    HStack {
-                                        Text(provider.displayName)
-                                            .font(.body)
-                                            .foregroundStyle(selectable
-                                                ? Theme.foreground(for: colorScheme)
-                                                : Theme.mutedForeground(for: colorScheme))
-
-                                        Spacer()
-
-                                        if !selectable {
-                                            Text("Not signed in")
-                                                .font(.caption)
-                                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                        } else if selectedProvider?.id == provider.id {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(Theme.primary(for: colorScheme))
-                                                .fontWeight(.semibold)
-                                        }
+                            Picker("Provider", selection: Binding(
+                                get: { selectedProvider?.id ?? "" },
+                                set: { newId in
+                                    // selectProvider guards unauthenticated providers and
+                                    // handles the model refetch/reset side effects
+                                    if let provider = providers.first(where: { $0.id == newId }) {
+                                        selectProvider(provider)
                                     }
-                                    .padding(.vertical, 2)
                                 }
-                                .disabled(!selectable)
-                                .listRowBackground(Theme.card(for: colorScheme))
+                            )) {
+                                ForEach(providers) { provider in
+                                    Text(provider.authenticated == false
+                                        ? "\(provider.displayName) (not signed in)"
+                                        : provider.displayName)
+                                        .tag(provider.id)
+                                }
                             }
+                            .pickerStyle(.menu)
+                            .listRowBackground(Theme.card(for: colorScheme))
                         }
                     }
 
