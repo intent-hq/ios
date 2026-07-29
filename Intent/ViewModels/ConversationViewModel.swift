@@ -301,9 +301,32 @@ class ConversationViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Agent Q&A pending questions
+
+    /// Pending Agent Q&A question set for the composer-slot wizard, derived
+    /// purely from the transcript (nil while streaming/turn-active or once a
+    /// later user message supersedes the questions). The optimistic user
+    /// message appended by `sendMessage` supersedes derivationally — and the
+    /// store raises `isStreaming` optimistically — so the wizard also hides
+    /// while a send is in flight.
+    var pendingQuestions: PendingQuestionSet? {
+        PendingQuestionSet.derive(messages: messages, isTurnActive: isStreaming)
+    }
+
+    /// Flatten the wizard's answers into ONE plain-text user message of
+    /// `Q:`/`A:` pairs and send it through the ordinary send path (wire
+    /// contract — no metadata, no image attachments).
+    func submitQuestionAnswers(_ answers: [QuestionAnswer]) async {
+        await sendMessage(QuestionAnswer.flattenToMessage(answers), images: [])
+    }
+
     // MARK: - Suggested prompts parsing
 
     var suggestedPrompts: [String] {
+        // Suggested prompts stay hidden whenever the turn has pending Agent
+        // Q&A questions — including while the wizard is Ignore-collapsed.
+        // Only answering (or any superseding user message) brings them back.
+        guard pendingQuestions == nil else { return [] }
         guard let lastMessage = messages.last,
               lastMessage.role == .assistant else { return [] }
         let blocks = lastMessage.contentBlocks ?? []

@@ -75,6 +75,9 @@ struct ConversationView: View {
     @State private var userIsScrolledAway: Bool = false
     @State private var hasInitiallyScrolled: Bool = false
     @State private var isScrollingToBottom: Bool = false
+    // Agent Q&A Ignore state — transient collapse of the question wizard to a
+    // compact banner (never persisted; reset when a different set pends).
+    @State private var questionWizardCollapsed = false
     @Environment(\.dismiss) private var dismiss
 
     init(agentId: String, workspaceId: String, agentName: String) {
@@ -129,10 +132,34 @@ struct ConversationView: View {
                 Divider()
             }
 
-            // Message input
-            if !isExposeMode {
+            // Agent Q&A: pending questions replace the composer with the
+            // sequential wizard; Ignore collapses it to a banner and the
+            // composer returns underneath. `.id` remounts (fresh wizard
+            // state) per question-bearing message.
+            if !isExposeMode, let pendingSet = viewModel.pendingQuestions {
+                QuestionWizardView(
+                    questions: pendingSet.questions,
+                    collapsed: $questionWizardCollapsed,
+                    onComplete: { answers in
+                        Task { await viewModel.submitQuestionAnswers(answers) }
+                    }
+                )
+                .id(pendingSet.messageId)
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+                .padding(.bottom, questionWizardCollapsed ? 4 : 8)
+            }
+
+            // Message input (not rendered while the wizard is expanded —
+            // Q&A replaces chat; the Ignore-collapsed banner restores it)
+            if !isExposeMode && (viewModel.pendingQuestions == nil || questionWizardCollapsed) {
                 MessageInputView(viewModel: viewModel)
             }
+        }
+        .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in
+            // Ignore = collapse, not dismiss — reset whenever a different
+            // question-bearing message pends (or the set resolves).
+            questionWizardCollapsed = false
         }
         .scrollDisabled(isExposeMode)
         .background(Theme.background(for: colorScheme).ignoresSafeArea())

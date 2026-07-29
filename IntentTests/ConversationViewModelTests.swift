@@ -21,6 +21,35 @@ struct ConversationViewModelTests {
         )
     }
 
+    private func questionResourceBlock(
+        attachmentId: String = "tar-0123456789ab",
+        question: String = "Which auth method?"
+    ) -> ContentBlock {
+        let json = """
+        {"attachmentId": "\(attachmentId)", "header": "Auth", \
+        "question": "\(question)", \
+        "options": [{"label": "OAuth"}, {"label": "API key"}]}
+        """
+        return ContentBlock(
+            type: .resource,
+            resource: ResourceContents(
+                uri: "intent-question://q",
+                mimeType: Question.resourceMimeType,
+                text: json
+            )
+        )
+    }
+
+    private func questionMessage(
+        id: String = "a1",
+        extraBlocks: [ContentBlock] = []
+    ) -> ConversationMessage {
+        ConversationMessage(
+            id: id, role: .assistant,
+            contentBlocks: [questionResourceBlock()] + extraBlocks
+        )
+    }
+
     // MARK: - filteredMessages
 
     @Test func filteredMessagesKeepsAssistantMessages() async {
@@ -149,6 +178,91 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsEmptyWhenNoMessages() async {
         let vm = makeVM()
         #expect(vm.suggestedPrompts.isEmpty)
+    }
+
+    // MARK: - Agent Q&A pending questions (wizard glue)
+
+    @Test func pendingQuestionsDerivedFromLastAssistant() throws {
+        let vm = makeVM()
+        vm.store.messages = [
+            textMessage(role: .user, text: "hi"),
+            questionMessage(id: "a1"),
+        ]
+        let set = try #require(vm.pendingQuestions)
+        #expect(set.messageId == "a1")
+        #expect(set.questions.count == 1)
+        #expect(set.questions[0].attachmentId == "tar-0123456789ab")
+    }
+
+    @Test func pendingQuestionsNilWhileStreaming() {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage()]
+        vm.store.isStreaming = true
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func pendingQuestionsNilWhenUserMessageTrails() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(),
+            textMessage(role: .user, text: "answered elsewhere"),
+        ]
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func pendingQuestionsNilWhenNoQuestions() {
+        let vm = makeVM()
+        vm.store.messages = [textMessage(role: .assistant, text: "plain reply")]
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func suggestedPromptsHiddenWhileQuestionsPend() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(extraBlocks: [
+                ContentBlock(type: .text, text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+            ]),
+        ]
+        #expect(vm.pendingQuestions != nil)
+        #expect(vm.suggestedPrompts.isEmpty)
+    }
+
+    @Test func suggestedPromptsReturnOnceQuestionsSuperseded() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(),
+            textMessage(role: .user, text: "answered"),
+            textMessage(role: .assistant,
+                        text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+        ]
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.suggestedPrompts == ["Run tests"])
+    }
+
+    @Test func submitQuestionAnswersSendsFlattenedMessageThroughSendPath() async throws {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage()]
+        let set = try #require(vm.pendingQuestions)
+        let answers = [
+            QuestionAnswer(
+                question: set.questions[0],
+                selectedLabels: ["OAuth"],
+                freeText: "",
+                skipped: false
+            ),
+        ]
+
+        // The network call fails (no server in unit tests), but the optimistic
+        // user message still lands in the transcript via the ordinary send path.
+        await vm.submitQuestionAnswers(answers)
+
+        let last = try #require(vm.messages.last)
+        #expect(last.role == .user)
+        let text = (last.contentBlocks ?? []).compactMap { $0.resolvedText }.joined()
+        #expect(text == "Q: Which auth method?\nA: OAuth")
+        // The trailing user message supersedes the questions derivationally,
+        // so the wizard hides while the send is in flight and after it lands.
+        #expect(vm.pendingQuestions == nil)
     }
 
     // MARK: - Image handling
