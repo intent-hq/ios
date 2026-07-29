@@ -551,8 +551,9 @@ struct CreateWorkspaceView: View {
                 if let dict = result as? [String: Any],
                    let wsDict = dict["workspace"] as? [String: Any],
                    let workspace = WorkspaceStore.parseWorkspace(wsDict) {
-                    // Add to workspace store
-                    WorkspaceStore.shared.workspaces.insert(workspace, at: 0)
+                    // Upsert into the workspace store — the live subscription delta
+                    // may have already added this workspace (#1066)
+                    WorkspaceStore.shared.addOrUpdate(workspace)
                     HapticManager.notification(.success)
                     // Reset idempotency key on success
                     idempotencyKey = UUID().uuidString
