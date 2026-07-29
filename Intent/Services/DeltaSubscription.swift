@@ -157,6 +157,16 @@ class DeltaReconciler<T> {
         return orderedIds.compactMap { items[$0] }
     }
 
+    /// Insert or update an already-normalized value without touching sequence
+    /// tracking (e.g. an optimistic row from an RPC response). New ids are
+    /// placed at the front; existing ids keep their position.
+    func seed(id: String, value: T) {
+        if items[id] == nil {
+            orderedIds.insert(id, at: 0)
+        }
+        items[id] = value
+    }
+
     private func upsert(_ raw: [String: Any]) {
         guard let id = getId(raw), let normalized = normalize(raw) else {
             return

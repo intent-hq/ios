@@ -86,6 +86,25 @@ class WorkspaceStore: ObservableObject {
         isLoading = false
     }
 
+    // MARK: - Upsert
+
+    /// Upserts a workspace (e.g. from a workspace.create response): replaces the
+    /// existing row when the id is already present — the live subscription delta
+    /// may have added it before the RPC response returned — otherwise inserts at
+    /// the top. Also seeds the live reconciler so the row isn't dropped by the
+    /// next delta apply.
+    func addOrUpdate(_ workspace: Workspace) {
+        var merged = [workspace]
+        applyHighWaterMarks(to: &merged)
+        let row = merged[0]
+        if let index = workspaces.firstIndex(where: { $0.id == row.id }) {
+            workspaces[index] = row
+        } else {
+            workspaces.insert(row, at: 0)
+        }
+        workspaceReconciler?.seed(id: row.id, value: row)
+    }
+
     /// Merges high-water-mark timestamps into the given workspaces array so
     /// optimistic event-driven timestamps are never overwritten by stale server data.
     func applyHighWaterMarks(to workspaces: inout [Workspace]) {
