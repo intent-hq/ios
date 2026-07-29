@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Circular GitHub repo-owner avatar loaded from the public
 /// `https://github.com/{owner}.png` endpoint, with an SF Symbol fallback
-/// when the owner is unknown or the image fails to load. Mirrors the
+/// while loading and when the owner is unknown or the image fails to load. Mirrors the
 /// avatar treatment in `CoverflowCardView` and the desktop `RepoSelector`.
 struct RepoOwnerAvatarView: View {
     let owner: String?
@@ -26,10 +26,8 @@ struct RepoOwnerAvatarView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        fallbackIcon
                     default:
-                        Color.clear
+                        fallbackIcon
                     }
                 }
             } else {
