@@ -135,7 +135,10 @@ struct WorkspaceListSidebar: View {
                 }
             case .repo:
                 ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                    Section(header: Text(repoName)) {
+                    Section(header: HStack(spacing: 6) {
+                        RepoOwnerAvatarView(owner: workspaces.first?.repositoryOwner, size: 16)
+                        Text(repoName)
+                    }) {
                         ForEach(workspaces) { workspace in
                             WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
                                 .tag(workspace.id)
