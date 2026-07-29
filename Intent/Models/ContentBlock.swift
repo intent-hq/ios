@@ -9,6 +9,7 @@ enum ContentBlockType: String, Codable {
     case thinking
     case image
     case file
+    case resource
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -17,8 +18,17 @@ enum ContentBlockType: String, Codable {
     }
 }
 
+/// Nested contents of a standalone `resource` content block (PROTOCOL §7.1):
+/// `{ type: "resource", resource: { uri?, mimeType, text } }`. Decoded leniently —
+/// consumers validate the fields they need (e.g. question parsing is MIME-gated).
+struct ResourceContents: Codable {
+    var uri: String?
+    var mimeType: String?
+    var text: String?
+}
+
 /// A content block within a conversation message.
-/// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file)
+/// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
 /// with backward-compatible field aliases.
 struct ContentBlock: Identifiable, Codable {
     /// Auto-generated if not present in JSON
@@ -50,6 +60,9 @@ struct ContentBlock: Identifiable, Codable {
     var mimeType: String?
     var fileName: String?
 
+    // Standalone resource block contents (type == .resource)
+    var resource: ResourceContents?
+
     // Metadata
     var metadata: [String: AnyCodable]?
 
@@ -57,7 +70,7 @@ struct ContentBlock: Identifiable, Codable {
         case id, type, text, content, language, name, toolName
         case input, toolCallId, toolUseId, tool_use_id
         case output, isError, is_error
-        case data, mimeType, fileName, metadata
+        case data, mimeType, fileName, resource, metadata
     }
 
     init(from decoder: Decoder) throws {
@@ -93,6 +106,7 @@ struct ContentBlock: Identifiable, Codable {
         data = try? container.decode(String.self, forKey: .data)
         mimeType = try? container.decode(String.self, forKey: .mimeType)
         fileName = try? container.decode(String.self, forKey: .fileName)
+        resource = try? container.decode(ResourceContents.self, forKey: .resource)
         metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
     }
 
@@ -130,7 +144,9 @@ struct ContentBlock: Identifiable, Codable {
         isError: Bool? = nil,
         data: String? = nil,
         mimeType: String? = nil,
-        fileName: String? = nil
+        fileName: String? = nil,
+        resource: ResourceContents? = nil,
+        metadata: [String: AnyCodable]? = nil
     ) {
         self.id = id
         self.type = type
@@ -149,7 +165,8 @@ struct ContentBlock: Identifiable, Codable {
         self.data = data
         self.mimeType = mimeType
         self.fileName = fileName
-        self.metadata = nil
+        self.resource = resource
+        self.metadata = metadata
     }
 }
 

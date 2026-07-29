@@ -21,6 +21,35 @@ struct ConversationViewModelTests {
         )
     }
 
+    private func questionResourceBlock(
+        attachmentId: String = "tar-0123456789ab",
+        question: String = "Which auth method?"
+    ) -> ContentBlock {
+        let json = """
+        {"attachmentId": "\(attachmentId)", "header": "Auth", \
+        "question": "\(question)", \
+        "options": [{"label": "OAuth"}, {"label": "API key"}]}
+        """
+        return ContentBlock(
+            type: .resource,
+            resource: ResourceContents(
+                uri: "intent-question://q",
+                mimeType: Question.resourceMimeType,
+                text: json
+            )
+        )
+    }
+
+    private func questionMessage(
+        id: String = "a1",
+        extraBlocks: [ContentBlock] = []
+    ) -> ConversationMessage {
+        ConversationMessage(
+            id: id, role: .assistant,
+            contentBlocks: [questionResourceBlock()] + extraBlocks
+        )
+    }
+
     // MARK: - filteredMessages
 
     @Test func filteredMessagesKeepsAssistantMessages() async {
@@ -149,6 +178,143 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsEmptyWhenNoMessages() async {
         let vm = makeVM()
         #expect(vm.suggestedPrompts.isEmpty)
+    }
+
+    // MARK: - Agent Q&A pending questions (wizard glue)
+
+    @Test func pendingQuestionsDerivedFromLastAssistant() throws {
+        let vm = makeVM()
+        vm.store.messages = [
+            textMessage(role: .user, text: "hi"),
+            questionMessage(id: "a1"),
+        ]
+        let set = try #require(vm.pendingQuestions)
+        #expect(set.messageId == "a1")
+        #expect(set.questions.count == 1)
+        #expect(set.questions[0].attachmentId == "tar-0123456789ab")
+    }
+
+    @Test func pendingQuestionsNilWhileStreaming() {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage()]
+        vm.store.isStreaming = true
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func pendingQuestionsNilWhenUserMessageTrails() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(),
+            textMessage(role: .user, text: "answered elsewhere"),
+        ]
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func pendingQuestionsNilWhenNoQuestions() {
+        let vm = makeVM()
+        vm.store.messages = [textMessage(role: .assistant, text: "plain reply")]
+        #expect(vm.pendingQuestions == nil)
+    }
+
+    @Test func suggestedPromptsHiddenWhileQuestionsPend() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(extraBlocks: [
+                ContentBlock(type: .text, text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+            ]),
+        ]
+        #expect(vm.pendingQuestions != nil)
+        #expect(vm.suggestedPrompts.isEmpty)
+    }
+
+    @Test func suggestedPromptsReturnOnceQuestionsSuperseded() {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(),
+            textMessage(role: .user, text: "answered"),
+            textMessage(role: .assistant,
+                        text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+        ]
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.suggestedPrompts == ["Run tests"])
+    }
+
+    /// Wire the view model's store to a FakeConnectionManager so the
+    /// `agent.sendMessage` outcome is controlled per test.
+    private func makeFakeBackedVM(sendError: Error? = nil)
+        -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
+        let vm = makeVM()
+        let fake = FakeConnectionManager()
+        if let sendError {
+            fake.errorMap["agent.sendMessage"] = sendError
+        } else {
+            fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+        }
+        vm.store = ConversationStore(connectionManager: fake)
+        return (vm, fake)
+    }
+
+    private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {
+        let set = try #require(vm.pendingQuestions)
+        return [
+            QuestionAnswer(
+                question: set.questions[0],
+                selectedLabels: ["OAuth"],
+                freeText: "",
+                skipped: false
+            ),
+        ]
+    }
+
+    @Test func submitQuestionAnswersSendsFlattenedMessageThroughSendPath() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage()]
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers)
+
+        let last = try #require(vm.messages.last)
+        #expect(last.role == .user)
+        let text = (last.contentBlocks ?? []).compactMap { $0.resolvedText }.joined()
+        #expect(text == "Q: Which auth method?\nA: OAuth")
+        // The trailing user message supersedes the questions derivationally,
+        // so the wizard hides while the send is in flight and after it lands.
+        #expect(vm.pendingQuestions == nil)
+        // Wire contract: wizard sends never carry image attachments.
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["imageBlocks"] == nil)
+    }
+
+    @Test func submitQuestionAnswersClearsPendingImages() async throws {
+        // Regression (PR #55 review): stale composer attachments must not
+        // silently ride a later normal message after a wizard submit
+        // (FE parity: ChatPanel.performLocalSendCleanup).
+        let (vm, _) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage()]
+        vm.addImage(UIImage(systemName: "star")!)
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers)
+
+        #expect(vm.pendingImages.isEmpty)
+    }
+
+    @Test func failedSubmitRollsBackOptimisticMessageAndRestoresQuestions() async throws {
+        // Regression (PR #55 review): a failed send must not permanently
+        // supersede the pending questions — the optimistic user message is
+        // rolled back so the wizard re-derives and returns.
+        let (vm, _) = makeFakeBackedVM(
+            sendError: NSError(domain: "WebSocket", code: -32000))
+        vm.store.messages = [questionMessage()]
+        let answers = try firstAnswer(vm)
+        #expect(vm.pendingQuestions != nil)
+
+        await vm.submitQuestionAnswers(answers)
+
+        #expect(vm.messages.count == 1, "optimistic user message rolled back")
+        #expect(vm.messages.last?.role == .assistant)
+        #expect(vm.isStreaming == false)
+        #expect(vm.pendingQuestions != nil, "questions re-pend after failure")
     }
 
     // MARK: - Image handling
