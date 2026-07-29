@@ -76,7 +76,8 @@ struct CreateWorkspaceView: View {
                         Button {
                             selectedRepo = repo
                         } label: {
-                            HStack {
+                            HStack(spacing: 12) {
+                                RepoOwnerAvatarView(owner: repo.owner)
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(repo.name)
                                         .font(.headline)
