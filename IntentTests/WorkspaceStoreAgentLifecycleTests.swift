@@ -253,6 +253,20 @@ struct WorkspaceStoreAgentLifecycleTests {
         #expect(store.workspaces.first { $0.id == "ws-1" }?.title == "Existing Renamed")
     }
 
+    @Test func addOrUpdateAppliesHighWaterMark() async throws {
+        // An agent event for the new workspace can arrive before the RPC
+        // response; the upserted row must keep the optimistic timestamp
+        let store = WorkspaceStore(forTesting: true)
+        store.lastActivityHighWaterMark["ws-new"] = "2026-07-17T12:00:00Z"
+
+        let response = try #require(WorkspaceStore.parseWorkspace([
+            "id": "ws-new", "title": "<Untitled>", "lastActivity": "2026-07-17T11:00:00Z"
+        ]))
+        store.addOrUpdate(response)
+
+        #expect(store.workspaces[0].lastActivity == "2026-07-17T12:00:00Z")
+    }
+
     @Test func addOrUpdateWithoutReconcilerReplacesExistingRow() async throws {
         // Legacy (non-live) mode: no reconciler, upsert still dedupes by id
         let store = WorkspaceStore(forTesting: true)

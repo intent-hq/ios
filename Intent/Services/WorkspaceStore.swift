@@ -94,12 +94,15 @@ class WorkspaceStore: ObservableObject {
     /// the top. Also seeds the live reconciler so the row isn't dropped by the
     /// next delta apply.
     func addOrUpdate(_ workspace: Workspace) {
-        if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
-            workspaces[index] = workspace
+        var merged = [workspace]
+        applyHighWaterMarks(to: &merged)
+        let row = merged[0]
+        if let index = workspaces.firstIndex(where: { $0.id == row.id }) {
+            workspaces[index] = row
         } else {
-            workspaces.insert(workspace, at: 0)
+            workspaces.insert(row, at: 0)
         }
-        workspaceReconciler?.seed(id: workspace.id, value: workspace)
+        workspaceReconciler?.seed(id: row.id, value: row)
     }
 
     /// Merges high-water-mark timestamps into the given workspaces array so
