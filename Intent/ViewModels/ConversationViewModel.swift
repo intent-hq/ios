@@ -308,16 +308,30 @@ class ConversationViewModel: ObservableObject {
     /// later user message supersedes the questions). The optimistic user
     /// message appended by `sendMessage` supersedes derivationally — and the
     /// store raises `isStreaming` optimistically — so the wizard also hides
-    /// while a send is in flight.
+    /// while a send is in flight. A failed wizard send is rolled back
+    /// (`ConversationStore.rollbackFailedSend`) so unanswered questions
+    /// re-pend instead of being permanently superseded.
     var pendingQuestions: PendingQuestionSet? {
         PendingQuestionSet.derive(messages: messages, isTurnActive: isStreaming)
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of
     /// `Q:`/`A:` pairs and send it through the ordinary send path (wire
-    /// contract — no metadata, no image attachments).
+    /// contract — no metadata, no image attachments). Completing the wizard
+    /// clears any pending composer image attachments (FE parity:
+    /// `ChatPanel.performLocalSendCleanup`) so stale images never ride a
+    /// later message.
     func submitQuestionAnswers(_ answers: [QuestionAnswer]) async {
-        await sendMessage(QuestionAnswer.flattenToMessage(answers), images: [])
+        pendingImages.removeAll()
+        do {
+            try await store.sendMessage(
+                agentId: agentId,
+                content: QuestionAnswer.flattenToMessage(answers),
+                workspaceId: workspaceId)
+        } catch {
+            print("[ConversationViewModel] Submit question answers failed: \(error)")
+            store.rollbackFailedSend()
+        }
     }
 
     // MARK: - Suggested prompts parsing

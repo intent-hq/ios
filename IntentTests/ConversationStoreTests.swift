@@ -124,5 +124,41 @@ struct ConversationStoreTests {
         #expect(store.messages.count == 1, "Only the stale optimistic message should be removed")
         #expect(store.messages[0].id == "other-msg", "Other messages should be preserved")
     }
+
+    // MARK: - rollbackFailedSend (failed send must not supersede pending questions)
+
+    @Test func rollbackFailedSendRemovesOptimisticMessageAndThinking() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "Q: x\nA: y", workspaceId: "w")
+        }
+        #expect(store.messages.count == 1, "failed send leaves the optimistic message")
+        #expect(store.isStreaming, "failed send leaves the optimistic thinking state")
+
+        store.rollbackFailedSend()
+
+        #expect(store.messages.isEmpty, "rollback removes the optimistic message")
+        #expect(store.isStreaming == false, "rollback resets the thinking state")
+        #expect(store.lastFailedSend != nil, "retry dedup tracking is preserved")
+    }
+
+    @Test func rollbackFailedSendIsNoopWithoutTrackedFailure() {
+        let store = ConversationStore()
+        store.messages = [
+            ConversationMessage(
+                id: "m1", role: .user,
+                contentBlocks: [ContentBlock(type: .text, text: "hi")]
+            ),
+        ]
+        store.isStreaming = true
+
+        store.rollbackFailedSend()
+
+        #expect(store.messages.count == 1)
+        #expect(store.isStreaming)
+    }
 }
 

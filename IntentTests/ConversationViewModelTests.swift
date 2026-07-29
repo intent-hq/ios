@@ -239,11 +239,24 @@ struct ConversationViewModelTests {
         #expect(vm.suggestedPrompts == ["Run tests"])
     }
 
-    @Test func submitQuestionAnswersSendsFlattenedMessageThroughSendPath() async throws {
+    /// Wire the view model's store to a FakeConnectionManager so the
+    /// `agent.sendMessage` outcome is controlled per test.
+    private func makeFakeBackedVM(sendError: Error? = nil)
+        -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
         let vm = makeVM()
-        vm.store.messages = [questionMessage()]
+        let fake = FakeConnectionManager()
+        if let sendError {
+            fake.errorMap["agent.sendMessage"] = sendError
+        } else {
+            fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+        }
+        vm.store = ConversationStore(connectionManager: fake)
+        return (vm, fake)
+    }
+
+    private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {
         let set = try #require(vm.pendingQuestions)
-        let answers = [
+        return [
             QuestionAnswer(
                 question: set.questions[0],
                 selectedLabels: ["OAuth"],
@@ -251,9 +264,13 @@ struct ConversationViewModelTests {
                 skipped: false
             ),
         ]
+    }
 
-        // The network call fails (no server in unit tests), but the optimistic
-        // user message still lands in the transcript via the ordinary send path.
+    @Test func submitQuestionAnswersSendsFlattenedMessageThroughSendPath() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage()]
+        let answers = try firstAnswer(vm)
+
         await vm.submitQuestionAnswers(answers)
 
         let last = try #require(vm.messages.last)
@@ -263,6 +280,41 @@ struct ConversationViewModelTests {
         // The trailing user message supersedes the questions derivationally,
         // so the wizard hides while the send is in flight and after it lands.
         #expect(vm.pendingQuestions == nil)
+        // Wire contract: wizard sends never carry image attachments.
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["imageBlocks"] == nil)
+    }
+
+    @Test func submitQuestionAnswersClearsPendingImages() async throws {
+        // Regression (PR #55 review): stale composer attachments must not
+        // silently ride a later normal message after a wizard submit
+        // (FE parity: ChatPanel.performLocalSendCleanup).
+        let (vm, _) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage()]
+        vm.addImage(UIImage(systemName: "star")!)
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers)
+
+        #expect(vm.pendingImages.isEmpty)
+    }
+
+    @Test func failedSubmitRollsBackOptimisticMessageAndRestoresQuestions() async throws {
+        // Regression (PR #55 review): a failed send must not permanently
+        // supersede the pending questions — the optimistic user message is
+        // rolled back so the wizard re-derives and returns.
+        let (vm, _) = makeFakeBackedVM(
+            sendError: NSError(domain: "WebSocket", code: -32000))
+        vm.store.messages = [questionMessage()]
+        let answers = try firstAnswer(vm)
+        #expect(vm.pendingQuestions != nil)
+
+        await vm.submitQuestionAnswers(answers)
+
+        #expect(vm.messages.count == 1, "optimistic user message rolled back")
+        #expect(vm.messages.last?.role == .assistant)
+        #expect(vm.isStreaming == false)
+        #expect(vm.pendingQuestions != nil, "questions re-pend after failure")
     }
 
     // MARK: - Image handling

@@ -1079,6 +1079,21 @@ class ConversationStore: ObservableObject {
         }
     }
 
+    /// Roll back the optimistic UI state left behind by a failed `sendMessage`
+    /// — the locally appended user message and the optimistic thinking
+    /// indicator. `lastFailedSend` is kept so retrying the same content still
+    /// reuses the messageId (server-side dedup). Used by the Agent Q&A wizard,
+    /// where the optimistic message would otherwise permanently supersede the
+    /// transcript-derived pending questions even though nothing reached the
+    /// daemon.
+    func rollbackFailedSend() {
+        guard let failed = lastFailedSend else { return }
+        withAnimation(.easeOut(duration: 0.2)) {
+            messages.removeAll { $0.id == failed.messageId }
+            isStreaming = false
+        }
+    }
+
     // MARK: - Queue message
 
     func queueMessage(agentId: String, content: String,

@@ -27,6 +27,10 @@ struct QuestionWizardView: View {
 
     @State private var idx = 0
     @State private var drafts: [DraftAnswer]
+    /// One-shot completion guard — the last-step Send button stays mounted
+    /// (and tappable) until the host reacts to `onComplete`, so rapid
+    /// double-taps must not submit duplicate answer messages.
+    @State private var submitted = false
 
     init(
         questions: [Question],
@@ -92,6 +96,8 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
+            guard !submitted else { return }
+            submitted = true
             onComplete(buildAnswers())
             return
         }
@@ -395,8 +401,8 @@ struct QuestionWizardView: View {
                     .background(Capsule().fill(Theme.primary(for: colorScheme)))
                 }
                 .buttonStyle(.plain)
-                .disabled(nextDisabled)
-                .opacity(nextDisabled ? 0.5 : 1)
+                .disabled(nextDisabled || submitted)
+                .opacity(nextDisabled || submitted ? 0.5 : 1)
             }
         }
         .padding(.horizontal, 14)
