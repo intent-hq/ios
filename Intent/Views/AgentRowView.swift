@@ -1,5 +1,15 @@
 import SwiftUI
 
+extension AgentAttentionKind {
+    /// Indicator tint: discussion needs input (orange), blocker is stop-flavored (red).
+    var color: Color {
+        switch self {
+        case .discussion: return .orange
+        case .blocker: return .red
+        }
+    }
+}
+
 struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
@@ -16,6 +26,11 @@ struct AgentRowView: View {
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
                         .offset(x: 2, y: -2)
+                } else if let attention = agent.pendingAttentionRequest {
+                    Image(systemName: attention.kind.systemImage)
+                        .font(.system(size: 9))
+                        .foregroundStyle(attention.kind.color)
+                        .offset(x: 3, y: -3)
                 }
             }
 
@@ -45,7 +60,12 @@ struct AgentRowView: View {
                     }
                 }
 
-                if let message = agent.displayMessage {
+                if let attention = agent.pendingAttentionRequest {
+                    Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
+                        .font(.subheadline)
+                        .foregroundStyle(attention.kind.color)
+                        .lineLimit(1)
+                } else if let message = agent.displayMessage {
                     Text(message)
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

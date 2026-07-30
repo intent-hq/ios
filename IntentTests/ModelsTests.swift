@@ -114,5 +114,78 @@ struct ModelsTests {
         ]
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }
+
+    // MARK: - TaskDisplayStatus (PROTOCOL §5.4 task-status vocabulary)
+
+    @Test func taskDisplayStatusParsesFullVocabulary() {
+        #expect(TaskDisplayStatus(wire: "not_started") == .notStarted)
+        #expect(TaskDisplayStatus(wire: "waiting") == .waiting)
+        #expect(TaskDisplayStatus(wire: "discussion_needed") == .discussionNeeded)
+        #expect(TaskDisplayStatus(wire: "blocked") == .blocked)
+        #expect(TaskDisplayStatus(wire: "in_progress") == .inProgress)
+        #expect(TaskDisplayStatus(wire: "review_required") == .reviewRequired)
+        #expect(TaskDisplayStatus(wire: "complete") == .complete)
+        #expect(TaskDisplayStatus(wire: "cancelled") == .cancelled)
+    }
+
+    @Test func taskDisplayStatusNormalizesLegacyCheckboxWords() {
+        #expect(TaskDisplayStatus(wire: "todo") == .notStarted)
+        #expect(TaskDisplayStatus(wire: "in-progress") == .inProgress)
+        #expect(TaskDisplayStatus(wire: "done") == .complete)
+    }
+
+    @Test func taskDisplayStatusUnknownFallback() {
+        #expect(TaskDisplayStatus(wire: "some_future_status") == .unknown)
+        #expect(TaskDisplayStatus(wire: "") == .unknown)
+    }
+
+    @Test func blockedIsDistinctFromUnknown() {
+        let blocked = TaskDisplayStatus(wire: "blocked")
+        let unknown = TaskDisplayStatus(wire: "mystery")
+        #expect(blocked != unknown)
+        #expect(blocked.emoji != unknown.emoji)
+        #expect(blocked.label == "Blocked")
+        #expect(blocked.needsAttention == true)
+        #expect(unknown.needsAttention == false)
+    }
+
+    @Test func discussionNeededNeedsAttention() {
+        let status = TaskDisplayStatus(wire: "discussion_needed")
+        #expect(status == .discussionNeeded)
+        #expect(status.needsAttention == true)
+        #expect(status.emoji != TaskDisplayStatus.unknown.emoji)
+    }
+
+    @Test func nonAttentionStatusesDoNotNeedAttention() {
+        for wire in ["not_started", "waiting", "in_progress", "review_required", "complete", "cancelled"] {
+            #expect(TaskDisplayStatus(wire: wire).needsAttention == false)
+        }
+    }
+
+    @Test func workspaceTaskExposesBlockedDisplayStatus() {
+        let task = WorkspaceTask.parseTask([
+            "id": "task-1",
+            "title": "Broken sandbox",
+            "status": "blocked",
+            "updatedAt": "2026-07-30T10:00:00Z"
+        ])
+        #expect(task?.status == "blocked")
+        #expect(task?.displayStatus == .blocked)
+        #expect(task?.displayStatus.needsAttention == true)
+    }
+
+    @Test func noteExposesTaskDisplayStatus() {
+        let blockedNote = Note.parseNote([
+            "id": "note-1",
+            "title": "Task note",
+            "metadata": ["task": ["status": "blocked"] as [String: Any]] as [String: Any]
+        ])
+        #expect(blockedNote?.taskStatus == "blocked")
+        #expect(blockedNote?.taskDisplayStatus == .blocked)
+
+        let plainNote = Note.parseNote(["id": "note-2", "title": "Plain"])
+        #expect(plainNote?.taskStatus == nil)
+        #expect(plainNote?.taskDisplayStatus == nil)
+    }
 }
 

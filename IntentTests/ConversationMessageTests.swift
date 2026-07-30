@@ -152,6 +152,98 @@ struct ContentBlockTests {
         let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
         #expect(block.type == .text)
     }
+
+    @Test func decodeMetaAlias() throws {
+        let json = #"{"type":"text","text":"reason","meta":{"kind":"discussion-request"}}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.metadata == nil)
+        #expect(block.resolvedMetadata?["kind"]?.stringValue == "discussion-request")
+    }
+
+    @Test func resolvedMetadataPrefersMetadata() throws {
+        let json = #"{"type":"text","text":"x","metadata":{"kind":"a"},"meta":{"kind":"b"}}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.resolvedMetadata?["kind"]?.stringValue == "a")
+    }
+}
+
+// MARK: - AttentionNotice Tests
+
+struct AttentionNoticeTests {
+    private func systemMessage(blocks: [[String: Any]], role: String = "system") -> ConversationMessage? {
+        ConversationMessage.parseMessage([
+            "id": "msg-att",
+            "role": role,
+            "contentBlocks": blocks,
+        ])
+    }
+
+    @Test func classifiesDiscussionRequest() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "Need input on the API shape", "meta": ["kind": "discussion-request"]]
+        ])
+        let notice = msg?.attentionNotice
+        #expect(notice?.kind == .discussionRequest)
+        #expect(notice?.reason == "Need input on the API shape")
+    }
+
+    @Test func classifiesBlockerReport() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "Sandbox is broken", "meta": ["kind": "blocker-report"]]
+        ])
+        let notice = msg?.attentionNotice
+        #expect(notice?.kind == .blockerReport)
+        #expect(notice?.reason == "Sandbox is broken")
+    }
+
+    @Test func unknownKindReturnsNil() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "Interrupted", "meta": ["kind": "interruption"]]
+        ])
+        #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func missingMetaReturnsNil() throws {
+        let msg = systemMessage(blocks: [["type": "text", "text": "plain system message"]])
+        #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func nonSystemRoleReturnsNil() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "Need input", "meta": ["kind": "discussion-request"]]
+        ], role: "assistant")
+        #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func emptyContentBlocksReturnsNil() throws {
+        let msg = systemMessage(blocks: [])
+        #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func nonStringKindReturnsNil() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "x", "meta": ["kind": 42]]
+        ])
+        #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func reasonJoinsTextBlocksAndTrims() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "  first line ", "meta": ["kind": "blocker-report"]],
+            ["type": "tool_use", "name": "some_tool"],
+            ["type": "text", "text": "second line"],
+        ])
+        #expect(msg?.attentionNotice?.reason == "first line \nsecond line")
+    }
+
+    @Test func classifiesAfterCodableRoundTrip() throws {
+        let json = """
+        {"id":"msg-rt","role":"system","timestamp":"2026-07-30T00:00:00Z",
+         "contentBlocks":[{"type":"text","text":"Reason","meta":{"kind":"discussion-request"}}]}
+        """
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        #expect(msg.attentionNotice == AttentionNotice(kind: .discussionRequest, reason: "Reason"))
+    }
 }
 
 // MARK: - ConversationMessage Tests

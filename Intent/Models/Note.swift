@@ -12,6 +12,14 @@ struct Note: Identifiable, Equatable {
     let createdAt: String
     let updatedAt: String
 
+    /// Display treatment for `taskStatus`; nil when the note is not a task.
+    /// Note: the checkbox markers in `renderedContent` are unaffected — the
+    /// wire checkbox vocabulary is only `[ ]`/`[x]`/`[/]`; `blocked` and
+    /// `discussion_needed` exist only in task-note metadata status.
+    var taskDisplayStatus: TaskDisplayStatus? {
+        taskStatus.map { TaskDisplayStatus(wire: $0) }
+    }
+
     /// Returns content with task checkbox markers replaced by emoji
     var renderedContent: String {
         return content

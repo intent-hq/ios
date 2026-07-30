@@ -23,7 +23,9 @@ struct ConversationStoreTests {
             isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: nil, lastUserMessage: nil,
-            digest: nil, specialist: nil, createdByAgentId: nil
+            digest: nil, specialist: nil, createdByAgentId: nil,
+            attentionRequestKind: nil, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
         )
     }
 
@@ -159,6 +161,88 @@ struct ConversationStoreTests {
 
         #expect(store.messages.count == 1)
         #expect(store.isStreaming)
+    }
+
+    // MARK: - attention request raise/retire (PROTOCOL §5.5)
+
+    @Test func fetchAgentStreamingStateRaisesAttentionRequest() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "A",
+                "attentionRequestKind": "blocker",
+                "attentionRequestReason": "sandbox is broken"
+            ] as [String: Any]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.attentionRequest?.kind == .blocker)
+        #expect(store.attentionRequest?.reason == "sandbox is broken")
+    }
+
+    @Test func fetchAgentStreamingStateClearsWhenServerHasNone() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": ["id": "a", "name": "A"] as [String: Any]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
+
+        // Attention state is server-authoritative even with raiseOnly (which
+        // only guards isStreaming).
+        await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
+
+        #expect(store.attentionRequest == nil)
+    }
+
+    @Test func fetchAgentStreamingStateUpdatesAttentionOnPartialPayload() async {
+        // Attention state must raise/clear even when the payload lacks the
+        // name required by the full session parse.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a",
+                "attentionRequestKind": "blocker"
+            ] as [String: Any]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.attentionRequest?.kind == .blocker)
+    }
+
+    @Test func sendMessageRetiresAttentionRequest() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
+
+        try await store.sendMessage(agentId: "a", content: "unblocking you", workspaceId: "w")
+
+        #expect(store.attentionRequest == nil, "sending a message retires the indicator immediately")
+    }
+
+    @Test func failedSendKeepsAttentionRequest() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        let store = ConversationStore(connectionManager: fake)
+        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "input needed")
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
+        }
+
+        #expect(store.attentionRequest != nil, "a failed send must not retire the indicator")
+    }
+
+    @Test func resetClearsAttentionRequest() {
+        let store = ConversationStore()
+        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
+        store.reset()
+        #expect(store.attentionRequest == nil)
     }
 }
 
