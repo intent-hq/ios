@@ -119,6 +119,44 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestKind == "blocker")
     }
 
+    @Test func parseAttentionFieldsDoNotBlendSurfaces() {
+        // The trio is resolved from the single surface carrying the kind; a
+        // reason mirrored only on the other surface is not picked up.
+        let dict: [String: Any] = [
+            "id": "agent-6b",
+            "name": "Mixed",
+            "attentionRequestKind": "blocker",
+            "metadata": ["attentionRequestReason": "metadata-only reason"] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.attentionRequestKind == "blocker")
+        #expect(agent?.attentionRequestReason == nil)
+    }
+
+    // MARK: - parsePendingAttentionRequest (partial payloads)
+
+    @Test func parsePendingAttentionRequestWithoutIdOrName() {
+        // Raise/clear must not depend on the full session parse (id/name).
+        let dict: [String: Any] = [
+            "attentionRequestKind": "blocker",
+            "attentionRequestReason": "sandbox is broken"
+        ]
+        let pending = AgentSession.parsePendingAttentionRequest(dict)
+        #expect(pending?.kind == .blocker)
+        #expect(pending?.reason == "sandbox is broken")
+    }
+
+    @Test func parsePendingAttentionRequestFromMetadataSurface() {
+        let dict: [String: Any] = [
+            "metadata": ["attentionRequestKind": "discussion"] as [String: Any]
+        ]
+        #expect(AgentSession.parsePendingAttentionRequest(dict)?.kind == .discussion)
+    }
+
+    @Test func parsePendingAttentionRequestNilWhenAbsent() {
+        #expect(AgentSession.parsePendingAttentionRequest(["id": "agent-6c"]) == nil)
+    }
+
     @Test func withDigestPreservesAttentionFields() {
         let dict: [String: Any] = [
             "id": "agent-7",

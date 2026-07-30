@@ -197,6 +197,23 @@ struct ConversationStoreTests {
         #expect(store.attentionRequest == nil)
     }
 
+    @Test func fetchAgentStreamingStateUpdatesAttentionOnPartialPayload() async {
+        // Attention state must raise/clear even when the payload lacks the
+        // name required by the full session parse.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a",
+                "attentionRequestKind": "blocker"
+            ] as [String: Any]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.attentionRequest?.kind == .blocker)
+    }
+
     @Test func sendMessageRetiresAttentionRequest() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.sendMessage"] = [:] as [String: Any]

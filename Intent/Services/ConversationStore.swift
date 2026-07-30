@@ -137,9 +137,7 @@ class ConversationStore: ObservableObject {
                 } else {
                     isStreaming = serverIsStreaming
                 }
-                if let session = AgentSession.parseAgent(agentDict) {
-                    attentionRequest = session.pendingAttentionRequest
-                }
+                attentionRequest = AgentSession.parsePendingAttentionRequest(agentDict)
             }
         } catch {
             print("[ConversationStore] Failed to fetch agent streaming state: \(error)")

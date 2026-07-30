@@ -116,6 +116,7 @@ struct AgentSession: Identifiable, Equatable {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }
         let metadata = dict["metadata"] as? [String: Any]
+        let attentionSurface = attentionRequestSurface(dict)
         return AgentSession(
             id: id,
             name: name,
@@ -134,14 +135,35 @@ struct AgentSession: Identifiable, Equatable {
             digest: dict["digest"] as? String,
             specialist: metadata?["specialist"] as? String,
             createdByAgentId: metadata?["createdByAgentId"] as? String,
-            // Top-level on agent.getSession; mirrored under metadata on AgentLite
-            // (agent.list / agent.get). Absent on both when no request is pending.
-            attentionRequestKind: dict["attentionRequestKind"] as? String
-                ?? metadata?["attentionRequestKind"] as? String,
-            attentionRequestReason: dict["attentionRequestReason"] as? String
-                ?? metadata?["attentionRequestReason"] as? String,
-            attentionRequestTimestamp: dict["attentionRequestTimestamp"] as? String
-                ?? metadata?["attentionRequestTimestamp"] as? String
+            attentionRequestKind: attentionSurface?["attentionRequestKind"] as? String,
+            attentionRequestReason: attentionSurface?["attentionRequestReason"] as? String,
+            attentionRequestTimestamp: attentionSurface?["attentionRequestTimestamp"] as? String
+        )
+    }
+
+    /// Resolves the surface carrying the attention-request trio: top-level on
+    /// agent.getSession, mirrored under metadata on AgentLite (agent.list /
+    /// agent.get); absent on both when no request is pending (PROTOCOL §5.5).
+    /// The whole trio is read from whichever surface carries the kind so a
+    /// mixed payload cannot blend fields from the two surfaces.
+    private static func attentionRequestSurface(_ dict: [String: Any]) -> [String: Any]? {
+        if dict["attentionRequestKind"] is String { return dict }
+        if let metadata = dict["metadata"] as? [String: Any],
+           metadata["attentionRequestKind"] is String {
+            return metadata
+        }
+        return nil
+    }
+
+    /// Extracts the pending attention request straight from a raw agent dict,
+    /// without requiring the full session parse (which needs id/name), so
+    /// attention state can still raise/clear on a partial payload.
+    static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
+        guard let surface = attentionRequestSurface(dict),
+              let kind = surface["attentionRequestKind"] as? String else { return nil }
+        return PendingAttentionRequest(
+            kind: AgentAttentionKind(wire: kind),
+            reason: oneLiner(surface["attentionRequestReason"] as? String)
         )
     }
 }
