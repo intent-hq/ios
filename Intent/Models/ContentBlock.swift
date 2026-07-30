@@ -65,12 +65,13 @@ struct ContentBlock: Identifiable, Codable {
 
     // Metadata
     var metadata: [String: AnyCodable]?
+    private var meta: [String: AnyCodable]?  // wire alias for metadata (PROTOCOL §5.5 notice rows)
 
     enum CodingKeys: String, CodingKey {
         case id, type, text, content, language, name, toolName
         case input, toolCallId, toolUseId, tool_use_id
         case output, isError, is_error
-        case data, mimeType, fileName, resource, metadata
+        case data, mimeType, fileName, resource, metadata, meta
     }
 
     init(from decoder: Decoder) throws {
@@ -108,6 +109,7 @@ struct ContentBlock: Identifiable, Codable {
         fileName = try? container.decode(String.self, forKey: .fileName)
         resource = try? container.decode(ResourceContents.self, forKey: .resource)
         metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
+        meta = try? container.decode([String: AnyCodable].self, forKey: .meta)
     }
 
     /// Resolved text content, falling back to legacy `content` field.
@@ -128,6 +130,12 @@ struct ContentBlock: Identifiable, Codable {
     /// Resolved error flag, falling back to snake_case `is_error` field.
     var resolvedIsError: Bool? {
         isError ?? is_error
+    }
+
+    /// Resolved metadata, falling back to the wire `meta` alias used by
+    /// daemon-persisted notice rows (e.g. `meta.kind = "discussion-request"`).
+    var resolvedMetadata: [String: AnyCodable]? {
+        metadata ?? meta
     }
 
     // MARK: - Convenience initializer for programmatic creation
@@ -167,6 +175,7 @@ struct ContentBlock: Identifiable, Codable {
         self.fileName = fileName
         self.resource = resource
         self.metadata = metadata
+        self.meta = nil
     }
 }
 

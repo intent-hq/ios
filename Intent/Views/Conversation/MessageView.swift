@@ -17,6 +17,8 @@ struct MessageView: View {
                 assistantMessageView
             } else if message.role == .error {
                 errorMessageView
+            } else if message.role == .system, let notice = message.attentionNotice {
+                AttentionNoticeView(notice: notice)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
