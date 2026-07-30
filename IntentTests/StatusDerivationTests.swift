@@ -24,48 +24,6 @@ struct StatusDerivationTests {
         )
     }
 
-    // MARK: - Status derivation
-
-    @Test func prMergedStatus() async throws {
-        let ws = makeWorkspace(prStatus: "Merged")
-        #expect(deriveDisplayStatus(from: ws) == .prMerged)
-    }
-
-    @Test func prOpenStatus() async throws {
-        let ws = makeWorkspace(prStatus: "Open")
-        #expect(deriveDisplayStatus(from: ws) == .prOpen)
-    }
-
-    @Test func prDraftStatus() async throws {
-        let ws = makeWorkspace(prStatus: "Draft")
-        #expect(deriveDisplayStatus(from: ws) == .prOpen)
-    }
-
-    @Test func allTasksComplete() async throws {
-        let ws = makeWorkspace(taskStatsTotal: 3, taskStatsCompleted: 3)
-        #expect(deriveDisplayStatus(from: ws) == .complete)
-    }
-
-    @Test func tasksInProgress() async throws {
-        let ws = makeWorkspace(taskStatsTotal: 5, taskStatsCompleted: 1, taskStatsInProgress: 2)
-        #expect(deriveDisplayStatus(from: ws) == .inProgress)
-    }
-
-    @Test func someTasksCompleted() async throws {
-        let ws = makeWorkspace(taskStatsTotal: 5, taskStatsCompleted: 2)
-        #expect(deriveDisplayStatus(from: ws) == .inProgress)
-    }
-
-    @Test func hasDiffFilesOnly() async throws {
-        let ws = makeWorkspace(diffSummaryTotalFiles: 3)
-        #expect(deriveDisplayStatus(from: ws) == .inProgress)
-    }
-
-    @Test func noActivityNotStarted() async throws {
-        let ws = makeWorkspace()
-        #expect(deriveDisplayStatus(from: ws) == .notStarted)
-    }
-
     // MARK: - Wire value mapping
 
     @Test func wireValueMapping() async throws {
@@ -78,10 +36,10 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus(wireValue: "some_future_status") == nil)
     }
 
-    // MARK: - Resolution (prefer BE value, fall back to derivation)
+    // MARK: - Resolution (BE-owned value only)
 
-    @Test func resolvePrefersBackendValue() async throws {
-        // BE says in_progress even though local derivation would say prMerged
+    @Test func resolveUsesBackendValue() async throws {
+        // BE value is authoritative — local workspace fields never override it
         let ws = makeWorkspace(displayStatus: "in_progress", prStatus: "Merged")
         #expect(resolveDisplayStatus(for: ws) == .inProgress)
     }
@@ -91,14 +49,14 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .prReady)
     }
 
-    @Test func resolveFallsBackWhenFieldAbsent() async throws {
+    @Test func resolveDefaultsToNotStartedWhenFieldAbsent() async throws {
         let ws = makeWorkspace(prStatus: "Merged")
-        #expect(resolveDisplayStatus(for: ws) == .prMerged)
+        #expect(resolveDisplayStatus(for: ws) == .notStarted)
     }
 
-    @Test func resolveFallsBackOnUnknownWireValue() async throws {
+    @Test func resolveDefaultsToNotStartedOnUnknownWireValue() async throws {
         let ws = makeWorkspace(displayStatus: "some_future_status", prStatus: "Open")
-        #expect(resolveDisplayStatus(for: ws) == .prOpen)
+        #expect(resolveDisplayStatus(for: ws) == .notStarted)
     }
 
     // MARK: - Labels

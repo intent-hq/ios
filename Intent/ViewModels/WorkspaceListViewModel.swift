@@ -16,7 +16,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     case prMerged
 
     /// Maps the BE-owned wire value (snake_case) to a display status.
-    /// Returns nil for unknown values so callers fall back to local derivation.
+    /// Returns nil for unknown values.
     init?(wireValue: String) {
         switch wireValue {
         case "not_started": self = .notStarted
@@ -64,41 +64,12 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     }
 }
 
-/// Resolves the display status for a workspace: prefers the BE-owned
-/// `displayStatus` wire value when present and recognized; falls back to
-/// local derivation for older daemons that don't emit the field.
+/// Resolves the display status for a workspace from the BE-owned
+/// `displayStatus` wire value. The daemon always emits the field, including
+/// on the lite workspace.subscribe snapshot (intent-hq/intentd#743); a
+/// missing or unrecognized value renders as `.notStarted`.
 func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
-    if let wire = workspace.displayStatus, let status = WorkspaceDisplayStatus(wireValue: wire) {
-        return status
-    }
-    return deriveDisplayStatus(from: workspace)
-}
-
-/// Fallback derivation for older daemons that don't emit `displayStatus`.
-/// Prefer `resolveDisplayStatus(for:)`, which uses the BE-owned value when present.
-func deriveDisplayStatus(from workspace: Workspace) -> WorkspaceDisplayStatus {
-    // PR merged
-    if workspace.prStatus == "Merged" {
-        return .prMerged
-    }
-    // PR open/draft
-    if workspace.prStatus == "Open" || workspace.prStatus == "Draft" {
-        return .prOpen
-    }
-    let totalTasks = workspace.taskStatsTotal ?? 0
-    let completedTasks = workspace.taskStatsCompleted ?? 0
-    let inProgressTasks = workspace.taskStatsInProgress ?? 0
-    // All tasks complete
-    if totalTasks > 0 && completedTasks == totalTasks {
-        return .complete
-    }
-    // Tasks in progress or some completed, or has code changes
-    let hasFiles = (workspace.diffSummaryTotalFiles ?? 0) > 0
-    if inProgressTasks > 0 || (totalTasks > 0 && completedTasks > 0) || hasFiles {
-        return .inProgress
-    }
-    // Default
-    return .notStarted
+    workspace.displayStatus.flatMap { WorkspaceDisplayStatus(wireValue: $0) } ?? .notStarted
 }
 
 @MainActor
