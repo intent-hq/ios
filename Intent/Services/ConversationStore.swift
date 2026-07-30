@@ -232,10 +232,7 @@ class ConversationStore: ObservableObject {
 
         // Replay user message events — these may not be in the fetch snapshot
         // if the message was created after the fetch started.
-        // handleStreamMessage and handleUserMessageSent both deduplicate, so this is safe.
-        for event in buffer where event.eventType == "agent:stream:message" {
-            handleStreamMessage(event.data)
-        }
+        // handleUserMessageSent deduplicates, so this is safe.
         for event in buffer where event.eventType == "agent:user-message:sent" {
             handleUserMessageSent(event.data)
         }
@@ -752,12 +749,6 @@ class ConversationStore: ObservableObject {
             }
             // Only continue processing if this is our agent
             guard eventAgentId == agentId else { return }
-        case "agent:stream:tool_result", "agent:stream:tool_use":
-            // Update watched agents after each tool call for granular progress
-            if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                refreshWatchedAgent(agentId: eventAgentId)
-            }
-            guard eventAgentId == agentId else { return }
         default:
             // Agent-specific events — only handle for our agent
             guard eventAgentId == agentId else { return }
@@ -784,14 +775,6 @@ class ConversationStore: ObservableObject {
             handleStreamChunk(data)
         case "agent:stream:end":
             handleStreamEnd(data)
-        case "agent:stream:content-blocks":
-            handleContentBlocks(data)
-        case "agent:stream:tool_use":
-            handleToolUse(data)
-        case "agent:stream:tool_result":
-            handleToolResult(data)
-        case "agent:stream:message":
-            handleStreamMessage(data)
         case "agent:queue:updated":
             handleQueueUpdated(data)
         case "agent:queue:processing":
@@ -877,102 +860,6 @@ class ConversationStore: ObservableObject {
         if !chatLive, let agentId = agentId {
             Task { await fetchConversation(agentId: agentId) }
         }
-    }
-
-    private func handleContentBlocks(_ data: [String: Any]) {
-        guard let blocks = data["content"] as? [[String: Any]] else { return }
-        guard let lastIndex = messages.indices.last,
-              messages[lastIndex].role == .assistant else { return }
-
-        var contentBlocks = messages[lastIndex].contentBlocks ?? []
-
-        for blockDict in blocks {
-            guard let typeStr = blockDict["type"] as? String else { continue }
-
-            switch typeStr {
-            case "tool_use":
-                let block = ContentBlock(
-                    type: .toolUse,
-                    name: blockDict["name"] as? String ?? blockDict["toolName"] as? String,
-                    input: (blockDict["input"] as? [String: Any])?.mapValues { AnyCodable($0) },
-                    toolUseId: blockDict["id"] as? String ?? blockDict["toolUseId"] as? String
-                )
-                contentBlocks.append(block)
-
-            case "tool_result":
-                let block = ContentBlock(
-                    type: .toolResult,
-                    toolUseId: blockDict["tool_use_id"] as? String ?? blockDict["toolUseId"] as? String,
-                    output: blockDict["content"].map { AnyCodable($0) },
-                    isError: blockDict["is_error"] as? Bool ?? blockDict["isError"] as? Bool
-                )
-                contentBlocks.append(block)
-
-            default:
-                break
-            }
-        }
-
-        messages[lastIndex].contentBlocks = contentBlocks
-        streamingUpdateCount += 1
-    }
-
-    private func handleToolUse(_ data: [String: Any]) {
-        guard let lastIndex = messages.indices.last,
-              messages[lastIndex].role == .assistant else { return }
-
-        let block = ContentBlock(
-            type: .toolUse,
-            name: data["name"] as? String ?? data["toolName"] as? String,
-            input: (data["input"] as? [String: Any])?.mapValues { AnyCodable($0) },
-            toolUseId: data["toolUseId"] as? String ?? data["id"] as? String
-        )
-
-        var blocks = messages[lastIndex].contentBlocks ?? []
-        blocks.append(block)
-        messages[lastIndex].contentBlocks = blocks
-        streamingUpdateCount += 1
-    }
-
-    private func handleToolResult(_ data: [String: Any]) {
-        guard let lastIndex = messages.indices.last,
-              messages[lastIndex].role == .assistant else { return }
-
-        let block = ContentBlock(
-            type: .toolResult,
-            toolUseId: data["toolUseId"] as? String,
-            output: data["output"].map { AnyCodable($0) },
-            isError: data["isError"] as? Bool ?? data["is_error"] as? Bool
-        )
-
-        var blocks = messages[lastIndex].contentBlocks ?? []
-        blocks.append(block)
-        messages[lastIndex].contentBlocks = blocks
-        streamingUpdateCount += 1
-    }
-
-    private func handleStreamMessage(_ data: [String: Any]) {
-        // A complete message arrived via streaming
-        if let messageDict = data["message"] as? [String: Any],
-           let msg = ConversationMessage.parseMessage(messageDict) {
-            // Replace or append
-            if let existingIndex = messages.firstIndex(where: { $0.id == msg.id }) {
-                messages[existingIndex] = msg
-            } else if msg.role == .user,
-                      let firstTextBlock = msg.contentBlocks?.first(where: { $0.type == .text }),
-                      let msgText = firstTextBlock.text,
-                      messages.contains(where: { existing in
-                          existing.role == .user &&
-                          existing.contentBlocks?.first(where: { $0.type == .text })?.text == msgText
-                      }) {
-                // Deduplicate: a user message with the same text already exists
-                // (optimistic add used a different ID than the server-generated one).
-                // Skip appending to avoid duplicate user messages.
-            } else {
-                messages.append(msg)
-            }
-        }
-        streamingUpdateCount += 1
     }
 
     private func handleQueueUpdated(_ data: [String: Any]) {
