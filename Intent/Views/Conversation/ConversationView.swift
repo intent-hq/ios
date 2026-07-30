@@ -98,6 +98,13 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Pending attention request banner (kind-flavored, PROTOCOL §5.5).
+            // Retires when the daemon clears the fields (agent next messaged).
+            if !isExposeMode, let attention = viewModel.attentionRequest {
+                AttentionRequestBanner(attention: attention)
+                Divider()
+            }
+
             // Main content area
             if viewModel.isLoading && viewModel.filteredMessages.isEmpty {
                 loadingView
@@ -579,6 +586,40 @@ struct ConversationView: View {
             guard !Task.isCancelled else { return }
             isScrollingToBottom = false
         }
+    }
+}
+
+// MARK: - Attention Request Banner
+
+/// Kind-flavored conversation-header banner for a pending attention request.
+struct AttentionRequestBanner: View {
+    let attention: PendingAttentionRequest
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: attention.kind.systemImage)
+                .font(.subheadline)
+                .foregroundStyle(attention.kind.color)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(attention.kind.label)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+
+                if let reason = attention.reason {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(attention.kind.color.opacity(0.1))
     }
 }
 

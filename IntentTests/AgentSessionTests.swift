@@ -134,6 +134,74 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestTimestamp == "2026-07-30T12:00:00Z")
     }
 
+    // MARK: - pendingAttentionRequest derivation
+
+    @Test func pendingAttentionRequestNilWhenNoKind() {
+        let dict: [String: Any] = ["id": "agent-8", "name": "Idle"]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.pendingAttentionRequest == nil)
+    }
+
+    @Test func pendingAttentionRequestDiscussion() {
+        let dict: [String: Any] = [
+            "id": "agent-9",
+            "name": "Discuss",
+            "attentionRequestKind": "discussion",
+            "attentionRequestReason": "need input on API shape"
+        ]
+        let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
+        #expect(pending?.kind == .discussion)
+        #expect(pending?.reason == "need input on API shape")
+        #expect(pending?.kind.label == "Discussion requested")
+    }
+
+    @Test func pendingAttentionRequestBlocker() {
+        let dict: [String: Any] = [
+            "id": "agent-10",
+            "name": "Blocked",
+            "attentionRequestKind": "blocker",
+            "attentionRequestReason": "sandbox is broken"
+        ]
+        let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
+        #expect(pending?.kind == .blocker)
+        #expect(pending?.reason == "sandbox is broken")
+        #expect(pending?.kind.label == "Blocker reported")
+    }
+
+    @Test func pendingAttentionRequestUnknownKindFallsBackToDiscussion() {
+        // Newer daemons may introduce kinds — still surface an indicator.
+        let dict: [String: Any] = [
+            "id": "agent-11",
+            "name": "Future",
+            "attentionRequestKind": "some-future-kind"
+        ]
+        let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
+        #expect(pending?.kind == .discussion)
+    }
+
+    @Test func pendingAttentionRequestReasonCollapsedToOneLiner() {
+        let dict: [String: Any] = [
+            "id": "agent-12",
+            "name": "Multiline",
+            "attentionRequestKind": "blocker",
+            "attentionRequestReason": "line one\nline two\n\n  spaced   out  "
+        ]
+        let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
+        #expect(pending?.reason == "line one line two spaced out")
+    }
+
+    @Test func pendingAttentionRequestEmptyReasonBecomesNil() {
+        let dict: [String: Any] = [
+            "id": "agent-13",
+            "name": "NoReason",
+            "attentionRequestKind": "discussion",
+            "attentionRequestReason": "   \n  "
+        ]
+        let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
+        #expect(pending != nil)
+        #expect(pending?.reason == nil)
+    }
+
     @Test func parseMissingIdReturnsNil() {
         let dict: [String: Any] = ["name": "No ID"]
         #expect(AgentSession.parseAgent(dict) == nil)

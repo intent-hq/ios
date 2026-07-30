@@ -19,6 +19,10 @@ class ConversationStore: ObservableObject {
     @Published var watchedAgents: [AgentSession] = []
     @Published var isTruncated: Bool = false
     @Published var totalMessageCount: Int = 0
+    /// Pending attention request for OUR agent (PROTOCOL §5.5), refreshed from
+    /// `agent.get`. The daemon clears the underlying fields when the agent next
+    /// receives a message, so this retires via the same refresh.
+    @Published var attentionRequest: PendingAttentionRequest?
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -113,6 +117,8 @@ class ConversationStore: ObservableObject {
     /// `turnInFlight`; `isStreaming`/`isResponding` may always be false).
     /// With `raiseOnly` the flag is only ever raised, never cleared — used as a
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
+    /// The pending attention request is always taken from the server response
+    /// (raise or clear) — it is server-authoritative with no optimistic state.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
         do {
             let result = try await connectionManager.request(
@@ -130,6 +136,9 @@ class ConversationStore: ObservableObject {
                     }
                 } else {
                     isStreaming = serverIsStreaming
+                }
+                if let session = AgentSession.parseAgent(agentDict) {
+                    attentionRequest = session.pendingAttentionRequest
                 }
             }
         } catch {
@@ -807,11 +816,20 @@ class ConversationStore: ObservableObject {
             } else if statusLower == "idle" || statusLower == "completed" || statusLower == "failed" || statusLower == "error" {
                 isStreaming = false
             }
+            // Turn boundary — refresh the pending attention request (raised when
+            // a turn ends, cleared when the agent next receives a message).
+            if let agentId = self.agentId {
+                Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+            }
         case "agent:idle":
             isStreaming = false
             // Re-fetch conversation to get final state (unless in live mode)
             if !chatLive, let agentId = self.agentId {
                 Task { await self.fetchConversation(agentId: agentId) }
+            }
+            // Turn ended — refresh the pending attention request
+            if let agentId = self.agentId {
+                Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
             }
         default:
             break
@@ -1078,6 +1096,11 @@ class ConversationStore: ObservableObject {
 
         // Send succeeded — clear any tracked failure
         lastFailedSend = nil
+
+        // The daemon clears attention-request fields when the agent receives a
+        // message — retire the indicator immediately rather than waiting for
+        // the next agent.get refresh.
+        attentionRequest = nil
 
         // If the message was queued, undo the optimistic streaming state
         if let dict = result as? [String: Any],
@@ -1434,6 +1457,7 @@ class ConversationStore: ObservableObject {
         isSubscribing = false
         streamEventBuffer.removeAll()
         lastFailedSend = nil
+        attentionRequest = nil
         watchedAgentLastRefresh.removeAll()
         watchedAgentDigests.removeAll()
         watchedAgentStreamBuffers.removeAll()

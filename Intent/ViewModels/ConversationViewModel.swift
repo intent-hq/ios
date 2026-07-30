@@ -45,6 +45,7 @@ class ConversationViewModel: ObservableObject {
     var queuedMessages: [QueuedMessage] { store.queuedMessages }
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
+    var attentionRequest: PendingAttentionRequest? { store.attentionRequest }
 
     // Message input
     @Published var messageText = ""

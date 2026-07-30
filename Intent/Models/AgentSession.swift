@@ -71,6 +71,28 @@ struct AgentSession: Identifiable, Equatable {
         attentionRequestKind != nil
     }
 
+    /// Kind-flavored display treatment for the pending attention request, or
+    /// nil when none is pending. The reason is collapsed to a one-liner
+    /// (same treatment as the `digest` one-liner surfaces).
+    var pendingAttentionRequest: PendingAttentionRequest? {
+        guard let kind = attentionRequestKind else { return nil }
+        return PendingAttentionRequest(
+            kind: AgentAttentionKind(wire: kind),
+            reason: Self.oneLiner(attentionRequestReason)
+        )
+    }
+
+    /// Collapses runs of whitespace/newlines into single spaces; nil when empty.
+    private static func oneLiner(_ text: String?) -> String? {
+        guard let text else { return nil }
+        let collapsed = text.replacingOccurrences(
+            of: "\\s+",
+            with: " ",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return collapsed.isEmpty ? nil : collapsed
+    }
+
     var bestTimestamp: String? {
         updatedAt ?? lastActivity ?? createdAt
     }
@@ -121,6 +143,39 @@ struct AgentSession: Identifiable, Equatable {
             attentionRequestTimestamp: dict["attentionRequestTimestamp"] as? String
                 ?? metadata?["attentionRequestTimestamp"] as? String
         )
+    }
+}
+
+/// A pending attention request ready for display (PROTOCOL §5.5).
+struct PendingAttentionRequest: Equatable {
+    let kind: AgentAttentionKind
+    /// Reason collapsed to a single line; nil when absent or empty.
+    let reason: String?
+}
+
+/// Kind vocabulary for agent attention requests: "discussion" | "blocker"
+/// (PROTOCOL §5.5). Unknown wire kinds fall back to the discussion treatment
+/// so newer daemons still surface an indicator.
+enum AgentAttentionKind: Equatable {
+    case discussion
+    case blocker
+
+    init(wire: String) {
+        self = wire == "blocker" ? .blocker : .discussion
+    }
+
+    var label: String {
+        switch self {
+        case .discussion: return "Discussion requested"
+        case .blocker: return "Blocker reported"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .discussion: return "bubble.left.and.bubble.right.fill"
+        case .blocker: return "exclamationmark.octagon.fill"
+        }
     }
 }
 

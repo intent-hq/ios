@@ -89,6 +89,13 @@ struct AgentWaitingView: View {
                         .foregroundStyle(.red)
                         .background(Circle().fill(Theme.card(for: colorScheme)).frame(width: 10, height: 10))
                         .offset(x: 2, y: -2)
+                } else if let attention = agent.pendingAttentionRequest {
+                    // Kind-flavored badge for pending attention requests
+                    Image(systemName: attention.kind.systemImage)
+                        .font(.system(size: 8))
+                        .foregroundStyle(attention.kind.color)
+                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(width: 10, height: 10))
+                        .offset(x: 2, y: -2)
                 } else if !agent.isActive && agent.digest != nil {
                     // Green checkmark for completed agents with digest
                     Image(systemName: "checkmark.circle.fill")
@@ -111,7 +118,12 @@ struct AgentWaitingView: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(1)
 
-                if let message = agent.displayMessage {
+                if let attention = agent.pendingAttentionRequest {
+                    Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
+                        .font(.caption2)
+                        .foregroundStyle(attention.kind.color)
+                        .lineLimit(1)
+                } else if let message = agent.displayMessage {
                     Text(message)
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
