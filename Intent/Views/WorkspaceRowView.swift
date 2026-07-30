@@ -21,15 +21,7 @@ struct WorkspaceRowView: View {
     }
 
     private var hasActiveAgents: Bool {
-        switch workspace.activity?.lowercased() {
-        case "agent_running":
-            return true
-        case "idle":
-            return false
-        default:
-            // Unknown or nil activity — fall back to agent-summary check
-            return workspace.agentSummaryAgents?.contains { $0.isStreaming || $0.isResponding } ?? false
-        }
+        workspace.activity?.lowercased() == "agent_running"
     }
 
     var body: some View {
@@ -83,18 +75,6 @@ struct WorkspaceRowView: View {
 
             Spacer()
 
-            // Agent indicators (up to 3, active only)
-            if let allAgents = workspace.agentSummaryAgents {
-                let activeAgents = allAgents.filter { $0.isStreaming || $0.isResponding }
-                if !activeAgents.isEmpty {
-                    HStack(spacing: -4) {
-                        ForEach(Array(activeAgents.prefix(3))) { agent in
-                            AuggieAvatarView(seed: agent.id, size: 12, specialist: agent.specialist, isActive: true)
-                        }
-                    }
-                }
-            }
-
             if let activity = workspace.lastActivity ?? workspace.updatedAt {
                 Text(relativeDate(from: activity))
                     .font(.caption)
@@ -104,16 +84,6 @@ struct WorkspaceRowView: View {
         .contentShape(Rectangle())
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
-        .onAppear {
-            #if DEBUG
-            print("[WorkspaceRowView] '\(workspace.title)': activity=\(workspace.activity ?? "nil"), agentCount=\(workspace.agentSummaryCount ?? 0), agents=\(workspace.agentSummaryAgents?.count ?? 0), hasActive=\(hasActiveAgents)")
-            if let agents = workspace.agentSummaryAgents {
-                for agent in agents {
-                    print("[WorkspaceRowView]   Agent: \(agent.name) status=\(agent.status) isStreaming=\(agent.isStreaming) isResponding=\(agent.isResponding)")
-                }
-            }
-            #endif
-        }
     }
 
     @ViewBuilder

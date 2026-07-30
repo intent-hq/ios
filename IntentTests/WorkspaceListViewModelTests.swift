@@ -125,12 +125,9 @@ struct WorkspaceListViewModelTests {
 
     @Test @MainActor func groupedByStatus_groupsAndSortsBySortOrder() {
         let ws = [
-            // prOpen (sortOrder 1)
-            makeWorkspace(id: "1", title: "PR", prStatus: "Open"),
-            // inProgress (sortOrder 0)
-            makeWorkspace(id: "2", title: "WIP", diffSummaryTotalFiles: 3),
-            // notStarted (sortOrder 2)
-            makeWorkspace(id: "3", title: "New")
+            makeWorkspace(id: "1", title: "PR", displayStatus: "pr_open"),
+            makeWorkspace(id: "2", title: "WIP", displayStatus: "in_progress"),
+            makeWorkspace(id: "3", title: "New", displayStatus: "not_started")
         ]
         let vm = setUp(ws)
         defer { tearDown() }
@@ -143,13 +140,13 @@ struct WorkspaceListViewModelTests {
         #expect(groups[2].0 == "No Code Changes")
     }
 
-    @Test @MainActor func groupedByStatus_prefersBackendDisplayStatus() {
+    @Test @MainActor func groupedByStatus_usesBackendDisplayStatusExclusively() {
         let ws = [
-            // BE says in_progress even though local derivation would say prMerged
+            // BE says in_progress; local prStatus never overrides it
             makeWorkspace(id: "1", title: "Reopened", displayStatus: "in_progress", prStatus: "Merged"),
             // BE-only prReady status (sortOrder 1, between inProgress and prOpen)
             makeWorkspace(id: "2", title: "Mergeable", displayStatus: "pr_ready", prStatus: "Open"),
-            // No BE value — falls back to local derivation (prOpen)
+            // No BE value — defaults to notStarted, not derived from prStatus
             makeWorkspace(id: "3", title: "Legacy", prStatus: "Open")
         ]
         let vm = setUp(ws)
@@ -161,7 +158,7 @@ struct WorkspaceListViewModelTests {
         #expect(groups[0].1.map(\.id) == ["1"])
         #expect(groups[1].0 == "PR Mergeable")
         #expect(groups[1].1.map(\.id) == ["2"])
-        #expect(groups[2].0 == "PR Open")
+        #expect(groups[2].0 == "No Code Changes")
         #expect(groups[2].1.map(\.id) == ["3"])
     }
 }
