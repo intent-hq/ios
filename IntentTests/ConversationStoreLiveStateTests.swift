@@ -891,6 +891,40 @@ struct ConversationStoreLiveStateTests {
         #expect(user.contentBlocks?.first?.resolvedText == "Hello")
     }
 
+    /// An attachment send persists the text block at index 0 with attachments
+    /// after (daemon `user_message_blocks`): a multi-block user-row delta must
+    /// upsert its text block over the single-block optimistic append and add
+    /// the attachment blocks alongside, without duplicating anything.
+    @Test func multiBlockUserRowDeltaUpsertsOverOptimisticAppend() async throws {
+        let (store, fake) = makeStore()
+        fake.responseMap["agent.sendMessage"] = ["success": true]
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        try await store.sendMessage(agentId: "agent-1", content: "See this",
+                                    workspaceId: "ws-1",
+                                    imageBlocks: [["type": "image", "data": "aGk=", "mimeType": "image/png"]])
+
+        #expect(store.messages.count == 1)
+        let messageId = try #require(store.messages.first?.id)
+
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "text", "id": "\(messageId):0", "text": "See this"],
+                        streamingComplete: true),
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "image", "id": "\(messageId):1",
+                                "data": "aGk=", "mimeType": "image/png"],
+                        streamingComplete: true)
+        ]))
+
+        #expect(store.messages.count == 1)
+        let blocks = try #require(store.messages.first?.contentBlocks)
+        #expect(blocks.count == 2)
+        #expect(blocks[0].type == .text)
+        #expect(blocks[0].resolvedText == "See this")
+        #expect(blocks[1].type == .image)
+    }
+
     /// A user row's `streamingComplete: true` is row-completion, not
     /// end-of-turn: it must not clear the optimistic thinking indicator (a
     /// direct send's row lands while the indicator is up; a queue drain's row

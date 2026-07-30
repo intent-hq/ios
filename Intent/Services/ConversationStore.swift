@@ -1009,11 +1009,14 @@ class ConversationStore: ObservableObject {
             return
         }
 
-        // Another client sent this message — append it to our conversation
+        // Another client sent this message — append it to our conversation.
+        // The block id mirrors the daemon's synthetic `{messageId}:0` (CS-0 D1)
+        // so a later authoritative user-row delta upserts over this block
+        // instead of appending a duplicate (same contract as sendMessage).
         let userMessage = ConversationMessage(
             id: messageId,
             role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: content)]
+            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
         )
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             messages.append(userMessage)
