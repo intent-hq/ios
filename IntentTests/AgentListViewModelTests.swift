@@ -32,7 +32,10 @@ struct AgentListViewModelTests {
             lastAgentResponse: lastAgentResponse,
             lastUserMessage: nil, digest: digest,
             specialist: specialist,
-            createdByAgentId: createdByAgentId
+            createdByAgentId: createdByAgentId,
+            attentionRequestKind: nil,
+            attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
         )
     }
 

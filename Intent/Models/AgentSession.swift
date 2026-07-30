@@ -18,6 +18,12 @@ struct AgentSession: Identifiable, Equatable {
     let digest: String?
     let specialist: String?
     let createdByAgentId: String?
+    /// Pending attention request (PROTOCOL §5.5 agent attention requests).
+    /// "discussion" | "blocker"; nil when no request is pending (older daemons
+    /// never send these fields).
+    let attentionRequestKind: String?
+    let attentionRequestReason: String?
+    let attentionRequestTimestamp: String?
 
     private static let activeStatuses: Set<String> = [
         "active", "pending", "processing",
@@ -61,6 +67,10 @@ struct AgentSession: Identifiable, Equatable {
         status.lowercased() == "error" || status.lowercased() == "failed"
     }
 
+    var hasPendingAttentionRequest: Bool {
+        attentionRequestKind != nil
+    }
+
     var bestTimestamp: String? {
         updatedAt ?? lastActivity ?? createdAt
     }
@@ -73,7 +83,10 @@ struct AgentSession: Identifiable, Equatable {
             isWaitingForOtherAgents: isWaitingForOtherAgents, waitingForAgentIds: waitingForAgentIds,
             createdAt: createdAt, updatedAt: updatedAt, lastActivity: lastActivity,
             lastAgentResponse: lastAgentResponse, lastUserMessage: lastUserMessage,
-            digest: newDigest, specialist: specialist, createdByAgentId: createdByAgentId
+            digest: newDigest, specialist: specialist, createdByAgentId: createdByAgentId,
+            attentionRequestKind: attentionRequestKind,
+            attentionRequestReason: attentionRequestReason,
+            attentionRequestTimestamp: attentionRequestTimestamp
         )
     }
 
@@ -98,7 +111,15 @@ struct AgentSession: Identifiable, Equatable {
             lastUserMessage: dict["lastUserMessage"] as? String,
             digest: dict["digest"] as? String,
             specialist: metadata?["specialist"] as? String,
-            createdByAgentId: metadata?["createdByAgentId"] as? String
+            createdByAgentId: metadata?["createdByAgentId"] as? String,
+            // Top-level on agent.getSession; mirrored under metadata on AgentLite
+            // (agent.list / agent.get). Absent on both when no request is pending.
+            attentionRequestKind: dict["attentionRequestKind"] as? String
+                ?? metadata?["attentionRequestKind"] as? String,
+            attentionRequestReason: dict["attentionRequestReason"] as? String
+                ?? metadata?["attentionRequestReason"] as? String,
+            attentionRequestTimestamp: dict["attentionRequestTimestamp"] as? String
+                ?? metadata?["attentionRequestTimestamp"] as? String
         )
     }
 }

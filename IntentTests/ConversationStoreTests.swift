@@ -23,7 +23,9 @@ struct ConversationStoreTests {
             isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: nil, lastUserMessage: nil,
-            digest: nil, specialist: nil, createdByAgentId: nil
+            digest: nil, specialist: nil, createdByAgentId: nil,
+            attentionRequestKind: nil, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
         )
     }
 

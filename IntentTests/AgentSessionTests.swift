@@ -66,6 +66,72 @@ struct AgentSessionTests {
         #expect(agent?.createdAt == nil)
         #expect(agent?.specialist == nil)
         #expect(agent?.createdByAgentId == nil)
+        #expect(agent?.attentionRequestKind == nil)
+        #expect(agent?.attentionRequestReason == nil)
+        #expect(agent?.attentionRequestTimestamp == nil)
+        #expect(agent?.hasPendingAttentionRequest == false)
+    }
+
+    // MARK: - attention-request fields (PROTOCOL §5.5)
+
+    @Test func parseAttentionFieldsTopLevel() {
+        // agent.getSession serves the fields top-level on the session.
+        let dict: [String: Any] = [
+            "id": "agent-4",
+            "name": "Blocked Agent",
+            "attentionRequestKind": "blocker",
+            "attentionRequestReason": "sandbox is broken",
+            "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.attentionRequestKind == "blocker")
+        #expect(agent?.attentionRequestReason == "sandbox is broken")
+        #expect(agent?.attentionRequestTimestamp == "2026-07-30T10:00:00Z")
+        #expect(agent?.hasPendingAttentionRequest == true)
+    }
+
+    @Test func parseAttentionFieldsFromMetadata() {
+        // AgentLite (agent.list / agent.get) mirrors the fields under metadata.
+        let dict: [String: Any] = [
+            "id": "agent-5",
+            "name": "Discussion Agent",
+            "metadata": [
+                "attentionRequestKind": "discussion",
+                "attentionRequestReason": "need input on API shape",
+                "attentionRequestTimestamp": "2026-07-30T11:00:00Z"
+            ] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.attentionRequestKind == "discussion")
+        #expect(agent?.attentionRequestReason == "need input on API shape")
+        #expect(agent?.attentionRequestTimestamp == "2026-07-30T11:00:00Z")
+        #expect(agent?.hasPendingAttentionRequest == true)
+    }
+
+    @Test func parseAttentionFieldsTopLevelWinsOverMetadata() {
+        let dict: [String: Any] = [
+            "id": "agent-6",
+            "name": "Both",
+            "attentionRequestKind": "blocker",
+            "metadata": ["attentionRequestKind": "discussion"] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.attentionRequestKind == "blocker")
+    }
+
+    @Test func withDigestPreservesAttentionFields() {
+        let dict: [String: Any] = [
+            "id": "agent-7",
+            "name": "Digest",
+            "attentionRequestKind": "discussion",
+            "attentionRequestReason": "why",
+            "attentionRequestTimestamp": "2026-07-30T12:00:00Z"
+        ]
+        let agent = AgentSession.parseAgent(dict)?.withDigest("new digest")
+        #expect(agent?.digest == "new digest")
+        #expect(agent?.attentionRequestKind == "discussion")
+        #expect(agent?.attentionRequestReason == "why")
+        #expect(agent?.attentionRequestTimestamp == "2026-07-30T12:00:00Z")
     }
 
     @Test func parseMissingIdReturnsNil() {
@@ -189,7 +255,9 @@ struct AgentSessionTests {
             isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: lastAgentResponse, lastUserMessage: nil,
-            digest: digest, specialist: nil, createdByAgentId: nil
+            digest: digest, specialist: nil, createdByAgentId: nil,
+            attentionRequestKind: nil, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
         )
     }
 }
