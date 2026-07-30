@@ -510,8 +510,14 @@ class ConversationStore: ObservableObject {
     }
 
     /// Upsert one delta entity's full block into its owning message.
-    /// Returns (applied, terminal): whether the entity was applied and whether it
-    /// carries the terminal `streamingComplete` flag.
+    /// Returns (applied, terminal): whether the entity was applied as live turn
+    /// activity and whether it carries the turn-terminal `streamingComplete`
+    /// flag. Non-assistant rows (user/system — queue drains, direct sends,
+    /// model switches; intentd#747) are authoritative persisted rows, not turn
+    /// activity: they upsert into the transcript but return (false, false) so
+    /// they neither raise nor clear the turn-level streaming flag (a direct
+    /// send's row lands while the optimistic thinking indicator is up, and a
+    /// queue drain's row lands right before the turn's first chunk).
     private func upsertChatBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
         guard let messageId = entity["messageId"] as? String,
               let blockDict = entity["block"] as? [String: Any],
@@ -531,7 +537,7 @@ class ConversationStore: ObservableObject {
             let roleStr = entity["role"] as? String ?? "assistant"
             let msg = ConversationMessage(
                 id: messageId,
-                role: MessageRole(rawValue: roleStr) ?? .assistant,
+                role: MessageRole(rawValue: roleStr) ?? .system,
                 contentBlocks: [],
                 timestamp: entity["timestamp"] as? String
                     ?? chatTimestampFormatter.string(from: Date()),
@@ -556,7 +562,8 @@ class ConversationStore: ObservableObject {
         messages[messageIndex].contentBlocks = blocks
         messages[messageIndex].isStreaming = !streamingComplete
 
-        return (true, streamingComplete)
+        let isAssistant = messages[messageIndex].role == .assistant
+        return (isAssistant, isAssistant && streamingComplete)
     }
 
     /// Merge a sparse `tool_use` upsert onto the prior block. The daemon's
@@ -1002,11 +1009,14 @@ class ConversationStore: ObservableObject {
             return
         }
 
-        // Another client sent this message — append it to our conversation
+        // Another client sent this message — append it to our conversation.
+        // The block id mirrors the daemon's synthetic `{messageId}:0` (CS-0 D1)
+        // so a later authoritative user-row delta upserts over this block
+        // instead of appending a duplicate (same contract as sendMessage).
         let userMessage = ConversationMessage(
             id: messageId,
             role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: content)]
+            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
         )
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             messages.append(userMessage)
@@ -1036,11 +1046,14 @@ class ConversationStore: ObservableObject {
             params["imageBlocks"] = imageBlocks
         }
 
-        // Add user message locally for immediate UI feedback (use messageId for dedup)
+        // Add user message locally for immediate UI feedback (use messageId for
+        // dedup). The block id mirrors the daemon's synthetic `{messageId}:0`
+        // (CS-0 D1) so the authoritative user-row delta (intentd#747) upserts
+        // over this optimistic block instead of appending a duplicate.
         let userMessage = ConversationMessage(
             id: messageId,
             role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: content)]
+            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
         )
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             messages.append(userMessage)
@@ -1170,8 +1183,9 @@ class ConversationStore: ObservableObject {
     // MARK: - Send queued message now
 
     func sendQueuedMessageNow(agentId: String, messageId: String, workspaceId: String) async throws {
+        let result: Any
         do {
-            let _ = try await connectionManager.request(
+            result = try await connectionManager.request(
                 "agent.sendQueuedMessageNow",
                 params: [
                     "agentId": agentId,
@@ -1185,7 +1199,15 @@ class ConversationStore: ObservableObject {
             await fetchQueue(agentId: agentId)
             throw error
         }
-        // Drop only the sent entry; the daemon preserves the rest of the queue.
+        // `queued: true` (slot race / quarantined session, §5.5): the daemon
+        // did NOT deliver — the entry stayed queued (restored at the front on
+        // a slot race) — so keep the local entry; `agent:queue:updated`
+        // reconciles ordering.
+        if let dict = result as? [String: Any], dict["queued"] as? Bool == true {
+            return
+        }
+        // Delivered: drop only the sent entry; the daemon preserves the rest
+        // of the queue (the transcript row arrives via the user-row chat delta).
         queuedMessages.removeAll { $0.id == messageId }
     }
 

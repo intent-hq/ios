@@ -48,6 +48,7 @@ struct ConversationStoreLiveStateTests {
     /// A delta entity carrying the full current block.
     private func blockEntity(
         messageId: String,
+        role: String = "assistant",
         block: [String: Any],
         streamingComplete: Bool = false,
         messageSeq: Int? = nil,
@@ -56,7 +57,7 @@ struct ConversationStoreLiveStateTests {
         var entity: [String: Any] = [
             "agentId": "agent-1",
             "messageId": messageId,
-            "role": "assistant",
+            "role": role,
             "block": block
         ]
         if streamingComplete { entity["streamingComplete"] = true }
@@ -812,5 +813,137 @@ struct ConversationStoreLiveStateTests {
         display = ToolClassifier.classify(name: block.resolvedName ?? "tool", input: block.input)
         #expect(display.verb == "Read")
         #expect(display.subject == "main.rs")
+    }
+
+    // MARK: - User-row deltas (intentd#747)
+
+    /// A persisted non-assistant row (queue drain, direct send, model switch)
+    /// arrives as an authoritative `role: "user"` delta entity with
+    /// `streamingComplete: true` — it must render as a user message without a
+    /// refetch.
+    @Test func userRowDeltaAppendsUserMessage() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: "msg-u1", role: "user",
+                        block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
+                        streamingComplete: true,
+                        messageSeq: 3,
+                        timestamp: "2026-06-27T01:00:02.000Z")
+        ]))
+
+        #expect(store.messages.count == 1)
+        let user = try #require(store.messages.first)
+        #expect(user.id == "msg-u1")
+        #expect(user.role == .user)
+        #expect(user.isStreaming == false)
+        #expect(user.timestamp == "2026-06-27T01:00:02.000Z")
+        #expect(user.contentBlocks?.count == 1)
+        #expect(user.contentBlocks?.first?.resolvedText == "Queued message")
+        // A user row is not turn activity: it must not raise the streaming flag.
+        #expect(store.isStreaming == false)
+    }
+
+    /// Re-delivery of the same user row (same synthetic block id) upserts by
+    /// id instead of duplicating the message or its blocks.
+    @Test func userRowDeltaRedeliveryDoesNotDuplicate() async throws {
+        let (store, _) = makeStore()
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+
+        let entity = blockEntity(messageId: "msg-u1", role: "user",
+                                 block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
+                                 streamingComplete: true)
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [entity]))
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [entity]))
+
+        #expect(store.messages.count == 1)
+        #expect(store.messages.first?.contentBlocks?.count == 1)
+        #expect(store.messages.first?.contentBlocks?.first?.resolvedText == "Queued message")
+    }
+
+    /// A direct send appends an optimistic local user message; the authoritative
+    /// user-row delta for the same messageId (same synthetic `{messageId}:0`
+    /// block id) must upsert onto it, not duplicate the message or the block.
+    @Test func userRowDeltaDoesNotDuplicateOptimisticLocalAppend() async throws {
+        let (store, fake) = makeStore()
+        fake.responseMap["agent.sendMessage"] = ["success": true]
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
+
+        #expect(store.messages.count == 1)
+        let messageId = try #require(store.messages.first?.id)
+
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
+                        streamingComplete: true,
+                        timestamp: "2026-06-27T01:00:02.000Z")
+        ]))
+
+        #expect(store.messages.count == 1)
+        let user = try #require(store.messages.first)
+        #expect(user.role == .user)
+        #expect(user.contentBlocks?.count == 1)
+        #expect(user.contentBlocks?.first?.resolvedText == "Hello")
+    }
+
+    /// An attachment send persists the text block at index 0 with attachments
+    /// after (daemon `user_message_blocks`): a multi-block user-row delta must
+    /// upsert its text block over the single-block optimistic append and add
+    /// the attachment blocks alongside, without duplicating anything.
+    @Test func multiBlockUserRowDeltaUpsertsOverOptimisticAppend() async throws {
+        let (store, fake) = makeStore()
+        fake.responseMap["agent.sendMessage"] = ["success": true]
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        try await store.sendMessage(agentId: "agent-1", content: "See this",
+                                    workspaceId: "ws-1",
+                                    imageBlocks: [["type": "image", "data": "aGk=", "mimeType": "image/png"]])
+
+        #expect(store.messages.count == 1)
+        let messageId = try #require(store.messages.first?.id)
+
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "text", "id": "\(messageId):0", "text": "See this"],
+                        streamingComplete: true),
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "image", "id": "\(messageId):1",
+                                "data": "aGk=", "mimeType": "image/png"],
+                        streamingComplete: true)
+        ]))
+
+        #expect(store.messages.count == 1)
+        let blocks = try #require(store.messages.first?.contentBlocks)
+        #expect(blocks.count == 2)
+        #expect(blocks[0].type == .text)
+        #expect(blocks[0].resolvedText == "See this")
+        #expect(blocks[1].type == .image)
+    }
+
+    /// A user row's `streamingComplete: true` is row-completion, not
+    /// end-of-turn: it must not clear the optimistic thinking indicator (a
+    /// direct send's row lands while the indicator is up; a queue drain's row
+    /// lands right before the turn's first chunk).
+    @Test func userRowTerminalDeltaDoesNotClearTurnStreaming() async throws {
+        let (store, fake) = makeStore()
+        fake.responseMap["agent.sendMessage"] = ["success": true]
+
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
+        try await store.sendMessage(agentId: "agent-1", content: "Hello", workspaceId: "ws-1")
+        #expect(store.isStreaming == true)
+
+        let messageId = try #require(store.messages.first?.id)
+        store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
+            blockEntity(messageId: messageId, role: "user",
+                        block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
+                        streamingComplete: true)
+        ]))
+
+        #expect(store.isStreaming == true)
     }
 }
