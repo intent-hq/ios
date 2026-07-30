@@ -157,21 +157,6 @@ struct AgentSessionTests {
         #expect(AgentSession.parsePendingAttentionRequest(["id": "agent-6c"]) == nil)
     }
 
-    @Test func withDigestPreservesAttentionFields() {
-        let dict: [String: Any] = [
-            "id": "agent-7",
-            "name": "Digest",
-            "attentionRequestKind": "discussion",
-            "attentionRequestReason": "why",
-            "attentionRequestTimestamp": "2026-07-30T12:00:00Z"
-        ]
-        let agent = AgentSession.parseAgent(dict)?.withDigest("new digest")
-        #expect(agent?.digest == "new digest")
-        #expect(agent?.attentionRequestKind == "discussion")
-        #expect(agent?.attentionRequestReason == "why")
-        #expect(agent?.attentionRequestTimestamp == "2026-07-30T12:00:00Z")
-    }
-
     // MARK: - pendingAttentionRequest derivation
 
     @Test func pendingAttentionRequestNilWhenNoKind() {

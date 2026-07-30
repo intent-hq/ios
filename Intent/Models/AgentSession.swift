@@ -97,21 +97,6 @@ struct AgentSession: Identifiable, Equatable {
         updatedAt ?? lastActivity ?? createdAt
     }
 
-    /// Returns a copy with the digest replaced
-    func withDigest(_ newDigest: String) -> AgentSession {
-        AgentSession(
-            id: id, name: name, status: status, isBackground: isBackground,
-            isStreaming: isStreaming, isProcessing: isProcessing, isResponding: isResponding,
-            isWaitingForOtherAgents: isWaitingForOtherAgents, waitingForAgentIds: waitingForAgentIds,
-            createdAt: createdAt, updatedAt: updatedAt, lastActivity: lastActivity,
-            lastAgentResponse: lastAgentResponse, lastUserMessage: lastUserMessage,
-            digest: newDigest, specialist: specialist, createdByAgentId: createdByAgentId,
-            attentionRequestKind: attentionRequestKind,
-            attentionRequestReason: attentionRequestReason,
-            attentionRequestTimestamp: attentionRequestTimestamp
-        )
-    }
-
     static func parseAgent(_ dict: [String: Any]) -> AgentSession? {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }
