@@ -293,7 +293,7 @@ struct ConversationStoreIntegrationTests {
             QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
             QueuedMessage(id: "q-2", content: "second", queuedAt: "2025-01-01T00:00:01Z", position: 1, imageBlocks: nil),
         ]
-        fake.responseMap["agent.sendQueuedMessageNow"] = ["ok": true]
+        fake.responseMap["agent.sendQueuedMessageNow"] = ["success": true, "queued": false, "messageId": "q-1"]
 
         try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
 
@@ -308,6 +308,47 @@ struct ConversationStoreIntegrationTests {
 
         // Only the sent entry is dropped; the rest of the queue is preserved
         #expect(store.queuedMessages.map(\.id) == ["q-2"])
+    }
+
+    /// Slot race (§5.5): the daemon could not begin the turn and restored the
+    /// entry at the FRONT of its queue, reporting `queued: true`. The local
+    /// entry must be kept — `agent:queue:updated` reconciles ordering.
+    @Test func sendQueuedMessageNowSlotRaceKeepsEntry() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+            QueuedMessage(id: "q-2", content: "second", queuedAt: "2025-01-01T00:00:01Z", position: 1, imageBlocks: nil),
+        ]
+        fake.responseMap["agent.sendQueuedMessageNow"] = [
+            "success": true, "queued": true,
+            "queuedMessage": ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
+        ]
+
+        try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
+
+        #expect(store.queuedMessages.map(\.id) == ["q-1", "q-2"])
+        #expect(!fake.didCallMethod("agent.getQueue"))
+    }
+
+    /// Quarantined session (monorepo#840): the daemon leaves the entry queued
+    /// (`queued: true, quarantined: true`); the local entry must be kept.
+    @Test func sendQueuedMessageNowQuarantinedKeepsEntry() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+        ]
+        fake.responseMap["agent.sendQueuedMessageNow"] = [
+            "success": true, "queued": true, "quarantined": true,
+            "queuedMessage": ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
+        ]
+
+        try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
+
+        #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
 
     @Test func sendQueuedMessageNowNotFoundRefreshesQueueNonDestructively() async throws {
