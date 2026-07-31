@@ -972,6 +972,23 @@ struct ConversationStoreLiveStateTests {
         return (store, fake)
     }
 
+    /// Drain the MainActor queue so any (wrongly) spawned refresh Task would
+    /// have started — and logged its request — before negative assertions.
+    /// Everything here is MainActor-bound and the fake resolves without delay,
+    /// so yielding is deterministic (no wall-clock dependence).
+    private func drainMainQueue() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    /// Poll (bounded) until the condition holds — avoids fixed-sleep flakiness
+    /// for positive assertions on Task-spawned work.
+    private func waitFor(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     /// An enriched activity ping carrying preview fields updates the watched
     /// agent push-style — no agent.get refetch, no transcript/streaming
     /// mutation on the parent store.
@@ -985,8 +1002,7 @@ struct ConversationStoreLiveStateTests {
                 "digest": "Running unit tests"
             ]]
         ])
-        // The debounced refresh runs in a Task — give it a chance to (wrongly) fire.
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         let watched = try #require(store.watchedAgents.first)
         #expect(watched.lastAgentResponse == "Running the tests now")
@@ -1010,7 +1026,7 @@ struct ConversationStoreLiveStateTests {
                 "lastAgentResponse": "Partial turn text"
             ]]
         ])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         let watched = try #require(store.watchedAgents.first)
         #expect(watched.lastAgentResponse == "Partial turn text")
@@ -1032,7 +1048,7 @@ struct ConversationStoreLiveStateTests {
                 "agentId": "agent-child", "messageId": "m-1"
             ]]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitFor { store.watchedAgents.first?.lastAgentResponse == "From agent.get" }
 
         #expect(fake.paramsForMethod("agent.get").count == 1)
         let watched = try #require(store.watchedAgents.first)
@@ -1055,7 +1071,7 @@ struct ConversationStoreLiveStateTests {
                 "lastAgentResponse": "Preview text", "digest": "Digest text"
             ]]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitFor { store.watchedAgents.first?.id == "agent-child" }
 
         #expect(fake.paramsForMethod("agent.get").count == 1)
         #expect(store.watchedAgents.first?.id == "agent-child")
@@ -1072,7 +1088,7 @@ struct ConversationStoreLiveStateTests {
                 "lastAgentResponse": "Should not apply", "digest": "Nope"
             ]]
         ])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainQueue()
 
         let watched = try #require(store.watchedAgents.first)
         #expect(watched.lastAgentResponse == "Old preview")
