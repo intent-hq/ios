@@ -48,22 +48,27 @@ jobs:
             xcodebuild -version
           fi
 
-      # Prefer the iPhone 16 simulator, else the first available iPhone on
-      # this runner; fail early with a clear message if there is none.
+      # Prefer the iPhone 16 simulator, else any available iPhone on this
+      # runner; fail early with a clear message if there is none. Select by
+      # UDID: it keeps parenthesized names (e.g. "iPhone SE (3rd generation)")
+      # intact, disambiguates duplicate names across runtimes, and pins the
+      # destination to one concrete device. tail -n 1 prefers the newest
+      # installed runtime (simctl groups devices by runtime, oldest first).
       - name: Pick simulator device
         run: |
           devices=$(xcrun simctl list devices available)
-          if echo "$devices" | grep -q 'iPhone 16 ('; then
-            device='iPhone 16'
-          else
-            device=$(echo "$devices" | sed -nE 's/^[[:space:]]*(iPhone[^(]*[^ (]) \([0-9A-Fa-f-]+\).*/\1/p' | head -n 1)
+          line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
+          if [ -z "$line" ]; then
+            line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
           fi
-          if [ -z "$device" ]; then
+          udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
+          if [ -z "$udid" ]; then
             echo "No available iPhone simulator on this runner" >&2
             exit 1
           fi
-          echo "SIM_DEVICE=$device" >> "$GITHUB_ENV"
-          echo "Selected simulator: $device"
+          name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          echo "Selected simulator: $name ($udid)"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -71,7 +76,7 @@ jobs:
       # the device to reach the Booted state, but CoreSimulator completes the
       # boot on its own and xcodebuild waits for it if still in progress.
       - name: Pre-boot simulator
-        run: xcrun simctl boot "$SIM_DEVICE" >/dev/null 2>&1 || true &
+        run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
       # Persistent runner: keep DerivedData (SPM checkouts included) OUTSIDE
       # the work dir so checkout's git clean can't wipe it — SPM packages and
@@ -79,7 +84,9 @@ jobs:
       # pattern). Replaces the actions/cache SPM step, which was tuned for
       # ephemeral runners and would be pure overhead here.
       - name: Point DerivedData outside the work dir
-        run: echo "DERIVED_DATA=$HOME/ci-target/ios/DerivedData" >> "$GITHUB_ENV"
+        run: |
+          mkdir -p "$HOME/ci-target/ios/DerivedData"
+          echo "DERIVED_DATA=$HOME/ci-target/ios/DerivedData" >> "$GITHUB_ENV"
 
       - name: Resolve SPM packages
         run: >
@@ -93,21 +100,24 @@ jobs:
           xcodebuild build-for-testing
           -project Intent.xcodeproj
           -scheme Intent
-          -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=latest"
+          -destination "platform=iOS Simulator,id=$SIM_UDID"
           -derivedDataPath "$DERIVED_DATA"
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGNING_ALLOWED=NO
 
+      # rm keeps the step independent of checkout's clean setting on the
+      # persistent runner: xcodebuild refuses an existing result bundle path.
       - name: Run unit tests
-        run: >
-          xcodebuild test-without-building
-          -project Intent.xcodeproj
-          -scheme Intent
-          -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=latest"
-          -derivedDataPath "$DERIVED_DATA"
-          -parallel-testing-enabled NO
-          -resultBundlePath TestResults
+        run: |
+          rm -rf TestResults
+          xcodebuild test-without-building \
+            -project Intent.xcodeproj \
+            -scheme Intent \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -derivedDataPath "$DERIVED_DATA" \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults
 
       - name: Upload test results
         if: failure()
