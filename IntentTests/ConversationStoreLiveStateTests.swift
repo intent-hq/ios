@@ -937,4 +937,147 @@ struct ConversationStoreLiveStateTests {
 
         #expect(store.isStreaming == true)
     }
+
+    // MARK: - Enriched agent:stream:activity preview payload (watched agents)
+
+    private func makeWatchedAgent(
+        id: String,
+        lastAgentResponse: String? = nil,
+        digest: String? = nil
+    ) -> AgentSession {
+        AgentSession(
+            id: id, name: "Delegate", status: "responding",
+            isBackground: false, isStreaming: true,
+            isProcessing: false, isResponding: true,
+            isWaitingForOtherAgents: false, waitingForAgentIds: [],
+            createdAt: nil, updatedAt: nil, lastActivity: nil,
+            lastAgentResponse: lastAgentResponse, lastUserMessage: nil,
+            digest: digest, specialist: nil, createdByAgentId: nil,
+            attentionRequestKind: nil, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
+        )
+    }
+
+    /// Sets up a store whose agentId is the parent — pins that the early
+    /// agent-ID filter exempts watched-agent events.
+    private func makeParentStore(watching childId: String) async -> (ConversationStore, FakeConnectionManager) {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        await store.fetchConversation(agentId: "agent-parent", workspaceId: "ws-1")
+        store.watchedAgentIds = [childId]
+        store.watchedAgents = [makeWatchedAgent(id: childId, lastAgentResponse: "Old preview")]
+        store.isWaitingForAgents = true
+        fake.clearRequestLog()
+        return (store, fake)
+    }
+
+    /// An enriched activity ping carrying preview fields updates the watched
+    /// agent push-style — no agent.get refetch, no transcript/streaming
+    /// mutation on the parent store.
+    @Test func enrichedActivityAppliesPreviewToWatchedAgentWithoutRefetch() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1",
+                "lastAgentResponse": "Running the tests now",
+                "digest": "Running unit tests"
+            ]]
+        ])
+        // The debounced refresh runs in a Task — give it a chance to (wrongly) fire.
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastAgentResponse == "Running the tests now")
+        #expect(watched.digest == "Running unit tests")
+        #expect(watched.displayMessage == "Running unit tests")
+        #expect(!fake.didCallMethod("agent.get"))
+        // Not our agent's turn — parent streaming state untouched.
+        #expect(store.isStreaming == false)
+        #expect(store.messages.isEmpty)
+    }
+
+    /// A partial payload (lastAgentResponse only, no digest yet) applies the
+    /// present field and preserves the existing one.
+    @Test func enrichedActivityPartialPayloadPreservesExistingFields() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+        store.watchedAgents = [makeWatchedAgent(id: "agent-child", digest: "Prior digest")]
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1",
+                "lastAgentResponse": "Partial turn text"
+            ]]
+        ])
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastAgentResponse == "Partial turn text")
+        #expect(watched.digest == "Prior digest")
+        #expect(!fake.didCallMethod("agent.get"))
+    }
+
+    /// A content-free ping (older daemon) falls back to the debounced
+    /// agent.get refresh for the watched agent.
+    @Test func contentFreeActivityFallsBackToDebouncedRefresh() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+        fake.responseMap["agent.get"] = ["agent": [
+            "id": "agent-child", "name": "Delegate", "status": "responding",
+            "isStreaming": true, "lastAgentResponse": "From agent.get"
+        ]]
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1"
+            ]]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.paramsForMethod("agent.get").count == 1)
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastAgentResponse == "From agent.get")
+    }
+
+    /// An enriched ping for a watched agent whose details haven't loaded yet
+    /// (not in watchedAgents) falls back to the refetch so the row can appear.
+    @Test func enrichedActivityForUnloadedWatchedAgentFallsBackToRefetch() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+        store.watchedAgents = []
+        fake.responseMap["agent.get"] = ["agent": [
+            "id": "agent-child", "name": "Delegate", "status": "responding",
+            "isStreaming": true, "lastAgentResponse": "Loaded"
+        ]]
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1",
+                "lastAgentResponse": "Preview text", "digest": "Digest text"
+            ]]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.paramsForMethod("agent.get").count == 1)
+        #expect(store.watchedAgents.first?.id == "agent-child")
+    }
+
+    /// Events from agents that are neither ours nor watched are still dropped
+    /// by the early agent-ID filter.
+    @Test func activityFromUnrelatedAgentStillDropped() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-stranger", "messageId": "m-1",
+                "lastAgentResponse": "Should not apply", "digest": "Nope"
+            ]]
+        ])
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastAgentResponse == "Old preview")
+        #expect(watched.digest == nil)
+        #expect(!fake.didCallMethod("agent.get"))
+        #expect(store.isStreaming == false)
+    }
 }

@@ -97,6 +97,35 @@ struct AgentSession: Identifiable, Equatable {
         updatedAt ?? lastActivity ?? createdAt
     }
 
+    /// Returns a copy with mid-turn preview fields from an enriched
+    /// `agent:stream:activity` payload applied. The daemon stamps
+    /// `lastAgentResponse`/`digest` only when derived to non-empty, so nil
+    /// inputs keep the existing values.
+    func applyingPreview(lastAgentResponse: String?, digest: String?) -> AgentSession {
+        AgentSession(
+            id: id,
+            name: name,
+            status: status,
+            isBackground: isBackground,
+            isStreaming: isStreaming,
+            isProcessing: isProcessing,
+            isResponding: isResponding,
+            isWaitingForOtherAgents: isWaitingForOtherAgents,
+            waitingForAgentIds: waitingForAgentIds,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            lastActivity: lastActivity,
+            lastAgentResponse: lastAgentResponse ?? self.lastAgentResponse,
+            lastUserMessage: lastUserMessage,
+            digest: digest ?? self.digest,
+            specialist: specialist,
+            createdByAgentId: createdByAgentId,
+            attentionRequestKind: attentionRequestKind,
+            attentionRequestReason: attentionRequestReason,
+            attentionRequestTimestamp: attentionRequestTimestamp
+        )
+    }
+
     static func parseAgent(_ dict: [String: Any]) -> AgentSession? {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }

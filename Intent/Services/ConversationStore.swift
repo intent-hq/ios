@@ -613,6 +613,8 @@ class ConversationStore: ObservableObject {
         // Early agent ID filter: skip events not meant for our agent.
         // This is critical when multiple ConversationStore instances exist
         // (e.g., coverflow card + regular conversation view for the same agent).
+        // Watched-agent (delegate) events are exempt: the switch below handles
+        // them and returns before any transcript mutation.
         if let myAgentId = agentId {
             let eventAgentId: String? = {
                 if let inner = dict["event"] as? [String: Any] {
@@ -622,7 +624,8 @@ class ConversationStore: ObservableObject {
                 let d = dict["data"] as? [String: Any] ?? dict
                 return d["agentId"] as? String ?? dict["agentId"] as? String
             }()
-            if let eAgentId = eventAgentId, eAgentId != myAgentId {
+            if let eAgentId = eventAgentId, eAgentId != myAgentId,
+               !watchedAgentIds.contains(eAgentId) {
                 return
             }
         }
@@ -672,18 +675,29 @@ class ConversationStore: ObservableObject {
             }
             if eventAgentId != agentId { return }
         case "agent:stream:activity":
-            // Content-free liveness ping ({ agentId, messageId }); the daemon
-            // throttles it leading-edge (first chunk immediate, then ≤1/s per
-            // agent). Refresh watched agents periodically during streaming —
-            // the local 3s debounce on top of the daemon throttle keeps
-            // agent.get traffic bounded. Digests come from the server's
-            // agent.get/agent.list `digest` field.
+            // Liveness ping ({ agentId, messageId }) throttled leading-edge by
+            // the daemon (first chunk immediate, then ≤1/s per agent). The
+            // payload carries live preview fields (lastAgentResponse, digest)
+            // when the turn has produced them — apply those push-style to the
+            // watched agent instead of refetching via agent.get. Fall back to
+            // the debounced agent.get refresh when the fields are absent
+            // (older daemons) or the agent's details haven't loaded yet.
             if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                let now = Date()
-                let lastRefresh = watchedAgentLastRefresh[eventAgentId]
-                if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
-                    watchedAgentLastRefresh[eventAgentId] = now
-                    refreshWatchedAgent(agentId: eventAgentId)
+                let lastAgentResponse = data["lastAgentResponse"] as? String
+                let digest = data["digest"] as? String
+                if lastAgentResponse != nil || digest != nil,
+                   let idx = watchedAgents.firstIndex(where: { $0.id == eventAgentId }) {
+                    watchedAgents[idx] = watchedAgents[idx].applyingPreview(
+                        lastAgentResponse: lastAgentResponse,
+                        digest: digest
+                    )
+                } else {
+                    let now = Date()
+                    let lastRefresh = watchedAgentLastRefresh[eventAgentId]
+                    if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
+                        watchedAgentLastRefresh[eventAgentId] = now
+                        refreshWatchedAgent(agentId: eventAgentId)
+                    }
                 }
             }
             guard eventAgentId == agentId else { return }
