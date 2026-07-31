@@ -678,20 +678,26 @@ class ConversationStore: ObservableObject {
             // Liveness ping ({ agentId, messageId }) throttled leading-edge by
             // the daemon (first chunk immediate, then ≤1/s per agent). The
             // payload carries live preview fields (lastAgentResponse, digest)
-            // when the turn has produced them — apply those push-style to the
-            // watched agent instead of refetching via agent.get. Fall back to
-            // the debounced agent.get refresh when the fields are absent
-            // (older daemons) or the agent's details haven't loaded yet.
+            // when the turn has produced them — apply those push-style to an
+            // already-loaded watched agent instead of refetching via agent.get.
             if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
                 let lastAgentResponse = data["lastAgentResponse"] as? String
                 let digest = data["digest"] as? String
-                if lastAgentResponse != nil || digest != nil,
-                   let idx = watchedAgents.firstIndex(where: { $0.id == eventAgentId }) {
-                    watchedAgents[idx] = watchedAgents[idx].applyingPreview(
-                        lastAgentResponse: lastAgentResponse,
-                        digest: digest
-                    )
+                if let idx = watchedAgents.firstIndex(where: { $0.id == eventAgentId }) {
+                    // Loaded row: apply the preview when present. A content-free
+                    // ping means no turn text is derivable yet (pre-first-token),
+                    // so there is nothing to apply and no refetch is needed — the
+                    // next enriched ping or turn-end event will populate the row.
+                    if lastAgentResponse != nil || digest != nil {
+                        watchedAgents[idx] = watchedAgents[idx].applyingPreview(
+                            lastAgentResponse: lastAgentResponse,
+                            digest: digest
+                        )
+                    }
                 } else {
+                    // Row not yet loaded: the preview payload alone can't
+                    // populate a full AgentSession, so debounce a one-off
+                    // agent.get to materialize the row.
                     let now = Date()
                     let lastRefresh = watchedAgentLastRefresh[eventAgentId]
                     if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {

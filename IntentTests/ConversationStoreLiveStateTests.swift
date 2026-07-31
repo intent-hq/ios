@@ -1054,25 +1054,23 @@ struct ConversationStoreLiveStateTests {
         #expect(!fake.didCallMethod("agent.get"))
     }
 
-    /// A content-free ping (older daemon) falls back to the debounced
-    /// agent.get refresh for the watched agent.
-    @Test func contentFreeActivityFallsBackToDebouncedRefresh() async throws {
+    /// A content-free ping for an already-loaded watched agent means no turn
+    /// text is derivable yet (pre-first-token), so it neither refetches nor
+    /// mutates the row — the next enriched ping or turn-end event covers it.
+    @Test func contentFreeActivityForLoadedAgentDoesNotRefetch() async throws {
         let (store, fake) = await makeParentStore(watching: "agent-child")
-        fake.responseMap["agent.get"] = ["agent": [
-            "id": "agent-child", "name": "Delegate", "status": "responding",
-            "isStreaming": true, "lastAgentResponse": "From agent.get"
-        ]]
 
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:activity", "data": [
                 "agentId": "agent-child", "messageId": "m-1"
             ]]
         ])
-        try await waitFor { store.watchedAgents.first?.lastAgentResponse == "From agent.get" }
+        await drainMainQueue()
 
-        #expect(fake.paramsForMethod("agent.get").count == 1)
+        #expect(!fake.didCallMethod("agent.get"))
         let watched = try #require(store.watchedAgents.first)
-        #expect(watched.lastAgentResponse == "From agent.get")
+        #expect(watched.lastAgentResponse == "Old preview")
+        #expect(watched.digest == nil)
     }
 
     /// An enriched ping for a watched agent whose details haven't loaded yet
