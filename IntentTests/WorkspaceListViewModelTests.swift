@@ -127,24 +127,26 @@ struct WorkspaceListViewModelTests {
         let ws = [
             makeWorkspace(id: "1", title: "PR", displayStatus: "pr_open"),
             makeWorkspace(id: "2", title: "WIP", displayStatus: "in_progress"),
-            makeWorkspace(id: "3", title: "New", displayStatus: "not_started")
+            makeWorkspace(id: "3", title: "New", displayStatus: "not_started"),
+            makeWorkspace(id: "4", title: "Quiet", displayStatus: "idle")
         ]
         let vm = setUp(ws)
         defer { tearDown() }
 
         let groups = vm.groupedByStatus
-        #expect(groups.count == 3)
-        // Sorted by sortOrder: inProgress(0), prOpen(2), notStarted(3)
-        #expect(groups[0].0 == "In Progress")
-        #expect(groups[1].0 == "PR Open")
-        #expect(groups[2].0 == "No Code Changes")
+        #expect(groups.count == 4)
+        // Sorted by sortOrder: idle(0), inProgress(1), prOpen(3), notStarted(4)
+        #expect(groups[0].0 == "Idle")
+        #expect(groups[1].0 == "In Progress")
+        #expect(groups[2].0 == "PR Open")
+        #expect(groups[3].0 == "No Code Changes")
     }
 
     @Test @MainActor func groupedByStatus_usesBackendDisplayStatusExclusively() {
         let ws = [
             // BE says in_progress; local prStatus never overrides it
             makeWorkspace(id: "1", title: "Reopened", displayStatus: "in_progress", prStatus: "Merged"),
-            // BE-only prReady status (sortOrder 1, between inProgress and prOpen)
+            // BE-only prReady status (sortOrder 2, between inProgress and prOpen)
             makeWorkspace(id: "2", title: "Mergeable", displayStatus: "pr_ready", prStatus: "Open"),
             // No BE value — defaults to notStarted, not derived from prStatus
             makeWorkspace(id: "3", title: "Legacy", prStatus: "Open")

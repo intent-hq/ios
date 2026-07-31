@@ -27,6 +27,7 @@ struct StatusDerivationTests {
     // MARK: - Wire value mapping
 
     @Test func wireValueMapping() async throws {
+        #expect(WorkspaceDisplayStatus(wireValue: "idle") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "not_started") == .notStarted)
         #expect(WorkspaceDisplayStatus(wireValue: "in_progress") == .inProgress)
         #expect(WorkspaceDisplayStatus(wireValue: "complete") == .complete)
@@ -59,9 +60,15 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .notStarted)
     }
 
+    @Test func resolveMapsIdle() async throws {
+        let ws = makeWorkspace(displayStatus: "idle")
+        #expect(resolveDisplayStatus(for: ws) == .idle)
+    }
+
     // MARK: - Labels
 
     @Test func statusLabels() async throws {
+        #expect(WorkspaceDisplayStatus.idle.label == "Idle")
         #expect(WorkspaceDisplayStatus.notStarted.label == "No Code Changes")
         #expect(WorkspaceDisplayStatus.inProgress.label == "In Progress")
         #expect(WorkspaceDisplayStatus.complete.label == "Complete")
@@ -73,7 +80,7 @@ struct StatusDerivationTests {
     // MARK: - Sort order
 
     @Test func sortOrderOrdering() async throws {
-        let ordered: [WorkspaceDisplayStatus] = [.inProgress, .prReady, .prOpen, .notStarted, .complete, .prMerged]
+        let ordered: [WorkspaceDisplayStatus] = [.idle, .inProgress, .prReady, .prOpen, .notStarted, .complete, .prMerged]
         for i in 0..<ordered.count - 1 {
             #expect(ordered[i].sortOrder < ordered[i + 1].sortOrder)
         }
