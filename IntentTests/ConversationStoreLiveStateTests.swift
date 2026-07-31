@@ -1034,6 +1034,26 @@ struct ConversationStoreLiveStateTests {
         #expect(!fake.didCallMethod("agent.get"))
     }
 
+    /// The symmetric partial payload (digest only) applies the digest and
+    /// preserves the existing lastAgentResponse.
+    @Test func enrichedActivityDigestOnlyPreservesLastAgentResponse() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1",
+                "digest": "Fresh digest"
+            ]]
+        ])
+        await drainMainQueue()
+
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastAgentResponse == "Old preview")
+        #expect(watched.digest == "Fresh digest")
+        #expect(watched.displayMessage == "Fresh digest")
+        #expect(!fake.didCallMethod("agent.get"))
+    }
+
     /// A content-free ping (older daemon) falls back to the debounced
     /// agent.get refresh for the watched agent.
     @Test func contentFreeActivityFallsBackToDebouncedRefresh() async throws {
