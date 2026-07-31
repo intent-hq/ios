@@ -18,16 +18,52 @@ concurrency:
 jobs:
   build-and-test:
     name: iOS Build & Test
-    runs-on: warp-macos-15-arm64-12x
-    timeout-minutes: 30
+    # m1mac is a single-slot persistent runner shared with intentd mac builds
+    # and cloudlands-fe release-beta; timeout covers a cold build on the
+    # slower machine (queue wait does not count against it).
+    runs-on: [self-hosted, macOS, ARM64, m1mac]
+    timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Select latest Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      # Prefer Xcode 16.4 when its versioned bundle exists (the ephemeral CI
+      # image layout), else the newest versioned bundle, else the runner's
+      # default toolchain. DEVELOPER_DIR needs no sudo and leaves the shared
+      # runner's global xcode-select untouched.
+      - name: Select Xcode
+        run: |
+          xcode=/Applications/Xcode_16.4.app
+          if [ ! -d "$xcode" ]; then
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          else
+            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
+            xcodebuild -version
+          fi
+
+      # Prefer the iPhone 16 simulator, else the first available iPhone on
+      # this runner; fail early with a clear message if there is none.
+      - name: Pick simulator device
+        run: |
+          devices=$(xcrun simctl list devices available)
+          if echo "$devices" | grep -q 'iPhone 16 ('; then
+            device='iPhone 16'
+          else
+            device=$(echo "$devices" | sed -nE 's/^[[:space:]]*(iPhone[^(]*[^ (]) \([0-9A-Fa-f-]+\).*/\1/p' | head -n 1)
+          fi
+          if [ -z "$device" ]; then
+            echo "No available iPhone simulator on this runner" >&2
+            exit 1
+          fi
+          echo "SIM_DEVICE=$device" >> "$GITHUB_ENV"
+          echo "Selected simulator: $device"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -35,28 +71,30 @@ jobs:
       # the device to reach the Booted state, but CoreSimulator completes the
       # boot on its own and xcodebuild waits for it if still in progress.
       - name: Pre-boot simulator
-        run: xcrun simctl boot 'iPhone 16' >/dev/null 2>&1 || true &
+        run: xcrun simctl boot "$SIM_DEVICE" >/dev/null 2>&1 || true &
 
-      - name: Cache SPM packages
-        uses: actions/cache@v6
-        with:
-          path: build/SourcePackages
-          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-          restore-keys: |
-            ${{ runner.os }}-spm-
+      # Persistent runner: keep DerivedData (SPM checkouts included) OUTSIDE
+      # the work dir so checkout's git clean can't wipe it — SPM packages and
+      # build products stay warm across runs (mirrors intentd's ci-target
+      # pattern). Replaces the actions/cache SPM step, which was tuned for
+      # ephemeral runners and would be pure overhead here.
+      - name: Point DerivedData outside the work dir
+        run: echo "DERIVED_DATA=$HOME/ci-target/ios/DerivedData" >> "$GITHUB_ENV"
 
       - name: Resolve SPM packages
         run: >
           xcodebuild -resolvePackageDependencies
           -project Intent.xcodeproj
           -scheme Intent
+          -derivedDataPath "$DERIVED_DATA"
 
       - name: Build for testing
         run: >
           xcodebuild build-for-testing
           -project Intent.xcodeproj
           -scheme Intent
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+          -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=latest"
+          -derivedDataPath "$DERIVED_DATA"
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGNING_ALLOWED=NO
@@ -66,7 +104,8 @@ jobs:
           xcodebuild test-without-building
           -project Intent.xcodeproj
           -scheme Intent
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+          -destination "platform=iOS Simulator,name=$SIM_DEVICE,OS=latest"
+          -derivedDataPath "$DERIVED_DATA"
           -parallel-testing-enabled NO
           -resultBundlePath TestResults
 
@@ -78,7 +117,7 @@ jobs:
           path: TestResults
 
   pr-title:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
       - uses: amannn/action-semantic-pull-request@v6
