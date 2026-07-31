@@ -453,7 +453,7 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Firehose gating while chat channel is live
 
-    @Test func firehoseChunkIgnoredWhenChatLive() async throws {
+    @Test func firehoseActivityIgnoredWhenChatLive() async throws {
         let (store, _) = makeStore()
 
         // Snapshot applied → chatLive; deltas own the transcript from here on.
@@ -466,14 +466,13 @@ struct ConversationStoreLiveStateTests {
         ]))
         #expect(store.messages.count == 1)
 
-        // Firehose stream events for the same turn must NOT mutate the transcript —
-        // a chunk-created block would carry a client-generated id that the terminal
-        // delta's removedIds cannot remove (duplicate text block).
+        // Firehose stream events for the same turn must NOT mutate live state —
+        // chat.subscribe owns the transcript and streaming flags while chatLive.
         store.handleStreamEvent("event", params: [
             "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
         ])
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:chunk", "data": ["content": "duplicate text"]]
+            "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
         ])
 
         #expect(store.messages.count == 1)
@@ -489,26 +488,19 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Real content")
     }
 
-    @Test func firehoseChunkStillAppliesWhenChatNotLive() async throws {
+    @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async throws {
         // No chat.subscribe snapshot applied → chatLive is false (legacy fallback).
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
 
+        // agent:stream:activity is content-free ({ agentId, messageId }) —
+        // it must raise the streaming flag but never mutate the transcript.
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
-        ])
-        store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:chunk", "data": ["content": "fallback text"]]
+            "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
         ])
 
-        #expect(store.messages.count == 1)
-        #expect(store.messages[0].role == .assistant)
-        #expect(store.messages[0].isStreaming == true)
+        #expect(store.messages.isEmpty)
         #expect(store.isStreaming == true)
-        let text = (store.messages[0].contentBlocks ?? [])
-            .compactMap { $0.resolvedText }
-            .joined()
-        #expect(text == "fallback text")
     }
 
     @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async throws {
@@ -532,11 +524,10 @@ struct ConversationStoreLiveStateTests {
             "event": ["type": "agent:stream:start", "data": ["streamId": "s-1"]]
         ])
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:chunk", "data": ["content": "fallback text"]]
+            "event": ["type": "agent:stream:activity", "data": ["messageId": "m-1"]]
         ])
 
-        #expect(store.messages.count == 2)
-        #expect(store.messages[1].role == .assistant)
+        #expect(store.messages.count == 1)
         #expect(store.isStreaming == true)
     }
 

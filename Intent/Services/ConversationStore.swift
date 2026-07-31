@@ -45,12 +45,8 @@ class ConversationStore: ObservableObject {
     /// Cached decoders/formatters for the hot block-delta path (many frames per second).
     private let chatBlockDecoder = JSONDecoder()
     private let chatTimestampFormatter = ISO8601DateFormatter()
-    /// Tracks the last time we refreshed each watched agent (for debouncing stream:chunk refreshes)
+    /// Tracks the last time we refreshed each watched agent (for debouncing stream:activity refreshes)
     private var watchedAgentLastRefresh: [String: Date] = [:]
-    /// Locally-extracted digests from watched agent stream chunks
-    private var watchedAgentDigests: [String: String] = [:]
-    /// Accumulated stream text per watched agent for digest extraction
-    private var watchedAgentStreamBuffers: [String: String] = [:]
     /// Buffer for stream events that arrive while the initial conversation fetch is in progress.
     /// This prevents lost deltas when subscribing before fetching.
     private var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
@@ -227,7 +223,6 @@ class ConversationStore: ObservableObject {
     // MARK: - Stream event buffer replay
 
     /// Replay buffered stream events after the initial fetch completes.
-    /// Deduplicates chunk text that the fetched snapshot already contains.
     private func replayBufferedStreamEvents() {
         let buffer = streamEventBuffer
         streamEventBuffer.removeAll()
@@ -255,52 +250,11 @@ class ConversationStore: ObservableObject {
             handleStreamStart(event.data)
         }
 
-        // Collect all buffered chunk text
-        let bufferedChunkText = buffer
-            .filter { $0.eventType == "agent:stream:chunk" }
-            .compactMap { $0.data["content"] as? String }
-            .joined()
-
-        guard !bufferedChunkText.isEmpty else {
-            // stream:start but no chunks yet — streaming state is already set
-            return
-        }
-
-        // Mark the last assistant message as streaming so subsequent chunks append to it
-        guard let lastIndex = messages.indices.last,
-              messages[lastIndex].role == .assistant else {
-            // No assistant message in snapshot — apply all chunks normally
-            for event in buffer where event.eventType == "agent:stream:chunk" {
-                handleStreamChunk(event.data)
-            }
-            return
-        }
-
-        messages[lastIndex].isStreaming = true
-        isStreaming = true
-
-        // Get the text already in the snapshot
-        let snapshotText = (messages[lastIndex].contentBlocks ?? [])
-            .filter { $0.type == .text }
-            .compactMap { $0.resolvedText }
-            .joined()
-
-        // Find overlap: longest prefix of bufferedChunkText that matches end of snapshotText.
-        // The snapshot may already contain some of the buffered chunk text since the fetch
-        // happened after subscription started.
-        var overlapLength = min(bufferedChunkText.count, snapshotText.count)
-        while overlapLength > 0 {
-            let snapshotSuffix = String(snapshotText.suffix(overlapLength))
-            let bufferPrefix = String(bufferedChunkText.prefix(overlapLength))
-            if snapshotSuffix == bufferPrefix {
-                break
-            }
-            overlapLength -= 1
-        }
-
-        let newText = String(bufferedChunkText.dropFirst(overlapLength))
-        if !newText.isEmpty {
-            appendTextToLastBlock(at: lastIndex, text: newText)
+        // agent:stream:activity pings are content-free — transcript content
+        // comes from chat.subscribe / persisted messages. A buffered ping
+        // still means the turn is live (we may have missed stream:start).
+        if buffer.contains(where: { $0.eventType == "agent:stream:activity" }) {
+            isStreaming = true
         }
     }
 
@@ -717,23 +671,14 @@ class ConversationStore: ObservableObject {
                 Task { await self.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
             }
             if eventAgentId != agentId { return }
-        case "agent:stream:chunk":
-            // Update watched agents periodically during streaming (debounced to ~3s)
+        case "agent:stream:activity":
+            // Content-free liveness ping ({ agentId, messageId }); the daemon
+            // throttles it leading-edge (first chunk immediate, then ≤1/s per
+            // agent). Refresh watched agents periodically during streaming —
+            // the local 3s debounce on top of the daemon throttle keeps
+            // agent.get traffic bounded. Digests come from the server's
+            // agent.get/agent.list `digest` field.
             if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                // Extract digest from chunk content
-                if let content = data["content"] as? String {
-                    watchedAgentStreamBuffers[eventAgentId, default: ""] += content
-                    if let digest = Self.extractAgentDigest(from: watchedAgentStreamBuffers[eventAgentId]!) {
-                        watchedAgentDigests[eventAgentId] = digest
-                        // Remove digest tag from buffer
-                        watchedAgentStreamBuffers[eventAgentId] = watchedAgentStreamBuffers[eventAgentId]!
-                            .replacingOccurrences(
-                                of: "<agent_digest>[\\s\\S]*?</agent_digest>",
-                                with: "",
-                                options: .regularExpression
-                            )
-                    }
-                }
                 let now = Date()
                 let lastRefresh = watchedAgentLastRefresh[eventAgentId]
                 if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
@@ -745,12 +690,6 @@ class ConversationStore: ObservableObject {
         case "agent:stream:end":
             // When a watched agent finishes streaming, always refresh (bypass debounce) for final state
             if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                // Final digest extraction from remaining buffer
-                if let buffer = watchedAgentStreamBuffers[eventAgentId],
-                   let digest = Self.extractAgentDigest(from: buffer) {
-                    watchedAgentDigests[eventAgentId] = digest
-                }
-                watchedAgentStreamBuffers.removeValue(forKey: eventAgentId)
                 watchedAgentLastRefresh.removeValue(forKey: eventAgentId)
                 refreshWatchedAgent(agentId: eventAgentId)
             }
@@ -778,8 +717,8 @@ class ConversationStore: ObservableObject {
         switch eventType {
         case "agent:stream:start":
             handleStreamStart(data)
-        case "agent:stream:chunk":
-            handleStreamChunk(data)
+        case "agent:stream:activity":
+            handleStreamActivity()
         case "agent:stream:end":
             handleStreamEnd(data)
         case "agent:queue:updated":
@@ -820,45 +759,14 @@ class ConversationStore: ObservableObject {
     private func handleStreamStart(_ data: [String: Any]) {
         currentStreamId = data["streamId"] as? String
         isStreaming = true
-        // Keep placeholder visible — handleStreamChunk will replace it when real content arrives
     }
 
-    private func handleStreamChunk(_ data: [String: Any]) {
-        guard let content = data["content"] as? String else { return }
-
-        // Append text to the last assistant message's last text block,
-        // or create a new message/block if needed
-        if let lastIndex = messages.indices.last,
-           messages[lastIndex].role == .assistant,
-           messages[lastIndex].isStreaming == true {
-            // Append to existing streaming message
-            appendTextToLastBlock(at: lastIndex, text: content)
-        } else {
-            // Create new streaming assistant message
-            let msg = ConversationMessage(
-                id: data["messageId"] as? String ?? UUID().uuidString,
-                role: .assistant,
-                contentBlocks: [ContentBlock(type: .text, text: content)],
-                isStreaming: true
-            )
-            messages.append(msg)
-        }
-        streamingUpdateCount += 1
-    }
-
-    private func appendTextToLastBlock(at messageIndex: Int, text: String) {
-        var blocks = messages[messageIndex].contentBlocks ?? []
-        if let lastBlockIndex = blocks.indices.last, blocks[lastBlockIndex].type == .text {
-            let existing = blocks[lastBlockIndex].resolvedText ?? ""
-            blocks[lastBlockIndex] = ContentBlock(
-                id: blocks[lastBlockIndex].id,
-                type: .text,
-                text: existing + text
-            )
-        } else {
-            blocks.append(ContentBlock(type: .text, text: text))
-        }
-        messages[messageIndex].contentBlocks = blocks
+    /// `agent:stream:activity` is a content-free liveness ping — transcript
+    /// content arrives via chat.subscribe / persisted messages. On the legacy
+    /// (non-chatLive) fallback path this keeps the streaming flag raised
+    /// between stream:start and stream:end.
+    private func handleStreamActivity() {
+        isStreaming = true
     }
 
     private func handleStreamEnd(_ data: [String: Any]) {
@@ -1222,8 +1130,6 @@ class ConversationStore: ObservableObject {
             isWaitingForAgents = false
             delegationGroupStatus = nil
             watchedAgents = []
-            watchedAgentDigests.removeAll()
-            watchedAgentStreamBuffers.removeAll()
         } catch {
             print("[ConversationStore] Failed to cancel subscriptions: \(error)")
         }
@@ -1239,12 +1145,7 @@ class ConversationStore: ObservableObject {
                 )
                 guard let dict = result as? [String: Any],
                       let agentDict = dict["agent"] as? [String: Any],
-                      var updated = AgentSession.parseAgent(agentDict) else { return }
-
-                // Overlay locally-extracted digest if the server doesn't have one yet
-                if updated.digest == nil, let localDigest = self.watchedAgentDigests[agentId] {
-                    updated = updated.withDigest(localDigest)
-                }
+                      let updated = AgentSession.parseAgent(agentDict) else { return }
 
                 if !updated.isActive {
                     self.watchedAgents.removeAll { $0.id == agentId }
@@ -1344,8 +1245,6 @@ class ConversationStore: ObservableObject {
         lastFailedSend = nil
         attentionRequest = nil
         watchedAgentLastRefresh.removeAll()
-        watchedAgentDigests.removeAll()
-        watchedAgentStreamBuffers.removeAll()
         chatLive = false
         // Unregister handler on reset
         if let oldId = chatSubscriptionId {
@@ -1356,19 +1255,6 @@ class ConversationStore: ObservableObject {
         chatSeeded = false
         chatExpectedSeq = 0
         resnapshotChatInProgress = false
-    }
-
-    // MARK: - Digest Extraction
-
-    /// Extract `<agent_digest>` content from text using regex, matching the Electron implementation.
-    static func extractAgentDigest(from text: String) -> String? {
-        guard let regex = try? NSRegularExpression(pattern: "<agent_digest>([\\s\\S]*?)</agent_digest>"),
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let captureRange = Range(match.range(at: 1), in: text) else {
-            return nil
-        }
-        let digest = String(text[captureRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-        return digest.isEmpty ? nil : digest
     }
 }
 
