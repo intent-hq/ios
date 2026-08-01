@@ -35,7 +35,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     var color: Color {
         switch self {
-        case .needsAttention: return Color(red: 0.96, green: 0.62, blue: 0.04) // Amber #F59E0B
+        case .needsAttention: return Color(red: 0.96, green: 0.62, blue: 0.043) // Amber #F59E0B
         case .idle: return Color.gray.opacity(0.6)
         case .notStarted: return Color.gray.opacity(0.4)
         case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
