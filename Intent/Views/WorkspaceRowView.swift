@@ -98,6 +98,12 @@ struct WorkspaceRowView: View {
                 .strokeBorder(Color.gray.opacity(0.4), lineWidth: 1.5)
                 .frame(width: size, height: size)
 
+        case .idle:
+            // Empty outline circle in the idle muted color
+            Circle()
+                .strokeBorder(color, lineWidth: 1.5)
+                .frame(width: size, height: size)
+
         case .inProgress:
             // Half-filled circle (right half)
             ZStack {

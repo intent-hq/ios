@@ -613,6 +613,8 @@ class ConversationStore: ObservableObject {
         // Early agent ID filter: skip events not meant for our agent.
         // This is critical when multiple ConversationStore instances exist
         // (e.g., coverflow card + regular conversation view for the same agent).
+        // Watched-agent (delegate) events are exempt: the switch below handles
+        // them and returns before any transcript mutation.
         if let myAgentId = agentId {
             let eventAgentId: String? = {
                 if let inner = dict["event"] as? [String: Any] {
@@ -622,7 +624,8 @@ class ConversationStore: ObservableObject {
                 let d = dict["data"] as? [String: Any] ?? dict
                 return d["agentId"] as? String ?? dict["agentId"] as? String
             }()
-            if let eAgentId = eventAgentId, eAgentId != myAgentId {
+            if let eAgentId = eventAgentId, eAgentId != myAgentId,
+               !watchedAgentIds.contains(eAgentId) {
                 return
             }
         }
@@ -672,18 +675,35 @@ class ConversationStore: ObservableObject {
             }
             if eventAgentId != agentId { return }
         case "agent:stream:activity":
-            // Content-free liveness ping ({ agentId, messageId }); the daemon
-            // throttles it leading-edge (first chunk immediate, then ≤1/s per
-            // agent). Refresh watched agents periodically during streaming —
-            // the local 3s debounce on top of the daemon throttle keeps
-            // agent.get traffic bounded. Digests come from the server's
-            // agent.get/agent.list `digest` field.
+            // Liveness ping ({ agentId, messageId }) throttled leading-edge by
+            // the daemon (first chunk immediate, then ≤1/s per agent). The
+            // payload carries live preview fields (lastAgentResponse, digest)
+            // when the turn has produced them — apply those push-style to an
+            // already-loaded watched agent instead of refetching via agent.get.
             if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                let now = Date()
-                let lastRefresh = watchedAgentLastRefresh[eventAgentId]
-                if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
-                    watchedAgentLastRefresh[eventAgentId] = now
-                    refreshWatchedAgent(agentId: eventAgentId)
+                let lastAgentResponse = data["lastAgentResponse"] as? String
+                let digest = data["digest"] as? String
+                if let idx = watchedAgents.firstIndex(where: { $0.id == eventAgentId }) {
+                    // Loaded row: apply the preview when present. A content-free
+                    // ping means no turn text is derivable yet (pre-first-token),
+                    // so there is nothing to apply and no refetch is needed — the
+                    // next enriched ping or turn-end event will populate the row.
+                    if lastAgentResponse != nil || digest != nil {
+                        watchedAgents[idx] = watchedAgents[idx].applyingPreview(
+                            lastAgentResponse: lastAgentResponse,
+                            digest: digest
+                        )
+                    }
+                } else {
+                    // Row not yet loaded: the preview payload alone can't
+                    // populate a full AgentSession, so debounce a one-off
+                    // agent.get to materialize the row.
+                    let now = Date()
+                    let lastRefresh = watchedAgentLastRefresh[eventAgentId]
+                    if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
+                        watchedAgentLastRefresh[eventAgentId] = now
+                        refreshWatchedAgent(agentId: eventAgentId)
+                    }
                 }
             }
             guard eventAgentId == agentId else { return }
