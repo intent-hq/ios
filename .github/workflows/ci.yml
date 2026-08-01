@@ -78,23 +78,26 @@ jobs:
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           echo "Selected simulator: $name ($udid)"
 
-      # TEMPORARY diagnostics: xcodebuild rejected the simctl-picked device
-      # ("iOS 18.2 is not installed") while simctl lists it as available.
-      # Dump what xcodebuild/CoreSimulator actually see, then remove this step.
-      - name: Diagnose simulator destinations (temporary)
+      # Xcode's SDK-to-runtime match policy can point at a simulator runtime
+      # build that isn't installed (Xcode 16.2 defaults iphoneos18.2 to
+      # 22C146 / iOS 18.2 while m1mac only has 22D8075 / iOS 18.3.1), which
+      # makes xcodebuild reject every simulator destination with "iOS 18.2
+      # is not installed" even though simctl lists available devices. Pin the
+      # match to the newest installed iOS runtime when the default choice is
+      # missing. User-level override; persists on the host and is a no-op
+      # once satisfied.
+      - name: Match iOS SDK to installed simulator runtime
         run: |
-          xcodebuild -version || true
-          xcodebuild -showsdks || true
-          echo "== simctl list runtimes =="
-          xcrun simctl list runtimes || true
-          echo "== simctl runtime list =="
-          xcrun simctl runtime list || true
-          echo "== simctl runtime match list =="
-          xcrun simctl runtime match list || true
-          echo "== simctl list devices available =="
-          xcrun simctl list devices available || true
-          echo "== showdestinations =="
-          xcodebuild -showdestinations -project Intent.xcodeproj -scheme Intent || true
+          sdk="iphoneos$(xcrun --sdk iphoneos --show-sdk-version)"
+          chosen=$(xcrun simctl runtime match list | awk -v k="$sdk:" 'index($0, k) == 1 {f=1} f && /Chosen Runtime:/ {print $3; exit}')
+          builds=$(xcrun simctl runtime list | sed -nE 's/^iOS [0-9.]+ \(([0-9A-Za-z]+)\).*\(Ready\).*/\1/p')
+          latest=$(echo "$builds" | tail -n 1)
+          echo "SDK $sdk chosen runtime: ${chosen:-none}; installed iOS runtimes: $(echo "$builds" | tr '\n' ' ')"
+          if [ -n "$latest" ] && ! echo "$builds" | grep -qx "$chosen"; then
+            echo "Chosen runtime $chosen is not installed; overriding $sdk -> $latest"
+            xcrun simctl runtime match set "$sdk" "$latest"
+            xcrun simctl runtime match list
+          fi
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
