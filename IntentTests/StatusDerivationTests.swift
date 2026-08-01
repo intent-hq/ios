@@ -27,6 +27,7 @@ struct StatusDerivationTests {
     // MARK: - Wire value mapping
 
     @Test func wireValueMapping() async throws {
+        #expect(WorkspaceDisplayStatus(wireValue: "needs_attention") == .needsAttention)
         #expect(WorkspaceDisplayStatus(wireValue: "idle") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "not_started") == .notStarted)
         #expect(WorkspaceDisplayStatus(wireValue: "in_progress") == .inProgress)
@@ -65,9 +66,15 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .idle)
     }
 
+    @Test func resolveMapsNeedsAttention() async throws {
+        let ws = makeWorkspace(displayStatus: "needs_attention")
+        #expect(resolveDisplayStatus(for: ws) == .needsAttention)
+    }
+
     // MARK: - Labels
 
     @Test func statusLabels() async throws {
+        #expect(WorkspaceDisplayStatus.needsAttention.label == "Needs Attention")
         #expect(WorkspaceDisplayStatus.idle.label == "Idle")
         #expect(WorkspaceDisplayStatus.notStarted.label == "No Code Changes")
         #expect(WorkspaceDisplayStatus.inProgress.label == "In Progress")
@@ -80,9 +87,16 @@ struct StatusDerivationTests {
     // MARK: - Sort order
 
     @Test func sortOrderOrdering() async throws {
-        let ordered: [WorkspaceDisplayStatus] = [.idle, .inProgress, .prReady, .prOpen, .notStarted, .complete, .prMerged]
+        let ordered: [WorkspaceDisplayStatus] = [.needsAttention, .idle, .inProgress, .prReady, .prOpen, .notStarted, .complete, .prMerged]
         for i in 0..<ordered.count - 1 {
             #expect(ordered[i].sortOrder < ordered[i + 1].sortOrder)
+        }
+    }
+
+    @Test func needsAttentionSortsFirst() async throws {
+        #expect(WorkspaceDisplayStatus.needsAttention.sortOrder == 0)
+        for status in WorkspaceDisplayStatus.allCases where status != .needsAttention {
+            #expect(WorkspaceDisplayStatus.needsAttention.sortOrder < status.sortOrder)
         }
     }
 }
