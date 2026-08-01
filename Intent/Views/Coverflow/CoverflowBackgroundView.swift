@@ -132,73 +132,87 @@ struct AgentStarCluster: View {
         let modeScale: CGFloat = isDarkMode ? 1.0 : 0.3
         let nc = nebulaCenter
 
+        // Xcode 16.2's type checker times out on the inline closure
+        // ("unable to type-check this expression in reasonable time"), so the
+        // drawing body lives in drawCluster(in:w:h:time:modeScale:nc:).
         return Canvas { context, _ in
-            guard opacity > 0.01 else { return }
-
-            // --- Faint nebula glow behind stars ---
-            let nebulaRadius = min(w, h) * 0.4
-            let nebulaPt = CGPoint(x: nc.x * w, y: nc.y * h)
-            let nebulaRect = CGRect(
-                x: nebulaPt.x - nebulaRadius,
-                y: nebulaPt.y - nebulaRadius,
-                width: nebulaRadius * 2,
-                height: nebulaRadius * 2
-            )
-            context.opacity = opacity * Double(modeScale) * 0.05
-            context.fill(Path(ellipseIn: nebulaRect), with: .radialGradient(
-                Gradient(colors: [color.opacity(0.8), color.opacity(0.2), color.opacity(0)]),
-                center: nebulaPt,
-                startRadius: 0,
-                endRadius: nebulaRadius
-            ))
-
-            // --- Stars ---
-            for star in stars {
-                let shimmerRate = 0.3 + star.phase * 0.5
-                let shimmer = sin((time * shimmerRate * .pi * 2) + star.phase * .pi * 2)
-                let shimmerFactor = 1.0 + CGFloat(shimmer) * star.shimmerAmplitude
-                let finalOpacity = Double(star.baseOpacity * shimmerFactor * modeScale) * opacity
-
-                guard finalOpacity > 0.005 else { continue }
-
-                let center = CGPoint(x: star.x * w, y: star.y * h)
-
-                // Blend star color: white mixed with agent color
-                let starColor = Color(
-                    red: 1.0 * Double(1.0 - star.colorMix) + 0.8 * Double(star.colorMix),
-                    green: 1.0 * Double(1.0 - star.colorMix) + 0.85 * Double(star.colorMix),
-                    blue: 1.0 * Double(1.0 - star.colorMix) + 1.0 * Double(star.colorMix)
-                )
-
-                if star.size < 1.2 {
-                    // Tiny star: simple filled circle, no gradient
-                    let r = star.size
-                    let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
-                    context.opacity = finalOpacity
-                    context.fill(Path(ellipseIn: rect), with: .color(starColor))
-                } else {
-                    // Bright star: small solid core + faint halo
-                    let coreR = star.size * 0.6
-                    let haloR = star.size * 1.5
-
-                    // Halo first (behind core)
-                    let haloRect = CGRect(x: center.x - haloR, y: center.y - haloR, width: haloR * 2, height: haloR * 2)
-                    context.opacity = finalOpacity * 0.15
-                    context.fill(Path(ellipseIn: haloRect), with: .radialGradient(
-                        Gradient(colors: [color.opacity(0.6), color.opacity(0.15), color.opacity(0)]),
-                        center: center,
-                        startRadius: 0,
-                        endRadius: haloR
-                    ))
-
-                    // Solid core
-                    let coreRect = CGRect(x: center.x - coreR, y: center.y - coreR, width: coreR * 2, height: coreR * 2)
-                    context.opacity = finalOpacity
-                    context.fill(Path(ellipseIn: coreRect), with: .color(starColor))
-                }
-            }
-            context.opacity = 1.0
+            drawCluster(in: &context, w: w, h: h, time: time, modeScale: modeScale, nc: nc)
         }
+    }
+
+    private func drawCluster(
+        in context: inout GraphicsContext,
+        w: CGFloat,
+        h: CGFloat,
+        time: Double,
+        modeScale: CGFloat,
+        nc: CGPoint
+    ) {
+        guard opacity > 0.01 else { return }
+
+        // --- Faint nebula glow behind stars ---
+        let nebulaRadius = min(w, h) * 0.4
+        let nebulaPt = CGPoint(x: nc.x * w, y: nc.y * h)
+        let nebulaRect = CGRect(
+            x: nebulaPt.x - nebulaRadius,
+            y: nebulaPt.y - nebulaRadius,
+            width: nebulaRadius * 2,
+            height: nebulaRadius * 2
+        )
+        context.opacity = opacity * Double(modeScale) * 0.05
+        context.fill(Path(ellipseIn: nebulaRect), with: .radialGradient(
+            Gradient(colors: [color.opacity(0.8), color.opacity(0.2), color.opacity(0)]),
+            center: nebulaPt,
+            startRadius: 0,
+            endRadius: nebulaRadius
+        ))
+
+        // --- Stars ---
+        for star in stars {
+            let shimmerRate = 0.3 + star.phase * 0.5
+            let shimmer = sin((time * shimmerRate * .pi * 2) + star.phase * .pi * 2)
+            let shimmerFactor = 1.0 + CGFloat(shimmer) * star.shimmerAmplitude
+            let finalOpacity = Double(star.baseOpacity * shimmerFactor * modeScale) * opacity
+
+            guard finalOpacity > 0.005 else { continue }
+
+            let center = CGPoint(x: star.x * w, y: star.y * h)
+
+            // Blend star color: white mixed with agent color
+            let starColor = Color(
+                red: 1.0 * Double(1.0 - star.colorMix) + 0.8 * Double(star.colorMix),
+                green: 1.0 * Double(1.0 - star.colorMix) + 0.85 * Double(star.colorMix),
+                blue: 1.0 * Double(1.0 - star.colorMix) + 1.0 * Double(star.colorMix)
+            )
+
+            if star.size < 1.2 {
+                // Tiny star: simple filled circle, no gradient
+                let r = star.size
+                let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+                context.opacity = finalOpacity
+                context.fill(Path(ellipseIn: rect), with: .color(starColor))
+            } else {
+                // Bright star: small solid core + faint halo
+                let coreR = star.size * 0.6
+                let haloR = star.size * 1.5
+
+                // Halo first (behind core)
+                let haloRect = CGRect(x: center.x - haloR, y: center.y - haloR, width: haloR * 2, height: haloR * 2)
+                context.opacity = finalOpacity * 0.15
+                context.fill(Path(ellipseIn: haloRect), with: .radialGradient(
+                    Gradient(colors: [color.opacity(0.6), color.opacity(0.15), color.opacity(0)]),
+                    center: center,
+                    startRadius: 0,
+                    endRadius: haloR
+                ))
+
+                // Solid core
+                let coreRect = CGRect(x: center.x - coreR, y: center.y - coreR, width: coreR * 2, height: coreR * 2)
+                context.opacity = finalOpacity
+                context.fill(Path(ellipseIn: coreRect), with: .color(starColor))
+            }
+        }
+        context.opacity = 1.0
     }
 }
 
