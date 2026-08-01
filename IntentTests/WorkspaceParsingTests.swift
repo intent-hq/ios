@@ -38,6 +38,16 @@ struct WorkspaceParsingTests {
         #expect(ws?.taskStatsInProgress == 2)
     }
 
+    @Test func parseNeedsAttentionDisplayStatus() async throws {
+        // "needs_attention" is a known wire value: it parses verbatim and
+        // resolves to .needsAttention (no fallback to .notStarted).
+        let dict: [String: Any] = ["id": "ws-6", "title": "Attention", "displayStatus": "needs_attention"]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.displayStatus == "needs_attention")
+        #expect(ws.map { resolveDisplayStatus(for: $0) } == .needsAttention)
+    }
+
     @Test func parseUnknownDisplayStatusTolerated() async throws {
         // Unknown future wire values are kept as-is; mapping to the enum
         // (and the fallback derivation) happens at display time.

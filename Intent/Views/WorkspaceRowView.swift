@@ -92,6 +92,17 @@ struct WorkspaceRowView: View {
         let color = displayStatus.color
 
         switch displayStatus {
+        case .needsAttention:
+            // Filled amber circle with exclamation mark
+            ZStack {
+                Circle()
+                    .fill(color)
+                Image(systemName: "exclamationmark")
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: size, height: size)
+
         case .notStarted:
             // Empty outline circle
             Circle()

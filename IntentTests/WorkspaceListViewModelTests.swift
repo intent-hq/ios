@@ -135,11 +135,28 @@ struct WorkspaceListViewModelTests {
 
         let groups = vm.groupedByStatus
         #expect(groups.count == 4)
-        // Sorted by sortOrder: idle(0), inProgress(1), prOpen(3), notStarted(4)
+        // Sorted by sortOrder: idle(1), inProgress(2), prOpen(4), notStarted(5)
         #expect(groups[0].0 == "Idle")
         #expect(groups[1].0 == "In Progress")
         #expect(groups[2].0 == "PR Open")
         #expect(groups[3].0 == "No Code Changes")
+    }
+
+    @Test @MainActor func groupedByStatus_putsNeedsAttentionFirst() {
+        let ws = [
+            makeWorkspace(id: "1", title: "Quiet", displayStatus: "idle"),
+            makeWorkspace(id: "2", title: "WIP", displayStatus: "in_progress"),
+            makeWorkspace(id: "3", title: "Blocked", displayStatus: "needs_attention")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        let groups = vm.groupedByStatus
+        #expect(groups.count == 3)
+        #expect(groups[0].0 == "Needs Attention")
+        #expect(groups[0].1.map(\.id) == ["3"])
+        #expect(groups[1].0 == "Idle")
+        #expect(groups[2].0 == "In Progress")
     }
 
     @Test @MainActor func groupedByStatus_usesBackendDisplayStatusExclusively() {
