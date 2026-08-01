@@ -22,6 +22,7 @@ struct AgentSessionTests {
             "lastActivity": "2026-01-02T12:00:00Z",
             "lastAgentResponse": "Done",
             "lastUserMessage": "Fix it",
+            "lastMessageRole": "assistant",
             "digest": "Fixed the bug",
             "metadata": [
                 "isBackground": true,
@@ -45,6 +46,7 @@ struct AgentSessionTests {
         #expect(agent?.lastActivity == "2026-01-02T12:00:00Z")
         #expect(agent?.lastAgentResponse == "Done")
         #expect(agent?.lastUserMessage == "Fix it")
+        #expect(agent?.lastMessageRole == "assistant")
         #expect(agent?.digest == "Fixed the bug")
         #expect(agent?.specialist == "implementor")
         #expect(agent?.createdByAgentId == "agent-0")
@@ -64,6 +66,7 @@ struct AgentSessionTests {
         #expect(agent?.isWaitingForOtherAgents == false)
         #expect(agent?.waitingForAgentIds == [])
         #expect(agent?.createdAt == nil)
+        #expect(agent?.lastMessageRole == nil)
         #expect(agent?.specialist == nil)
         #expect(agent?.createdByAgentId == nil)
         #expect(agent?.attentionRequestKind == nil)
@@ -292,6 +295,87 @@ struct AgentSessionTests {
         #expect(agent.displayMessage == "Real content")
     }
 
+    // MARK: - displayMessage lastMessageRole precedence (PROTOCOL §5.5)
+
+    @Test func displayMessagePrefersUserFirstLineWhenUserIsNewest() {
+        let agent = makeAgent(
+            digest: "old digest", lastAgentResponse: "old response",
+            lastUserMessage: "Please rerun the tests", lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "Please rerun the tests")
+    }
+
+    @Test func displayMessageUserNewestTakesFirstLineOnly() {
+        let agent = makeAgent(
+            lastUserMessage: "First line\nSecond line", lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "First line")
+    }
+
+    @Test func displayMessageUserNewestSkipsBlankLeadingLines() {
+        let agent = makeAgent(
+            lastUserMessage: "\n  \nActual question", lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "Actual question")
+    }
+
+    @Test func displayMessageAssistantNewestKeepsExistingBehavior() {
+        let agent = makeAgent(
+            digest: "digest text", lastAgentResponse: "response text",
+            lastUserMessage: "user text", lastMessageRole: "assistant"
+        )
+        #expect(agent.displayMessage == "digest text")
+    }
+
+    @Test func displayMessageAbsentRoleKeepsExistingBehavior() {
+        // Older daemons omit lastMessageRole — back-compat fallback.
+        let agent = makeAgent(
+            digest: "digest text", lastAgentResponse: "response text",
+            lastUserMessage: "user text", lastMessageRole: nil
+        )
+        #expect(agent.displayMessage == "digest text")
+    }
+
+    @Test func displayMessageUserNewestWithBlankUserMessageFallsBack() {
+        let agent = makeAgent(
+            digest: "digest text", lastUserMessage: "   \n ",
+            lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "digest text")
+    }
+
+    @Test func displayMessageUserNewestWithNilUserMessageFallsBack() {
+        let agent = makeAgent(
+            lastAgentResponse: "response text", lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "response text")
+    }
+
+    // MARK: - applyingPreview role flip
+
+    @Test func applyingPreviewFlipsRoleToAssistant() {
+        // Live agent text arriving mirrors the daemon's read-path overlay:
+        // the agent-side preview resumes over the user's newest message.
+        let agent = makeAgent(
+            lastUserMessage: "Do the thing", lastMessageRole: "user"
+        )
+        #expect(agent.displayMessage == "Do the thing")
+        let updated = agent.applyingPreview(
+            lastAgentResponse: "On it — running now", digest: nil
+        )
+        #expect(updated.lastMessageRole == "assistant")
+        #expect(updated.displayMessage == "On it — running now")
+    }
+
+    @Test func applyingPreviewWithNilFieldsKeepsRole() {
+        let agent = makeAgent(
+            lastUserMessage: "Do the thing", lastMessageRole: "user"
+        )
+        let updated = agent.applyingPreview(lastAgentResponse: nil, digest: nil)
+        #expect(updated.lastMessageRole == "user")
+        #expect(updated.displayMessage == "Do the thing")
+    }
+
     // MARK: - isActive
 
     @Test func isActiveForRespondingStatus() {
@@ -337,7 +421,9 @@ struct AgentSessionTests {
         isProcessing: Bool = false,
         isResponding: Bool = false,
         digest: String? = nil,
-        lastAgentResponse: String? = nil
+        lastAgentResponse: String? = nil,
+        lastUserMessage: String? = nil,
+        lastMessageRole: String? = nil
     ) -> AgentSession {
         AgentSession(
             id: "test", name: "Test", status: status,
@@ -345,7 +431,9 @@ struct AgentSessionTests {
             isProcessing: isProcessing, isResponding: isResponding,
             isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
-            lastAgentResponse: lastAgentResponse, lastUserMessage: nil,
+            lastAgentResponse: lastAgentResponse,
+            lastUserMessage: lastUserMessage,
+            lastMessageRole: lastMessageRole,
             digest: digest, specialist: nil, createdByAgentId: nil,
             attentionRequestKind: nil, attentionRequestReason: nil,
             attentionRequestTimestamp: nil
