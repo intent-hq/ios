@@ -18,10 +18,10 @@ concurrency:
 jobs:
   build-and-test:
     name: iOS Build & Test
-    # m1mac is a single-slot persistent runner shared with intentd mac builds
-    # and cloudlands-fe release-beta; timeout covers a cold build on the
-    # slower machine (queue wait does not count against it).
-    runs-on: [self-hosted, macOS, ARM64, m1mac]
+    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
+    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
+    # on the 3-core M-series VM.
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -29,10 +29,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Prefer Xcode 16.4 when its versioned bundle exists (the ephemeral CI
-      # image layout), else the newest versioned bundle, else the runner's
-      # default toolchain. DEVELOPER_DIR needs no sudo and leaves the shared
-      # runner's global xcode-select untouched.
+      # Prefer Xcode 16.4 when its versioned bundle exists, else the newest
+      # versioned bundle, else the runner's default toolchain — tolerant to
+      # image updates that drop 16.4. DEVELOPER_DIR needs no sudo.
       - name: Select Xcode
         run: |
           xcode=/Applications/Xcode_16.4.app
@@ -78,22 +77,23 @@ jobs:
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
-      # Persistent runner: keep DerivedData (SPM checkouts included) OUTSIDE
-      # the work dir so checkout's git clean can't wipe it — SPM packages and
-      # build products stay warm across runs (mirrors intentd's ci-target
-      # pattern). Replaces the actions/cache SPM step, which was tuned for
-      # ephemeral runners and would be pure overhead here.
-      - name: Point DerivedData outside the work dir
-        run: |
-          mkdir -p "$HOME/ci-target/ios/DerivedData"
-          echo "DERIVED_DATA=$HOME/ci-target/ios/DerivedData" >> "$GITHUB_ENV"
+      # Ephemeral runner: cache SPM checkouts across runs. The xcodebuild
+      # invocations pin -clonedSourcePackagesDirPath to the cached path so
+      # the cache key actually covers what gets written.
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
       - name: Resolve SPM packages
         run: >
           xcodebuild -resolvePackageDependencies
           -project Intent.xcodeproj
           -scheme Intent
-          -derivedDataPath "$DERIVED_DATA"
+          -clonedSourcePackagesDirPath build/SourcePackages
 
       - name: Build for testing
         run: >
@@ -101,13 +101,13 @@ jobs:
           -project Intent.xcodeproj
           -scheme Intent
           -destination "platform=iOS Simulator,id=$SIM_UDID"
-          -derivedDataPath "$DERIVED_DATA"
+          -clonedSourcePackagesDirPath build/SourcePackages
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGNING_ALLOWED=NO
 
-      # rm keeps the step independent of checkout's clean setting on the
-      # persistent runner: xcodebuild refuses an existing result bundle path.
+      # rm keeps the step independent of checkout's clean setting:
+      # xcodebuild refuses an existing result bundle path.
       - name: Run unit tests
         run: |
           rm -rf TestResults
@@ -115,7 +115,7 @@ jobs:
             -project Intent.xcodeproj \
             -scheme Intent \
             -destination "platform=iOS Simulator,id=$SIM_UDID" \
-            -derivedDataPath "$DERIVED_DATA" \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults
 
