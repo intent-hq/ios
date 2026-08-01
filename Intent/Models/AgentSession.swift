@@ -15,6 +15,10 @@ struct AgentSession: Identifiable, Equatable {
     let lastActivity: String?
     let lastAgentResponse: String?
     let lastUserMessage: String?
+    /// Role of the conversation's newest user/assistant message:
+    /// "user" | "assistant" (PROTOCOL §5.5). Nil when omitted (older daemons,
+    /// or a transcript with neither role).
+    let lastMessageRole: String?
     let digest: String?
     let specialist: String?
     let createdByAgentId: String?
@@ -35,6 +39,13 @@ struct AgentSession: Identifiable, Equatable {
     }
 
     var displayMessage: String? {
+        // Freshness wins (PROTOCOL §5.5): when the user's message is newest,
+        // preview its first line instead of the stale agent response/digest.
+        // The daemon flips lastMessageRole to "assistant" once mid-turn
+        // streamed text is derivable, so no local turn-state logic is needed.
+        if lastMessageRole == "user", let userLine = Self.firstLine(lastUserMessage) {
+            return userLine
+        }
         guard let raw = digest ?? lastAgentResponse else { return nil }
         // Strip <group:Name> and </group> / </group:Name> tags
         var cleaned = raw.replacingOccurrences(
@@ -82,6 +93,16 @@ struct AgentSession: Identifiable, Equatable {
         )
     }
 
+    /// First non-empty line, trimmed; nil when the text is nil or blank.
+    private static func firstLine(_ text: String?) -> String? {
+        guard let text else { return nil }
+        for line in text.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return nil
+    }
+
     /// Collapses runs of whitespace/newlines into single spaces; nil when empty.
     private static func oneLiner(_ text: String?) -> String? {
         guard let text else { return nil }
@@ -100,7 +121,11 @@ struct AgentSession: Identifiable, Equatable {
     /// Returns a copy with mid-turn preview fields from an enriched
     /// `agent:stream:activity` payload applied. The daemon stamps
     /// `lastAgentResponse`/`digest` only when derived to non-empty, so nil
-    /// inputs keep the existing values.
+    /// inputs keep the existing values. Applying a live response also flips
+    /// `lastMessageRole` to "assistant", mirroring the daemon's read-path
+    /// overlay: the role flips with the response overlay only (a digest-only
+    /// payload keeps the persisted role, same as the daemon), so the
+    /// agent-side preview resumes once streamed response text is derivable.
     func applyingPreview(lastAgentResponse: String?, digest: String?) -> AgentSession {
         AgentSession(
             id: id,
@@ -117,6 +142,7 @@ struct AgentSession: Identifiable, Equatable {
             lastActivity: lastActivity,
             lastAgentResponse: lastAgentResponse ?? self.lastAgentResponse,
             lastUserMessage: lastUserMessage,
+            lastMessageRole: lastAgentResponse != nil ? "assistant" : self.lastMessageRole,
             digest: digest ?? self.digest,
             specialist: specialist,
             createdByAgentId: createdByAgentId,
@@ -146,6 +172,7 @@ struct AgentSession: Identifiable, Equatable {
             lastActivity: dict["lastActivity"] as? String,
             lastAgentResponse: dict["lastAgentResponse"] as? String,
             lastUserMessage: dict["lastUserMessage"] as? String,
+            lastMessageRole: dict["lastMessageRole"] as? String,
             digest: dict["digest"] as? String,
             specialist: metadata?["specialist"] as? String,
             createdByAgentId: metadata?["createdByAgentId"] as? String,

@@ -943,6 +943,8 @@ struct ConversationStoreLiveStateTests {
     private func makeWatchedAgent(
         id: String,
         lastAgentResponse: String? = nil,
+        lastUserMessage: String? = nil,
+        lastMessageRole: String? = nil,
         digest: String? = nil
     ) -> AgentSession {
         AgentSession(
@@ -951,7 +953,9 @@ struct ConversationStoreLiveStateTests {
             isProcessing: false, isResponding: true,
             isWaitingForOtherAgents: false, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
-            lastAgentResponse: lastAgentResponse, lastUserMessage: nil,
+            lastAgentResponse: lastAgentResponse,
+            lastUserMessage: lastUserMessage,
+            lastMessageRole: lastMessageRole,
             digest: digest, specialist: nil, createdByAgentId: nil,
             attentionRequestKind: nil, attentionRequestReason: nil,
             attentionRequestTimestamp: nil
@@ -1051,6 +1055,33 @@ struct ConversationStoreLiveStateTests {
         #expect(watched.lastAgentResponse == "Old preview")
         #expect(watched.digest == "Fresh digest")
         #expect(watched.displayMessage == "Fresh digest")
+        #expect(!fake.didCallMethod("agent.get"))
+    }
+
+    /// A watched agent previewing a newest user message (lastMessageRole
+    /// "user") switches back to the agent-side preview when live agent text
+    /// arrives via the enriched ping — the applied preview flips the role to
+    /// "assistant", mirroring the daemon's read-path overlay.
+    @Test func enrichedActivityFlipsUserNewestPreviewToAgentText() async throws {
+        let (store, fake) = await makeParentStore(watching: "agent-child")
+        store.watchedAgents = [makeWatchedAgent(
+            id: "agent-child",
+            lastUserMessage: "Please also update the docs",
+            lastMessageRole: "user"
+        )]
+        #expect(store.watchedAgents.first?.displayMessage == "Please also update the docs")
+
+        store.handleStreamEvent("event", params: [
+            "event": ["type": "agent:stream:activity", "data": [
+                "agentId": "agent-child", "messageId": "m-1",
+                "lastAgentResponse": "Updating the docs now"
+            ]]
+        ])
+        await drainMainQueue()
+
+        let watched = try #require(store.watchedAgents.first)
+        #expect(watched.lastMessageRole == "assistant")
+        #expect(watched.displayMessage == "Updating the docs now")
         #expect(!fake.didCallMethod("agent.get"))
     }
 
