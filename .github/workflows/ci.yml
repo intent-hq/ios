@@ -18,16 +18,56 @@ concurrency:
 jobs:
   build-and-test:
     name: iOS Build & Test
-    runs-on: warp-macos-15-arm64-12x
-    timeout-minutes: 30
+    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
+    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
+    # on the 3-core M-series VM.
+    runs-on: macos-15
+    timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Select latest Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+      # Prefer Xcode 16.4 when its versioned bundle exists, else the newest
+      # versioned bundle, else the runner's default toolchain — tolerant to
+      # image updates that drop 16.4. DEVELOPER_DIR needs no sudo.
+      - name: Select Xcode
+        run: |
+          xcode=/Applications/Xcode_16.4.app
+          if [ ! -d "$xcode" ]; then
+            xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          fi
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          else
+            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
+            xcodebuild -version
+          fi
+
+      # Prefer the iPhone 16 simulator, else any available iPhone on this
+      # runner; fail early with a clear message if there is none. Select by
+      # UDID: it keeps parenthesized names (e.g. "iPhone SE (3rd generation)")
+      # intact, disambiguates duplicate names across runtimes, and pins the
+      # destination to one concrete device. tail -n 1 prefers the newest
+      # installed runtime (simctl groups devices by runtime, oldest first).
+      - name: Pick simulator device
+        run: |
+          devices=$(xcrun simctl list devices available)
+          line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
+          if [ -z "$line" ]; then
+            line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
+          fi
+          udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
+          if [ -z "$udid" ]; then
+            echo "No available iPhone simulator on this runner" >&2
+            exit 1
+          fi
+          name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          echo "Selected simulator: $name ($udid)"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -35,8 +75,11 @@ jobs:
       # the device to reach the Booted state, but CoreSimulator completes the
       # boot on its own and xcodebuild waits for it if still in progress.
       - name: Pre-boot simulator
-        run: xcrun simctl boot 'iPhone 16' >/dev/null 2>&1 || true &
+        run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
+      # Ephemeral runner: cache SPM checkouts across runs. The xcodebuild
+      # invocations pin -clonedSourcePackagesDirPath to the cached path so
+      # the cache key actually covers what gets written.
       - name: Cache SPM packages
         uses: actions/cache@v6
         with:
@@ -50,25 +93,31 @@ jobs:
           xcodebuild -resolvePackageDependencies
           -project Intent.xcodeproj
           -scheme Intent
+          -clonedSourcePackagesDirPath build/SourcePackages
 
       - name: Build for testing
         run: >
           xcodebuild build-for-testing
           -project Intent.xcodeproj
           -scheme Intent
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+          -destination "platform=iOS Simulator,id=$SIM_UDID"
+          -clonedSourcePackagesDirPath build/SourcePackages
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGNING_ALLOWED=NO
 
+      # rm keeps the step independent of checkout's clean setting:
+      # xcodebuild refuses an existing result bundle path.
       - name: Run unit tests
-        run: >
-          xcodebuild test-without-building
-          -project Intent.xcodeproj
-          -scheme Intent
-          -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
-          -parallel-testing-enabled NO
-          -resultBundlePath TestResults
+        run: |
+          rm -rf TestResults
+          xcodebuild test-without-building \
+            -project Intent.xcodeproj \
+            -scheme Intent \
+            -destination "platform=iOS Simulator,id=$SIM_UDID" \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            -parallel-testing-enabled NO \
+            -resultBundlePath TestResults
 
       - name: Upload test results
         if: failure()
@@ -78,7 +127,7 @@ jobs:
           path: TestResults
 
   pr-title:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
       - uses: amannn/action-semantic-pull-request@v6
