@@ -376,6 +376,20 @@ struct AgentSessionTests {
         #expect(updated.displayMessage == "Do the thing")
     }
 
+    @Test func applyingPreviewDigestOnlyKeepsRole() {
+        // The daemon's read-path overlay flips the role only with the
+        // response overlay; a digest-only payload keeps the persisted role.
+        let agent = makeAgent(
+            lastUserMessage: "Do the thing", lastMessageRole: "user"
+        )
+        let updated = agent.applyingPreview(
+            lastAgentResponse: nil, digest: "Working on it"
+        )
+        #expect(updated.lastMessageRole == "user")
+        #expect(updated.digest == "Working on it")
+        #expect(updated.displayMessage == "Do the thing")
+    }
+
     // MARK: - isActive
 
     @Test func isActiveForRespondingStatus() {
