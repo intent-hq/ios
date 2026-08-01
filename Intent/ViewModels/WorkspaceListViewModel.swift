@@ -8,6 +8,7 @@ enum ViewMode: String, CaseIterable {
 }
 
 enum WorkspaceDisplayStatus: String, CaseIterable {
+    case needsAttention
     case idle
     case notStarted
     case inProgress
@@ -20,6 +21,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     /// Returns nil for unknown values.
     init?(wireValue: String) {
         switch wireValue {
+        case "needs_attention": self = .needsAttention
         case "idle": self = .idle
         case "not_started": self = .notStarted
         case "in_progress": self = .inProgress
@@ -33,6 +35,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     var color: Color {
         switch self {
+        case .needsAttention: return Color(red: 0.96, green: 0.62, blue: 0.04) // Amber #F59E0B
         case .idle: return Color.gray.opacity(0.6)
         case .notStarted: return Color.gray.opacity(0.4)
         case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
@@ -45,6 +48,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     var label: String {
         switch self {
+        case .needsAttention: return "Needs Attention"
         case .idle: return "Idle"
         case .notStarted: return "No Code Changes"
         case .inProgress: return "In Progress"
@@ -58,13 +62,14 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     /// Order for the Status view grouping (matches the FE sidebar status view)
     var sortOrder: Int {
         switch self {
-        case .idle: return 0
-        case .inProgress: return 1
-        case .prReady: return 2
-        case .prOpen: return 3
-        case .notStarted: return 4
-        case .complete: return 5
-        case .prMerged: return 6
+        case .needsAttention: return 0
+        case .idle: return 1
+        case .inProgress: return 2
+        case .prReady: return 3
+        case .prOpen: return 4
+        case .notStarted: return 5
+        case .complete: return 6
+        case .prMerged: return 7
         }
     }
 }
