@@ -90,7 +90,7 @@ struct AgentSession: Identifiable, Equatable {
         return PendingAttentionRequest(
             kind: AgentAttentionKind(wire: kind),
             reason: Self.oneLiner(attentionRequestReason),
-            raisedAt: Self.parseAttentionTimestamp(attentionRequestTimestamp)
+            raisedAt: ISO8601DateFormatter.lenientDate(from: attentionRequestTimestamp)
         )
     }
 
@@ -206,20 +206,8 @@ struct AgentSession: Identifiable, Equatable {
         return PendingAttentionRequest(
             kind: AgentAttentionKind(wire: kind),
             reason: oneLiner(surface["attentionRequestReason"] as? String),
-            raisedAt: parseAttentionTimestamp(surface["attentionRequestTimestamp"] as? String)
+            raisedAt: ISO8601DateFormatter.lenientDate(from: surface["attentionRequestTimestamp"] as? String)
         )
-    }
-
-    /// Parses the ISO8601 `attentionRequestTimestamp`, handling both with and
-    /// without fractional seconds; nil when absent or unparseable.
-    private static func parseAttentionTimestamp(_ raw: String?) -> Date? {
-        guard let raw else { return nil }
-        let frac = ISO8601DateFormatter()
-        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = frac.date(from: raw) { return d }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: raw)
     }
 }
 

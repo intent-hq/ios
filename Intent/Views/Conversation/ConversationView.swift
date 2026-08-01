@@ -603,13 +603,15 @@ struct AttentionRequestBanner: View {
                 .foregroundStyle(attention.kind.color)
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(attention.kind.label)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
 
                     if let raisedAt = attention.raisedAt {
-                        (Text(raisedAt, style: .relative) + Text(" ago"))
+                        // Clamp to now: a slightly-ahead device clock would
+                        // otherwise render a live countdown before " ago".
+                        (Text(min(raisedAt, Date()), style: .relative) + Text(" ago"))
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     }
@@ -619,6 +621,7 @@ struct AttentionRequestBanner: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .lineLimit(6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
