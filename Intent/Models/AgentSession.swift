@@ -89,7 +89,8 @@ struct AgentSession: Identifiable, Equatable {
         guard let kind = attentionRequestKind else { return nil }
         return PendingAttentionRequest(
             kind: AgentAttentionKind(wire: kind),
-            reason: Self.oneLiner(attentionRequestReason)
+            reason: Self.oneLiner(attentionRequestReason),
+            raisedAt: Self.parseAttentionTimestamp(attentionRequestTimestamp)
         )
     }
 
@@ -204,8 +205,21 @@ struct AgentSession: Identifiable, Equatable {
               let kind = surface["attentionRequestKind"] as? String else { return nil }
         return PendingAttentionRequest(
             kind: AgentAttentionKind(wire: kind),
-            reason: oneLiner(surface["attentionRequestReason"] as? String)
+            reason: oneLiner(surface["attentionRequestReason"] as? String),
+            raisedAt: parseAttentionTimestamp(surface["attentionRequestTimestamp"] as? String)
         )
+    }
+
+    /// Parses the ISO8601 `attentionRequestTimestamp`, handling both with and
+    /// without fractional seconds; nil when absent or unparseable.
+    private static func parseAttentionTimestamp(_ raw: String?) -> Date? {
+        guard let raw else { return nil }
+        let frac = ISO8601DateFormatter()
+        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = frac.date(from: raw) { return d }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: raw)
     }
 }
 
@@ -214,6 +228,15 @@ struct PendingAttentionRequest: Equatable {
     let kind: AgentAttentionKind
     /// Reason collapsed to a single line; nil when absent or empty.
     let reason: String?
+    /// When the request was raised; nil when the daemon omitted the timestamp
+    /// or it failed to parse.
+    let raisedAt: Date?
+
+    init(kind: AgentAttentionKind, reason: String?, raisedAt: Date? = nil) {
+        self.kind = kind
+        self.reason = reason
+        self.raisedAt = raisedAt
+    }
 }
 
 /// Kind vocabulary for agent attention requests: "discussion" | "blocker"

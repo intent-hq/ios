@@ -172,7 +172,8 @@ struct ConversationStoreTests {
             "agent": [
                 "id": "a", "name": "A",
                 "attentionRequestKind": "blocker",
-                "attentionRequestReason": "sandbox is broken"
+                "attentionRequestReason": "sandbox is broken",
+                "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
             ] as [String: Any]
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
@@ -181,6 +182,7 @@ struct ConversationStoreTests {
 
         #expect(store.attentionRequest?.kind == .blocker)
         #expect(store.attentionRequest?.reason == "sandbox is broken")
+        #expect(store.attentionRequest?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
     }
 
     @Test func fetchAgentStreamingStateClearsWhenServerHasNone() async {
