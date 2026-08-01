@@ -39,27 +39,14 @@ struct CoverflowAgent: Identifiable, Equatable {
     var status: String { agent.status }
     var specialist: String? { agent.specialist }
 
-    /// Parse an ISO8601 date string, handling both with and without fractional seconds.
-    private static func parseDate(_ raw: String) -> Date? {
-        let frac = ISO8601DateFormatter()
-        frac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = frac.date(from: raw) { return d }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        return plain.date(from: raw)
-    }
-
     /// Best timestamp for sorting — prefer updatedAt, then lastActivity, then createdAt.
     var bestTimestamp: Date? {
-        guard let raw = agent.bestTimestamp else { return nil }
-        return Self.parseDate(raw)
+        ISO8601DateFormatter.lenientDate(from: agent.bestTimestamp)
     }
 
     /// Last activity date for computing idle duration.
     var lastActivityDate: Date? {
-        let raw = agent.lastActivity ?? agent.updatedAt ?? agent.createdAt
-        guard let raw else { return nil }
-        return Self.parseDate(raw)
+        ISO8601DateFormatter.lenientDate(from: agent.lastActivity ?? agent.updatedAt ?? agent.createdAt)
     }
 
     /// Human-readable idle duration string like "idle 5m" or "idle 2h".

@@ -142,11 +142,38 @@ struct AgentSessionTests {
         // Raise/clear must not depend on the full session parse (id/name).
         let dict: [String: Any] = [
             "attentionRequestKind": "blocker",
-            "attentionRequestReason": "sandbox is broken"
+            "attentionRequestReason": "sandbox is broken",
+            "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
         ]
         let pending = AgentSession.parsePendingAttentionRequest(dict)
         #expect(pending?.kind == .blocker)
         #expect(pending?.reason == "sandbox is broken")
+        #expect(pending?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
+    }
+
+    @Test func parsePendingAttentionRequestTimestampWithFractionalSeconds() {
+        let dict: [String: Any] = [
+            "attentionRequestKind": "discussion",
+            "attentionRequestTimestamp": "2026-07-30T10:00:00.500Z"
+        ]
+        let pending = AgentSession.parsePendingAttentionRequest(dict)
+        let expected = ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z")!
+        #expect(pending?.raisedAt == expected.addingTimeInterval(0.5))
+    }
+
+    @Test func parsePendingAttentionRequestNilRaisedAtWhenTimestampAbsentOrInvalid() {
+        let absent = AgentSession.parsePendingAttentionRequest([
+            "attentionRequestKind": "blocker"
+        ])
+        #expect(absent != nil)
+        #expect(absent?.raisedAt == nil)
+
+        let invalid = AgentSession.parsePendingAttentionRequest([
+            "attentionRequestKind": "blocker",
+            "attentionRequestTimestamp": "not-a-date"
+        ])
+        #expect(invalid != nil)
+        #expect(invalid?.raisedAt == nil)
     }
 
     @Test func parsePendingAttentionRequestFromMetadataSurface() {
@@ -186,12 +213,14 @@ struct AgentSessionTests {
             "id": "agent-10",
             "name": "Blocked",
             "attentionRequestKind": "blocker",
-            "attentionRequestReason": "sandbox is broken"
+            "attentionRequestReason": "sandbox is broken",
+            "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
         ]
         let pending = AgentSession.parseAgent(dict)?.pendingAttentionRequest
         #expect(pending?.kind == .blocker)
         #expect(pending?.reason == "sandbox is broken")
         #expect(pending?.kind.label == "Blocker reported")
+        #expect(pending?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
     }
 
     @Test func pendingAttentionRequestUnknownKindFallsBackToDiscussion() {
