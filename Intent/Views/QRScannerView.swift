@@ -5,6 +5,9 @@ struct QRScannerView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
+    /// When set, pairing success is reported to the presenting context instead
+    /// of the first-run coordinator flow.
+    var onPaired: ((StoredConnection) -> Void)?
     @State private var isValidating = false
     @State private var errorMessage: String?
 
@@ -81,9 +84,13 @@ struct QRScannerView: View {
             do {
                 try await ConnectionManager.shared.connect(hosts: hosts, port: port, token: token, certFingerprint: certFingerprint)
                 let server = PairedServer(hosts: hosts, port: port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint)
-                PersistenceManager.shared.savePairing(server: server, token: token)
+                let stored = await ConnectionPairing.finalize(server: server, token: token)
                 dismiss()
-                coordinator.onConnectionSuccess()
+                if let onPaired {
+                    onPaired(stored)
+                } else {
+                    coordinator.onConnectionSuccess()
+                }
             } catch {
                 errorMessage = "Connection failed: \(error.localizedDescription)"
                 isValidating = false

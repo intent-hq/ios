@@ -5,6 +5,10 @@ import Testing
 @Suite(.serialized)
 struct AppCoordinatorTests {
 
+    init() {
+        _ = TestKeychainStorage.installed
+    }
+
     // MARK: - Helper to check AppScreen cases
 
     private static func assertScreen(_ screen: AppScreen, is expected: String, file: String = #file, line: Int = #line) {
@@ -65,6 +69,8 @@ struct AppCoordinatorTests {
     }
 
     @Test @MainActor func onLogOff_setsPairing() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
         let coordinator = AppCoordinator()
         coordinator.onLogOff()
         if case .pairing = coordinator.currentScreen {
@@ -108,6 +114,302 @@ struct AppCoordinatorTests {
     /// Clean up all PersistenceManager state that could leak between tests
     private static func cleanupLastScreen() {
         PersistenceManager.shared.clearLastScreen()
+    }
+
+    // MARK: - Connection routing
+
+    /// Remove all connection-related state (new blob, legacy entries, active pointer).
+    private static func resetConnectionState() {
+        let pm = PersistenceManager.shared
+        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
+        pm.deleteFromKeychain(account: pm.keychainAccountServer)
+        pm.deleteFromKeychain(account: pm.keychainAccountToken)
+        UserDefaults.standard.removeObject(forKey: pm.activeConnectionIdKey)
+        UserDefaults.standard.removeObject(forKey: pm.serverKey)
+    }
+
+    private static func makeConnection(port: Int) -> StoredConnection {
+        StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: port, name: "daemon-\(port)", pairedAt: Date()),
+            token: "tok-\(port)")
+    }
+
+    private static func makeWorkspace(id: String) -> Workspace {
+        Workspace(
+            id: id, title: "WS \(id)", branch: nil, baseRef: nil, status: nil,
+            activity: nil, displayStatus: nil, lastActivity: nil, updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil, prNumber: nil,
+            diffSummaryTotalFiles: nil, taskStatsTotal: nil, taskStatsCompleted: nil,
+            taskStatsInProgress: nil, agentSummaryCount: nil, agentSummaryAgents: nil)
+    }
+
+    /// Seed WorkspaceStore.shared as if a previous daemon's list had loaded.
+    @MainActor private static func seedWorkspaceStore() {
+        WorkspaceStore.shared.workspaces = [makeWorkspace(id: "stale-ws")]
+        WorkspaceStore.shared.lastUpdated = Date()
+    }
+
+    @MainActor private static func resetWorkspaceStore() {
+        WorkspaceStore.shared.workspaces = []
+        WorkspaceStore.shared.lastUpdated = nil
+    }
+
+    @Test @MainActor func onLoadComplete_routesToConnectingWhenActiveConnectionExists() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let stored = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 4242))
+        PersistenceManager.shared.setActiveConnection(id: stored.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onLoadComplete()
+
+        if case .connecting = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onLoadComplete_routesToPairingWhenNoActiveConnection() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        // A saved connection without an active pointer must not auto-connect.
+        PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 4242))
+
+        let coordinator = AppCoordinator()
+        coordinator.onLoadComplete()
+
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onLogOff_forgetsActiveConnectionOnly_flagsSavedConnections() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let active = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        let other = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 2))
+        PersistenceManager.shared.setActiveConnection(id: active.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onLogOff()
+
+        #expect(PersistenceManager.shared.loadConnections().map(\.id) == [other.id])
+        #expect(PersistenceManager.shared.activeConnection() == nil)
+        #expect(coordinator.pairingShowsSavedConnections,
+                "Pairing surface should offer the remaining saved connections")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onLogOff_lastConnection_behavesLikeFirstRun() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let only = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        PersistenceManager.shared.setActiveConnection(id: only.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onLogOff()
+
+        #expect(PersistenceManager.shared.loadConnections().isEmpty)
+        #expect(!coordinator.pairingShowsSavedConnections)
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onPaired_resetsPairingShowsSavedConnections() {
+        let coordinator = AppCoordinator()
+        coordinator.pairingShowsSavedConnections = true
+        coordinator.onPaired()
+        #expect(!coordinator.pairingShowsSavedConnections)
+    }
+
+    @Test @MainActor func onSwitchConnection_activatesTargetAndRoutesToConnecting() {
+        Self.resetConnectionState()
+        defer {
+            Self.resetConnectionState()
+            Self.cleanupLastScreen()
+        }
+
+        let a = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        let b = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 2))
+        PersistenceManager.shared.setActiveConnection(id: a.id)
+        PersistenceManager.shared.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: "ws-1",
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectWorkspace("ws-1")
+        coordinator.onSwitchConnection(id: b.id)
+
+        #expect(PersistenceManager.shared.activeConnection()?.id == b.id)
+        #expect(PersistenceManager.shared.loadLastScreen() == nil,
+                "Last-screen state must be cleared on switch")
+        #expect(coordinator.selectedWorkspaceId == nil,
+                "selectedWorkspaceId must be reset on switch")
+        if case .connecting = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onSwitchConnection_resetsWorkspaceStore() {
+        Self.resetConnectionState()
+        defer {
+            Self.resetConnectionState()
+            Self.resetWorkspaceStore()
+        }
+
+        let target = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 2))
+        Self.seedWorkspaceStore()
+
+        let coordinator = AppCoordinator()
+        coordinator.onSwitchConnection(id: target.id)
+
+        #expect(WorkspaceStore.shared.workspaces.isEmpty,
+                "Previous daemon's workspaces must be dropped on switch")
+        #expect(WorkspaceStore.shared.lastUpdated == nil,
+                "lastUpdated must be reset so ConnectingView waits for the new daemon's data")
+    }
+
+    @Test @MainActor func onLogOff_resetsWorkspaceStore() {
+        Self.resetConnectionState()
+        defer {
+            Self.resetConnectionState()
+            Self.resetWorkspaceStore()
+        }
+
+        Self.seedWorkspaceStore()
+
+        let coordinator = AppCoordinator()
+        coordinator.onLogOff()
+
+        #expect(WorkspaceStore.shared.workspaces.isEmpty)
+        #expect(WorkspaceStore.shared.lastUpdated == nil)
+    }
+
+    @Test @MainActor func onDeleteConnection_active_resetsWorkspaceStore() {
+        Self.resetConnectionState()
+        defer {
+            Self.resetConnectionState()
+            Self.resetWorkspaceStore()
+        }
+
+        let active = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        PersistenceManager.shared.setActiveConnection(id: active.id)
+        Self.seedWorkspaceStore()
+
+        let coordinator = AppCoordinator()
+        coordinator.onDeleteConnection(id: active.id)
+
+        #expect(WorkspaceStore.shared.workspaces.isEmpty)
+        #expect(WorkspaceStore.shared.lastUpdated == nil)
+    }
+
+    @Test @MainActor func onSwitchConnection_resetsPairingShowsSavedConnections() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let target = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+
+        let coordinator = AppCoordinator()
+        coordinator.pairingShowsSavedConnections = true
+        coordinator.onSwitchConnection(id: target.id)
+
+        #expect(!coordinator.pairingShowsSavedConnections)
+    }
+
+    @Test @MainActor func onDeleteConnection_nonActive_keepsScreenAndActiveConnection() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let active = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        let other = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 2))
+        PersistenceManager.shared.setActiveConnection(id: active.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onConnectionSuccess()
+        coordinator.onDeleteConnection(id: other.id)
+
+        #expect(PersistenceManager.shared.loadConnections().map(\.id) == [active.id])
+        #expect(PersistenceManager.shared.activeConnection()?.id == active.id)
+        if case .workspaceList = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .workspaceList to be untouched, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onDeleteConnection_active_routesLikeLogOff_flagsSavedConnections() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let active = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        let other = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 2))
+        PersistenceManager.shared.setActiveConnection(id: active.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onDeleteConnection(id: active.id)
+
+        #expect(PersistenceManager.shared.loadConnections().map(\.id) == [other.id])
+        #expect(PersistenceManager.shared.activeConnection() == nil)
+        #expect(coordinator.pairingShowsSavedConnections,
+                "Pairing surface should offer the remaining saved connections")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onDeleteConnection_lastActive_behavesLikeFirstRun() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let only = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        PersistenceManager.shared.setActiveConnection(id: only.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onDeleteConnection(id: only.id)
+
+        #expect(PersistenceManager.shared.loadConnections().isEmpty)
+        #expect(!coordinator.pairingShowsSavedConnections)
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onDeleteConnection_lastNonActive_clearsSavedConnectionsFlag() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        // Post-Log Off state: no active pointer, one saved connection remaining.
+        let remaining = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+
+        let coordinator = AppCoordinator()
+        coordinator.pairingShowsSavedConnections = true
+        coordinator.onDeleteConnection(id: remaining.id)
+
+        #expect(PersistenceManager.shared.loadConnections().isEmpty)
+        #expect(!coordinator.pairingShowsSavedConnections,
+                "Flag must clear once no saved connections remain")
     }
 
     @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {

@@ -38,7 +38,7 @@ struct SettingsView: View {
                         }
 
                         // Connected server card
-                        if let pairing = PersistenceManager.shared.loadPairing() {
+                        if let connection = PersistenceManager.shared.activeConnection() {
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Connected to")
                                     .font(.caption.weight(.medium))
@@ -51,10 +51,10 @@ struct SettingsView: View {
                                         .foregroundStyle(Theme.primary(for: colorScheme))
 
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(pairing.server.name)
+                                        Text(connection.displayName)
                                             .font(.body.weight(.medium))
                                             .foregroundStyle(Theme.foreground(for: colorScheme))
-                                        Text(verbatim: "\(pairing.server.hosts.joined(separator: ", ")):\(pairing.server.port)")
+                                        Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
                                             .font(.caption)
                                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     }

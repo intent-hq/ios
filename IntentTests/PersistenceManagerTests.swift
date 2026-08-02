@@ -201,3 +201,272 @@ struct PersistenceManagerTests {
     }
 }
 
+/// In-memory `KeychainStorage` so connection-persistence tests are hermetic:
+/// SecItem calls fail on headless CI simulators, and real Keychain state would
+/// leak between runs.
+final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
+    private var items: [String: Data] = [:]
+    private let lock = NSLock()
+
+    private func key(_ service: String, _ account: String) -> String { "\(service)\u{1F}\(account)" }
+
+    @discardableResult
+    func save(data: Data, service: String, account: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        items[key(service, account)] = data
+        return true
+    }
+
+    func load(service: String, account: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return items[key(service, account)]
+    }
+
+    func delete(service: String, account: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        items.removeValue(forKey: key(service, account))
+    }
+}
+
+/// Installs the in-memory Keychain backend exactly once per test process.
+enum TestKeychainStorage {
+    static let installed: Void = {
+        PersistenceManager.shared.keychainStorage = InMemoryKeychainStorage()
+    }()
+}
+
+/// Tests for the multi-connection persistence layer (Keychain-backed connection list,
+/// active-connection pointer, legacy-pairing migration).
+@Suite(.serialized)
+struct ConnectionPersistenceTests {
+
+    private let pm = PersistenceManager.shared
+
+    init() {
+        _ = TestKeychainStorage.installed
+    }
+
+    /// Remove all connection-related state (new blob, legacy entries, active pointer).
+    private func resetConnectionState() {
+        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
+        pm.deleteFromKeychain(account: pm.keychainAccountServer)
+        pm.deleteFromKeychain(account: pm.keychainAccountToken)
+        UserDefaults.standard.removeObject(forKey: pm.activeConnectionIdKey)
+        UserDefaults.standard.removeObject(forKey: pm.serverKey)
+    }
+
+    private func makeServer(
+        hosts: [String] = ["10.0.0.1"], port: Int = 4242, name: String = "daemon"
+    ) -> PairedServer {
+        PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
+    }
+
+    // MARK: - Load / upsert
+
+    @Test func loadConnectionsIsEmptyByDefault() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        #expect(pm.loadConnections().isEmpty)
+    }
+
+    @Test func upsertInsertsAndRoundTrips() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let connection = StoredConnection(server: makeServer(), token: "tok-1")
+        pm.upsertConnection(connection)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first == connection)
+        #expect(loaded.first?.displayName == "10.0.0.1:4242")
+    }
+
+    @Test func upsertDedupsSameHostSetAndPortPreservingId() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let original = StoredConnection(
+            server: makeServer(hosts: ["a.local", "10.0.0.1"]),
+            token: "tok-old",
+            lastConnectedAt: Date(timeIntervalSince1970: 1000)
+        )
+        pm.upsertConnection(original)
+
+        // Same host set (reordered) + port: updates in place, preserves id and lastConnectedAt.
+        let updated = StoredConnection(
+            server: makeServer(hosts: ["10.0.0.1", "a.local"]),
+            token: "tok-new"
+        )
+        let stored = pm.upsertConnection(updated)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        #expect(loaded.first?.lastConnectedAt == original.lastConnectedAt)
+    }
+
+    @Test func upsertDifferentPortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(port: 4242), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(port: 4243), token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    // MARK: - Delete
+
+    @Test func deleteRemovesConnectionAndClearsActivePointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        pm.setActiveConnection(id: a.id)
+
+        pm.deleteConnection(id: a.id)
+        #expect(pm.loadConnections().map(\.id) == [b.id])
+        #expect(pm.activeConnection() == nil)
+
+        // Deleting a non-active connection leaves the active pointer alone.
+        pm.setActiveConnection(id: b.id)
+        pm.deleteConnection(id: a.id)
+        #expect(pm.activeConnection()?.id == b.id)
+    }
+
+    // MARK: - Active pointer
+
+    @Test func activeConnectionRoundTrip() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        #expect(pm.activeConnection() == nil)
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+
+        pm.setActiveConnection(id: a.id)
+        #expect(pm.activeConnection()?.id == a.id)
+
+        pm.setActiveConnection(id: b.id)
+        #expect(pm.activeConnection()?.id == b.id)
+    }
+
+    @Test func touchLastConnectedUpdatesTimestamp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "t"))
+        #expect(stored.lastConnectedAt == nil)
+
+        let before = Date()
+        pm.touchLastConnected(id: stored.id)
+        let loaded = pm.loadConnections().first
+        #expect(loaded?.lastConnectedAt != nil)
+        if let touched = loaded?.lastConnectedAt {
+            #expect(touched >= before)
+        }
+    }
+
+    // MARK: - Migration
+
+    @Test func migratesLegacyKeychainPairing() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["legacy.local"], port: 9999)
+        let data = try JSONEncoder().encode(server)
+        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("legacy-token".utf8), account: pm.keychainAccountToken)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server == server)
+        #expect(loaded.first?.token == "legacy-token")
+        #expect(pm.activeConnection()?.id == loaded.first?.id)
+
+        // Legacy entries removed after successful migration.
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == nil)
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountToken) == nil)
+    }
+
+    @Test func migratesLegacyUserDefaultsPairing() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["defaults.local"], port: 8888)
+        UserDefaults.standard.set(try JSONEncoder().encode(server), forKey: pm.serverKey)
+        pm.saveDataToKeychain(data: Data("ud-token".utf8), account: pm.keychainAccountToken)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server == server)
+        #expect(loaded.first?.token == "ud-token")
+        #expect(pm.activeConnection()?.id == loaded.first?.id)
+        #expect(UserDefaults.standard.data(forKey: pm.serverKey) == nil)
+    }
+
+    @Test func migrationWithoutTokenIsNonDestructive() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["orphan.local"])
+        let data = try JSONEncoder().encode(server)
+        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
+
+        // No token: nothing to migrate, legacy server entry must remain untouched.
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == data)
+    }
+
+    @Test func migrationRunsOnlyOnce() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["once.local"])
+        pm.saveDataToKeychain(data: try JSONEncoder().encode(server), account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("tok".utf8), account: pm.keychainAccountToken)
+
+        let first = pm.loadConnections()
+        try #require(first.count == 1)
+
+        // Deleting everything from the migrated list must not resurrect the legacy pairing.
+        pm.deleteConnection(id: first[0].id)
+        #expect(pm.loadConnections().isEmpty)
+    }
+
+    // MARK: - Compatibility shims
+
+    @Test func pairingShimsRoundTripOverConnectionsAPI() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["shim.local"], port: 7777)
+        pm.savePairing(server: server, token: "shim-token")
+
+        let pairing = pm.loadPairing()
+        #expect(pairing?.server == server)
+        #expect(pairing?.token == "shim-token")
+        #expect(pm.loadConnections().count == 1)
+
+        // Re-pairing the same host:port does not create a duplicate.
+        pm.savePairing(server: server, token: "shim-token-2")
+        #expect(pm.loadConnections().count == 1)
+        #expect(pm.loadPairing()?.token == "shim-token-2")
+
+        // clearPairing forgets only the active connection.
+        let other = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["other.local"], port: 7778), token: "o")
+        )
+        pm.clearPairing()
+        #expect(pm.loadPairing() == nil)
+        #expect(pm.loadConnections().map(\.id) == [other.id])
+    }
+}
+

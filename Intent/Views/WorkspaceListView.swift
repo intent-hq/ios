@@ -5,6 +5,7 @@ struct WorkspaceListView: View {
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var viewModel = WorkspaceListViewModel()
     @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -64,10 +65,19 @@ struct WorkspaceListView: View {
         .navigationTitle("Workspaces")
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button {
-                    coordinator.onOpenSettings()
+                Menu {
+                    Button {
+                        coordinator.onOpenSettings()
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                    Button {
+                        showingConnections = true
+                    } label: {
+                        Label("Connect to…", systemImage: "desktopcomputer")
+                    }
                 } label: {
-                    Image(systemName: "gearshape")
+                    Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
             }
@@ -82,6 +92,10 @@ struct WorkspaceListView: View {
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView()
+                .environmentObject(coordinator)
+        }
+        .sheet(isPresented: $showingConnections) {
+            ConnectionsView()
                 .environmentObject(coordinator)
         }
         .refreshable {

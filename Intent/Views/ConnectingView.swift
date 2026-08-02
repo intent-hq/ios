@@ -11,18 +11,19 @@ struct ConnectingView: View {
     }
 
     private func attemptConnection() async {
-        guard let pairing = PersistenceManager.shared.loadPairing() else {
+        guard let connection = PersistenceManager.shared.activeConnection() else {
             coordinator.currentScreen = .pairing
             return
         }
 
         do {
             try await ConnectionManager.shared.connect(
-                hosts: pairing.server.hosts,
-                port: pairing.server.port,
-                token: pairing.token,
-                certFingerprint: pairing.server.certFingerprint
+                hosts: connection.server.hosts,
+                port: connection.server.port,
+                token: connection.token,
+                certFingerprint: connection.server.certFingerprint
             )
+            PersistenceManager.shared.touchLastConnected(id: connection.id)
             // Wait for WorkspaceStore to finish fetching workspace data before
             // navigating, so the user doesn't see an empty workspace list.
             // WorkspaceStore auto-fetches on .connected and sets lastUpdated

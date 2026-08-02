@@ -5,6 +5,9 @@ struct ManualTokenEntryView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
+    /// When set, pairing success is reported to the presenting context instead
+    /// of the first-run coordinator flow.
+    var onPaired: ((StoredConnection) -> Void)?
     @State private var host = ""
     @State private var port = "5180"
     @State private var token = ""
@@ -150,9 +153,13 @@ struct ManualTokenEntryView: View {
                 do {
                     try await ConnectionManager.shared.connect(hosts: [host], port: portNum, token: token)
                     let server = PairedServer(hosts: [host], port: portNum, name: "Intent", pairedAt: Date())
-                    PersistenceManager.shared.savePairing(server: server, token: token)
+                    let stored = await ConnectionPairing.finalize(server: server, token: token)
                     dismiss()
-                    coordinator.onConnectionSuccess()
+                    if let onPaired {
+                        onPaired(stored)
+                    } else {
+                        coordinator.onConnectionSuccess()
+                    }
                 } catch {
                     errorMessage = "Connection failed: \(error.localizedDescription)"
                     isValidating = false
@@ -168,9 +175,13 @@ struct ManualTokenEntryView: View {
             do {
                 try await ConnectionManager.shared.connect(hosts: [host], port: portNum, token: token, certFingerprint: fingerprint)
                 let server = PairedServer(hosts: [host], port: portNum, name: "Intent", pairedAt: Date(), certFingerprint: fingerprint)
-                PersistenceManager.shared.savePairing(server: server, token: token)
+                let stored = await ConnectionPairing.finalize(server: server, token: token)
                 dismiss()
-                coordinator.onConnectionSuccess()
+                if let onPaired {
+                    onPaired(stored)
+                } else {
+                    coordinator.onConnectionSuccess()
+                }
             } catch {
                 errorMessage = "Connection failed: \(error.localizedDescription)"
                 isValidating = false
