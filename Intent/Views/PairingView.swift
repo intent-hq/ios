@@ -5,6 +5,7 @@ struct PairingView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var showQRScanner = false
     @State private var showManualEntry = false
+    @State private var showConnections = false
 
     var body: some View {
         NavigationStack {
@@ -51,6 +52,17 @@ struct PairingView: View {
                             showManualEntry = true
                         }
 
+                        if coordinator.pairingShowsSavedConnections {
+                            PairingOptionButton(
+                                icon: "clock.arrow.circlepath",
+                                title: "Saved Connections",
+                                subtitle: "Reconnect to a previously paired daemon",
+                                colorScheme: colorScheme
+                            ) {
+                                showConnections = true
+                            }
+                        }
+
                     }
                     .padding(.horizontal, 24)
 
@@ -63,6 +75,9 @@ struct PairingView: View {
             }
             .sheet(isPresented: $showManualEntry) {
                 ManualTokenEntryView()
+            }
+            .sheet(isPresented: $showConnections) {
+                ConnectionsView()
             }
         }
     }
