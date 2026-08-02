@@ -78,12 +78,20 @@ class WorkspaceStore: ObservableObject {
             let result = try await ConnectionManager.shared.request("workspace.list")
             var parsed = Self.parseWorkspaces(from: result)
             applyHighWaterMarks(to: &parsed)
-            workspaces = parsed
-            lastUpdated = Date()
+            publishFetchedWorkspaces(parsed)
         } catch {
             print("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
         isLoading = false
+    }
+
+    /// Publishes a fetched workspace list. `lastUpdated` is set **before** `workspaces`
+    /// so `$workspaces` subscribers that gate on "fetched at least once" (e.g.
+    /// AppCoordinator's missing-workspace validation) see a non-nil `lastUpdated`
+    /// on the very first post-fetch publish.
+    func publishFetchedWorkspaces(_ parsed: [Workspace]) {
+        lastUpdated = Date()
+        workspaces = parsed
     }
 
     // MARK: - Upsert
@@ -270,8 +278,7 @@ class WorkspaceStore: ObservableObject {
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             var parsed = reconciler.values()
             applyHighWaterMarks(to: &parsed)
-            workspaces = parsed
-            lastUpdated = Date()
+            publishFetchedWorkspaces(parsed)
             print("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
 
         case .delta:
@@ -279,8 +286,7 @@ class WorkspaceStore: ObservableObject {
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 var parsed = reconciler.values()
                 applyHighWaterMarks(to: &parsed)
-                workspaces = parsed
-                lastUpdated = Date()
+                publishFetchedWorkspaces(parsed)
                 print("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)

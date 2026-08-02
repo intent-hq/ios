@@ -23,6 +23,11 @@ class ConversationStore: ObservableObject {
     /// `agent.get`. The daemon clears the underlying fields when the agent next
     /// receives a message, so this retires via the same refresh.
     @Published var attentionRequest: PendingAttentionRequest?
+    /// True when the daemon has definitively told us our agent does not exist —
+    /// a `-32602` not-found on `agent.getConversation`/`agent.get`, or an
+    /// `agent:deleted` event for the open agent. Transient transport errors
+    /// never raise this. The view observes it to fall back to the agent list.
+    @Published var agentNotFound = false
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -136,7 +141,18 @@ class ConversationStore: ObservableObject {
                 attentionRequest = AgentSession.parsePendingAttentionRequest(agentDict)
             }
         } catch {
+            raiseAgentNotFoundIfDefinitive(error)
             print("[ConversationStore] Failed to fetch agent streaming state: \(error)")
+        }
+    }
+
+    /// Raise `agentNotFound` only for a definitive not-found JSON-RPC error
+    /// (`-32602`, PROTOCOL §5.5) — transient transport errors (timeouts,
+    /// disconnects) must not read as deletion.
+    private func raiseAgentNotFoundIfDefinitive(_ error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == "WebSocket" && nsError.code == -32602 {
+            agentNotFound = true
         }
     }
 
@@ -212,6 +228,7 @@ class ConversationStore: ObservableObject {
                 }
             }
         } catch {
+            raiseAgentNotFoundIfDefinitive(error)
             print("[ConversationStore] Failed to fetch conversation: \(error)")
         }
         if isInitialLoad {
@@ -294,6 +311,7 @@ class ConversationStore: ObservableObject {
                         "agent:subscribed", "agent:unsubscribed",
                         "agent:status-changed", "agent:idle",
                         "agent:woken-by-subscription",
+                        "agent:deleted",
                     ],
                     "workspaceId": workspaceId,
                     "replaceGroup": "streaming-\(agentId)",
@@ -658,6 +676,14 @@ class ConversationStore: ObservableObject {
 
         // Workspace-level events — handle regardless of which agent emitted them
         switch eventType {
+        case "agent:deleted":
+            // Our agent was deleted while its conversation is open — surface it
+            // so the view falls back to the agent list. Handled before the
+            // isLoading buffer so a deletion during the initial fetch is not lost.
+            if let myAgentId = agentId, eventAgentId == myAgentId {
+                agentNotFound = true
+            }
+            return
         case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
             if let agentId = self.agentId, let workspaceId = self.workspaceId {
                 Task { await self.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
@@ -1264,6 +1290,7 @@ class ConversationStore: ObservableObject {
         streamEventBuffer.removeAll()
         lastFailedSend = nil
         attentionRequest = nil
+        agentNotFound = false
         watchedAgentLastRefresh.removeAll()
         chatLive = false
         // Unregister handler on reset

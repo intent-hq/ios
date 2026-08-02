@@ -247,5 +247,79 @@ struct ConversationStoreTests {
         store.reset()
         #expect(store.attentionRequest == nil)
     }
+
+    // MARK: - agentNotFound (missing-agent fallback)
+
+    @Test func fetchConversationNotFoundRaisesAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        // agent.getConversation answers -32602 for a nonexistent agent (docs/PROTOCOL.md §5.5)
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone"])
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchConversation(agentId: "gone", workspaceId: "w")
+
+        #expect(store.agentNotFound, "a definitive not-found must raise agentNotFound")
+    }
+
+    @Test func fetchConversationTransientErrorDoesNotRaiseAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        // Transport-level timeout must not read as deletion
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        #expect(!store.agentNotFound, "a transient transport error must not raise agentNotFound")
+    }
+
+    @Test func fetchAgentStreamingStateNotFoundRaisesAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone"])
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "gone")
+
+        #expect(store.agentNotFound)
+    }
+
+    @Test func agentDeletedEventForOpenAgentRaisesAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        #expect(!store.agentNotFound)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:deleted", "data": ["agentId": "a"]] as [String: Any]
+        ])
+
+        #expect(store.agentNotFound, "agent:deleted for the open agent must raise agentNotFound")
+    }
+
+    @Test func agentDeletedEventForOtherAgentDoesNotRaiseAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:deleted", "data": ["agentId": "someone-else"]] as [String: Any]
+        ])
+
+        #expect(!store.agentNotFound, "agent:deleted for a different agent must not raise agentNotFound")
+    }
+
+    @Test func resetClearsAgentNotFound() {
+        let store = ConversationStore()
+        store.agentNotFound = true
+        store.reset()
+        #expect(!store.agentNotFound)
+    }
 }
 

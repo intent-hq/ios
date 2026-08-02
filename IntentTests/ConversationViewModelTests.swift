@@ -317,6 +317,65 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions != nil, "questions re-pend after failure")
     }
 
+    // MARK: - Missing-agent detection at load
+
+    /// Configure the fake with every response load() touches, then override
+    /// selected methods with errors.
+    private func makeLoadableVM(errors: [String: Error] = [:])
+        -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
+        let vm = makeVM()
+        let fake = FakeConnectionManager()
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.responseMap["agent.get"] = ["agent": ["id": "test-agent", "name": "Test"]] as [String: Any]
+        fake.responseMap["agent.getQueue"] = ["queue": []]
+        fake.responseMap["agent.getSubscriptions"] = ["subscriptions": [], "delegationGroups": []]
+        for (method, error) in errors {
+            fake.errorMap[method] = error
+        }
+        vm.store = ConversationStore(connectionManager: fake)
+        return (vm, fake)
+    }
+
+    @Test func loadNotFoundRaisesAgentNotFound() async {
+        let notFound = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: test-agent"])
+        let (vm, _) = makeLoadableVM(errors: [
+            "agent.getConversation": notFound,
+            "agent.get": notFound,
+        ])
+
+        await vm.load()
+
+        #expect(vm.agentNotFound, "not-found at load must surface agentNotFound")
+    }
+
+    @Test func loadTransientErrorDoesNotRaiseAgentNotFound() async {
+        let timeout = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        let (vm, _) = makeLoadableVM(errors: [
+            "agent.getConversation": timeout,
+            "agent.get": timeout,
+        ])
+
+        await vm.load()
+
+        #expect(!vm.agentNotFound, "a transient error at load must not read as deletion")
+    }
+
+    @Test func loadSuccessLeavesAgentNotFoundFalse() async {
+        let (vm, _) = makeLoadableVM()
+
+        await vm.load()
+
+        #expect(!vm.agentNotFound)
+    }
+
     // MARK: - Image handling
 
     @Test func addImageAppendsToPendingImages() async {

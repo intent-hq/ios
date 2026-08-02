@@ -484,5 +484,438 @@ struct AppCoordinatorTests {
         #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil,
                 "Repeated onBackToWorkspaceDetail should still clear the per-workspace screen")
     }
+
+    // MARK: - Fetch-driven workspace validation (lastUpdated race)
+
+    private static func makeWorkspace(id: String, status: String? = nil) -> Workspace {
+        Workspace(
+            id: id, title: "WS \(id)", branch: nil, baseRef: nil,
+            status: status, activity: nil, displayStatus: nil,
+            lastActivity: nil, updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
+            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+            taskStatsCompleted: nil, taskStatsInProgress: nil,
+            agentSummaryCount: nil, agentSummaryAgents: nil
+        )
+    }
+
+    /// Let main-queue-hopping Combine sinks and spawned validation tasks run.
+    private static func drainMainQueue() async {
+        try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+
+    @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async {
+        let wsId = "test-coord-firstfetch-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager())
+        coordinator.onSelectWorkspace(wsId)
+
+        // Regression: the very first post-launch fetch must trigger validation
+        // (lastUpdated used to be assigned after workspaces, so the first publish was skipped).
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: "other-ws")])
+        await Self.drainMainQueue()
+
+        if case .workspaceList = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .workspaceList after first fetch without the workspace, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadLastScreen() == nil, "Last screen should be cleared")
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
+    }
+
+    @Test @MainActor func preFetchEmptyPublish_doesNotBootUserOut() async {
+        let wsId = "test-coord-prefetch-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager())
+        coordinator.onSelectWorkspace(wsId)
+
+        // A publish before any successful fetch (lastUpdated still nil) must be ignored.
+        store.workspaces = []
+        await Self.drainMainQueue()
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("An empty pre-fetch publish must not navigate away, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func firstFetch_archivedWorkspace_bootsToWorkspaceListFromConversation() async {
+        let wsId = "test-coord-archived-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager())
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, status: "archived")])
+        await Self.drainMainQueue()
+
+        if case .workspaceList = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .workspaceList for archived workspace, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func firstFetch_existingWorkspace_staysOnDetail() async {
+        let wsId = "test-coord-alive-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager())
+        coordinator.onSelectWorkspace(wsId)
+
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+        await Self.drainMainQueue()
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected to stay on .workspaceDetail, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Reconnect re-validation of the open conversation
+
+    @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async {
+        let wsId = "test-coord-reconnect-gone-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "agent not found"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+        // Seed the store so the reconnect overlay clears immediately.
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+
+        coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Worker")
+        fake.simulateConnect()
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("agent.get"), "Reconnect must re-validate the open conversation's agent")
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail after reconnect with missing agent, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil,
+                "Per-workspace saved sub-screen should be cleared for the missing agent")
+    }
+
+    @Test @MainActor func reconnect_agentStillExists_staysOnConversation() async {
+        let wsId = "test-coord-reconnect-alive-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = ["agent": ["id": "agent-live"]] as [String: Any]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
+        fake.simulateConnect()
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("agent.get"))
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-live")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected to stay on .agentConversation after reconnect, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func reconnect_notOnConversation_doesNotValidateAgent() async {
+        let wsId = "test-coord-reconnect-detail-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+
+        coordinator.onSelectWorkspace(wsId)
+        fake.simulateConnect()
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+
+        #expect(!fake.didCallMethod("agent.get"), "agent.get must not be called when not on a conversation screen")
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail after reconnect, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Missing agent handling (conversation fallback)
+
+    @Test @MainActor func handleMissingAgent_navigatesToWorkspaceDetail_andClearsSavedScreen() {
+        let wsId = "test-coord-missing-agent-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Doomed")
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
+
+        coordinator.handleMissingAgent(workspaceId: wsId)
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail after handleMissingAgent, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil,
+                "Per-workspace saved sub-screen should be cleared for the missing agent")
+    }
+
+    @Test @MainActor func handleMissingAgent_ignoredWhenNotOnConversationScreen() {
+        // Self-initiated deletion dismisses the conversation first, so by the
+        // time the agent:deleted fallback fires the screen is already
+        // .workspaceDetail — the guard must make it a no-op (no double navigation).
+        let wsId = "test-coord-missing-agent-noop-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectWorkspace(wsId)
+
+        coordinator.handleMissingAgent(workspaceId: wsId)
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingAgent off a conversation must not navigate, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func handleMissingAgent_ignoredForDifferentWorkspace() {
+        let wsId = "test-coord-missing-agent-otherws-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+
+        coordinator.handleMissingAgent(workspaceId: "some-other-workspace")
+
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-1")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingAgent for another workspace must not navigate, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Missing note handling
+
+    @Test @MainActor func handleMissingNote_navigatesToWorkspaceDetail_andClearsSavedScreen() {
+        let wsId = "test-coord-missing-note-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.onSelectNote("note-gone", workspaceId: wsId, noteTitle: "Doomed Note")
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
+
+        coordinator.handleMissingNote(workspaceId: wsId)
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail after handleMissingNote, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil,
+                "Per-workspace saved note screen should be cleared for the missing note")
+    }
+
+    @Test @MainActor func handleMissingNote_ignoredWhenNotOnNoteScreen() {
+        let wsId = "test-coord-missing-note-noop-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+
+        coordinator.handleMissingNote(workspaceId: wsId)
+
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-1")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingNote must not navigate away from a conversation, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func handleMissingNote_ignoredForDifferentWorkspace() {
+        let wsId = "test-coord-missing-note-otherws-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.onSelectNote("note-1", workspaceId: wsId, noteTitle: "Note")
+
+        coordinator.handleMissingNote(workspaceId: "some-other-workspace")
+
+        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+            #expect(noteId == "note-1")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingNote for another workspace must not navigate, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Note validation on restore
+
+    @Test @MainActor func onSelectWorkspace_restoredNoteMissing_fallsBackToDetail() async {
+        let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        PersistenceManager.shared.saveWorkspaceScreen(
+            workspaceId: wsId,
+            screen: PersistenceManager.SavedScreen(
+                screen: "note", workspaceId: wsId,
+                agentId: nil, agentName: nil,
+                noteId: "note-dead", noteTitle: "Dead Note"))
+
+        // No workspace publish: keep lastUpdated nil so the workspace-existence
+        // validation stays inert and only the note validation path is exercised.
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        // note.get answers -32602 for a nonexistent note (docs/PROTOCOL.md §9)
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "note not found"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("note.get"), "Restoring a note screen must re-validate the note")
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail after restoring a missing note, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) == nil,
+                "Per-workspace saved note screen should be cleared for the missing note")
+    }
+
+    @Test @MainActor func onSelectWorkspace_restoredNoteTransientError_staysOnNote() async {
+        let wsId = "test-coord-restore-note-transient-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        PersistenceManager.shared.saveWorkspaceScreen(
+            workspaceId: wsId,
+            screen: PersistenceManager.SavedScreen(
+                screen: "note", workspaceId: wsId,
+                agentId: nil, agentName: nil,
+                noteId: "note-1", noteTitle: "Flaky Network Note"))
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        // Transport-level timeout must not read as deletion
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+
+        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+            #expect(noteId == "note-1")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Transient note.get error must not navigate away, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onSelectWorkspace_restoredNoteAlive_staysOnNote() async {
+        let wsId = "test-coord-restore-note-alive-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        PersistenceManager.shared.saveWorkspaceScreen(
+            workspaceId: wsId,
+            screen: PersistenceManager.SavedScreen(
+                screen: "note", workspaceId: wsId,
+                agentId: nil, agentName: nil,
+                noteId: "note-live", noteTitle: "Live Note"))
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-live", "title": "Live Note", "content": "hello"
+        ] as [String: Any]] as [String: Any]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("note.get"))
+        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+            #expect(noteId == "note-live")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected to stay on .noteDetail for a live note, got \(coordinator.currentScreen)")
+        }
+    }
 }
 

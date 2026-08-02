@@ -129,20 +129,36 @@ class NoteStore: ObservableObject {
         // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
     }
 
-    func fetchNote(noteId: String, workspaceId: String) async -> Note? {
+    /// Outcome of a single-note fetch, distinguishing a definitive not-found
+    /// (deleted/archived) from transient transport errors.
+    enum NoteFetchResult {
+        case found(Note)
+        case notFound
+        case transientError
+    }
+
+    /// Fetch a single note. The daemon answers `-32602` for a nonexistent note
+    /// (docs/PROTOCOL.md §5.5/§9) and archived notes are treated as gone; any
+    /// other error is transient so callers don't mistake network blips for deletion.
+    func fetchNote(noteId: String, workspaceId: String) async -> NoteFetchResult {
         do {
             let result = try await connectionManager.request(
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
             if let dict = result as? [String: Any],
-               let noteDict = dict["note"] as? [String: Any] {
-                return Note.parseNote(noteDict)
+               let noteDict = dict["note"] as? [String: Any],
+               let note = Note.parseNote(noteDict) {
+                return note.isArchived ? .notFound : .found(note)
             }
+            return .transientError
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+            print("[NoteStore] Note not found: \(noteId)")
+            return .notFound
         } catch {
             print("[NoteStore] Failed to fetch note: \(error)")
+            return .transientError
         }
-        return nil
     }
 
     // MARK: - Live-state subscription

@@ -39,14 +39,20 @@ class AppCoordinator: ObservableObject {
     private var workspaceValidationObserver: AnyCancellable?
     private var reconnectLoadingObserver: AnyCancellable?
 
-    init() {
+    private let workspaceStore: WorkspaceStore
+    private let connection: ConnectionManagerRouting
+
+    init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
+         connection: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.workspaceStore = workspaceStore
+        self.connection = connection
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
     }
 
     private func startObservingConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = connection.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self = self else { return }
@@ -62,6 +68,10 @@ class AppCoordinator: ObservableObject {
                         // On reconnection, wait for workspace data to load before
                         // clearing the overlay so the UI doesn't flash blank metadata.
                         self.waitForWorkspaceLoadThenClearOverlay()
+                        // The agent shown in an open conversation may have been
+                        // deleted while disconnected — re-validate it. (Workspace
+                        // validation follows from the reconnect fetchAll.)
+                        self.revalidateCurrentAgentAfterReconnect()
                     } else {
                         // Initial connection — isDisconnected was never true, nothing to clear.
                     }
@@ -69,6 +79,15 @@ class AppCoordinator: ObservableObject {
                     break
                 }
             }
+    }
+
+    /// After a reconnect, re-run agent validation if the current screen is a conversation.
+    private func revalidateCurrentAgentAfterReconnect() {
+        if case .agentConversation(let agentId, let workspaceId, _) = currentScreen {
+            Task { @MainActor in
+                await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
+            }
+        }
     }
 
     /// Wait for WorkspaceStore to finish loading before clearing the reconnection overlay.
@@ -80,13 +99,13 @@ class AppCoordinator: ObservableObject {
 
         // If WorkspaceStore is not currently loading (fetchAll already completed
         // or hasn't started yet), check if data is already available.
-        if !WorkspaceStore.shared.isLoading && WorkspaceStore.shared.lastUpdated != nil {
+        if !workspaceStore.isLoading && workspaceStore.lastUpdated != nil {
             self.isDisconnected = false
             return
         }
 
         // Observe isLoading: wait for it to go from true → false (fetchAll completed).
-        reconnectLoadingObserver = WorkspaceStore.shared.$isLoading
+        reconnectLoadingObserver = workspaceStore.$isLoading
             .dropFirst() // skip the current value
             .filter { !$0 } // wait for isLoading == false
             .first()
@@ -121,13 +140,16 @@ class AppCoordinator: ObservableObject {
     }
 
     private func startObservingWorkspaceList() {
-        workspaceValidationObserver = WorkspaceStore.shared.$workspaces
+        // Note: validate against the store's *current* state, not the delivered
+        // value — receive(on:) defers delivery, so the value can be stale (e.g.
+        // the initial empty list arriving after the first fetch has published).
+        workspaceValidationObserver = workspaceStore.$workspaces
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] workspaces in
+            .sink { [weak self] _ in
                 guard let self = self else { return }
                 // Only validate after workspaces have been fetched at least once
-                guard WorkspaceStore.shared.lastUpdated != nil else { return }
-                self.validateCurrentWorkspaceExists(in: workspaces)
+                guard self.workspaceStore.lastUpdated != nil else { return }
+                self.validateCurrentWorkspaceExists(in: self.workspaceStore.workspaces)
             }
     }
 
@@ -203,6 +225,10 @@ class AppCoordinator: ObservableObject {
                     suppressWorkspaceNavigation = false
                     currentScreen = .noteDetail(
                         noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
+                    // Validate note still exists asynchronously
+                    Task { @MainActor in
+                        await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
+                    }
                     return
                 }
             default:
@@ -263,6 +289,10 @@ class AppCoordinator: ObservableObject {
                     currentScreen = .noteDetail(
                         noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
                     saveCurrentScreen()
+                    // Validate note still exists asynchronously
+                    Task { @MainActor in
+                        await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
+                    }
                     return
                 }
             default:
@@ -361,7 +391,7 @@ class AppCoordinator: ObservableObject {
     /// Validates that a restored agent still exists. If not, falls back to the workspace detail view.
     private func validateRestoredAgent(agentId: String, workspaceId: String) async {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connection.request(
                 "agent.get",
                 params: ["agentId": agentId, "workspaceId": workspaceId]
             )
@@ -376,10 +406,31 @@ class AppCoordinator: ObservableObject {
         }
     }
 
-    /// Called when a restored agent is no longer found. Falls back to the workspace detail (agent list).
-    private func handleMissingAgent(workspaceId: String) {
+    /// Called when the agent being viewed is no longer found (restore validation,
+    /// not-found at conversation load, or deletion while open).
+    /// Falls back to the workspace detail (agent list).
+    func handleMissingAgent(workspaceId: String) {
         // Only redirect if we're still on a conversation screen for this workspace
         if case .agentConversation(_, let wsId, _) = currentScreen, wsId == workspaceId {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
+            currentScreen = .workspaceDetail(workspaceId: workspaceId)
+            saveCurrentScreen()
+        }
+    }
+
+    /// Validates that a restored note still exists. Only a definitive not-found falls back —
+    /// transient/transport errors leave the screen in place.
+    func validateRestoredNote(noteId: String, workspaceId: String, noteStore: NoteStore? = nil) async {
+        let store = noteStore ?? NoteStore(connectionManager: connection)
+        if case .notFound = await store.fetchNote(noteId: noteId, workspaceId: workspaceId) {
+            handleMissingNote(workspaceId: workspaceId)
+        }
+    }
+
+    /// Called when the note being viewed no longer exists. Falls back to the workspace detail view.
+    func handleMissingNote(workspaceId: String) {
+        // Only redirect if we're still on a note screen for this workspace
+        if case .noteDetail(_, let wsId, _) = currentScreen, wsId == workspaceId {
             PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()

@@ -76,16 +76,39 @@ struct NoteDetailView: View {
             }
             noteStore.startObservingEvents(workspaceId: workspaceId)
         }
+        .onChange(of: noteStore.notes) { _, newNotes in
+            // Live-delta removal: if the open note vanished from the workspace's note
+            // list while we have content loaded, confirm via refetch (which falls back
+            // to the workspace detail on a definitive not-found).
+            if note != nil && !newNotes.isEmpty && !newNotes.contains(where: { $0.id == noteId }) {
+                Task { await refreshNote() }
+            }
+        }
     }
 
     private func loadNote() async {
         isLoading = true
-        note = await noteStore.fetchNote(noteId: noteId, workspaceId: workspaceId)
+        switch await noteStore.fetchNote(noteId: noteId, workspaceId: workspaceId) {
+        case .found(let fetched):
+            note = fetched
+        case .notFound:
+            note = nil
+            coordinator.handleMissingNote(workspaceId: workspaceId)
+        case .transientError:
+            note = nil
+        }
         isLoading = false
     }
 
     private func refreshNote() async {
-        note = await noteStore.fetchNote(noteId: noteId, workspaceId: workspaceId)
+        switch await noteStore.fetchNote(noteId: noteId, workspaceId: workspaceId) {
+        case .found(let fetched):
+            note = fetched
+        case .notFound:
+            coordinator.handleMissingNote(workspaceId: workspaceId)
+        case .transientError:
+            break  // keep showing the last known content
+        }
     }
 
     /// Parse an intent:// URL to extract a note/task ID.
