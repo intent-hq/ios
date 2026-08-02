@@ -5,6 +5,7 @@ struct WorkspaceListSidebar: View {
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var viewModel = WorkspaceListViewModel()
     @State private var showingCreateWorkspace = false
+    @State private var showingConnections = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -76,6 +77,12 @@ struct WorkspaceListSidebar: View {
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }
+                    Divider()
+                    Button {
+                        showingConnections = true
+                    } label: {
+                        Label("Connect to…", systemImage: "desktopcomputer")
+                    }
                     if UIDevice.current.userInterfaceIdiom == .pad {
                         Divider()
                         Button {
@@ -92,6 +99,10 @@ struct WorkspaceListSidebar: View {
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView()
+                .environmentObject(coordinator)
+        }
+        .sheet(isPresented: $showingConnections) {
+            ConnectionsView()
                 .environmentObject(coordinator)
         }
         .refreshable {
