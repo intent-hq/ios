@@ -211,39 +211,61 @@ struct SpecialistPickerSelectionTests {
 
     // MARK: - modelFetchOutcome (stale-response guard + loading reset)
 
-    @Test func modelFetchOutcomeAppliesCurrentProviderResults() {
+    @Test func modelFetchOutcomeAppliesCurrentProviderResults() throws {
         // A fresh catalog resets the selection to the daemon-default row (nil).
         let fetched = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.7")]
-        let outcome = SpecialistPickerView.modelFetchOutcome(
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: "auggie",
-            selectedProviderId: "auggie"
-        )
+            selectedProviderId: "auggie",
+            requestGeneration: 1,
+            latestGeneration: 1
+        ))
         #expect(outcome.models?.map(\.id) == ["sonnet4.5", "opus4.7"])
         #expect(outcome.selectedModel == nil)
         #expect(!outcome.isLoadingModels)
     }
 
-    @Test func modelFetchOutcomeDropsStaleProviderResults() {
+    @Test func modelFetchOutcomeIgnoresSupersededFetchEntirely() {
+        // Regression: a late response from an older fetch must be ignored
+        // entirely while a newer fetch is still in flight — it must not
+        // clear isLoadingModels (or the previous provider's catalog could
+        // briefly present as the current provider's and allow a mismatched
+        // (provider, model) pair on create).
         let outcome = SpecialistPickerView.modelFetchOutcome(
             fetched: [makeModel("grok-4", provider: "grok")],
             requestedProviderId: "grok",
-            selectedProviderId: "auggie"
+            selectedProviderId: "grok",
+            requestGeneration: 1,
+            latestGeneration: 2
         )
+        #expect(outcome == nil)
+    }
+
+    @Test func modelFetchOutcomeDropsStaleProviderResults() throws {
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
+            fetched: [makeModel("grok-4", provider: "grok")],
+            requestedProviderId: "grok",
+            selectedProviderId: "auggie",
+            requestGeneration: 2,
+            latestGeneration: 2
+        ))
         #expect(outcome.models == nil)
         #expect(outcome.selectedModel == nil)
         #expect(!outcome.isLoadingModels)
     }
 
-    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() {
+    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() throws {
         // Regression: a provider refresh can resolve the selection to nil while
         // a fetch is in flight; the loading flag must still clear so the
         // Create button doesn't wedge disabled.
-        let outcome = SpecialistPickerView.modelFetchOutcome(
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
             fetched: [makeModel("sonnet4.5")],
             requestedProviderId: "auggie",
-            selectedProviderId: nil
-        )
+            selectedProviderId: nil,
+            requestGeneration: 1,
+            latestGeneration: 1
+        ))
         #expect(outcome.models == nil)
         #expect(!outcome.isLoadingModels)
     }

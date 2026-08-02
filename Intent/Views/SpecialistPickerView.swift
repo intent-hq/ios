@@ -24,6 +24,7 @@ struct SpecialistPickerView: View {
     @State private var selectedProvider: ProviderInfo?
     @State private var models: [ModelInfo] = []
     @State private var isLoadingModels = false
+    @State private var modelFetchGeneration = 0
     @State private var selectedModel: ModelInfo?
     @State private var isCreating = false
     @State private var errorMessage: String?
@@ -280,14 +281,18 @@ struct SpecialistPickerView: View {
     }
 
     private func fetchModels(for provider: ProviderInfo) async {
+        modelFetchGeneration += 1
+        let generation = modelFetchGeneration
         isLoadingModels = true
         selectedModel = nil
         let fetched = await agentStore.fetchModels(providerId: provider.id)
-        let outcome = Self.modelFetchOutcome(
+        guard let outcome = Self.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: provider.id,
-            selectedProviderId: selectedProvider?.id
-        )
+            selectedProviderId: selectedProvider?.id,
+            requestGeneration: generation,
+            latestGeneration: modelFetchGeneration
+        ) else { return }
         isLoadingModels = outcome.isLoadingModels
         guard let applied = outcome.models else { return }
         models = applied
@@ -340,19 +345,26 @@ struct SpecialistPickerView: View {
         return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
     }
 
-    /// Outcome of a completed model fetch. Stale fetches (the selected
-    /// provider changed — or was cleared — while the fetch was in flight)
-    /// return nil `models` so the current catalog is kept, but
-    /// `isLoadingModels` is always false: no newer fetch may take over the
-    /// flag (e.g. a provider refresh resolved the selection to nil) and the
+    /// Outcome of a completed model fetch, or nil when a newer fetch has
+    /// been started since (`requestGeneration != latestGeneration`): a
+    /// superseded response must be ignored entirely — it must not clear
+    /// `isLoadingModels` while the newer fetch is still in flight, or the
+    /// previous provider's catalog could briefly present as the current
+    /// one and allow a mismatched (provider, model) pair on create.
+    /// For the latest generation, a provider mismatch (the selection was
+    /// cleared while the fetch was in flight) returns nil `models` so the
+    /// current catalog is kept, but `isLoadingModels` still clears — the
     /// Create button is disabled while it is set. A fresh catalog always
     /// resets the selection to the daemon-default row (nil) — the daemon's
     /// resolver decides unless the user explicitly picks a model.
     static func modelFetchOutcome(
         fetched: [ModelInfo],
         requestedProviderId: String,
-        selectedProviderId: String?
-    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool) {
+        selectedProviderId: String?,
+        requestGeneration: Int,
+        latestGeneration: Int
+    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool)? {
+        guard requestGeneration == latestGeneration else { return nil }
         guard selectedProviderId == requestedProviderId else {
             return (nil, nil, false)
         }
