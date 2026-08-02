@@ -19,6 +19,10 @@ class AppCoordinator: ObservableObject {
     @Published var currentScreen: AppScreen = .loading
     @Published var isDisconnected = false
     @Published var showCoverflow = false
+    /// True when the pairing surface should also offer the remaining saved
+    /// connections (e.g. after logging off the active connection while others
+    /// are still saved). The Connect to… screen reads this flag.
+    @Published var pairingShowsSavedConnections = false
     private var hasEverConnected = false
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     private var suppressWorkspaceNavigation = false
@@ -160,7 +164,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onLoadComplete() {
-        if PersistenceManager.shared.loadPairing() != nil {
+        if PersistenceManager.shared.activeConnection() != nil {
             currentScreen = .connecting
         } else {
             currentScreen = .pairing
@@ -225,18 +229,71 @@ class AppCoordinator: ObservableObject {
     }
 
     func onPaired() {
+        pairingShowsSavedConnections = false
         currentScreen = .connecting
+    }
+
+    /// Drop the previous daemon's workspace data so no stale rows are shown
+    /// after reconnecting, and so ConnectingView's waitForWorkspaceData
+    /// (which polls lastUpdated == nil) genuinely waits for the new daemon.
+    private func resetWorkspaceStore() {
+        WorkspaceStore.shared.workspaces = []
+        WorkspaceStore.shared.lastUpdated = nil
+    }
+
+    /// Switch to another saved connection: drop the live connection, clear the
+    /// saved screen state, make the target connection active, and reconnect.
+    func onSwitchConnection(id: UUID) {
+        hasEverConnected = false
+        isDisconnected = false
+        ConnectionManager.shared.disconnect()
+        resetWorkspaceStore()
+        PersistenceManager.shared.clearLastScreen()
+        PersistenceManager.shared.setActiveConnection(id: id)
+        selectedWorkspaceId = nil
+        pairingShowsSavedConnections = false
+        currentScreen = .connecting
+    }
+
+    /// Delete a saved connection. Deleting the active one disconnects and routes
+    /// like Log Off: pairing surface, with the remaining saved connections
+    /// offered when any are left.
+    func onDeleteConnection(id: UUID) {
+        let wasActive = PersistenceManager.shared.activeConnection()?.id == id
+        PersistenceManager.shared.deleteConnection(id: id)
+        let hasRemaining = !PersistenceManager.shared.loadConnections().isEmpty
+        if wasActive {
+            hasEverConnected = false
+            isDisconnected = false
+            ConnectionManager.shared.disconnect()
+            resetWorkspaceStore()
+            PersistenceManager.shared.clearLastScreen()
+            selectedWorkspaceId = nil
+            pairingShowsSavedConnections = hasRemaining
+            currentScreen = .pairing
+        } else if !hasRemaining {
+            pairingShowsSavedConnections = false
+        }
     }
 
     func onOpenSettings() {
         currentScreen = .settings
     }
 
+    /// Log Off forgets the active connection only. If other saved connections
+    /// remain, the pairing surface is shown with those connections available;
+    /// otherwise it behaves like first-run pairing.
     func onLogOff() {
         hasEverConnected = false
         isDisconnected = false
-        PersistenceManager.shared.clearPairing()
+        ConnectionManager.shared.disconnect()
+        resetWorkspaceStore()
+        if let active = PersistenceManager.shared.activeConnection() {
+            PersistenceManager.shared.deleteConnection(id: active.id)
+        }
         PersistenceManager.shared.clearLastScreen()
+        selectedWorkspaceId = nil
+        pairingShowsSavedConnections = !PersistenceManager.shared.loadConnections().isEmpty
         currentScreen = .pairing
     }
 
