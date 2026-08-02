@@ -261,10 +261,6 @@ struct CreateWorkspaceView: View {
                             get: { selectedSpecialist?.id ?? "" },
                             set: { newId in
                                 selectedSpecialist = specialists.first(where: { $0.id == newId })
-                                // Auto-select the specialist's configured model or tier-based default (auggie only)
-                                if let specialist = selectedSpecialist, isAuggieSelected {
-                                    selectedModel = Self.modelForTier(specialist.modelTier, configuredModel: specialist.model, in: models)
-                                }
                             }
                         )) {
                             ForEach(specialists) { specialist in
@@ -308,7 +304,9 @@ struct CreateWorkspaceView: View {
                         }
                     }
 
-                    // Model dropdown picker
+                    // Model dropdown picker. The daemon-default row (empty
+                    // tag) keeps selectedModel nil; a model is sent only on
+                    // an explicit user pick.
                     if !models.isEmpty {
                         Section("Model") {
                             Picker("Model", selection: Binding(
@@ -317,6 +315,10 @@ struct CreateWorkspaceView: View {
                                     selectedModel = models.first(where: { $0.id == newId })
                                 }
                             )) {
+                                Text(SpecialistInfo.daemonDefaultLabel(
+                                    for: selectedSpecialist,
+                                    providerId: selectedProvider?.id
+                                )).tag("")
                                 ForEach(models) { model in
                                     Text(model.name).tag(model.id)
                                 }
@@ -369,11 +371,6 @@ struct CreateWorkspaceView: View {
             async let providersTask: () = fetchProviders()
             _ = await (specialistsTask, providersTask)
         }
-    }
-
-    /// Whether the effective provider is auggie (no explicit selection defaults to auggie).
-    private var isAuggieSelected: Bool {
-        (selectedProvider?.id ?? "auggie") == "auggie"
     }
 
     /// Guidance shown when providers exist but none are signed in; provider
@@ -472,10 +469,6 @@ struct CreateWorkspaceView: View {
                 $0.id == "spec-writer" || $0.name.lowercased().contains("coordinator")
             }) ?? specialists.first
         }
-        // If models already loaded, update selection based on specialist's configured model or tier (auggie only)
-        if !models.isEmpty, isAuggieSelected, let specialist = selectedSpecialist {
-            selectedModel = Self.modelForTier(specialist.modelTier, configuredModel: specialist.model, in: models)
-        }
         isLoadingSpecialists = false
     }
 
@@ -521,8 +514,7 @@ struct CreateWorkspaceView: View {
         guard let outcome = Self.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: providerId,
-            selectedProviderId: selectedProvider?.id,
-            specialist: selectedSpecialist
+            selectedProviderId: selectedProvider?.id
         ) else { return }
         models = outcome.models
         selectedModel = outcome.selectedModel
@@ -601,29 +593,13 @@ struct CreateWorkspaceView: View {
                 initialAgent["specialist"] = specialist.id
             }
             if isNonAuggieProvider, let provider = provider {
-                // Non-auggie provider: always send provider, plus the bare model id when selected
                 initialAgent["provider"] = provider.id
-                if let model = model {
-                    initialAgent["model"] = model.id
-                }
-            } else if let model = model {
-                // Auggie (or no provider selected): only send model if it differs from the
-                // specialist's configured model, so the daemon's model resolution wins when
-                // the user hasn't overridden
-                if let specialist = specialist {
-                    // If specialist has a configured model, only send if different
-                    if let configuredModel = specialist.model {
-                        if configuredModel != model.id {
-                            initialAgent["model"] = model.id
-                        }
-                    } else {
-                        // Specialist has no configured model; omit model to let daemon resolve
-                        // (the tier-based default we're showing is just UI guidance)
-                    }
-                } else {
-                    // No specialist, send the model
-                    initialAgent["model"] = model.id
-                }
+            }
+            // model is non-nil only on an explicit user pick — the
+            // daemon-default picker row keeps it nil so the daemon's
+            // resolver decides
+            if let model = model {
+                initialAgent["model"] = model.id
             }
             if hasMessage {
                 initialAgent["prompt"] = trimmedMessage
@@ -645,36 +621,18 @@ struct CreateWorkspaceView: View {
         return branch
     }
 
-    /// Returns the model matching a specialist's configured model or tier, falling back to sonnet4.5 or the first available model.
-    private static func modelForTier(_ tier: String?, configuredModel: String? = nil, in models: [ModelInfo]) -> ModelInfo? {
-        // First, try the specialist's explicitly configured model
-        if let configuredModel = configuredModel,
-           let model = models.first(where: { $0.id == configuredModel }) {
-            return model
-        }
-
-        // Fall back to the shared tier-based mapping
-        let modelId = SpecialistInfo.modelId(forTier: tier)
-        return models.first(where: { $0.id == modelId }) ?? models.first
-    }
-
     /// Outcome of a completed model fetch, or nil when the fetch is stale
     /// (the selected provider changed while it was in flight) so rapid
     /// provider switching can't apply another provider's catalog/selection.
+    /// A fresh catalog always resets the selection to the daemon-default row
+    /// (nil) — the daemon's resolver decides unless the user explicitly
+    /// picks a model.
     static func modelFetchOutcome(
         fetched: [ModelInfo],
         requestedProviderId: String,
-        selectedProviderId: String?,
-        specialist: SpecialistInfo?
+        selectedProviderId: String?
     ) -> (models: [ModelInfo], selectedModel: ModelInfo?)? {
         guard selectedProviderId == requestedProviderId else { return nil }
-        // Reset selection: specialist-driven preselection for auggie, provider default otherwise
-        let selection: ModelInfo?
-        if requestedProviderId == "auggie", let specialist = specialist {
-            selection = modelForTier(specialist.modelTier, configuredModel: specialist.model, in: fetched)
-        } else {
-            selection = fetched.first(where: { $0.isDefault }) ?? fetched.first
-        }
-        return (fetched, selection)
+        return (fetched, nil)
     }
 }

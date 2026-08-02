@@ -5,8 +5,8 @@ struct SpecialistInfo: Identifiable {
     let id: String
     let name: String
     let description: String
-    let modelTier: String?  // "fast", "balanced", "smart"
-    let model: String?      // Configured model from specialist definition
+    var resolvedModel: String?     // Daemon-resolved default model preview (PROTOCOL §5.11)
+    var resolvedProvider: String?  // Provider context the preview was resolved for
     var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
 }
 
@@ -20,14 +20,17 @@ extension Array where Element == SpecialistInfo {
 }
 
 extension SpecialistInfo {
-    /// Tier→auggie-model-id mapping shared by the agent and workspace
-    /// creation flows.
-    static func modelId(forTier tier: String?) -> String {
-        switch tier {
-        case "fast": return "haiku4.5"
-        case "smart": return "opus4.6"
-        default: return "sonnet4.5" // balanced or nil
+    /// Label for the daemon-default row of model pickers, shared by the agent
+    /// and workspace creation flows: names the daemon-resolved default when
+    /// the preview was computed for the given provider, else "Provider
+    /// default" (the resolved fields are omitted when resolution yields the
+    /// provider CLI default — PROTOCOL §5.11).
+    static func daemonDefaultLabel(for specialist: SpecialistInfo?, providerId: String?) -> String {
+        if let resolved = specialist?.resolvedModel,
+           specialist?.resolvedProvider == providerId {
+            return "Default (\(resolved))"
         }
+        return "Provider default"
     }
 }
 
@@ -41,8 +44,8 @@ extension SpecialistInfo {
             id: id,
             name: name,
             description: description,
-            modelTier: item["modelTier"] as? String,
-            model: item["model"] as? String,
+            resolvedModel: item["resolvedModel"] as? String,
+            resolvedProvider: item["resolvedProvider"] as? String,
             hidden: item["hidden"] as? Bool ?? false
         )
     }

@@ -24,6 +24,7 @@ struct SpecialistPickerView: View {
     @State private var selectedProvider: ProviderInfo?
     @State private var models: [ModelInfo] = []
     @State private var isLoadingModels = false
+    @State private var modelFetchGeneration = 0
     @State private var selectedModel: ModelInfo?
     @State private var isCreating = false
     @State private var errorMessage: String?
@@ -192,12 +193,19 @@ struct SpecialistPickerView: View {
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .listRowBackground(Theme.card(for: colorScheme))
                         } else {
+                            // The daemon-default row (empty tag) keeps
+                            // selectedModel nil; a model is sent only on an
+                            // explicit user pick.
                             Picker("Model", selection: Binding(
                                 get: { selectedModel?.id ?? "" },
                                 set: { newId in
                                     selectedModel = models.first(where: { $0.id == newId })
                                 }
                             )) {
+                                Text(SpecialistInfo.daemonDefaultLabel(
+                                    for: selectedSpecialist,
+                                    providerId: selectedProvider?.id
+                                )).tag("")
                                 ForEach(models) { model in
                                     Text(model.name).tag(model.id)
                                 }
@@ -273,15 +281,18 @@ struct SpecialistPickerView: View {
     }
 
     private func fetchModels(for provider: ProviderInfo) async {
+        modelFetchGeneration += 1
+        let generation = modelFetchGeneration
         isLoadingModels = true
         selectedModel = nil
         let fetched = await agentStore.fetchModels(providerId: provider.id)
-        let outcome = Self.modelFetchOutcome(
+        guard let outcome = Self.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: provider.id,
             selectedProviderId: selectedProvider?.id,
-            specialist: selectedSpecialist
-        )
+            requestGeneration: generation,
+            latestGeneration: modelFetchGeneration
+        ) else { return }
         isLoadingModels = outcome.isLoadingModels
         guard let applied = outcome.models else { return }
         models = applied
@@ -334,61 +345,43 @@ struct SpecialistPickerView: View {
         return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
     }
 
-    /// The auggie model id a specialist resolves to by default: its configured
-    /// model, else the tier default (shared with CreateWorkspaceView via
-    /// `SpecialistInfo.modelId(forTier:)`).
-    static func defaultAuggieModelId(for specialist: SpecialistInfo?) -> String {
-        specialist?.model ?? SpecialistInfo.modelId(forTier: specialist?.modelTier)
-    }
-
-    /// Outcome of a completed model fetch. Stale fetches (the selected
-    /// provider changed — or was cleared — while the fetch was in flight)
-    /// return nil `models` so the current catalog is kept, but
-    /// `isLoadingModels` is always false: no newer fetch may take over the
-    /// flag (e.g. a provider refresh resolved the selection to nil) and the
-    /// Create button is disabled while it is set.
+    /// Outcome of a completed model fetch, or nil when a newer fetch has
+    /// been started since (`requestGeneration != latestGeneration`): a
+    /// superseded response must be ignored entirely — it must not clear
+    /// `isLoadingModels` while the newer fetch is still in flight, or the
+    /// previous provider's catalog could briefly present as the current
+    /// one and allow a mismatched (provider, model) pair on create.
+    /// For the latest generation, a provider mismatch (the selection was
+    /// cleared while the fetch was in flight) returns nil `models` so the
+    /// current catalog is kept, but `isLoadingModels` still clears — the
+    /// Create button is disabled while it is set. A fresh catalog always
+    /// resets the selection to the daemon-default row (nil) — the daemon's
+    /// resolver decides unless the user explicitly picks a model.
     static func modelFetchOutcome(
         fetched: [ModelInfo],
         requestedProviderId: String,
         selectedProviderId: String?,
-        specialist: SpecialistInfo?
-    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool) {
+        requestGeneration: Int,
+        latestGeneration: Int
+    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool)? {
+        guard requestGeneration == latestGeneration else { return nil }
         guard selectedProviderId == requestedProviderId else {
             return (nil, nil, false)
         }
-        let selection = defaultModel(in: fetched, providerId: requestedProviderId, specialist: specialist)
-        return (fetched, selection, false)
+        return (fetched, nil, false)
     }
 
-    /// Default model selection for a provider's catalog: for auggie, the
-    /// specialist's default model when present in the catalog; otherwise the
-    /// provider-reported default (`isDefault`), else the first model.
-    static func defaultModel(in models: [ModelInfo], providerId: String?, specialist: SpecialistInfo?) -> ModelInfo? {
-        if providerId == "auggie",
-           let match = models.first(where: { $0.id == defaultAuggieModelId(for: specialist) }) {
-            return match
-        }
-        return models.first(where: { $0.isDefault }) ?? models.first
-    }
-
-    /// Builds the provider/model params for `agent.create`. For auggie (the
-    /// daemon default) the provider is always omitted: both are omitted when
-    /// the model matches the specialist's default (letting the daemon's model
-    /// resolution win), and only the bare `model` is sent on an override —
-    /// matching CreateWorkspaceView's omission logic.
+    /// Builds the provider/model params for `agent.create`. `model` is
+    /// non-nil only on an explicit user pick — the daemon-default picker row
+    /// keeps it nil so the daemon's resolver decides. For auggie (the daemon
+    /// default) the provider is omitted, matching CreateWorkspaceView's
+    /// omission logic.
     static func buildCreateAgentSelection(
-        specialist: SpecialistInfo?,
         provider: ProviderInfo?,
         model: ModelInfo?
     ) -> (provider: String?, model: String?) {
-        guard let provider = provider else { return (nil, nil) }
-        if provider.id == "auggie" {
-            guard let model = model, model.id != defaultAuggieModelId(for: specialist) else {
-                return (nil, nil)
-            }
-            return (nil, model.id)
-        }
-        return (provider.id, model?.id)
+        let providerId = provider?.id
+        return (providerId == "auggie" ? nil : providerId, model?.id)
     }
 
     @ViewBuilder
@@ -425,7 +418,6 @@ struct SpecialistPickerView: View {
         Task { @MainActor in
             do {
                 let selection = Self.buildCreateAgentSelection(
-                    specialist: specialist,
                     provider: selectedProvider,
                     model: selectedModel
                 )

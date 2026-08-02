@@ -5,8 +5,11 @@ import Testing
 /// provider selection/fallback, default model resolution, and the
 /// provider/model params sent on agent.create.
 struct SpecialistPickerSelectionTests {
-    private func makeSpecialist(tier: String? = "balanced", model: String? = nil) -> SpecialistInfo {
-        SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements tasks", modelTier: tier, model: model)
+    private func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
+        SpecialistInfo(
+            id: "implementor", name: "Implementor", description: "Implements tasks",
+            resolvedModel: resolvedModel, resolvedProvider: resolvedProvider
+        )
     }
 
     private func makeModel(_ id: String, provider: String = "auggie", isDefault: Bool = false) -> ModelInfo {
@@ -139,104 +142,51 @@ struct SpecialistPickerSelectionTests {
         #expect(isCreateDisabled(isLoadingModels: true, providers: providers))
     }
 
-    // MARK: - defaultAuggieModelId
+    // MARK: - daemonDefaultLabel (resolvedModel/resolvedProvider preview)
 
-    @Test func defaultAuggieModelIdPrefersConfiguredModel() {
-        #expect(SpecialistPickerView.defaultAuggieModelId(for: makeSpecialist(model: "opus4.6")) == "opus4.6")
+    @Test func daemonDefaultLabelNamesResolvedModelForMatchingProvider() {
+        let specialist = makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
+        #expect(SpecialistInfo.daemonDefaultLabel(for: specialist, providerId: "auggie") == "Default (sonnet4.5)")
     }
 
-    @Test func defaultAuggieModelIdMapsTiers() {
-        #expect(SpecialistPickerView.defaultAuggieModelId(for: makeSpecialist(tier: "fast")) == "haiku4.5")
-        #expect(SpecialistPickerView.defaultAuggieModelId(for: makeSpecialist(tier: "smart")) == "opus4.6")
-        #expect(SpecialistPickerView.defaultAuggieModelId(for: makeSpecialist(tier: "balanced")) == "sonnet4.5")
-        #expect(SpecialistPickerView.defaultAuggieModelId(for: nil) == "sonnet4.5")
+    @Test func daemonDefaultLabelFallsBackWhenProviderContextDiffers() {
+        // The preview was resolved for another provider; its model must not
+        // be shown as the default for the selected one.
+        let specialist = makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
+        #expect(SpecialistInfo.daemonDefaultLabel(for: specialist, providerId: "claude-code") == "Provider default")
     }
 
-    // MARK: - defaultModel
-
-    @Test func auggieDefaultModelPrefersSpecialistDefault() {
-        let models = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.6")]
-        let picked = SpecialistPickerView.defaultModel(in: models, providerId: "auggie", specialist: makeSpecialist(model: "opus4.6"))
-        #expect(picked?.id == "opus4.6")
-    }
-
-    @Test func nonAuggieDefaultModelUsesIsDefaultFlag() {
-        let models = [makeModel("opus-4.5", provider: "claude-code"), makeModel("sonnet-4.6", provider: "claude-code", isDefault: true)]
-        let picked = SpecialistPickerView.defaultModel(in: models, providerId: "claude-code", specialist: makeSpecialist(model: "opus4.6"))
-        #expect(picked?.id == "sonnet-4.6")
-    }
-
-    @Test func defaultModelFallsBackToFirstAndNilWhenEmpty() {
-        let models = [makeModel("grok-4", provider: "grok"), makeModel("grok-4-fast", provider: "grok")]
-        #expect(SpecialistPickerView.defaultModel(in: models, providerId: "grok", specialist: nil)?.id == "grok-4")
-        #expect(SpecialistPickerView.defaultModel(in: [], providerId: "grok", specialist: nil) == nil)
+    @Test func daemonDefaultLabelFallsBackWhenFieldsOmitted() {
+        // Omitted fields mean resolution yielded the provider CLI default.
+        #expect(SpecialistInfo.daemonDefaultLabel(for: makeSpecialist(), providerId: "auggie") == "Provider default")
+        #expect(SpecialistInfo.daemonDefaultLabel(for: nil, providerId: "auggie") == "Provider default")
     }
 
     // MARK: - buildCreateAgentSelection
 
-    @Test func omitsBothWhenAuggieModelMatchesConfiguredModel() {
+    @Test func omitsBothOnDaemonDefaultSelection() {
+        // No explicit user pick: the daemon's resolver decides the model.
         let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(model: "sonnet4.5"),
-            provider: ProviderInfo(id: "auggie", authenticated: true),
-            model: makeModel("sonnet4.5")
-        )
-        #expect(selection.provider == nil)
-        #expect(selection.model == nil)
-    }
-
-    @Test func omitsBothWhenAuggieModelMatchesTierDefault() {
-        let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(tier: "smart"),
-            provider: ProviderInfo(id: "auggie", authenticated: true),
-            model: makeModel("opus4.6")
-        )
-        #expect(selection.provider == nil)
-        #expect(selection.model == nil)
-    }
-
-    @Test func omitsBothWhenNoProviderOrNoAuggieModel() {
-        let noProvider = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(),
-            provider: nil,
-            model: makeModel("opus4.6")
-        )
-        #expect(noProvider.provider == nil)
-        #expect(noProvider.model == nil)
-
-        let noModel = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(),
             provider: ProviderInfo(id: "auggie", authenticated: true),
             model: nil
         )
-        #expect(noModel.provider == nil)
-        #expect(noModel.model == nil)
+        #expect(selection.provider == nil)
+        #expect(selection.model == nil)
     }
 
-    @Test func sendsModelOnlyWhenAuggieModelOverridden() {
-        // Matches CreateWorkspaceView: auggie is the daemon default, so the
-        // provider is omitted and only the bare model override is sent.
+    @Test func sendsModelOnlyOnExplicitAuggiePick() {
+        // Auggie is the daemon default, so the provider is omitted and only
+        // the bare model pick is sent — matching CreateWorkspaceView.
         let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(model: "sonnet4.5"),
             provider: ProviderInfo(id: "auggie", authenticated: true),
-            model: makeModel("opus4.6")
+            model: makeModel("opus4.7")
         )
         #expect(selection.provider == nil)
-        #expect(selection.model == "opus4.6")
-    }
-
-    @Test func sendsModelOnlyWhenAuggieTierDefaultOverridden() {
-        let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(tier: "fast"),
-            provider: ProviderInfo(id: "auggie", authenticated: true),
-            model: makeModel("opus4.6")
-        )
-        #expect(selection.provider == nil)
-        #expect(selection.model == "opus4.6")
+        #expect(selection.model == "opus4.7")
     }
 
     @Test func sendsProviderAndModelForNonAuggieProvider() {
         let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(model: "sonnet4.5"),
             provider: ProviderInfo(id: "claude-code", authenticated: true),
             model: makeModel("sonnet-4.6", provider: "claude-code", isDefault: true)
         )
@@ -244,9 +194,8 @@ struct SpecialistPickerSelectionTests {
         #expect(selection.model == "sonnet-4.6")
     }
 
-    @Test func sendsProviderOnlyWhenModelCatalogEmpty() {
+    @Test func sendsProviderOnlyWhenNoExplicitPick() {
         let selection = SpecialistPickerView.buildCreateAgentSelection(
-            specialist: makeSpecialist(),
             provider: ProviderInfo(id: "grok", authenticated: nil),
             model: nil
         )
@@ -254,43 +203,69 @@ struct SpecialistPickerSelectionTests {
         #expect(selection.model == nil)
     }
 
+    @Test func omitsBothWhenNoProviderSelected() {
+        let selection = SpecialistPickerView.buildCreateAgentSelection(provider: nil, model: nil)
+        #expect(selection.provider == nil)
+        #expect(selection.model == nil)
+    }
+
     // MARK: - modelFetchOutcome (stale-response guard + loading reset)
 
-    @Test func modelFetchOutcomeAppliesCurrentProviderResults() {
-        let fetched = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.6")]
-        let outcome = SpecialistPickerView.modelFetchOutcome(
+    @Test func modelFetchOutcomeAppliesCurrentProviderResults() throws {
+        // A fresh catalog resets the selection to the daemon-default row (nil).
+        let fetched = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.7")]
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: "auggie",
             selectedProviderId: "auggie",
-            specialist: makeSpecialist(tier: "smart")
-        )
-        #expect(outcome.models?.map(\.id) == ["sonnet4.5", "opus4.6"])
-        #expect(outcome.selectedModel?.id == "opus4.6")
+            requestGeneration: 1,
+            latestGeneration: 1
+        ))
+        #expect(outcome.models?.map(\.id) == ["sonnet4.5", "opus4.7"])
+        #expect(outcome.selectedModel == nil)
         #expect(!outcome.isLoadingModels)
     }
 
-    @Test func modelFetchOutcomeDropsStaleProviderResults() {
+    @Test func modelFetchOutcomeIgnoresSupersededFetchEntirely() {
+        // Regression: a late response from an older fetch must be ignored
+        // entirely while a newer fetch is still in flight — it must not
+        // clear isLoadingModels (or the previous provider's catalog could
+        // briefly present as the current provider's and allow a mismatched
+        // (provider, model) pair on create).
         let outcome = SpecialistPickerView.modelFetchOutcome(
             fetched: [makeModel("grok-4", provider: "grok")],
             requestedProviderId: "grok",
-            selectedProviderId: "auggie",
-            specialist: nil
+            selectedProviderId: "grok",
+            requestGeneration: 1,
+            latestGeneration: 2
         )
+        #expect(outcome == nil)
+    }
+
+    @Test func modelFetchOutcomeDropsStaleProviderResults() throws {
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
+            fetched: [makeModel("grok-4", provider: "grok")],
+            requestedProviderId: "grok",
+            selectedProviderId: "auggie",
+            requestGeneration: 2,
+            latestGeneration: 2
+        ))
         #expect(outcome.models == nil)
         #expect(outcome.selectedModel == nil)
         #expect(!outcome.isLoadingModels)
     }
 
-    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() {
+    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() throws {
         // Regression: a provider refresh can resolve the selection to nil while
         // a fetch is in flight; the loading flag must still clear so the
         // Create button doesn't wedge disabled.
-        let outcome = SpecialistPickerView.modelFetchOutcome(
+        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
             fetched: [makeModel("sonnet4.5")],
             requestedProviderId: "auggie",
             selectedProviderId: nil,
-            specialist: makeSpecialist()
-        )
+            requestGeneration: 1,
+            latestGeneration: 1
+        ))
         #expect(outcome.models == nil)
         #expect(!outcome.isLoadingModels)
     }
