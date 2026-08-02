@@ -306,7 +306,7 @@ struct ConversationView: View {
     /// `handleMissingAgent` also keeps this a no-op.
     private func handleAgentNotFoundIfNeeded() {
         guard viewModel.agentNotFound, !selfInitiatedDelete, !isExposeMode else { return }
-        coordinator.handleMissingAgent(workspaceId: viewModel.workspaceId)
+        coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 
     @ViewBuilder

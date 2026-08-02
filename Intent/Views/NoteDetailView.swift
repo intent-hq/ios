@@ -96,7 +96,7 @@ struct NoteDetailView: View {
             note = fetched
         case .notFound:
             note = nil
-            coordinator.handleMissingNote(workspaceId: workspaceId)
+            coordinator.handleMissingNote(noteId: noteId, workspaceId: workspaceId)
         case .transientError:
             note = nil
         }
@@ -108,7 +108,7 @@ struct NoteDetailView: View {
         case .found(let fetched):
             note = fetched
         case .notFound:
-            coordinator.handleMissingNote(workspaceId: workspaceId)
+            coordinator.handleMissingNote(noteId: noteId, workspaceId: workspaceId)
         case .transientError:
             break  // keep showing the last known content
         }

@@ -725,7 +725,7 @@ struct AppCoordinatorTests {
         coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Doomed")
         #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
 
-        coordinator.handleMissingAgent(workspaceId: wsId)
+        coordinator.handleMissingAgent(agentId: "agent-gone", workspaceId: wsId)
 
         if case .workspaceDetail(let wId) = coordinator.currentScreen {
             #expect(wId == wsId)
@@ -749,7 +749,7 @@ struct AppCoordinatorTests {
         let coordinator = AppCoordinator()
         coordinator.onSelectWorkspace(wsId)
 
-        coordinator.handleMissingAgent(workspaceId: wsId)
+        coordinator.handleMissingAgent(agentId: "agent-1", workspaceId: wsId)
 
         if case .workspaceDetail(let wId) = coordinator.currentScreen {
             #expect(wId == wsId)
@@ -768,7 +768,7 @@ struct AppCoordinatorTests {
         let coordinator = AppCoordinator()
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
 
-        coordinator.handleMissingAgent(workspaceId: "some-other-workspace")
+        coordinator.handleMissingAgent(agentId: "agent-1", workspaceId: "some-other-workspace")
 
         if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
@@ -776,6 +776,30 @@ struct AppCoordinatorTests {
         } else {
             Issue.record("handleMissingAgent for another workspace must not navigate, got \(coordinator.currentScreen)")
         }
+    }
+
+    @Test @MainActor func handleMissingAgent_ignoredForDifferentAgent() {
+        // A stale validation for agent A must not evict a live conversation
+        // with agent B in the same workspace.
+        let wsId = "test-coord-missing-agent-otheragent-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectAgent("agent-b", workspaceId: wsId, agentName: "Alive")
+
+        coordinator.handleMissingAgent(agentId: "agent-a", workspaceId: wsId)
+
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-b")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingAgent for another agent must not navigate, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil,
+                "The live conversation's saved sub-screen must not be cleared")
     }
 
     // MARK: - Missing note handling
@@ -792,7 +816,7 @@ struct AppCoordinatorTests {
         coordinator.onSelectNote("note-gone", workspaceId: wsId, noteTitle: "Doomed Note")
         #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
 
-        coordinator.handleMissingNote(workspaceId: wsId)
+        coordinator.handleMissingNote(noteId: "note-gone", workspaceId: wsId)
 
         if case .workspaceDetail(let wId) = coordinator.currentScreen {
             #expect(wId == wsId)
@@ -813,7 +837,7 @@ struct AppCoordinatorTests {
         let coordinator = AppCoordinator()
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
 
-        coordinator.handleMissingNote(workspaceId: wsId)
+        coordinator.handleMissingNote(noteId: "note-1", workspaceId: wsId)
 
         if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
@@ -834,7 +858,7 @@ struct AppCoordinatorTests {
         coordinator.onSelectWorkspace(wsId)
         coordinator.onSelectNote("note-1", workspaceId: wsId, noteTitle: "Note")
 
-        coordinator.handleMissingNote(workspaceId: "some-other-workspace")
+        coordinator.handleMissingNote(noteId: "note-1", workspaceId: "some-other-workspace")
 
         if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-1")
@@ -842,6 +866,31 @@ struct AppCoordinatorTests {
         } else {
             Issue.record("handleMissingNote for another workspace must not navigate, got \(coordinator.currentScreen)")
         }
+    }
+
+    @Test @MainActor func handleMissingNote_ignoredForDifferentNote() {
+        // A stale validation for note A must not evict a live note B screen
+        // in the same workspace (reachable via note-to-note links).
+        let wsId = "test-coord-missing-note-othernote-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator()
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.onSelectNote("note-b", workspaceId: wsId, noteTitle: "Alive Note")
+
+        coordinator.handleMissingNote(noteId: "note-a", workspaceId: wsId)
+
+        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+            #expect(noteId == "note-b")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("handleMissingNote for another note must not navigate, got \(coordinator.currentScreen)")
+        }
+        #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil,
+                "The live note screen's saved sub-screen must not be cleared")
     }
 
     // MARK: - Note validation on restore

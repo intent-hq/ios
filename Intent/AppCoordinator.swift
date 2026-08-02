@@ -398,14 +398,14 @@ class AppCoordinator: ObservableObject {
             )
             // If result is nil or doesn't contain agent data, the agent is gone
             if result == nil || (result as? [String: Any]) == nil {
-                handleMissingAgent(workspaceId: workspaceId)
+                handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
             }
         } catch {
             print("[AppCoordinator] Agent validation failed: \(error)")
             // Only a definitive not-found (-32602, PROTOCOL §5.5) reads as deletion.
             let nsError = error as NSError
             if nsError.domain == "WebSocket" && nsError.code == -32602 {
-                handleMissingAgent(workspaceId: workspaceId)
+                handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
             }
         }
     }
@@ -413,9 +413,11 @@ class AppCoordinator: ObservableObject {
     /// Called when the agent being viewed is no longer found (restore validation,
     /// not-found at conversation load, or deletion while open).
     /// Falls back to the workspace detail (agent list).
-    func handleMissingAgent(workspaceId: String) {
-        // Only redirect if we're still on a conversation screen for this workspace
-        if case .agentConversation(_, let wsId, _) = currentScreen, wsId == workspaceId {
+    func handleMissingAgent(agentId: String, workspaceId: String) {
+        // Only redirect if we're still viewing this agent's conversation — a stale
+        // validation must not evict a different conversation in the same workspace.
+        if case .agentConversation(let aId, let wsId, _) = currentScreen,
+           aId == agentId, wsId == workspaceId {
             PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
@@ -427,14 +429,16 @@ class AppCoordinator: ObservableObject {
     func validateRestoredNote(noteId: String, workspaceId: String, noteStore: NoteStore? = nil) async {
         let store = noteStore ?? NoteStore(connectionManager: connection)
         if case .notFound = await store.fetchNote(noteId: noteId, workspaceId: workspaceId) {
-            handleMissingNote(workspaceId: workspaceId)
+            handleMissingNote(noteId: noteId, workspaceId: workspaceId)
         }
     }
 
     /// Called when the note being viewed no longer exists. Falls back to the workspace detail view.
-    func handleMissingNote(workspaceId: String) {
-        // Only redirect if we're still on a note screen for this workspace
-        if case .noteDetail(_, let wsId, _) = currentScreen, wsId == workspaceId {
+    func handleMissingNote(noteId: String, workspaceId: String) {
+        // Only redirect if we're still viewing this note — a stale validation
+        // must not evict a different note screen in the same workspace.
+        if case .noteDetail(let nId, let wsId, _) = currentScreen,
+           nId == noteId, wsId == workspaceId {
             PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()

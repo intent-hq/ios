@@ -153,7 +153,11 @@ class NoteStore: ObservableObject {
             }
             return .transientError
         } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
-            print("[NoteStore] Note not found: \(noteId)")
+            // -32602 also covers invalid-params (PROTOCOL §4) — log loudly so a
+            // client params bug doesn't silently masquerade as deletion.
+            print(
+                "[NoteStore] -32602 for note \(noteId) — treating as not found "
+                    + "(also raised for invalid params): \(error.localizedDescription)")
             return .notFound
         } catch {
             print("[NoteStore] Failed to fetch note: \(error)")

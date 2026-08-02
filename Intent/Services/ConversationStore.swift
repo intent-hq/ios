@@ -148,10 +148,15 @@ class ConversationStore: ObservableObject {
 
     /// Raise `agentNotFound` only for a definitive not-found JSON-RPC error
     /// (`-32602`, PROTOCOL §5.5) — transient transport errors (timeouts,
-    /// disconnects) must not read as deletion.
+    /// disconnects) must not read as deletion. `-32602` also covers
+    /// invalid-params (PROTOCOL §4), so log loudly: a client params bug must
+    /// not silently masquerade as deletion.
     private func raiseAgentNotFoundIfDefinitive(_ error: Error) {
         let nsError = error as NSError
         if nsError.domain == "WebSocket" && nsError.code == -32602 {
+            print(
+                "[ConversationStore] -32602 for agent \(agentId ?? "?") — treating as not found "
+                    + "(also raised for invalid params): \(nsError.localizedDescription)")
             agentNotFound = true
         }
     }
