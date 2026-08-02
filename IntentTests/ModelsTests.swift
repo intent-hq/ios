@@ -60,7 +60,27 @@ struct ModelsTests {
 
     // MARK: - SpecialistInfo wire decoding (specialist.list)
 
-    @Test func specialistInfoWireDecodesWithoutHidden() async throws {
+    @Test func specialistInfoWireDecodesResolvedFields() async throws {
+        // Fixture mirroring a daemon specialist.list entry carrying the
+        // additive resolvedModel/resolvedProvider preview fields (PROTOCOL §5.11).
+        let info = SpecialistInfo(wire: [
+            "id": "implementor",
+            "name": "Implementor",
+            "description": "Implements tasks",
+            "prompt": "You are an implementor.",
+            "resolvedModel": "sonnet4.5",
+            "resolvedProvider": "auggie",
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.id == "implementor")
+        #expect(specialist.resolvedModel == "sonnet4.5")
+        #expect(specialist.resolvedProvider == "auggie")
+        #expect(specialist.hidden == false)
+    }
+
+    @Test func specialistInfoWireDecodesOmittedResolvedFields() async throws {
+        // Both fields are omitted when resolution yields the provider CLI
+        // default — clients render "Provider default".
         let info = SpecialistInfo(wire: [
             "id": "implementor",
             "name": "Implementor",
@@ -68,7 +88,8 @@ struct ModelsTests {
             "modelTier": "balanced",
         ])
         let specialist = try #require(info)
-        #expect(specialist.id == "implementor")
+        #expect(specialist.resolvedModel == nil)
+        #expect(specialist.resolvedProvider == nil)
         #expect(specialist.hidden == false)
     }
 
@@ -100,17 +121,17 @@ struct ModelsTests {
 
     @Test func pickableDropsHiddenSpecialists() async throws {
         let specialists = [
-            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", modelTier: nil, model: nil),
-            SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", modelTier: nil, model: nil, hidden: true),
-            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", modelTier: nil, model: nil, hidden: false),
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
+            SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", hidden: true),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", hidden: false),
         ]
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }
 
     @Test func pickableKeepsAllWhenNoneHidden() async throws {
         let specialists = [
-            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", modelTier: nil, model: nil),
-            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", modelTier: nil, model: nil),
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements"),
         ]
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
     }

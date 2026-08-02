@@ -2,8 +2,15 @@ import Testing
 @testable import Intent
 
 struct CreateWorkspaceParamsTests {
-    private func makeSpecialist(id: String = "implementor", model: String? = nil) -> SpecialistInfo {
-        SpecialistInfo(id: id, name: "Implementor", description: "Implements tasks", modelTier: "balanced", model: model)
+    private func makeSpecialist(
+        id: String = "implementor",
+        resolvedModel: String? = nil,
+        resolvedProvider: String? = nil
+    ) -> SpecialistInfo {
+        SpecialistInfo(
+            id: id, name: "Implementor", description: "Implements tasks",
+            resolvedModel: resolvedModel, resolvedProvider: resolvedProvider
+        )
     }
 
     private func makeModel(id: String = "sonnet4.5", provider: String = "auggie") -> ModelInfo {
@@ -60,7 +67,7 @@ struct CreateWorkspaceParamsTests {
         #expect(params["initialAgent"] == nil)
     }
 
-    // MARK: - Specialist / prompt / model behavior preserved
+    // MARK: - Specialist / prompt / model behavior
 
     @Test func specialistIdAndTrimmedPromptCarried() throws {
         let params = buildParams(specialist: makeSpecialist(id: "verifier"), message: "  Review the diff  ")
@@ -76,41 +83,47 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["specialist"] == nil)
     }
 
-    @Test func modelOmittedWhenMatchingSpecialistConfiguredModel() throws {
-        let params = buildParams(specialist: makeSpecialist(model: "sonnet4.5"), model: makeModel(id: "sonnet4.5"))
-        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["model"] == nil)
-    }
-
-    @Test func modelSentWhenOverridingSpecialistConfiguredModel() throws {
-        let params = buildParams(specialist: makeSpecialist(model: "sonnet4.5"), model: makeModel(id: "opus4.6"))
-        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["model"] as? String == "opus4.6")
-    }
-
-    @Test func modelOmittedWhenSpecialistHasNoConfiguredModel() throws {
-        let params = buildParams(specialist: makeSpecialist(model: nil), model: makeModel(id: "sonnet4.5"))
+    @Test func modelOmittedOnDaemonDefaultSelection() throws {
+        // No explicit user pick (model nil): the daemon's resolver decides,
+        // even when the specialist carries a resolvedModel preview.
+        let params = buildParams(
+            specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
+            model: nil,
+            message: "Do the thing"
+        )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["model"] == nil)
         #expect(initialAgent["specialist"] as? String == "implementor")
     }
 
+    @Test func modelSentOnExplicitPickWithSpecialist() throws {
+        // An explicit pick is always sent as-is, even if it happens to match
+        // the daemon's resolved preview — model is non-nil only on user picks.
+        let params = buildParams(
+            specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
+            model: makeModel(id: "opus4.6")
+        )
+        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(initialAgent["model"] as? String == "opus4.6")
+    }
+
     // MARK: - Provider emission/omission
 
-    @Test func providerOmittedWhenAuggieAndModelMatchesConfigured() throws {
+    @Test func providerOmittedWhenAuggieOnDaemonDefault() throws {
         let params = buildParams(
-            specialist: makeSpecialist(model: "sonnet4.5"),
+            specialist: makeSpecialist(resolvedModel: "sonnet4.5", resolvedProvider: "auggie"),
             provider: makeProvider(id: "auggie"),
-            model: makeModel(id: "sonnet4.5")
+            model: nil,
+            message: "Do the thing"
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["provider"] == nil)
         #expect(initialAgent["model"] == nil)
     }
 
-    @Test func providerOmittedWhenAuggieWithModelOverride() throws {
+    @Test func providerOmittedWhenAuggieWithModelPick() throws {
         let params = buildParams(
-            specialist: makeSpecialist(model: "sonnet4.5"),
+            specialist: makeSpecialist(),
             provider: makeProvider(id: "auggie"),
             model: makeModel(id: "opus4.6")
         )
@@ -128,17 +141,6 @@ struct CreateWorkspaceParamsTests {
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["provider"] as? String == "claude-code")
         #expect(initialAgent["model"] as? String == "claude-sonnet-4-5")
-    }
-
-    @Test func nonAuggieProviderSentEvenWhenModelMatchesConfigured() throws {
-        let params = buildParams(
-            specialist: makeSpecialist(model: "sonnet4.5"),
-            provider: makeProvider(id: "codex"),
-            model: makeModel(id: "sonnet4.5", provider: "codex")
-        )
-        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
-        #expect(initialAgent["provider"] as? String == "codex")
-        #expect(initialAgent["model"] as? String == "sonnet4.5")
     }
 
     @Test func nonAuggieProviderSentWithoutModel() throws {
@@ -159,15 +161,15 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["agentId"] == nil)
     }
 
-    @Test func nilProviderPreservesOmissionBehavior() throws {
+    @Test func nilProviderOmitsProviderOnWire() throws {
         let params = buildParams(
-            specialist: makeSpecialist(model: "sonnet4.5"),
+            specialist: makeSpecialist(),
             provider: nil,
             model: makeModel(id: "sonnet4.5")
         )
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["provider"] == nil)
-        #expect(initialAgent["model"] == nil)
+        #expect(initialAgent["model"] as? String == "sonnet4.5")
     }
 
     // MARK: - modelFetchOutcome (stale-response guard)
@@ -177,36 +179,22 @@ struct CreateWorkspaceParamsTests {
         let outcome = CreateWorkspaceView.modelFetchOutcome(
             fetched: [makeModel(id: "grok-4", provider: "grok")],
             requestedProviderId: "grok",
-            selectedProviderId: "claude-code",
-            specialist: makeSpecialist()
+            selectedProviderId: "claude-code"
         )
         #expect(outcome == nil)
     }
 
-    @Test func modelFetchOutcomeAppliesAuggieTierSelection() throws {
+    @Test func modelFetchOutcomeResetsToDaemonDefaultRow() throws {
+        // A fresh catalog resets the selection to the daemon-default row (nil)
+        // — the daemon's resolver decides unless the user explicitly picks.
         let fetched = [makeModel(id: "sonnet4.5"), makeModel(id: "opus4.6")]
         let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: "auggie",
-            selectedProviderId: "auggie",
-            specialist: makeSpecialist(model: "opus4.6")
+            selectedProviderId: "auggie"
         ))
         #expect(outcome.models.map(\.id) == ["sonnet4.5", "opus4.6"])
-        #expect(outcome.selectedModel?.id == "opus4.6")
-    }
-
-    @Test func modelFetchOutcomeAppliesProviderDefaultForNonAuggie() throws {
-        let fetched = [
-            makeModel(id: "opus-4.5", provider: "claude-code"),
-            ModelInfo(id: "sonnet-4.6", name: "sonnet-4.6", provider: "claude-code", isDefault: true)
-        ]
-        let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: "claude-code",
-            selectedProviderId: "claude-code",
-            specialist: makeSpecialist()
-        ))
-        #expect(outcome.selectedModel?.id == "sonnet-4.6")
+        #expect(outcome.selectedModel == nil)
     }
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
