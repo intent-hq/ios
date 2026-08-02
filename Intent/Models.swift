@@ -16,6 +16,37 @@ struct PairedServer: Codable, Equatable {
     }
 }
 
+/// A saved daemon connection: pairing info plus its API token and metadata.
+struct StoredConnection: Codable, Identifiable, Equatable {
+    let id: UUID
+    var server: PairedServer
+    var token: String
+    /// Daemon hostname when known, else first host:port.
+    var displayName: String
+    var lastConnectedAt: Date?
+
+    init(
+        id: UUID = UUID(),
+        server: PairedServer,
+        token: String,
+        displayName: String? = nil,
+        lastConnectedAt: Date? = nil
+    ) {
+        self.id = id
+        self.server = server
+        self.token = token
+        self.displayName = displayName ?? StoredConnection.fallbackDisplayName(for: server)
+        self.lastConnectedAt = lastConnectedAt
+    }
+
+    static func fallbackDisplayName(for server: PairedServer) -> String {
+        if let host = server.hosts.first {
+            return "\(host):\(server.port)"
+        }
+        return server.name
+    }
+}
+
 struct WorkspaceAgentInfo: Codable, Identifiable, Equatable {
     let id: String
     let name: String

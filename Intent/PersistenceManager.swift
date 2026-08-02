@@ -4,48 +4,159 @@ import Security
 class PersistenceManager {
     static let shared = PersistenceManager()
 
-    private let serverKey = "pairedServer"
+    let serverKey = "pairedServer"
     private let keychainService = "com.intent.companion"
-    private let keychainAccountToken = "apiToken"
-    private let keychainAccountServer = "serverInfo"
+    let keychainAccountToken = "apiToken"
+    let keychainAccountServer = "serverInfo"
+    let keychainAccountConnections = "connections"
+    let activeConnectionIdKey = "activeConnectionId"
     private let syncQueue = DispatchQueue(label: "com.intent.companion.persistence", qos: .userInitiated)
 
     private init() {}
 
-    // MARK: - Pairing
+    // MARK: - Connections
 
-    func savePairing(server: PairedServer, token: String) {
-        // Save server to Keychain
-        if let data = try? JSONEncoder().encode(server) {
-            saveDataToKeychain(data: data, account: keychainAccountServer)
+    func loadConnections() -> [StoredConnection] {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            return loadConnectionsLocked()
         }
-        // Save token to Keychain
-        saveDataToKeychain(data: Data(token.utf8), account: keychainAccountToken)
     }
 
-    func loadPairing() -> (server: PairedServer, token: String)? {
-        var serverData = loadDataFromKeychain(account: keychainAccountServer)
-
-        // Migration: check UserDefaults for existing installs
-        if serverData == nil, let legacyData = UserDefaults.standard.data(forKey: serverKey) {
-            // Migrate to Keychain
-            saveDataToKeychain(data: legacyData, account: keychainAccountServer)
-            UserDefaults.standard.removeObject(forKey: serverKey)
-            serverData = legacyData
+    /// Inserts the connection, or updates the existing entry in place (preserving its
+    /// id) when one with the same host set + port already exists. Returns the stored value.
+    @discardableResult
+    func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            var connections = loadConnectionsLocked()
+            let stored: StoredConnection
+            if let index = connections.firstIndex(where: {
+                Set($0.server.hosts) == Set(connection.server.hosts)
+                    && $0.server.port == connection.server.port
+            }) {
+                let existing = connections[index]
+                stored = StoredConnection(
+                    id: existing.id,
+                    server: connection.server,
+                    token: connection.token,
+                    displayName: connection.displayName,
+                    lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt
+                )
+                connections[index] = stored
+            } else {
+                stored = connection
+                connections.append(stored)
+            }
+            saveConnectionsLocked(connections)
+            return stored
         }
+    }
 
+    func deleteConnection(id: UUID) {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            var connections = loadConnectionsLocked()
+            connections.removeAll { $0.id == id }
+            saveConnectionsLocked(connections)
+            if activeConnectionIdLocked() == id {
+                UserDefaults.standard.removeObject(forKey: activeConnectionIdKey)
+            }
+        }
+    }
+
+    func activeConnection() -> StoredConnection? {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            guard let id = activeConnectionIdLocked() else { return nil }
+            return loadConnectionsLocked().first { $0.id == id }
+        }
+    }
+
+    func setActiveConnection(id: UUID) {
+        syncQueue.sync {
+            UserDefaults.standard.set(id.uuidString, forKey: activeConnectionIdKey)
+        }
+    }
+
+    func touchLastConnected(id: UUID) {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            var connections = loadConnectionsLocked()
+            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+            connections[index].lastConnectedAt = Date()
+            saveConnectionsLocked(connections)
+        }
+    }
+
+    private func loadConnectionsLocked() -> [StoredConnection] {
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        guard let data = loadDataFromKeychain(account: keychainAccountConnections),
+              let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
+            return []
+        }
+        return connections
+    }
+
+    @discardableResult
+    private func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        guard let data = try? JSONEncoder().encode(connections) else { return false }
+        return saveDataToKeychain(data: data, account: keychainAccountConnections)
+    }
+
+    private func activeConnectionIdLocked() -> UUID? {
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        guard let raw = UserDefaults.standard.string(forKey: activeConnectionIdKey) else { return nil }
+        return UUID(uuidString: raw)
+    }
+
+    /// One-time migration of the legacy single pairing (Keychain `serverInfo`+`apiToken`,
+    /// or the even older UserDefaults `pairedServer`) into the connections list.
+    /// Legacy entries are only removed after the new blob is written successfully.
+    private func migrateLegacyPairingIfNeeded() {
+        dispatchPrecondition(condition: .onQueue(syncQueue))
+        guard loadDataFromKeychain(account: keychainAccountConnections) == nil else { return }
+
+        var serverData = loadDataFromKeychain(account: keychainAccountServer)
+        if serverData == nil {
+            serverData = UserDefaults.standard.data(forKey: serverKey)
+        }
         guard let data = serverData,
               let server = try? JSONDecoder().decode(PairedServer.self, from: data),
               let token = loadStringFromKeychain(account: keychainAccountToken) else {
-            return nil
+            return
         }
-        return (server, token)
+
+        let connection = StoredConnection(server: server, token: token)
+        guard saveConnectionsLocked([connection]) else { return }
+        UserDefaults.standard.set(connection.id.uuidString, forKey: activeConnectionIdKey)
+
+        deleteFromKeychain(account: keychainAccountServer)
+        deleteFromKeychain(account: keychainAccountToken)
+        UserDefaults.standard.removeObject(forKey: serverKey)
     }
 
+    // MARK: - Pairing (compatibility shims over the connections API)
+
+    func savePairing(server: PairedServer, token: String) {
+        let stored = upsertConnection(StoredConnection(server: server, token: token))
+        setActiveConnection(id: stored.id)
+    }
+
+    func loadPairing() -> (server: PairedServer, token: String)? {
+        guard let connection = activeConnection() else { return nil }
+        return (connection.server, connection.token)
+    }
+
+    /// Forgets the active connection (removes it from the saved list).
     func clearPairing() {
+        if let connection = activeConnection() {
+            deleteConnection(id: connection.id)
+        }
+        // Clean up any legacy entries
         deleteFromKeychain(account: keychainAccountToken)
         deleteFromKeychain(account: keychainAccountServer)
-        // Clean up any legacy UserDefaults data
         UserDefaults.standard.removeObject(forKey: serverKey)
     }
 
@@ -183,7 +294,8 @@ class PersistenceManager {
 
     // MARK: - Keychain
 
-    private func saveDataToKeychain(data: Data, account: String) {
+    @discardableResult
+    func saveDataToKeychain(data: Data, account: String) -> Bool {
         deleteFromKeychain(account: account) // Remove existing
 
         let query: [String: Any] = [
@@ -193,10 +305,10 @@ class PersistenceManager {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
-        SecItemAdd(query as CFDictionary, nil)
+        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    private func loadDataFromKeychain(account: String) -> Data? {
+    func loadDataFromKeychain(account: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -210,12 +322,12 @@ class PersistenceManager {
         return data
     }
 
-    private func loadStringFromKeychain(account: String) -> String? {
+    func loadStringFromKeychain(account: String) -> String? {
         guard let data = loadDataFromKeychain(account: account) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
-    private func deleteFromKeychain(account: String) {
+    func deleteFromKeychain(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
