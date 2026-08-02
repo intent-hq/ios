@@ -388,7 +388,8 @@ class AppCoordinator: ObservableObject {
         PersistenceManager.shared.saveLastScreen(saved)
     }
 
-    /// Validates that a restored agent still exists. If not, falls back to the workspace detail view.
+    /// Validates that a restored agent still exists. Only a definitive not-found falls back —
+    /// transient/transport errors leave the screen in place (the conversation load re-validates).
     private func validateRestoredAgent(agentId: String, workspaceId: String) async {
         do {
             let result = try await connection.request(
@@ -401,8 +402,11 @@ class AppCoordinator: ObservableObject {
             }
         } catch {
             print("[AppCoordinator] Agent validation failed: \(error)")
-            // Agent doesn't exist — fall back to workspace detail
-            handleMissingAgent(workspaceId: workspaceId)
+            // Only a definitive not-found (-32602, PROTOCOL §5.5) reads as deletion.
+            let nsError = error as NSError
+            if nsError.domain == "WebSocket" && nsError.code == -32602 {
+                handleMissingAgent(workspaceId: workspaceId)
+            }
         }
     }
 

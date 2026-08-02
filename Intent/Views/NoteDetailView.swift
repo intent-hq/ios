@@ -79,8 +79,11 @@ struct NoteDetailView: View {
         .onChange(of: noteStore.notes) { _, newNotes in
             // Live-delta removal: if the open note vanished from the workspace's note
             // list while we have content loaded, confirm via refetch (which falls back
-            // to the workspace detail on a definitive not-found).
-            if note != nil && !newNotes.isEmpty && !newNotes.contains(where: { $0.id == noteId }) {
+            // to the workspace detail on a definitive not-found). An empty list also
+            // triggers the refetch — the last note in the workspace may have been the
+            // open one — and a spurious empty publish is harmless since refreshNote
+            // only navigates on a definitive not-found.
+            if note != nil && !newNotes.contains(where: { $0.id == noteId }) {
                 Task { await refreshNote() }
             }
         }

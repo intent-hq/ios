@@ -655,6 +655,37 @@ struct AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func reconnect_agentTransientError_staysOnConversation() async {
+        let wsId = "test-coord-reconnect-transient-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        // Transport-level timeout must not read as deletion
+        fake.errorMap["agent.get"] = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
+        fake.simulateConnect()
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("agent.get"))
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-live")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Transient agent.get error must not navigate away, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func reconnect_notOnConversation_doesNotValidateAgent() async {
         let wsId = "test-coord-reconnect-detail-\(UUID().uuidString)"
         defer {
