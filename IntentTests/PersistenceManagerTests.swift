@@ -201,12 +201,53 @@ struct PersistenceManagerTests {
     }
 }
 
+/// In-memory `KeychainStorage` so connection-persistence tests are hermetic:
+/// SecItem calls fail on headless CI simulators, and real Keychain state would
+/// leak between runs.
+final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
+    private var items: [String: Data] = [:]
+    private let lock = NSLock()
+
+    private func key(_ service: String, _ account: String) -> String { "\(service)\u{1F}\(account)" }
+
+    @discardableResult
+    func save(data: Data, service: String, account: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        items[key(service, account)] = data
+        return true
+    }
+
+    func load(service: String, account: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return items[key(service, account)]
+    }
+
+    func delete(service: String, account: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        items.removeValue(forKey: key(service, account))
+    }
+}
+
+/// Installs the in-memory Keychain backend exactly once per test process.
+enum TestKeychainStorage {
+    static let installed: Void = {
+        PersistenceManager.shared.keychainStorage = InMemoryKeychainStorage()
+    }()
+}
+
 /// Tests for the multi-connection persistence layer (Keychain-backed connection list,
 /// active-connection pointer, legacy-pairing migration).
 @Suite(.serialized)
 struct ConnectionPersistenceTests {
 
     private let pm = PersistenceManager.shared
+
+    init() {
+        _ = TestKeychainStorage.installed
+    }
 
     /// Remove all connection-related state (new blob, legacy entries, active pointer).
     private func resetConnectionState() {
@@ -393,7 +434,7 @@ struct ConnectionPersistenceTests {
         pm.saveDataToKeychain(data: Data("tok".utf8), account: pm.keychainAccountToken)
 
         let first = pm.loadConnections()
-        #expect(first.count == 1)
+        try #require(first.count == 1)
 
         // Deleting everything from the migrated list must not resurrect the legacy pairing.
         pm.deleteConnection(id: first[0].id)

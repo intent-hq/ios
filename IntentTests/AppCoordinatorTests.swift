@@ -5,6 +5,10 @@ import Testing
 @Suite(.serialized)
 struct AppCoordinatorTests {
 
+    init() {
+        _ = TestKeychainStorage.installed
+    }
+
     // MARK: - Helper to check AppScreen cases
 
     private static func assertScreen(_ screen: AppScreen, is expected: String, file: String = #file, line: Int = #line) {

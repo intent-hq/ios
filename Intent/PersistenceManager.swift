@@ -294,13 +294,46 @@ class PersistenceManager {
 
     // MARK: - Keychain
 
+    /// Backend for Keychain-stored values. Tests substitute an in-memory
+    /// implementation (SecItem calls fail in headless CI simulators).
+    var keychainStorage: KeychainStorage = SecItemKeychainStorage()
+
     @discardableResult
     func saveDataToKeychain(data: Data, account: String) -> Bool {
-        deleteFromKeychain(account: account) // Remove existing
+        keychainStorage.save(data: data, service: keychainService, account: account)
+    }
+
+    func loadDataFromKeychain(account: String) -> Data? {
+        keychainStorage.load(service: keychainService, account: account)
+    }
+
+    func loadStringFromKeychain(account: String) -> String? {
+        guard let data = loadDataFromKeychain(account: account) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func deleteFromKeychain(account: String) {
+        keychainStorage.delete(service: keychainService, account: account)
+    }
+}
+
+/// Abstraction over Keychain item storage so tests can run hermetically.
+protocol KeychainStorage {
+    @discardableResult
+    func save(data: Data, service: String, account: String) -> Bool
+    func load(service: String, account: String) -> Data?
+    func delete(service: String, account: String)
+}
+
+/// Production backend over the Security framework.
+struct SecItemKeychainStorage: KeychainStorage {
+    @discardableResult
+    func save(data: Data, service: String, account: String) -> Bool {
+        delete(service: service, account: account) // Remove existing
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
@@ -308,10 +341,10 @@ class PersistenceManager {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    func loadDataFromKeychain(account: String) -> Data? {
+    func load(service: String, account: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -322,15 +355,10 @@ class PersistenceManager {
         return data
     }
 
-    func loadStringFromKeychain(account: String) -> String? {
-        guard let data = loadDataFromKeychain(account: account) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    func deleteFromKeychain(account: String) {
+    func delete(service: String, account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
