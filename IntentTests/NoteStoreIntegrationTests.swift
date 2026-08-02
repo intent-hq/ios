@@ -213,4 +213,109 @@ struct NoteStoreIntegrationTests {
         #expect(store.notes[0].id == "note-1")
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
+
+    // MARK: - fetchNote classification
+
+    @Test func fetchNoteFoundReturnsNote() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1", "content": "hello",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .found(let note) = result {
+            #expect(note.id == "note-1")
+        } else {
+            Issue.record("Expected .found, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteNotFoundOnRpcInvalidParams() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // note.get answers -32602 for a nonexistent note (docs/PROTOCOL.md §5.5/§9)
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "not found (-32602)"])
+
+        let result = await store.fetchNote(noteId: "note-gone", workspaceId: "ws-1")
+
+        if case .notFound = result {
+            // pass
+        } else {
+            Issue.record("Expected .notFound, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteArchivedTreatedAsNotFound() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1", "content": "hello", "isArchived": true,
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .notFound = result {
+            // pass
+        } else {
+            Issue.record("Expected .notFound for archived note, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteTransientOnTimeout() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // Transport-level timeout (ConnectionManager code -2) must not read as deletion
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .transientError = result {
+            // pass
+        } else {
+            Issue.record("Expected .transientError, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteTransientOnGenericError() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.errorMap["note.get"] = NSError(
+            domain: "SomeOtherDomain", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unrelated failure"])
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .transientError = result {
+            // pass
+        } else {
+            Issue.record("Expected .transientError for non-RPC error, got \(result)")
+        }
+    }
+
+    // MARK: - note:deleted event triggers onNoteChanged
+
+    @Test func noteDeletedEventTriggersOnNoteChanged() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        store.startObservingEvents(workspaceId: "ws-1")
+
+        var called = false
+        store.onNoteChanged = { called = true }
+
+        fake.deliverEvent(method: "events.event", params: [
+            "event": ["type": "note:deleted", "workspaceId": "ws-1", "noteId": "note-1"]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(called, "note:deleted must invoke onNoteChanged so the detail view can re-validate")
+    }
 }

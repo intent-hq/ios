@@ -46,6 +46,9 @@ class ConversationViewModel: ObservableObject {
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
     var attentionRequest: PendingAttentionRequest? { store.attentionRequest }
+    /// True when the daemon definitively reported the agent as gone (not-found
+    /// at load or `agent:deleted` while open); the view falls back to the agent list.
+    var agentNotFound: Bool { store.agentNotFound }
 
     // Message input
     @Published var messageText = ""

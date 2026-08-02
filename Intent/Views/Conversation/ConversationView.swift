@@ -63,10 +63,15 @@ struct NoteSheetInfo: Identifiable {
 struct ConversationView: View {
     @StateObject private var viewModel: ConversationViewModel
     @StateObject private var scrollMomentumProxy = ScrollViewMomentumProxy()
+    @EnvironmentObject private var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     var isExposeMode: Bool = false
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
+    /// True while a deletion initiated from this view's own Delete button is in
+    /// flight — the `agent:deleted` fallback must not double-navigate on top of
+    /// the explicit dismiss().
+    @State private var selfInitiatedDelete = false
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var scrollDebounceTask: Task<Void, Never>?
@@ -233,6 +238,7 @@ struct ConversationView: View {
         ) {
             Button("Delete", role: .destructive) {
                 HapticManager.notification(.warning)
+                selfInitiatedDelete = true
                 Task {
                     do {
                         let _ = try await ConnectionManager.shared.request(
@@ -244,6 +250,7 @@ struct ConversationView: View {
                         )
                         dismiss()
                     } catch {
+                        selfInitiatedDelete = false
                         print("[ConversationView] Failed to delete agent: \(error)")
                     }
                 }
@@ -277,6 +284,12 @@ struct ConversationView: View {
         }
         .task {
             await viewModel.load()
+            handleAgentNotFoundIfNeeded()
+        }
+        .onChange(of: viewModel.agentNotFound) { _, notFound in
+            if notFound {
+                handleAgentNotFoundIfNeeded()
+            }
         }
         .onAppear {
             NotificationManager.shared.currentAgentId = viewModel.agentId
@@ -284,6 +297,16 @@ struct ConversationView: View {
         .onDisappear {
             NotificationManager.shared.currentAgentId = nil
         }
+    }
+
+    /// Coordinator-driven fallback when the agent no longer exists (not-found at
+    /// load or deleted while open): navigate back to the workspace's agent list.
+    /// Skipped for a self-initiated delete (the Delete button already dismisses)
+    /// and in exposé/coverflow, where the coordinator screen guard in
+    /// `handleMissingAgent` also keeps this a no-op.
+    private func handleAgentNotFoundIfNeeded() {
+        guard viewModel.agentNotFound, !selfInitiatedDelete, !isExposeMode else { return }
+        coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 
     @ViewBuilder
