@@ -5,6 +5,8 @@ import SwiftUI
 @MainActor
 class ConversationViewModel: ObservableObject {
     @Published var store = ConversationStore()
+    /// Live background hooks for this conversation's workspace (PROTOCOL §5.40).
+    @Published var hookStore = BackgroundHookStore()
 
     let agentId: String
     let workspaceId: String
@@ -49,6 +51,11 @@ class ConversationViewModel: ObservableObject {
     /// True when the daemon definitively reported the agent as gone (not-found
     /// at load or `agent:deleted` while open); the view falls back to the agent list.
     var agentNotFound: Bool { store.agentNotFound }
+    /// This agent's active (`scheduled`/`running`) background hooks, for the
+    /// chip row above the composer.
+    var activeAgentHooks: [BackgroundHook] {
+        hookStore.activeHooks.filter { $0.agentId == agentId }
+    }
 
     // Message input
     @Published var messageText = ""
@@ -66,6 +73,7 @@ class ConversationViewModel: ObservableObject {
     @Published var selectedPhotoItems: [PhotosPickerItem] = []
 
     private var cancellable: AnyCancellable?
+    private var hookStoreCancellable: AnyCancellable?
     private var draftSaveCancellable: AnyCancellable?
 
     init(agentId: String, workspaceId: String, agentName: String) {
@@ -79,6 +87,11 @@ class ConversationViewModel: ObservableObject {
 
         // Forward store changes
         cancellable = store.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        hookStoreCancellable = hookStore.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -116,8 +129,16 @@ class ConversationViewModel: ObservableObject {
         // Backstop for mid-turn entry: restore the thinking indicator from the
         // agent's live state (raise-only, so it never clears snapshot/optimistic state).
         async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true)
+        // Live background hooks (hook:* subscribe + hook.list seed, §5.40)
+        async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
-        _ = await (conversation, queue, model, subscriptions, streamingState)
+        _ = await (conversation, queue, model, subscriptions, streamingState, hooks)
+    }
+
+    /// Tears down the hook subscription when the conversation leaves the
+    /// screen (`load()` re-subscribes on the next appearance).
+    func teardownHooks() async {
+        await hookStore.unsubscribe()
     }
 
     func cancelWait() async {
