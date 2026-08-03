@@ -4,10 +4,6 @@ import SwiftUI
 
 @MainActor
 class ConversationStore: ObservableObject {
-    /// Only one store per agentId should process streaming events.
-    /// The most recently subscribed store wins.
-    private static var activeStores: [String: ObjectIdentifier] = [:]
-
     @Published var messages: [ConversationMessage] = []
     @Published var isStreaming = false
     @Published var isLoading = false
@@ -326,8 +322,6 @@ class ConversationStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 subscriptionId = subId
             }
-            // Register as the active store for this agent
-            ConversationStore.activeStores[agentId] = ObjectIdentifier(self)
             print("[ConversationStore] Subscribed to streaming events")
         } catch {
             print("[ConversationStore] Failed to subscribe: \(error)")
@@ -605,12 +599,6 @@ class ConversationStore: ObservableObject {
 
     /// Unsubscribe the previous server-side event subscription to prevent duplicate event delivery.
     private func unsubscribePrevious() async {
-        // Clean up active store registry
-        if let aid = agentId {
-            if ConversationStore.activeStores[aid] == ObjectIdentifier(self) {
-                ConversationStore.activeStores.removeValue(forKey: aid)
-            }
-        }
         guard let subId = subscriptionId else { return }
         subscriptionId = nil
         do {
@@ -634,8 +622,7 @@ class ConversationStore: ObservableObject {
         }
 
         // Early agent ID filter: skip events not meant for our agent.
-        // This is critical when multiple ConversationStore instances exist
-        // (e.g., coverflow card + regular conversation view for the same agent).
+        // This is critical when multiple ConversationStore instances exist.
         // Watched-agent (delegate) events are exempt: the switch below handles
         // them and returns before any transcript mutation.
         if let myAgentId = agentId {
@@ -657,13 +644,6 @@ class ConversationStore: ObservableObject {
         // Each event delivery includes a subscriptionId. Only process events matching OUR subscription.
         let eventSubscriptionId = dict["subscriptionId"] as? String
         if let mySubId = subscriptionId, let eventSubId = eventSubscriptionId, eventSubId != mySubId {
-            return
-        }
-
-        // Only the active store for this agent processes streaming events
-        if let myAgentId = agentId,
-           let activeId = ConversationStore.activeStores[myAgentId],
-           activeId != ObjectIdentifier(self) {
             return
         }
 
@@ -1270,12 +1250,6 @@ class ConversationStore: ObservableObject {
     // MARK: - Cleanup
 
     func reset() {
-        // Clean up active store registry
-        if let aid = agentId {
-            if ConversationStore.activeStores[aid] == ObjectIdentifier(self) {
-                ConversationStore.activeStores.removeValue(forKey: aid)
-            }
-        }
         messages = []
         isStreaming = false
         isLoading = false

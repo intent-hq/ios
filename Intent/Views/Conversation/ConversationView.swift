@@ -65,7 +65,6 @@ struct ConversationView: View {
     @StateObject private var scrollMomentumProxy = ScrollViewMomentumProxy()
     @EnvironmentObject private var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
-    var isExposeMode: Bool = false
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
     /// True while a deletion initiated from this view's own Delete button is in
@@ -91,21 +90,13 @@ struct ConversationView: View {
             workspaceId: workspaceId,
             agentName: agentName
         ))
-        self.isExposeMode = false
-    }
-
-    /// Initialize with a pre-existing ViewModel (used by Coverflow to cache ViewModels).
-    /// StateObject only uses the wrappedValue on first render — subsequent renders keep the original.
-    init(viewModel: ConversationViewModel, isExposeMode: Bool = false) {
-        _viewModel = StateObject(wrappedValue: viewModel)
-        self.isExposeMode = isExposeMode
     }
 
     var body: some View {
         VStack(spacing: 0) {
             // Pending attention request banner (kind-flavored, PROTOCOL §5.5).
             // Retires when the daemon clears the fields (agent next messaged).
-            if !isExposeMode, let attention = viewModel.attentionRequest {
+            if let attention = viewModel.attentionRequest {
                 AttentionRequestBanner(attention: attention)
                 Divider()
             }
@@ -158,7 +149,7 @@ struct ConversationView: View {
             // sequential wizard; Ignore collapses it to a banner and the
             // composer returns underneath. `.id` remounts (fresh wizard
             // state) per question-bearing message.
-            if !isExposeMode, let pendingSet = viewModel.pendingQuestions {
+            if let pendingSet = viewModel.pendingQuestions {
                 QuestionWizardView(
                     questions: pendingSet.questions,
                     collapsed: $questionWizardCollapsed,
@@ -174,7 +165,7 @@ struct ConversationView: View {
 
             // Message input (not rendered while the wizard is expanded —
             // Q&A replaces chat; the Ignore-collapsed banner restores it)
-            if !isExposeMode && (viewModel.pendingQuestions == nil || questionWizardCollapsed) {
+            if viewModel.pendingQuestions == nil || questionWizardCollapsed {
                 MessageInputView(viewModel: viewModel)
             }
         }
@@ -183,11 +174,10 @@ struct ConversationView: View {
             // question-bearing message pends (or the set resolves).
             questionWizardCollapsed = false
         }
-        .scrollDisabled(isExposeMode)
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
-        .navigationTitle(isExposeMode ? "" : viewModel.agentName)
+        .navigationTitle(viewModel.agentName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -313,11 +303,9 @@ struct ConversationView: View {
 
     /// Coordinator-driven fallback when the agent no longer exists (not-found at
     /// load or deleted while open): navigate back to the workspace's agent list.
-    /// Skipped for a self-initiated delete (the Delete button already dismisses)
-    /// and in exposé/coverflow, where the coordinator screen guard in
-    /// `handleMissingAgent` also keeps this a no-op.
+    /// Skipped for a self-initiated delete (the Delete button already dismisses).
     private func handleAgentNotFoundIfNeeded() {
-        guard viewModel.agentNotFound, !selfInitiatedDelete, !isExposeMode else { return }
+        guard viewModel.agentNotFound, !selfInitiatedDelete else { return }
         coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 
