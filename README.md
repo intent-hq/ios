@@ -26,8 +26,7 @@ Intent/
 │   ├── WorkspaceStore.swift      Workspace CRUD + caching
 │   ├── NoteStore.swift           Note CRUD + caching
 │   ├── AgentStore.swift          Agent session tracking
-│   ├── ConversationStore.swift   Message history + streaming
-│   └── CoverflowStore.swift      Coverflow UI state (archived workspace flow)
+│   └── ConversationStore.swift   Message history + streaming
 ├── Views/                  SwiftUI components
 │   ├── PairingView.swift         Initial pairing flow orchestrator
 │   ├── QRScannerView.swift       QR code scanner for token + fingerprint

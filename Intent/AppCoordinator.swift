@@ -18,7 +18,6 @@ enum AppScreen {
 class AppCoordinator: ObservableObject {
     @Published var currentScreen: AppScreen = .loading
     @Published var isDisconnected = false
-    @Published var showCoverflow = false
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.

@@ -11,8 +11,17 @@ struct AuggieAvatarView: View {
     // The auggie is wider than tall (aspect ratio ~20:12.3)
     private let aspectRatio: CGFloat = 20.0 / 12.3
 
+    /// Stable djb2 hash that doesn't change across app runs (unlike Swift's .hashValue).
+    private static func stableHash(_ string: String) -> UInt64 {
+        var hash: UInt64 = 5381
+        for byte in string.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
+        }
+        return hash
+    }
+
     private var hue: Double {
-        Double(RepoColorSystem.stableHash(seed) % 360) / 360.0
+        Double(Self.stableHash(seed) % 360) / 360.0
     }
 
     private var color1: Color {

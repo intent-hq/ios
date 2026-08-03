@@ -83,14 +83,6 @@ struct WorkspaceListSidebar: View {
                     } label: {
                         Label("Connect to…", systemImage: "desktopcomputer")
                     }
-                    if UIDevice.current.userInterfaceIdiom == .pad {
-                        Divider()
-                        Button {
-                            coordinator.showCoverflow = true
-                        } label: {
-                            Label("Enter Coverflow", systemImage: "rectangle.stack")
-                        }
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))

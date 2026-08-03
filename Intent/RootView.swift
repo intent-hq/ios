@@ -170,10 +170,6 @@ struct RootView: View {
                 .animation(.easeInOut(duration: 0.3), value: coordinator.isDisconnected)
             }
         }
-        .fullScreenCover(isPresented: $coordinator.showCoverflow) {
-            CoverflowContainerView()
-                .environmentObject(coordinator)
-        }
     }
 
     @ViewBuilder
