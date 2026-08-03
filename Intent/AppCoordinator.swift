@@ -458,10 +458,16 @@ class AppCoordinator: ObservableObject {
             }
         } catch {
             print("[AppCoordinator] Agent validation failed: \(error)")
-            // Only a definitive not-found (-32602, PROTOCOL §5.5) reads as deletion.
+            // Only a definitive not-found (-32602 with data.code == "not-found",
+            // PROTOCOL §3.3/§9) reads as deletion.
             let nsError = error as NSError
-            if nsError.domain == "WebSocket" && nsError.code == -32602 {
+            if nsError.isEntityNotFound {
                 handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
+            } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
+                print(
+                    "[AppCoordinator] UNEXPECTED -32602 without data.code == \"not-found\" for "
+                        + "agent \(agentId) (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
+                        + "NOT treating as deletion: \(nsError.localizedDescription)")
             }
         }
     }

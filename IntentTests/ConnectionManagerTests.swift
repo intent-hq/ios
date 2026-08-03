@@ -110,6 +110,105 @@ struct ConnectionManagerTests {
         }
     }
 
+    /// Deterministically wait (bounded) until the continuation-registration Task
+    /// has stored its continuation, instead of a fixed sleep (flake-prone under
+    /// CI load). The registration Task inherits the main actor, so yielding here
+    /// lets it run to the registration point.
+    @MainActor
+    private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while manager.pendingRequests[id] == nil {
+            if ContinuousClock.now >= deadline {
+                Issue.record("Timed out waiting for pendingRequests[\(id)] to be registered")
+                return
+            }
+            await Task.yield()
+        }
+    }
+
+    @Test @MainActor func dispatchErrorResponsePreservesDataCode() async {
+        let manager = ConnectionManager.shared
+
+        let expectation = Task<Any, Error> {
+            try await withCheckedThrowingContinuation { continuation in
+                manager.pendingRequests[889] = continuation
+            }
+        }
+
+        await waitForPendingRequest(manager, id: 889)
+
+        let errorResponse = """
+        {"jsonrpc":"2.0","id":889,"error":{"code":-32602,"message":"unknown agent id: gone","data":{"code":"not-found"}}}
+        """
+        await manager.dispatchMessage(errorResponse)
+
+        do {
+            _ = try await expectation.value
+            Issue.record("Expected error but got success")
+        } catch {
+            let nsError = error as NSError
+            #expect(nsError.domain == "WebSocket")
+            #expect(nsError.code == -32602)
+            #expect(nsError.intentErrorDataCode == "not-found")
+            #expect(nsError.isEntityNotFound)
+        }
+    }
+
+    @Test @MainActor func dispatchErrorResponseWithoutDataOmitsDataCode() async {
+        let manager = ConnectionManager.shared
+
+        let expectation = Task<Any, Error> {
+            try await withCheckedThrowingContinuation { continuation in
+                manager.pendingRequests[890] = continuation
+            }
+        }
+
+        await waitForPendingRequest(manager, id: 890)
+
+        // Legacy daemons emit -32602 with no data (monorepo#1365)
+        let errorResponse = """
+        {"jsonrpc":"2.0","id":890,"error":{"code":-32602,"message":"unknown agent id: gone"}}
+        """
+        await manager.dispatchMessage(errorResponse)
+
+        do {
+            _ = try await expectation.value
+            Issue.record("Expected error but got success")
+        } catch {
+            let nsError = error as NSError
+            #expect(nsError.code == -32602)
+            #expect(nsError.intentErrorDataCode == nil)
+            #expect(!nsError.isEntityNotFound, "a -32602 without data.code must not read as entity-not-found")
+        }
+    }
+
+    // MARK: - NSError.isEntityNotFound helper
+
+    @Test func isEntityNotFoundRequiresDomainCodeAndDataCode() {
+        let notFound = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+        #expect(notFound.isEntityNotFound)
+
+        let invalidParams = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSError.intentErrorDataCodeKey: "invalid-params"])
+        #expect(!invalidParams.isEntityNotFound)
+
+        let bare = NSError(domain: "WebSocket", code: -32602)
+        #expect(!bare.isEntityNotFound)
+
+        let wrongCode = NSError(
+            domain: "WebSocket", code: -32603,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+        #expect(!wrongCode.isEntityNotFound)
+
+        let wrongDomain = NSError(
+            domain: "SomeOtherDomain", code: -32602,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+        #expect(!wrongDomain.isEntityNotFound)
+    }
+
     // MARK: - failAllPending
 
     @Test @MainActor func failAllPendingClearsRequests() async {

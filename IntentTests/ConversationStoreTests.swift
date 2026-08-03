@@ -252,15 +252,44 @@ struct ConversationStoreTests {
 
     @Test func fetchConversationNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
-        // agent.getConversation answers -32602 for a nonexistent agent (docs/PROTOCOL.md §5.5)
+        // agent.getConversation answers -32602 with data.code == "not-found" for a
+        // nonexistent agent (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["agent.getConversation"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone"])
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchConversation(agentId: "gone", workspaceId: "w")
 
         #expect(store.agentNotFound, "a definitive not-found must raise agentNotFound")
+    }
+
+    @Test func fetchConversationBare32602DoesNotRaiseAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        // -32602 without data.code == "not-found" (invalid-params or a legacy
+        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        #expect(!store.agentNotFound, "a -32602 without data.code == \"not-found\" must not raise agentNotFound")
+    }
+
+    @Test func fetchConversationInvalidParams32602DoesNotRaiseAgentNotFound() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId",
+                       NSError.intentErrorDataCodeKey: "invalid-params"])
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        #expect(!store.agentNotFound, "data.code == \"invalid-params\" must not raise agentNotFound")
     }
 
     @Test func fetchConversationTransientErrorDoesNotRaiseAgentNotFound() async {
@@ -280,7 +309,8 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.get"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone"])
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchAgentStreamingState(agentId: "gone")
