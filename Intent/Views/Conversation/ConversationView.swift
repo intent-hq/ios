@@ -138,6 +138,16 @@ struct ConversationView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+            // Background hooks chip row (above queued messages, mirroring
+            // the FE's above-the-input placement)
+            if !viewModel.activeAgentHooks.isEmpty {
+                VStack(spacing: 0) {
+                    BackgroundHooksRow(viewModel: viewModel)
+                    Divider()
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             // Queued messages (above input)
             if !viewModel.queuedMessages.isEmpty {
                 QueuedMessagesView(viewModel: viewModel)
@@ -176,6 +186,7 @@ struct ConversationView: View {
         .scrollDisabled(isExposeMode)
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
         .navigationTitle(isExposeMode ? "" : viewModel.agentName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
@@ -296,6 +307,7 @@ struct ConversationView: View {
         }
         .onDisappear {
             NotificationManager.shared.currentAgentId = nil
+            Task { await viewModel.teardownHooks() }
         }
     }
 
