@@ -908,7 +908,8 @@ struct AppCoordinatorTests {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.get"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "agent not found"])
+            userInfo: [NSLocalizedDescriptionKey: "agent not found",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
         // Seed the store so the reconnect overlay clears immediately.
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
@@ -985,6 +986,38 @@ struct AppCoordinatorTests {
             #expect(wId == wsId)
         } else {
             Issue.record("Transient agent.get error must not navigate away, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func reconnect_agentBare32602_staysOnConversation() async {
+        let wsId = "test-coord-reconnect-bare32602-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        // -32602 without data.code == "not-found" (invalid-params or a legacy
+        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
+        fake.errorMap["agent.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
+
+        coordinator.onSelectAgent("agent-live", workspaceId: wsId, agentName: "Worker")
+        fake.simulateConnect()
+        fake.simulateDisconnect()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("agent.get"))
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-live")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("A -32602 without data.code == \"not-found\" must not navigate away, got \(coordinator.currentScreen)")
         }
     }
 
@@ -1215,10 +1248,12 @@ struct AppCoordinatorTests {
         // validation stays inert and only the note validation path is exercised.
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        // note.get answers -32602 for a nonexistent note (docs/PROTOCOL.md §9)
+        // note.get answers -32602 with data.code == "not-found" for a
+        // nonexistent note (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "note not found"])
+            userInfo: [NSLocalizedDescriptionKey: "note not found",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
 
         coordinator.onSelectWorkspace(wsId)

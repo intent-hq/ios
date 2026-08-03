@@ -20,9 +20,10 @@ class ConversationStore: ObservableObject {
     /// receives a message, so this retires via the same refresh.
     @Published var attentionRequest: PendingAttentionRequest?
     /// True when the daemon has definitively told us our agent does not exist —
-    /// a `-32602` not-found on `agent.getConversation`/`agent.get`, or an
-    /// `agent:deleted` event for the open agent. Transient transport errors
-    /// never raise this. The view observes it to fall back to the agent list.
+    /// a `-32602` with `data.code == "not-found"` on
+    /// `agent.getConversation`/`agent.get`, or an `agent:deleted` event for the
+    /// open agent. Transient transport errors never raise this. The view
+    /// observes it to fall back to the agent list.
     @Published var agentNotFound = false
 
     private let connectionManager: ConnectionManagerRouting
@@ -143,17 +144,23 @@ class ConversationStore: ObservableObject {
     }
 
     /// Raise `agentNotFound` only for a definitive not-found JSON-RPC error
-    /// (`-32602`, PROTOCOL §5.5) — transient transport errors (timeouts,
-    /// disconnects) must not read as deletion. `-32602` also covers
-    /// invalid-params (PROTOCOL §4), so log loudly: a client params bug must
-    /// not silently masquerade as deletion.
+    /// (`-32602` with `data.code == "not-found"`, PROTOCOL §3.3/§9) — transient
+    /// transport errors (timeouts, disconnects) must not read as deletion. Any
+    /// other `-32602` (`invalid-params` or absent `data`) is logged loudly and
+    /// NOT classified as deletion: a client params bug must not silently
+    /// masquerade as a deleted agent.
     private func raiseAgentNotFoundIfDefinitive(_ error: Error) {
         let nsError = error as NSError
-        if nsError.domain == "WebSocket" && nsError.code == -32602 {
+        if nsError.isEntityNotFound {
             print(
-                "[ConversationStore] -32602 for agent \(agentId ?? "?") — treating as not found "
-                    + "(also raised for invalid params): \(nsError.localizedDescription)")
+                "[ConversationStore] not-found for agent \(agentId ?? "?") — "
+                    + "treating as deleted: \(nsError.localizedDescription)")
             agentNotFound = true
+        } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
+            print(
+                "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
+                    + "agent \(agentId ?? "?") (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
+                    + "NOT treating as deletion: \(nsError.localizedDescription)")
         }
     }
 
@@ -1040,10 +1047,19 @@ class ConversationStore: ObservableObject {
                     "messageId": messageId,
                 ]
             )
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError where error.isEntityNotFound {
             // Queued message not found on the daemon — refresh the queue instead of
             // mutating local state (`agent:queue:updated` reconciles thereafter).
             await fetchQueue(agentId: agentId)
+            throw error
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+            // -32602 without data.code == "not-found" (invalid-params or absent
+            // data, PROTOCOL §3.3/§9) — log loudly and propagate without
+            // classifying as a missing queued message.
+            print(
+                "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
+                    + "queued message \(messageId) (data.code: \(error.intentErrorDataCode ?? "absent")): "
+                    + error.localizedDescription)
             throw error
         }
         // `queued: true` (slot race / quarantined session, §5.5): the daemon

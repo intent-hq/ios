@@ -137,9 +137,10 @@ class NoteStore: ObservableObject {
         case transientError
     }
 
-    /// Fetch a single note. The daemon answers `-32602` for a nonexistent note
-    /// (docs/PROTOCOL.md §5.5/§9) and archived notes are treated as gone; any
-    /// other error is transient so callers don't mistake network blips for deletion.
+    /// Fetch a single note. The daemon answers `-32602` with
+    /// `data.code == "not-found"` for a nonexistent note (docs/PROTOCOL.md
+    /// §3.3/§9) and archived notes are treated as gone; any other error is
+    /// transient so callers don't mistake network blips for deletion.
     func fetchNote(noteId: String, workspaceId: String) async -> NoteFetchResult {
         do {
             let result = try await connectionManager.request(
@@ -152,13 +153,17 @@ class NoteStore: ObservableObject {
                 return note.isArchived ? .notFound : .found(note)
             }
             return .transientError
+        } catch let error as NSError where error.isEntityNotFound {
+            return .notFound
         } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
-            // -32602 also covers invalid-params (PROTOCOL §4) — log loudly so a
+            // -32602 without data.code == "not-found" (invalid-params or absent
+            // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
             // client params bug doesn't silently masquerade as deletion.
             print(
-                "[NoteStore] -32602 for note \(noteId) — treating as not found "
-                    + "(also raised for invalid params): \(error.localizedDescription)")
-            return .notFound
+                "[NoteStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
+                    + "note \(noteId) (data.code: \(error.intentErrorDataCode ?? "absent")) — "
+                    + "NOT treating as deletion: \(error.localizedDescription)")
+            return .transientError
         } catch {
             print("[NoteStore] Failed to fetch note: \(error)")
             return .transientError

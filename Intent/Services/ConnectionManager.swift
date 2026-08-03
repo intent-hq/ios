@@ -498,20 +498,26 @@ class ConnectionManager: ObservableObject {
                     let code = parsedCode ?? -1
                     let hasCode = parsedCode != nil
                     let topMessage = error["message"] as? String ?? "Unknown error"
+                    let errorData = error["data"] as? [String: Any]
 
                     // Extract error.data.message if present (daemon stashes real cause there)
                     var effectiveMessage = topMessage
-                    if let errorData = error["data"] as? [String: Any],
-                       let dataMessage = errorData["message"] as? String,
+                    if let dataMessage = errorData?["message"] as? String,
                        !dataMessage.isEmpty {
                         effectiveMessage = dataMessage
                     }
 
                     let description = hasCode ? "\(effectiveMessage) (\(code))" : effectiveMessage
+                    var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
+                    // Preserve the error.data.code discriminator (PROTOCOL §3.3) so
+                    // callers can distinguish "not-found" from "invalid-params".
+                    if let dataCode = errorData?["code"] as? String {
+                        userInfo[NSError.intentErrorDataCodeKey] = dataCode
+                    }
                     continuation.resume(throwing: NSError(
                         domain: "WebSocket",
                         code: code,
-                        userInfo: [NSLocalizedDescriptionKey: description]))
+                        userInfo: userInfo))
                 } else {
                     continuation.resume(returning: json["result"] as Any)
                 }
@@ -739,4 +745,24 @@ class CertFingerprintPinner: CertificatePinning {
 extension ConnectionManager: ConnectionManagerRouting {
     // ConnectionManager already implements all required methods and properties.
     // This extension provides explicit conformance to the protocol.
+}
+
+// MARK: - JSON-RPC error discriminator
+
+extension NSError {
+    /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
+    static let intentErrorDataCodeKey = "intentErrorDataCode"
+
+    /// The JSON-RPC `error.data.code` discriminator attached by the daemon, if any.
+    var intentErrorDataCode: String? {
+        userInfo[NSError.intentErrorDataCodeKey] as? String
+    }
+
+    /// True only for a definitive entity-not-found JSON-RPC error: `-32602` with
+    /// `error.data.code == "not-found"` (PROTOCOL §3.3/§9). Any other `-32602`
+    /// (`invalid-params`, a more specific code, or absent `data`) must NOT be
+    /// treated as "entity deleted".
+    var isEntityNotFound: Bool {
+        domain == "WebSocket" && code == -32602 && intentErrorDataCode == "not-found"
+    }
 }

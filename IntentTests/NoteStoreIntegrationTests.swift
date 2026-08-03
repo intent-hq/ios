@@ -233,13 +233,15 @@ struct NoteStoreIntegrationTests {
         }
     }
 
-    @Test func fetchNoteNotFoundOnRpcInvalidParams() async {
+    @Test func fetchNoteNotFoundOnRpcNotFound() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
-        // note.get answers -32602 for a nonexistent note (docs/PROTOCOL.md §5.5/§9)
+        // note.get answers -32602 with data.code == "not-found" for a
+        // nonexistent note (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["note.get"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "not found (-32602)"])
+            userInfo: [NSLocalizedDescriptionKey: "not found (-32602)",
+                       NSError.intentErrorDataCodeKey: "not-found"])
 
         let result = await store.fetchNote(noteId: "note-gone", workspaceId: "ws-1")
 
@@ -247,6 +249,41 @@ struct NoteStoreIntegrationTests {
             // pass
         } else {
             Issue.record("Expected .notFound, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteTransientOnBare32602() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // -32602 without data.code == "not-found" (invalid-params or a legacy
+        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: noteId"])
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .transientError = result {
+            // pass
+        } else {
+            Issue.record("Expected .transientError for a -32602 without data.code == \"not-found\", got \(result)")
+        }
+    }
+
+    @Test func fetchNoteTransientOnInvalidParams32602() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.errorMap["note.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: noteId",
+                       NSError.intentErrorDataCodeKey: "invalid-params"])
+
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+
+        if case .transientError = result {
+            // pass
+        } else {
+            Issue.record("Expected .transientError for data.code == \"invalid-params\", got \(result)")
         }
     }
 

@@ -343,7 +343,8 @@ struct ConversationViewModelTests {
     @Test func loadNotFoundRaisesAgentNotFound() async {
         let notFound = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: test-agent"])
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: test-agent",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         let (vm, _) = makeLoadableVM(errors: [
             "agent.getConversation": notFound,
             "agent.get": notFound,
@@ -352,6 +353,22 @@ struct ConversationViewModelTests {
         await vm.load()
 
         #expect(vm.agentNotFound, "not-found at load must surface agentNotFound")
+    }
+
+    @Test func loadBare32602DoesNotRaiseAgentNotFound() async {
+        // -32602 without data.code == "not-found" (invalid-params or a legacy
+        // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
+        let bare = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+        let (vm, _) = makeLoadableVM(errors: [
+            "agent.getConversation": bare,
+            "agent.get": bare,
+        ])
+
+        await vm.load()
+
+        #expect(!vm.agentNotFound, "a -32602 without data.code == \"not-found\" must not read as deletion")
     }
 
     @Test func loadTransientErrorDoesNotRaiseAgentNotFound() async {

@@ -360,7 +360,8 @@ struct ConversationStoreIntegrationTests {
         ]
         fake.errorMap["agent.sendQueuedMessageNow"] = NSError(
             domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "queued message not found (-32602)"])
+            userInfo: [NSLocalizedDescriptionKey: "queued message not found (-32602)",
+                       NSError.intentErrorDataCodeKey: "not-found"])
         fake.responseMap["agent.getQueue"] = ["queue": [
             ["id": "q-server", "content": "authoritative", "queuedAt": "2025-01-01T00:00:02Z", "position": 0],
         ]]
@@ -372,6 +373,28 @@ struct ConversationStoreIntegrationTests {
         // The queue was refreshed from the daemon rather than mutated locally
         #expect(fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-server"])
+    }
+
+    @Test func sendQueuedMessageNowBare32602PropagatesWithoutRefreshOrRemoval() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+        ]
+        // -32602 without data.code == "not-found" (invalid-params or a legacy
+        // daemon omitting data) must NOT read as a missing queued message
+        fake.errorMap["agent.sendQueuedMessageNow"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: messageId"])
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendQueuedMessageNow(agentId: "agent-1", messageId: "q-1", workspaceId: "ws-1")
+        }
+
+        // No refresh, no local mutation — the error just propagates
+        #expect(!fake.didCallMethod("agent.getQueue"))
+        #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
 
     @Test func sendQueuedMessageNowOtherErrorPropagatesWithoutRefreshOrRemoval() async throws {
