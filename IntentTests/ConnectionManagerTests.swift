@@ -110,6 +110,22 @@ struct ConnectionManagerTests {
         }
     }
 
+    /// Deterministically wait (bounded) until the continuation-registration Task
+    /// has stored its continuation, instead of a fixed sleep (flake-prone under
+    /// CI load). The registration Task inherits the main actor, so yielding here
+    /// lets it run to the registration point.
+    @MainActor
+    private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while manager.pendingRequests[id] == nil {
+            if ContinuousClock.now >= deadline {
+                Issue.record("Timed out waiting for pendingRequests[\(id)] to be registered")
+                return
+            }
+            await Task.yield()
+        }
+    }
+
     @Test @MainActor func dispatchErrorResponsePreservesDataCode() async {
         let manager = ConnectionManager.shared
 
@@ -119,7 +135,7 @@ struct ConnectionManagerTests {
             }
         }
 
-        try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
+        await waitForPendingRequest(manager, id: 889)
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":889,"error":{"code":-32602,"message":"unknown agent id: gone","data":{"code":"not-found"}}}
@@ -147,7 +163,7 @@ struct ConnectionManagerTests {
             }
         }
 
-        try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
+        await waitForPendingRequest(manager, id: 890)
 
         // Legacy daemons emit -32602 with no data (monorepo#1365)
         let errorResponse = """
