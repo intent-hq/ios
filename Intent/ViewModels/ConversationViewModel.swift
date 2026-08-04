@@ -215,6 +215,18 @@ class ConversationViewModel: ObservableObject {
         }
     }
 
+    /// Send a suggested prompt as-is: prompt text only. Unlike `sendMessage`,
+    /// this never attaches `pendingImages` and never clears the persisted
+    /// composer draft — the in-progress draft (text + attachments) stays
+    /// intact for the user's own message.
+    func sendSuggestedPrompt(_ prompt: String) async {
+        do {
+            try await store.sendMessage(agentId: agentId, content: prompt, workspaceId: workspaceId)
+        } catch {
+            print("[ConversationViewModel] Send suggested prompt failed: \(error)")
+        }
+    }
+
     func queueMessage(_ content: String) async {
         let imageBlocks = buildImageBlocks()
         do {

@@ -549,7 +549,7 @@ struct ConversationView: View {
         VStack(spacing: 8) {
             ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
                 Button {
-                    Task { await viewModel.sendMessage(prompt) }
+                    Task { await viewModel.sendSuggestedPrompt(prompt) }
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "paperplane")
