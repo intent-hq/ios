@@ -92,6 +92,19 @@ struct QueuedMessage: Identifiable, Codable {
     let queuedAt: String
     var position: Int
     var imageBlocks: [ImageBlock]?
+    var messageMetadata: [String: AnyCodable]? = nil
+
+    /// Whether this entry was authored by the user. Non-user entries carry
+    /// `messageMetadata` with a string `type`, a non-empty `fromAgentId`, or
+    /// `source == "system"` (PROTOCOL §5.5); absent/malformed metadata fails
+    /// open (treated as user-authored).
+    var isUserMessage: Bool {
+        guard let metadata = messageMetadata else { return true }
+        if metadata["type"]?.stringValue != nil { return false }
+        if let fromAgentId = metadata["fromAgentId"]?.stringValue, !fromAgentId.isEmpty { return false }
+        if metadata["source"]?.stringValue == "system" { return false }
+        return true
+    }
 }
 
 /// A single message in an agent conversation.

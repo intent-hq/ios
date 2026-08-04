@@ -355,6 +355,74 @@ struct QueuedMessageTests {
         #expect(decoded.imageBlocks?.first?.mimeType == "image/jpeg")
         #expect(decoded.imageBlocks?.first?.data == "abc123")
     }
+
+    @Test func decodesWithoutMessageMetadata() throws {
+        // Backward compat: wire entries without messageMetadata must decode.
+        let json = """
+        {"id": "q-1", "content": "hello", "queuedAt": "2025-01-01T00:00:00Z", "position": 0}
+        """
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: Data(json.utf8))
+        #expect(decoded.messageMetadata == nil)
+        #expect(decoded.isUserMessage)
+    }
+
+    @Test func decodesWithMessageMetadata() throws {
+        let json = """
+        {"id": "q-1", "content": "wake", "queuedAt": "2025-01-01T00:00:00Z", "position": 0, \
+        "messageMetadata": {"type": "agent_message", "fromAgentId": "agent-2"}}
+        """
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: Data(json.utf8))
+        #expect(decoded.messageMetadata?["type"]?.stringValue == "agent_message")
+        #expect(decoded.messageMetadata?["fromAgentId"]?.stringValue == "agent-2")
+    }
+
+    // MARK: isUserMessage predicate (shared with FE, see spec Background)
+
+    private func queued(metadata: [String: AnyCodable]?) -> QueuedMessage {
+        QueuedMessage(id: "q", content: "c", queuedAt: "2025-01-01T00:00:00Z",
+                      position: 0, imageBlocks: nil, messageMetadata: metadata)
+    }
+
+    @Test func isUserMessageTrueWithoutMetadata() {
+        #expect(queued(metadata: nil).isUserMessage)
+    }
+
+    @Test func isUserMessageTrueWithBenignMetadata() {
+        #expect(queued(metadata: [
+            "userAppMessageId": AnyCodable("uam-1"),
+            "queueInfo": AnyCodable(["position": 1]),
+        ]).isUserMessage)
+    }
+
+    @Test func isUserMessageFalseWithTypeString() {
+        for type in ["agent_message", "event_notification", "hook_wake", "task_wake"] {
+            #expect(!queued(metadata: ["type": AnyCodable(type)]).isUserMessage)
+        }
+    }
+
+    @Test func isUserMessageFalseWithFromAgentId() {
+        #expect(!queued(metadata: ["fromAgentId": AnyCodable("agent-2")]).isUserMessage)
+    }
+
+    @Test func isUserMessageTrueWithEmptyFromAgentId() {
+        #expect(queued(metadata: ["fromAgentId": AnyCodable("")]).isUserMessage)
+    }
+
+    @Test func isUserMessageFalseWithSystemSource() {
+        #expect(!queued(metadata: ["source": AnyCodable("system")]).isUserMessage)
+    }
+
+    @Test func isUserMessageTrueWithNonSystemSource() {
+        #expect(queued(metadata: ["source": AnyCodable("other")]).isUserMessage)
+    }
+
+    @Test func isUserMessageTrueWithNonStringMarkers() {
+        // Malformed marker values fail open.
+        #expect(queued(metadata: [
+            "type": AnyCodable(42),
+            "fromAgentId": AnyCodable(true),
+        ]).isUserMessage)
+    }
 }
 
 // MARK: - ImageBlock Tests
