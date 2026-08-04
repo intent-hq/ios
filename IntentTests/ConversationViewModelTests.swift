@@ -346,6 +346,52 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions != nil, "questions re-pend after failure")
     }
 
+    // MARK: - Suggested-prompt send (draft retention)
+
+    @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
+        // Regression: draft attachments must not silently ride a suggested
+        // prompt — the prompt sends text only.
+        let (vm, fake) = makeFakeBackedVM()
+        vm.addImage(UIImage(systemName: "star")!)
+
+        await vm.sendSuggestedPrompt("Run the tests")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["imageBlocks"] == nil)
+        #expect(vm.pendingImages.count == 1, "pending images stay attached to the draft")
+    }
+
+    @Test func sendSuggestedPromptLeavesDraftIntact() async {
+        // Regression: a suggested-prompt send must not clear the persisted
+        // composer draft or the on-screen draft text.
+        let (vm, _) = makeFakeBackedVM()
+        PersistenceManager.shared.saveDraft(
+            "half-typed draft", workspaceId: vm.workspaceId, agentId: vm.agentId)
+        vm.messageText = "half-typed draft"
+
+        await vm.sendSuggestedPrompt("Run the tests")
+
+        #expect(vm.messageText == "half-typed draft")
+        #expect(PersistenceManager.shared.loadDraft(
+            workspaceId: vm.workspaceId, agentId: vm.agentId) == "half-typed draft")
+        PersistenceManager.shared.clearDraft(workspaceId: vm.workspaceId, agentId: vm.agentId)
+    }
+
+    @Test func sendMessageStillClearsDraftAndUsesExplicitImages() async throws {
+        // The normal composer path is unchanged: explicit images are sent and
+        // the persisted draft is cleared after a successful send.
+        let (vm, fake) = makeFakeBackedVM()
+        PersistenceManager.shared.saveDraft(
+            "outgoing", workspaceId: vm.workspaceId, agentId: vm.agentId)
+
+        await vm.sendMessage("outgoing", images: [UIImage(systemName: "star")!])
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["imageBlocks"] != nil)
+        #expect(PersistenceManager.shared.loadDraft(
+            workspaceId: vm.workspaceId, agentId: vm.agentId) == "")
+    }
+
     // MARK: - Missing-agent detection at load
 
     /// Configure the fake with every response load() touches, then override
