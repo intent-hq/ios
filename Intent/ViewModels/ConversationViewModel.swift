@@ -44,7 +44,10 @@ class ConversationViewModel: ObservableObject {
     }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
-    var queuedMessages: [QueuedMessage] { store.queuedMessages }
+    /// Display-only filter: hide daemon-originated queue entries (agent sends,
+    /// event/hook/system wakes) from the queued-messages section. The store
+    /// keeps the full queue and flush behavior is unchanged.
+    var queuedMessages: [QueuedMessage] { store.queuedMessages.filter(\.isUserMessage) }
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
     var attentionRequest: PendingAttentionRequest? { store.attentionRequest }

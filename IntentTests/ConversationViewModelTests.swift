@@ -120,6 +120,35 @@ struct ConversationViewModelTests {
         #expect(vm.filteredMessages.count == 3)
     }
 
+    // MARK: - queuedMessages display filter
+
+    private func queuedEntry(id: String, metadata: [String: AnyCodable]? = nil) -> QueuedMessage {
+        QueuedMessage(id: id, content: "c", queuedAt: "2025-01-01T00:00:00Z",
+                      position: 0, imageBlocks: nil, messageMetadata: metadata)
+    }
+
+    @Test func queuedMessagesHidesNonUserEntries() async {
+        let vm = makeVM()
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-user"),
+            queuedEntry(id: "q-agent", metadata: ["type": AnyCodable("agent_message")]),
+            queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
+            queuedEntry(id: "q-system", metadata: ["source": AnyCodable("system")]),
+            queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")]),
+        ]
+        #expect(vm.queuedMessages.map(\.id) == ["q-user", "q-benign"])
+        // The store keeps the full queue (flush behavior untouched).
+        #expect(vm.store.queuedMessages.count == 5)
+    }
+
+    @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() async {
+        let vm = makeVM()
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-agent", metadata: ["fromAgentId": AnyCodable("agent-2")]),
+        ]
+        #expect(vm.queuedMessages.isEmpty)
+    }
+
     // MARK: - suggestedPrompts
 
     @Test func suggestedPromptsParsesSinglePrompt() async {
