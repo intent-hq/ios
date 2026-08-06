@@ -126,11 +126,11 @@ struct ContentBlockView: View {
         // that merely looks like one is left intact (see `SuggestedPrompts`).
         var result = SuggestedPrompts.stripBlocks(from: text)
 
-        // Strip all other HTML comments. Suggested-prompts openers are excluded
-        // so a malformed one cannot lazily capture body text up to an embedded
-        // `-->` (e.g. a Mermaid edge).
+        // Strip all other HTML comments. Suggested-prompts openers (which end
+        // their line) are excluded so a malformed one cannot lazily capture body
+        // text up to an embedded `-->` (e.g. a Mermaid edge).
         result = result.replacingOccurrences(
-            of: "<!--(?![ \\t]*suggested-prompts)[\\s\\S]*?-->",
+            of: "<!--(?![ \\t]*suggested-prompts[ \\t]*(\\r?\\n|$))[\\s\\S]*?-->",
             with: "",
             options: .regularExpression
         )

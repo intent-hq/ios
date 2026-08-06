@@ -4,10 +4,15 @@ import Foundation
 ///
 /// A block is well-formed only when the opener ends its own line, the closing
 /// `-->` stands alone on a later line, and the opener is not inside a fenced
-/// code region. Only the last well-formed block supplies prompts, and a block
-/// whose body carries body-text-shaped lines (headings, fences, table rows,
-/// Mermaid edges) is discarded entirely — response body text must never render
-/// as chips, and stripping must never remove it.
+/// code region. Every well-formed block is stripped from the rendered text, and
+/// only the last one supplies prompts — it yields nothing when any captured line
+/// is body-text-shaped (heading, fence, table row, Mermaid edge), so response
+/// body text can never render as chips.
+///
+/// Mirrors `findSuggestedPromptsBlocks` / `parseSuggestedPrompts` in the desktop
+/// app's `messageParser.ts`, except that prompt lines are kept verbatim (iOS has
+/// no `Label|` / `delay:N|` stripping) and a body line starting with `<!--` also
+/// disqualifies the block.
 enum SuggestedPrompts {
     /// Maximum number of chips a block can contribute.
     static let maxPrompts = 6
@@ -26,7 +31,11 @@ enum SuggestedPrompts {
     /// Prompts from the last well-formed block, capped and sanitized.
     static func parse(_ text: String) -> [String] {
         guard let last = blocks(in: text).last else { return [] }
-        return prompts(from: last.body)
+        let lines = last.body
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty, !lines.contains(where: looksLikeBodyText) else { return [] }
+        return prompts(from: lines)
     }
 
     /// Removes every well-formed block, leaving all other text untouched.
@@ -48,75 +57,102 @@ enum SuggestedPrompts {
             .joined(separator: "\n")
     }
 
-    /// Well-formed blocks that also pass the body sanity gate, in order.
+    /// Every well-formed block, in order, ungated.
     private static func blocks(in text: String) -> [Block] {
         let lines = text.components(separatedBy: "\n")
         var result: [Block] = []
-        var inFence = false
+        var fence: (char: Character, length: Int)?
         var index = 0
         while index < lines.count {
-            let line = lines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-                inFence.toggle()
+            let line = trimmingTrailingWhitespace(lines[index])
+            if let marker = fenceMarker(line) {
+                if let open = fence {
+                    // Only a matching, at-least-as-long, bare marker closes.
+                    if marker.char == open.char, marker.length >= open.length,
+                       marker.info.trimmingCharacters(in: .whitespaces).isEmpty {
+                        fence = nil
+                    }
+                } else {
+                    fence = (marker.char, marker.length)
+                }
                 index += 1
                 continue
             }
-            guard !inFence,
+            guard fence == nil,
                   let openerRange = line.range(of: openerPattern, options: .regularExpression) else {
                 index += 1
                 continue
             }
             // The closing `-->` must stand alone on a later line; an embedded
-            // `-->` (Mermaid edge, prose arrow) never closes a block.
+            // `-->` (Mermaid edge, prose arrow) never closes a block. A second
+            // opener means this one was never closed.
             var closerLine: Int?
             var scan = index + 1
             while scan < lines.count {
-                if lines[scan].trimmingCharacters(in: .whitespaces) == "-->" {
+                let candidate = trimmingTrailingWhitespace(lines[scan])
+                if candidate.trimmingCharacters(in: .whitespaces) == "-->" {
                     closerLine = scan
                     break
                 }
+                if candidate.range(of: openerPattern, options: .regularExpression) != nil { break }
                 scan += 1
             }
             guard let closer = closerLine else {
-                index += 1
+                // Unclosed opener — resume from wherever the scan stopped so a
+                // later well-formed block is still found.
+                index = scan > index ? scan : index + 1
                 continue
             }
-            let body = Array(lines[(index + 1)..<closer])
-            if isPromptBody(body) {
-                result.append(Block(
-                    openerLine: index,
-                    closerLine: closer,
-                    openerPrefix: String(line[line.startIndex..<openerRange.lowerBound]),
-                    body: body))
-            }
+            result.append(Block(
+                openerLine: index,
+                closerLine: closer,
+                openerPrefix: String(line[line.startIndex..<openerRange.lowerBound]),
+                body: Array(lines[(index + 1)..<closer])))
             index = closer + 1
         }
         return result
     }
 
-    private static func isPromptBody(_ body: [String]) -> Bool {
-        let lines = body
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard !lines.isEmpty else { return false }
-        return !lines.contains(where: looksLikeBodyText)
+    /// Opening/closing markdown fence (backtick or tilde), indented at most 3.
+    private static func fenceMarker(_ line: String) -> (char: Character, length: Int, info: String)? {
+        var index = line.startIndex
+        var indent = 0
+        while index < line.endIndex, line[index] == " " {
+            indent += 1
+            index = line.index(after: index)
+        }
+        guard indent <= 3, index < line.endIndex else { return nil }
+        let char = line[index]
+        guard char == "`" || char == "~" else { return nil }
+        var length = 0
+        while index < line.endIndex, line[index] == char {
+            length += 1
+            index = line.index(after: index)
+        }
+        guard length >= 3 else { return nil }
+        return (char, length, String(line[index...]))
+    }
+
+    private static func trimmingTrailingWhitespace(_ line: String) -> String {
+        var result = line
+        while let last = result.last, last.isWhitespace || last.isNewline {
+            result.removeLast()
+        }
+        return result
     }
 
     private static func looksLikeBodyText(_ line: String) -> Bool {
-        if line.hasPrefix("#") || line.hasPrefix("```") || line.hasPrefix("~~~")
-            || line.hasPrefix("|") || line.hasPrefix("<!--") {
-            return true
-        }
-        // Mermaid edges and stray closers cannot be prompts.
-        return line.contains("-->")
+        if line.hasPrefix("|") || line.hasPrefix("<!--") { return true }
+        if line.range(of: "^#{1,6}(\\s|$)", options: .regularExpression) != nil { return true }
+        if line.range(of: "^(`{3,}|~{3,})", options: .regularExpression) != nil { return true }
+        // Mermaid edges cannot be prompts.
+        return line.range(of: "\\S[ \t]*--+>", options: .regularExpression) != nil
     }
 
-    private static func prompts(from body: [String]) -> [String] {
+    private static func prompts(from lines: [String]) -> [String] {
         var result: [String] = []
-        for raw in body {
-            let line = raw.trimmingCharacters(in: .whitespaces)
-            if line.isEmpty || line.count > maxPromptLength { continue }
+        for line in lines {
+            if line.utf16.count > maxPromptLength { continue }
             result.append(line)
             if result.count == maxPrompts { break }
         }

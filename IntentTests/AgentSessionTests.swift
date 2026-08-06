@@ -318,6 +318,14 @@ struct AgentSessionTests {
         #expect(agent.displayMessage == "Hello\nWorld")
     }
 
+    @Test func displayMessageStripsInlineSuggestedPromptsComment() {
+        // A one-liner comment mentioning suggested-prompts is not a block
+        // opener (an opener ends its line), so it is stripped like any comment.
+        let raw = "Hello <!-- suggested-prompts config note --> World"
+        let agent = makeAgent(lastAgentResponse: raw)
+        #expect(agent.displayMessage == "Hello  World")
+    }
+
     @Test func displayMessageKeepsMalformedSuggestedPromptsBlock() {
         // An embedded `-->` (Mermaid edge, prose arrow) does not close a block,
         // so body text must survive intact.

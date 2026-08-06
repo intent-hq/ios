@@ -514,6 +514,61 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text).isEmpty)
     }
 
+    @Test func unclosedOpenerDoesNotSwallowLaterBlock() {
+        // A second opener means the first was never closed; the scan must
+        // resume there instead of consuming the inner, well-formed block.
+        let text = """
+        <!-- suggested-prompts
+        A truncated example that is never closed
+        <!-- suggested-prompts
+        Run the tests
+        -->
+        """
+        #expect(SuggestedPrompts.parse(text) == ["Run the tests"])
+        #expect(SuggestedPrompts.stripBlocks(from: text) == """
+        <!-- suggested-prompts
+        A truncated example that is never closed
+        """)
+    }
+
+    @Test func toleratesCRLFLineEndings() {
+        let text = "Done!\r\n<!-- suggested-prompts\r\nRun the tests\r\n-->\r\n"
+        #expect(SuggestedPrompts.parse(text) == ["Run the tests"])
+    }
+
+    // MARK: - Fence bookkeeping
+
+    @Test func mismatchedFenceCharDoesNotCloseFence() {
+        let text = """
+        ```markdown
+        ~~~
+        <!-- suggested-prompts
+        Quoted example
+        -->
+        ```
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func infoStringedLineInsideFenceDoesNotCloseFence() {
+        let text = """
+        ~~~
+        ```swift
+        <!-- suggested-prompts
+        Quoted example
+        -->
+        ~~~
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func deeplyIndentedFenceMarkerDoesNotOpenFence() {
+        // Four spaces is an indented code block, not a fence, so it must not
+        // flip fence state and hide the real block that follows.
+        let text = "    ```\n<!-- suggested-prompts\nRun the tests\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Run the tests"])
+    }
+
     // MARK: - Body-text rejection
 
     @Test func rejectsBlockContainingHeading() {
@@ -548,6 +603,20 @@ struct SuggestedPromptsTests {
         -->
         """
         #expect(SuggestedPrompts.parse(text) == ["Second block"])
+    }
+
+    @Test func gateRejectedLastBlockYieldsNoPromptsEvenWithEarlierValidBlock() {
+        // The gate applies only to the last well-formed block; an earlier block
+        // must not resurface stale prompts.
+        let text = """
+        <!-- suggested-prompts
+        Earlier prompt
+        -->
+        <!-- suggested-prompts
+        ## Heading
+        -->
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
     }
 
     @Test func lastWellFormedBlockWinsOverQuotedExample() {
@@ -612,8 +681,12 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.stripBlocks(from: text) == text)
     }
 
-    @Test func stripLeavesBodyTextShapedBlockIntact() {
-        let text = "<!-- suggested-prompts\n## Heading\n-->"
-        #expect(SuggestedPrompts.stripBlocks(from: text) == text)
+    @Test func stripsBodyTextShapedBlock() {
+        // A standalone `-->` closer makes the block unambiguously comment
+        // delimited, so removing it can never remove body text — even though
+        // it contributes no prompts.
+        let text = "Done!\n<!-- suggested-prompts\n## Heading\n-->"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
+        #expect(SuggestedPrompts.parse(text).isEmpty)
     }
 }
