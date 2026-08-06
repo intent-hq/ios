@@ -307,9 +307,23 @@ struct AgentSessionTests {
     }
 
     @Test func displayMessageStripsHTMLComments() {
-        let raw = "Hello <!-- suggested-prompts\nRun tests\n--> World"
+        let raw = "Hello <!-- a note --> World"
         let agent = makeAgent(lastAgentResponse: raw)
         #expect(agent.displayMessage == "Hello  World")
+    }
+
+    @Test func displayMessageStripsWellFormedSuggestedPromptsBlock() {
+        let raw = "Hello\n<!-- suggested-prompts\nRun tests\n-->\nWorld"
+        let agent = makeAgent(lastAgentResponse: raw)
+        #expect(agent.displayMessage == "Hello\nWorld")
+    }
+
+    @Test func displayMessageKeepsMalformedSuggestedPromptsBlock() {
+        // An embedded `-->` (Mermaid edge, prose arrow) does not close a block,
+        // so body text must survive intact.
+        let raw = "Hello <!-- suggested-prompts\nA --> B"
+        let agent = makeAgent(lastAgentResponse: raw)
+        #expect(agent.displayMessage == raw)
     }
 
     @Test func displayMessageReturnsNilWhenOnlyTags() {

@@ -437,3 +437,183 @@ struct ImageBlockTests {
         #expect(decoded.mimeType == "image/png")
     }
 }
+
+// MARK: - SuggestedPrompts Tests
+
+struct SuggestedPromptsTests {
+
+    // MARK: - Valid formats
+
+    @Test func parsesPlainPrompts() {
+        let text = "Done!\n<!-- suggested-prompts\nRun the tests\nShip it\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Run the tests", "Ship it"])
+    }
+
+    @Test func parsesLabelAndDelayLinesVerbatim() {
+        // iOS renders the raw line (no label/delay stripping); the gate must
+        // not reject pipe-bearing or delay-prefixed prompts.
+        let text = "<!-- suggested-prompts\nShort label|Full prompt text\ndelay:60|Check deployment\n-->"
+        #expect(SuggestedPrompts.parse(text) == [
+            "Short label|Full prompt text",
+            "delay:60|Check deployment",
+        ])
+    }
+
+    @Test func trimsWhitespaceAndSkipsBlankLines() {
+        let text = "<!-- suggested-prompts\n  Spaced prompt  \n\n\nSecond\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Spaced prompt", "Second"])
+    }
+
+    @Test func toleratesWhitespaceAroundOpenerAndCloser() {
+        let text = "<!--   suggested-prompts   \nA prompt\n   -->   "
+        #expect(SuggestedPrompts.parse(text) == ["A prompt"])
+    }
+
+    // MARK: - Malformed blocks
+
+    @Test func ignoresOpenerInsideFencedCodeRegion() {
+        let text = """
+        Here is the convention:
+
+        ```markdown
+        <!-- suggested-prompts
+        Not a real prompt
+        -->
+        ```
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func ignoresOpenerInsideTildeFencedRegion() {
+        let text = "~~~\n<!-- suggested-prompts\nNope\n-->\n~~~"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func unclosedOpenerFollowedByMermaidArrowYieldsNoPrompts() {
+        let text = """
+        <!-- suggested-prompts
+        ```mermaid
+        flowchart LR
+          A --> B
+        ```
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func embeddedArrowDoesNotCloseBlock() {
+        let text = "<!-- suggested-prompts\nStep A --> Step B\n"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func unclosedOpenerYieldsNoPrompts() {
+        #expect(SuggestedPrompts.parse("<!-- suggested-prompts\nRun tests").isEmpty)
+    }
+
+    @Test func openerNotAtLineEndIsNotABlock() {
+        let text = "<!-- suggested-prompts Run tests -->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    // MARK: - Body-text rejection
+
+    @Test func rejectsBlockContainingHeading() {
+        let text = "<!-- suggested-prompts\n## Summary\nRun tests\n-->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func rejectsBlockContainingTableRow() {
+        let text = "<!-- suggested-prompts\n| Col | Col |\nRun tests\n-->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func rejectsBlockContainingFenceMarker() {
+        let text = "<!-- suggested-prompts\nRun tests\n```swift\n-->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+    }
+
+    @Test func rejectsEmptyBlock() {
+        #expect(SuggestedPrompts.parse("<!-- suggested-prompts\n\n-->").isEmpty)
+    }
+
+    // MARK: - Last block wins
+
+    @Test func lastWellFormedBlockWins() {
+        let text = """
+        <!-- suggested-prompts
+        First block
+        -->
+        More text
+        <!-- suggested-prompts
+        Second block
+        -->
+        """
+        #expect(SuggestedPrompts.parse(text) == ["Second block"])
+    }
+
+    @Test func lastWellFormedBlockWinsOverQuotedExample() {
+        let text = """
+        ```
+        <!-- suggested-prompts
+        Quoted example
+        -->
+        ```
+        <!-- suggested-prompts
+        Real prompt
+        -->
+        """
+        #expect(SuggestedPrompts.parse(text) == ["Real prompt"])
+    }
+
+    // MARK: - Caps
+
+    @Test func capsAtSixPrompts() {
+        let lines = (1...10).map { "Prompt \($0)" }.joined(separator: "\n")
+        let prompts = SuggestedPrompts.parse("<!-- suggested-prompts\n\(lines)\n-->")
+        #expect(prompts.count == SuggestedPrompts.maxPrompts)
+        #expect(prompts.first == "Prompt 1")
+        #expect(prompts.last == "Prompt 6")
+    }
+
+    @Test func dropsOverlongPrompts() {
+        let long = String(repeating: "x", count: SuggestedPrompts.maxPromptLength + 1)
+        let prompts = SuggestedPrompts.parse("<!-- suggested-prompts\n\(long)\nShort\n-->")
+        #expect(prompts == ["Short"])
+    }
+
+    @Test func keepsPromptAtExactLengthLimit() {
+        let atLimit = String(repeating: "x", count: SuggestedPrompts.maxPromptLength)
+        #expect(SuggestedPrompts.parse("<!-- suggested-prompts\n\(atLimit)\n-->") == [atLimit])
+    }
+
+    // MARK: - Stripping
+
+    @Test func stripsWellFormedBlock() {
+        let text = "Done!\n<!-- suggested-prompts\nRun tests\n-->"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
+    }
+
+    @Test func stripsAllWellFormedBlocks() {
+        let text = "A\n<!-- suggested-prompts\nOne\n-->\nB\n<!-- suggested-prompts\nTwo\n-->\nC"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "A\nB\nC")
+    }
+
+    @Test func stripKeepsTextBeforeInlineOpener() {
+        let text = "Trailing text <!-- suggested-prompts\nRun tests\n-->"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Trailing text ")
+    }
+
+    @Test func stripLeavesUnclosedOpenerAndBodyIntact() {
+        let text = "<!-- suggested-prompts\nA --> B\nMore body"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == text)
+    }
+
+    @Test func stripLeavesFencedBlockIntact() {
+        let text = "```\n<!-- suggested-prompts\nExample\n-->\n```"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == text)
+    }
+
+    @Test func stripLeavesBodyTextShapedBlockIntact() {
+        let text = "<!-- suggested-prompts\n## Heading\n-->"
+        #expect(SuggestedPrompts.stripBlocks(from: text) == text)
+    }
+}
