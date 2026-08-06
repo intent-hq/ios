@@ -383,19 +383,14 @@ class ConversationViewModel: ObservableObject {
         guard pendingQuestions == nil else { return [] }
         guard let lastMessage = messages.last,
               lastMessage.role == .assistant else { return [] }
-        let blocks = lastMessage.contentBlocks ?? []
-        for block in blocks.reversed() {
-            guard block.type == .text, let text = block.resolvedText else { continue }
-            if let range = text.range(of: "<!-- suggested-prompts"),
-               let endRange = text.range(of: "-->", range: range.upperBound..<text.endIndex) {
-                let inner = text[range.upperBound..<endRange.lowerBound]
-                return inner
-                    .split(separator: "\n")
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty }
-            }
-        }
-        return []
+        // Text blocks are joined with newlines so a block boundary never fuses
+        // two lines, then only the last well-formed block supplies prompts
+        // (see `SuggestedPrompts`).
+        let text = (lastMessage.contentBlocks ?? [])
+            .filter { $0.type == .text }
+            .compactMap { $0.resolvedText }
+            .joined(separator: "\n")
+        return SuggestedPrompts.parse(text)
     }
 }
 

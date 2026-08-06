@@ -64,9 +64,14 @@ struct AgentSession: Identifiable, Equatable {
             with: "",
             options: .regularExpression
         )
-        // Also strip <!-- suggested-prompts ... --> comments
+        // Strip well-formed <!-- suggested-prompts --> blocks (never body text
+        // that merely resembles one — see `SuggestedPrompts`)
+        cleaned = SuggestedPrompts.stripBlocks(from: cleaned)
+        // Also strip remaining HTML comments, excluding suggested-prompts
+        // openers (which end their line) so a malformed one cannot capture body
+        // text up to an embedded `-->` (e.g. a Mermaid edge)
         cleaned = cleaned.replacingOccurrences(
-            of: "<!--[\\s\\S]*?-->",
+            of: "<!--(?![ \\t]*suggested-prompts[ \\t]*(\\r?\\n|$))[\\s\\S]*?-->",
             with: "",
             options: .regularExpression
         )

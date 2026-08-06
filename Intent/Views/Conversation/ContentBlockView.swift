@@ -122,18 +122,15 @@ struct ContentBlockView: View {
     }
 
     private func stripSuggestedPrompts(_ text: String) -> String {
-        var result = text
+        // Only well-formed suggested-prompts blocks are removed; body text
+        // that merely looks like one is left intact (see `SuggestedPrompts`).
+        var result = SuggestedPrompts.stripBlocks(from: text)
 
-        // Strip suggested-prompts blocks specifically (most common pattern)
+        // Strip all other HTML comments. Suggested-prompts openers (which end
+        // their line) are excluded so a malformed one cannot lazily capture body
+        // text up to an embedded `-->` (e.g. a Mermaid edge).
         result = result.replacingOccurrences(
-            of: "<!--\\s*suggested-prompts[\\s\\S]*?-->",
-            with: "",
-            options: .regularExpression
-        )
-
-        // Strip all other HTML comments
-        result = result.replacingOccurrences(
-            of: "<!--[\\s\\S]*?-->",
+            of: "<!--(?![ \\t]*suggested-prompts[ \\t]*(\\r?\\n|$))[\\s\\S]*?-->",
             with: "",
             options: .regularExpression
         )
@@ -151,13 +148,6 @@ struct ContentBlockView: View {
             with: "",
             options: .regularExpression
         )
-
-        // Fallback: strip unclosed suggested-prompts blocks
-        if result.contains("<!-- suggested-prompts") {
-            if let range = result.range(of: "<!-- suggested-prompts") {
-                result = String(result[result.startIndex..<range.lowerBound])
-            }
-        }
 
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
