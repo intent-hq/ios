@@ -100,10 +100,6 @@ struct WorkspaceDetailView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 2))
                         }
                         .frame(height: 4)
-
-                        Text(progressStatusText)
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
@@ -292,34 +288,6 @@ struct WorkspaceDetailView: View {
         .refreshable {
             await agentStore.fetchAgents(workspaceId: workspaceId)
         }
-    }
-
-    private var progressStatusText: String {
-        guard let ws = workspace else { return "" }
-        let total = ws.taskStatsTotal ?? 0
-        let completed = ws.taskStatsCompleted ?? 0
-        let inProgress = ws.taskStatsInProgress ?? 0
-        let fileChanges = ws.diffSummaryTotalFiles ?? 0
-
-        if total == 0 { return "" }
-
-        if completed == total {
-            if fileChanges > 0 {
-                return "Review \(fileChanges) file change\(fileChanges == 1 ? "" : "s")"
-            }
-            return "All done!"
-        }
-
-        let remaining = total - completed
-        if completed > 0 && Double(completed) / Double(total) >= 0.75 {
-            return "Almost there! \(remaining) task\(remaining == 1 ? "" : "s") remaining."
-        }
-
-        if completed > 0 || inProgress > 0 {
-            return "\(completed) of \(total) tasks complete"
-        }
-
-        return "Tasks ready to go."
     }
 
     private func toggleDelegates(_ agentId: String) {

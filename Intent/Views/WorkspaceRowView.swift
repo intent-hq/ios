@@ -92,6 +92,28 @@ struct WorkspaceRowView: View {
         let color = displayStatus.color
 
         switch displayStatus {
+        case .failed:
+            // Filled red circle with an xmark
+            ZStack {
+                Circle()
+                    .fill(color)
+                Image(systemName: "xmark")
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: size, height: size)
+
+        case .blocked:
+            // Filled red circle with a minus (blocker attention request)
+            ZStack {
+                Circle()
+                    .fill(color)
+                Image(systemName: "minus")
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundColor(.white)
+            }
+            .frame(width: size, height: size)
+
         case .needsAttention:
             // Filled amber circle with exclamation mark
             ZStack {
@@ -156,6 +178,23 @@ struct WorkspaceRowView: View {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.system(size: size * 0.5, weight: .bold))
                     .foregroundColor(.white)
+            }
+            .frame(width: size, height: size)
+
+        case .unread:
+            // Solid blue dot — unseen output on an otherwise quiet workspace
+            Circle()
+                .fill(color)
+                .frame(width: size, height: size)
+
+        case .unknown:
+            // Neutral question mark for a wire value this build doesn't know
+            ZStack {
+                Circle()
+                    .strokeBorder(color, lineWidth: 1.5)
+                Image(systemName: "questionmark")
+                    .font(.system(size: size * 0.5, weight: .bold))
+                    .foregroundColor(color)
             }
             .frame(width: size, height: size)
         }

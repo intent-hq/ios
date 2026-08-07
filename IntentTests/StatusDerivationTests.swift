@@ -2,24 +2,22 @@ import Testing
 @testable import Intent
 
 struct StatusDerivationTests {
-    // Helper to build a Workspace with specific fields
+    // Helper to build a Workspace with specific fields. Only `displayStatus`
+    // feeds the resolution; `prStatus` is kept to pin that BE authority is not
+    // overridden by the parallel PR surface.
     private func makeWorkspace(
         displayStatus: String? = nil,
-        prStatus: String? = nil,
-        diffSummaryTotalFiles: Int? = nil,
-        taskStatsTotal: Int? = nil,
-        taskStatsCompleted: Int? = nil,
-        taskStatsInProgress: Int? = nil
+        prStatus: String? = nil
     ) -> Workspace {
         Workspace(
             id: "test", title: "Test", branch: nil, baseRef: nil,
             status: nil, activity: nil, displayStatus: displayStatus,
             lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
             repositoryName: nil, prStatus: prStatus, prNumber: nil,
-            diffSummaryTotalFiles: diffSummaryTotalFiles,
-            taskStatsTotal: taskStatsTotal,
-            taskStatsCompleted: taskStatsCompleted,
-            taskStatsInProgress: taskStatsInProgress,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
             agentSummaryCount: nil, agentSummaryAgents: nil
         )
     }
@@ -27,10 +25,13 @@ struct StatusDerivationTests {
     // MARK: - Wire value mapping
 
     @Test func wireValueMapping() async throws {
+        #expect(WorkspaceDisplayStatus(wireValue: "failed") == .failed)
+        #expect(WorkspaceDisplayStatus(wireValue: "blocked") == .blocked)
         #expect(WorkspaceDisplayStatus(wireValue: "needs_attention") == .needsAttention)
         #expect(WorkspaceDisplayStatus(wireValue: "idle") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "not_started") == .notStarted)
         #expect(WorkspaceDisplayStatus(wireValue: "in_progress") == .inProgress)
+        #expect(WorkspaceDisplayStatus(wireValue: "unread") == .unread)
         #expect(WorkspaceDisplayStatus(wireValue: "complete") == .complete)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_ready") == .prReady)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_open") == .prOpen)
@@ -56,9 +57,12 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .notStarted)
     }
 
-    @Test func resolveDefaultsToNotStartedOnUnknownWireValue() async throws {
+    @Test func resolveMapsUnknownWireValueToUnknown() async throws {
+        // A newer daemon's value must not masquerade as .notStarted
+        // ("No Code Changes") — it gets its own neutral treatment.
         let ws = makeWorkspace(displayStatus: "some_future_status", prStatus: "Open")
-        #expect(resolveDisplayStatus(for: ws) == .notStarted)
+        #expect(resolveDisplayStatus(for: ws) == .unknown)
+        #expect(resolveDisplayStatus(for: ws) != .notStarted)
     }
 
     @Test func resolveMapsIdle() async throws {
@@ -71,32 +75,60 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .needsAttention)
     }
 
+    @Test func resolveMapsFailed() async throws {
+        let ws = makeWorkspace(displayStatus: "failed", prStatus: "Open")
+        #expect(resolveDisplayStatus(for: ws) == .failed)
+    }
+
+    @Test func resolveMapsBlocked() async throws {
+        let ws = makeWorkspace(displayStatus: "blocked")
+        #expect(resolveDisplayStatus(for: ws) == .blocked)
+    }
+
+    @Test func resolveMapsUnread() async throws {
+        let ws = makeWorkspace(displayStatus: "unread")
+        #expect(resolveDisplayStatus(for: ws) == .unread)
+    }
+
     // MARK: - Labels
 
     @Test func statusLabels() async throws {
+        #expect(WorkspaceDisplayStatus.failed.label == "Failed")
+        #expect(WorkspaceDisplayStatus.blocked.label == "Blocked")
         #expect(WorkspaceDisplayStatus.needsAttention.label == "Needs Attention")
         #expect(WorkspaceDisplayStatus.idle.label == "Idle")
         #expect(WorkspaceDisplayStatus.notStarted.label == "No Code Changes")
         #expect(WorkspaceDisplayStatus.inProgress.label == "In Progress")
+        #expect(WorkspaceDisplayStatus.unread.label == "Unread")
         #expect(WorkspaceDisplayStatus.complete.label == "Complete")
         #expect(WorkspaceDisplayStatus.prReady.label == "PR Mergeable")
         #expect(WorkspaceDisplayStatus.prOpen.label == "PR Open")
         #expect(WorkspaceDisplayStatus.prMerged.label == "PR Merged")
+        #expect(WorkspaceDisplayStatus.unknown.label == "Unknown")
     }
 
     // MARK: - Sort order
 
     @Test func sortOrderOrdering() async throws {
-        let ordered: [WorkspaceDisplayStatus] = [.needsAttention, .idle, .inProgress, .prReady, .prOpen, .notStarted, .complete, .prMerged]
+        let ordered: [WorkspaceDisplayStatus] = [
+            .failed, .blocked, .needsAttention, .idle, .inProgress, .unread,
+            .prReady, .prOpen, .notStarted, .complete, .prMerged, .unknown,
+        ]
         for i in 0..<ordered.count - 1 {
             #expect(ordered[i].sortOrder < ordered[i + 1].sortOrder)
         }
     }
 
-    @Test func needsAttentionSortsFirst() async throws {
-        #expect(WorkspaceDisplayStatus.needsAttention.sortOrder == 0)
-        for status in WorkspaceDisplayStatus.allCases where status != .needsAttention {
-            #expect(WorkspaceDisplayStatus.needsAttention.sortOrder < status.sortOrder)
+    @Test func failedSortsFirst() async throws {
+        #expect(WorkspaceDisplayStatus.failed.sortOrder == 0)
+        for status in WorkspaceDisplayStatus.allCases where status != .failed {
+            #expect(WorkspaceDisplayStatus.failed.sortOrder < status.sortOrder)
+        }
+    }
+
+    @Test func unknownSortsLast() async throws {
+        for status in WorkspaceDisplayStatus.allCases where status != .unknown {
+            #expect(WorkspaceDisplayStatus.unknown.sortOrder > status.sortOrder)
         }
     }
 }

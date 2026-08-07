@@ -8,23 +8,32 @@ enum ViewMode: String, CaseIterable {
 }
 
 enum WorkspaceDisplayStatus: String, CaseIterable {
+    case failed
+    case blocked
     case needsAttention
     case idle
     case notStarted
     case inProgress
+    case unread
     case complete
     case prReady
     case prOpen
     case prMerged
+    /// A wire value this build does not know (a newer daemon's status) —
+    /// rendered neutrally rather than being folded into another status.
+    case unknown
 
     /// Maps the BE-owned wire value (snake_case) to a display status.
     /// Returns nil for unknown values.
     init?(wireValue: String) {
         switch wireValue {
+        case "failed": self = .failed
+        case "blocked": self = .blocked
         case "needs_attention": self = .needsAttention
         case "idle": self = .idle
         case "not_started": self = .notStarted
         case "in_progress": self = .inProgress
+        case "unread": self = .unread
         case "complete": self = .complete
         case "pr_ready": self = .prReady
         case "pr_open": self = .prOpen
@@ -35,51 +44,67 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     var color: Color {
         switch self {
+        case .failed: return Color(red: 0.94, green: 0.27, blue: 0.27) // Red #EF4444
+        case .blocked: return Color(red: 0.86, green: 0.15, blue: 0.15) // Dark red #DC2626
         case .needsAttention: return Color(red: 0.96, green: 0.62, blue: 0.043) // Amber #F59E0B
         case .idle: return Color.gray.opacity(0.6)
         case .notStarted: return Color.gray.opacity(0.4)
         case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
+        case .unread: return Color(red: 0.23, green: 0.51, blue: 0.96) // Blue #3B82F6
         case .complete: return Color(red: 0.0, green: 0.74, blue: 0.49) // Green #00BD7D
         case .prReady: return Color(red: 0.13, green: 0.77, blue: 0.37) // Green #22C55E
         case .prOpen: return Color(red: 0.43, green: 0.50, blue: 0.96) // Indigo
         case .prMerged: return Color.purple
+        case .unknown: return Color.gray.opacity(0.5)
         }
     }
 
     var label: String {
         switch self {
+        case .failed: return "Failed"
+        case .blocked: return "Blocked"
         case .needsAttention: return "Needs Attention"
         case .idle: return "Idle"
         case .notStarted: return "No Code Changes"
         case .inProgress: return "In Progress"
+        case .unread: return "Unread"
         case .complete: return "Complete"
         case .prReady: return "PR Mergeable"
         case .prOpen: return "PR Open"
         case .prMerged: return "PR Merged"
+        case .unknown: return "Unknown"
         }
     }
 
-    /// Order for the Status view grouping (matches the FE sidebar status view)
+    /// Order for the Status view grouping (matches the BE-owned canonical
+    /// precedence: failed > blocked > needs_attention > in_progress > unread >
+    /// the PR/task rollup). Unknown values sort last.
     var sortOrder: Int {
         switch self {
-        case .needsAttention: return 0
-        case .idle: return 1
-        case .inProgress: return 2
-        case .prReady: return 3
-        case .prOpen: return 4
-        case .notStarted: return 5
-        case .complete: return 6
-        case .prMerged: return 7
+        case .failed: return 0
+        case .blocked: return 1
+        case .needsAttention: return 2
+        case .idle: return 3
+        case .inProgress: return 4
+        case .unread: return 5
+        case .prReady: return 6
+        case .prOpen: return 7
+        case .notStarted: return 8
+        case .complete: return 9
+        case .prMerged: return 10
+        case .unknown: return 11
         }
     }
 }
 
 /// Resolves the display status for a workspace from the BE-owned
 /// `displayStatus` wire value. The daemon always emits the field, including
-/// on the lite workspace.subscribe snapshot (intent-hq/intentd#743); a
-/// missing or unrecognized value renders as `.notStarted`.
+/// on the lite workspace.subscribe snapshot (intent-hq/intentd#743); an
+/// absent field renders as `.notStarted`, while a value this build does not
+/// recognize renders as `.unknown` rather than being mislabeled.
 func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
-    workspace.displayStatus.flatMap { WorkspaceDisplayStatus(wireValue: $0) } ?? .notStarted
+    guard let wireValue = workspace.displayStatus else { return .notStarted }
+    return WorkspaceDisplayStatus(wireValue: wireValue) ?? .unknown
 }
 
 @MainActor
