@@ -76,9 +76,12 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         }
     }
 
-    /// Order for the Status view grouping (matches the BE-owned canonical
-    /// precedence: failed > blocked > needs_attention > in_progress > unread >
-    /// the PR/task rollup). Unknown values sort last.
+    /// Order for the Status view grouping. This is presentation ordering that
+    /// matches the FE sidebar status view — notably `idle` sits above
+    /// `inProgress` there — not the BE-owned derivation precedence (which a
+    /// workspace never needs here: it already resolves to a single status).
+    /// The new values slot in at their precedence-consistent positions and
+    /// unknown values sort last.
     var sortOrder: Int {
         switch self {
         case .failed: return 0
