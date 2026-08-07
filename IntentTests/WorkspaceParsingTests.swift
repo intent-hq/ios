@@ -50,11 +50,12 @@ struct WorkspaceParsingTests {
 
     @Test func parseUnknownDisplayStatusTolerated() async throws {
         // Unknown future wire values are kept as-is; mapping to the enum
-        // (and the fallback derivation) happens at display time.
+        // happens at display time and lands on the neutral `.unknown`.
         let dict: [String: Any] = ["id": "ws-4", "title": "Future", "displayStatus": "some_future_status"]
         let ws = WorkspaceStore.parseWorkspace(dict)
         #expect(ws != nil)
         #expect(ws?.displayStatus == "some_future_status")
+        #expect(ws.map { resolveDisplayStatus(for: $0) } == .unknown)
     }
 
     @Test func parseMinimalWorkspace() async throws {
