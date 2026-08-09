@@ -154,7 +154,16 @@ struct ConversationView: View {
                     questions: pendingSet.questions,
                     collapsed: $questionWizardCollapsed,
                     onComplete: { answers in
-                        Task { await viewModel.submitQuestionAnswers(answers) }
+                        // Mount-time capture: this wizard is `.id`-keyed on
+                        // pendingSet.messageId, so this id is by construction
+                        // the set the user answered — never re-derived after
+                        // the Task hop, where a derivation flip could
+                        // otherwise send the answer untagged (#1789).
+                        let answeredId = pendingSet.messageId
+                        Task {
+                            await viewModel.submitQuestionAnswers(
+                                answers, answeredQuestionsMessageId: answeredId)
+                        }
                     }
                 )
                 .id(pendingSet.messageId)

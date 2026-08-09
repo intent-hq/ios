@@ -228,6 +228,37 @@ struct ConversationStoreTests {
         #expect(store.attentionRequest == nil, "sending a message retires the indicator immediately")
     }
 
+    // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
+
+    @Test func sendMessageThreadsMessageMetadataToWire() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.sendMessage(
+            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            messageMetadata: [
+                "type": "question_answers",
+                "answeredQuestionsMessageId": "msg-q1",
+            ])
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        let metadata = try #require(sent.params["messageMetadata"] as? [String: Any])
+        #expect(metadata["type"] as? String == "question_answers")
+        #expect(metadata["answeredQuestionsMessageId"] as? String == "msg-q1")
+    }
+
+    @Test func sendMessageOmitsMessageMetadataWhenAbsent() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
+    }
+
     @Test func failedSendKeepsAttentionRequest() async {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
