@@ -143,39 +143,52 @@ struct GitHubRepoStoreTests {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict()]]
-        await store.searchRepos(query: "intent-hq/intentd")
+        let results = await store.searchRepos(query: "intent-hq/intentd")
         let params = fake.paramsForMethod("github.repos.search")
         #expect(params.count == 1)
         #expect(params[0]["query"] as? String == "intentd user:intent-hq")
-        #expect(store.searchResults.count == 1)
+        #expect(results?.count == 1)
     }
 
     @Test func searchReposSendsBareQueryVerbatim() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": []]
-        await store.searchRepos(query: "intentd")
+        let results = await store.searchRepos(query: "intentd")
         #expect(fake.paramsForMethod("github.repos.search")[0]["query"] as? String == "intentd")
-        #expect(store.searchResults.isEmpty)
+        #expect(results?.isEmpty == true)
     }
 
-    @Test func searchReposEmptyQueryClearsResultsWithoutRequest() async {
+    @Test func searchReposEmptyQueryReturnsEmptyWithoutRequest() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        store.searchResults = [GitHubRepo.parseRepo(makeRepoDict())!]
-        await store.searchRepos(query: "   ")
-        #expect(store.searchResults.isEmpty)
+        let results = await store.searchRepos(query: "   ")
+        #expect(results?.isEmpty == true)
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
-    @Test func searchReposErrorSetsLastError() async {
+    @Test func searchReposDoesNotAssignPublishedResults() async {
+        // The debounced caller publishes results itself after its
+        // cancellation check, so an out-of-order older response can't
+        // overwrite a newer one's published results.
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        store.searchResults = [existing]
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "other")]]
+        _ = await store.searchRepos(query: "other")
+        #expect(store.searchResults == [existing])
+    }
+
+    @Test func searchReposErrorSetsLastErrorAndReturnsNil() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.errorMap["github.repos.search"] = NSError(
             domain: "t", code: -1,
             userInfo: [NSLocalizedDescriptionKey: "search down"]
         )
-        await store.searchRepos(query: "intentd")
+        let results = await store.searchRepos(query: "intentd")
+        #expect(results == nil)
         #expect(store.lastError == "search down")
         #expect(store.isLoading == false)
     }

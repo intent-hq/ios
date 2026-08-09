@@ -157,8 +157,12 @@ struct GitHubRepoPickerView: View {
         searchTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
-            await store.searchRepos(query: query)
+            guard let results = await store.searchRepos(query: query) else { return }
+            // Publish results + the query they answer together, only if this
+            // task is still the latest — an out-of-order older response can't
+            // overwrite a newer one's results.
             guard !Task.isCancelled else { return }
+            store.searchResults = results
             completedSearchQuery = query
         }
     }

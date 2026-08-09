@@ -66,27 +66,30 @@ class GitHubRepoStore: ObservableObject {
     }
 
     /// `github.repos.search` — one page of global repo search, with the
-    /// FE-parity query rewrite (`owner/name` → `name user:owner`).
-    func searchRepos(query: String) async {
+    /// FE-parity query rewrite (`owner/name` → `name user:owner`). Returns
+    /// the parsed results instead of assigning `searchResults`, so the
+    /// debounced caller can publish results and the query they answer
+    /// together after its own cancellation check (out-of-order responses
+    /// would otherwise let an older request overwrite a newer one's
+    /// results). Returns nil on error.
+    func searchRepos(query: String) async -> [GitHubRepo]? {
         let rewritten = Self.rewriteSearchQuery(query)
-        guard !rewritten.isEmpty else {
-            searchResults = []
-            return
-        }
+        guard !rewritten.isEmpty else { return [] }
         isLoading = true
         lastError = nil
+        defer { isLoading = false }
         do {
             let result = try await connectionManager.request("github.repos.search", params: [
                 "query": rewritten,
                 "limit": Self.pageLimit
             ])
             let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
-            searchResults = items.compactMap { GitHubRepo.parseRepo($0) }
+            return items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
             print("[GitHubRepoStore] github.repos.search failed: \(error)")
             lastError = error.localizedDescription
+            return nil
         }
-        isLoading = false
     }
 
     /// `github.repos.get` — resolve a repo's `defaultBranch` when the
