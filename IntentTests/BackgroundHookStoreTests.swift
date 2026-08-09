@@ -279,4 +279,56 @@ struct BackgroundHookStoreTests {
         #expect(store.hooks.isEmpty)
         #expect(fake.eventHandlerCount == 0)
     }
+
+    @Test func staleListResponseAfterCancelledFoldIsDiscarded() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
+        fake.clearRequestLog()
+
+        // Suspend the next hook.list so a fold can land while it is in
+        // flight; the suspended response still lists hook-1.
+        fake.delayMap["hook.list"] = 100_000_000
+        let refetchTask = Task { await store.refetch() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "sub-hooks",
+            "event": [
+                "type": "hook:cancelled",
+                "workspaceId": "ws-1",
+                "data": ["workspaceId": "ws-1", "hookId": "hook-1"]
+            ]
+        ] as [String: Any])
+        try await Task.sleep(nanoseconds: 20_000_000)
+        #expect(store.hooks.isEmpty)
+
+        // Fresh server state (post-cancel) for the queued follow-up fetch.
+        fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
+        await refetchTask.value
+
+        // The stale response must not restore the cancelled hook; the
+        // discarded response queues one follow-up fetch to converge.
+        #expect(store.hooks.isEmpty)
+        #expect(fake.paramsForMethod("hook.list").count == 2)
+    }
+
+    @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
+        fake.clearRequestLog()
+
+        fake.delayMap["hook.list"] = 100_000_000
+        let refetchTask = Task { await store.refetch() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        await store.unsubscribe()
+        #expect(store.hooks.isEmpty)
+
+        await refetchTask.value
+
+        // The stale response must not repopulate the cleared list, and the
+        // queued follow-up bails out (no workspace bound anymore).
+        #expect(store.hooks.isEmpty)
+        #expect(fake.paramsForMethod("hook.list").count == 1)
+    }
 }
