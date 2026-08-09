@@ -129,6 +129,16 @@ struct ConversationView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+            // Monitored PRs chip row (above the hooks row, mirroring the
+            // FE's ordering)
+            if !viewModel.activeAgentMonitors.isEmpty {
+                VStack(spacing: 0) {
+                    MonitoredPrsRow(viewModel: viewModel)
+                    Divider()
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             // Background hooks chip row (above queued messages, mirroring
             // the FE's above-the-input placement)
             if !viewModel.activeAgentHooks.isEmpty {
@@ -186,6 +196,7 @@ struct ConversationView: View {
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
+        .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentMonitors.map(\.monitorId))
         .navigationTitle(viewModel.agentName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
@@ -306,7 +317,7 @@ struct ConversationView: View {
         }
         .onDisappear {
             NotificationManager.shared.currentAgentId = nil
-            Task { await viewModel.teardownHooks() }
+            Task { await viewModel.teardownLiveStores() }
         }
     }
 
