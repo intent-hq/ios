@@ -8,10 +8,9 @@ struct CreateWorkspaceView: View {
     // Navigation state
     @State private var navigationPath = NavigationPath()
 
-    // Step 1: Repo selection
-    @State private var repos: [KnownRepo] = []
-    @State private var isLoadingRepos = true
-    @State private var selectedRepo: KnownRepo?
+    // Step 1: GitHub repo selection
+    @StateObject private var githubStore = GitHubRepoStore()
+    @State private var selectedRepo: GitHubRepo?
 
     // Step 2: Branch selection
     @State private var localBranches: [String] = []
@@ -52,82 +51,29 @@ struct CreateWorkspaceView: View {
     // MARK: - Step 1: Repository Selection
 
     private var repoSelectionView: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if isLoadingRepos {
-                ProgressView("Loading repositories...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if repos.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "folder.badge.questionmark")
-                        .font(.largeTitle)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    Text("No repositories found")
-                        .font(.headline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text("Add a repository in the desktop app first.")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-            } else {
-                List {
-                    ForEach(repos) { repo in
-                        Button {
-                            selectedRepo = repo
-                        } label: {
-                            HStack(spacing: 12) {
-                                RepoOwnerAvatarView(owner: repo.owner)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(repo.name)
-                                        .font(.headline)
-                                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                                    Text(repo.path)
-                                        .font(.subheadline)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if selectedRepo?.id == repo.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Theme.primary(for: colorScheme))
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .listRowBackground(Theme.card(for: colorScheme))
+        GitHubRepoPickerView(store: githubStore, selectedRepo: $selectedRepo)
+            .navigationTitle("Select Repository")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(Theme.foreground(for: colorScheme))
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            }
-        }
-        .navigationTitle("Select Repository")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Next") {
+                        navigationPath.append("branches")
+                    }
+                    .disabled(selectedRepo == nil)
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Next") {
-                    navigationPath.append("branches")
-                }
-                .disabled(selectedRepo == nil)
+            .onChange(of: selectedRepo?.id) { _, _ in
+                // Reset idempotency key when repo changes
+                idempotencyKey = UUID().uuidString
             }
-        }
-        .task {
-            await fetchRepos()
-        }
-        .onChange(of: selectedRepo?.id) { _, _ in
-            // Reset idempotency key when repo changes
-            idempotencyKey = UUID().uuidString
-        }
     }
 
     // MARK: - Step 2: Branch Selection
@@ -398,55 +344,19 @@ struct CreateWorkspaceView: View {
 
     // MARK: - Data Fetching
 
-    private func fetchRepos() async {
-        isLoadingRepos = true
-        do {
-            let result = try await ConnectionManager.shared.request("repo.list")
-            if let dict = result as? [String: Any],
-               let items = dict["repos"] as? [[String: Any]] {
-                repos = items.compactMap { item in
-                    guard let path = item["path"] as? String,
-                          let name = item["name"] as? String else { return nil }
-                    return KnownRepo(
-                        path: path,
-                        name: name,
-                        owner: item["owner"] as? String,
-                        addedAt: item["addedAt"] as? String,
-                        lastUsedAt: item["lastUsedAt"] as? String
-                    )
-                }
-            }
-        } catch {
-            print("[CreateWorkspace] Failed to fetch repos: \(error)")
-        }
-        isLoadingRepos = false
-    }
-
+    // Temporary scaffolding: the branch-step task replaces this with a
+    // `github.branches.list` fetch (GitHubRepoStore.fetchRemoteBranches).
+    // Until then only the picked repo's default branch (when known) is
+    // offered so the flow stays navigable.
     private func fetchBranches() async {
         guard let repo = selectedRepo else { return }
         isLoadingBranches = true
-        do {
-            let result = try await ConnectionManager.shared.request(
-                "git.getBranches",
-                params: ["repoPath": repo.path, "includeRemote": true]
-            )
-            if let dict = result as? [String: Any] {
-                if let branches = dict["branches"] as? [String] {
-                    localBranches = branches
-                }
-                if let remote = dict["remoteBranches"] as? [String] {
-                    remoteBranches = remote
-                }
-                currentBranch = dict["currentBranch"] as? String
-                defaultBranch = dict["defaultBranch"] as? String
-
-                // Auto-select default branch, or current branch, or first local branch
-                if selectedBranch == nil {
-                    selectedBranch = defaultBranch ?? currentBranch ?? localBranches.first
-                }
-            }
-        } catch {
-            print("[CreateWorkspace] Failed to fetch branches: \(error)")
+        localBranches = []
+        remoteBranches = [repo.defaultBranch].compactMap { $0 }
+        currentBranch = nil
+        defaultBranch = repo.defaultBranch
+        if selectedBranch == nil {
+            selectedBranch = repo.defaultBranch
         }
         isLoadingBranches = false
     }
@@ -521,7 +431,7 @@ struct CreateWorkspaceView: View {
     }
 
     private func createWorkspace() {
-        guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
+        guard !isCreating, selectedRepo != nil, let branch = selectedBranch else { return }
         isCreating = true
 
         Task {
@@ -529,8 +439,12 @@ struct CreateWorkspaceView: View {
                 // Normalize branch name: strip "origin/" or other known remote prefixes
                 let normalizedBranch = normalizeBranchName(branch)
 
+                // Temporary scaffolding: the branch-step task replaces this
+                // with githubUrl-based cache-hydrated creation
+                // (`workspace.create { githubUrl, baseRef }`); no local
+                // repository path exists for a GitHub pick.
                 let params = Self.buildCreateWorkspaceParams(
-                    repositoryPath: repo.path,
+                    repositoryPath: "",
                     baseRef: normalizedBranch,
                     idempotencyKey: idempotencyKey,
                     specialist: selectedSpecialist,
