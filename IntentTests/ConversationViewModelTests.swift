@@ -331,6 +331,34 @@ struct ConversationViewModelTests {
         #expect(sent.params["imageBlocks"] == nil)
     }
 
+    @Test func submitQuestionAnswersTagsWireMessageWithQuestionAnswersMetadata() async throws {
+        // Regression (intent-hq/monorepo#1789): the daemon only retires the
+        // question hold (and the workspace's needs_attention status) when the
+        // answer send carries messageMetadata { type: "question_answers",
+        // answeredQuestionsMessageId } naming the question-bearing assistant
+        // message — an untagged answer leaves the hold pending forever.
+        let (vm, fake) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage(id: "a1")]
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers)
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        let metadata = try #require(sent.params["messageMetadata"] as? [String: Any])
+        #expect(metadata["type"] as? String == "question_answers")
+        #expect(metadata["answeredQuestionsMessageId"] as? String == "a1")
+    }
+
+    @Test func plainSendMessageCarriesNoMessageMetadata() async throws {
+        // Ordinary sends must stay byte-identical to before: no metadata key.
+        let (vm, fake) = makeFakeBackedVM()
+
+        await vm.sendMessage("just a normal message")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["messageMetadata"] == nil)
+    }
+
     @Test func submitQuestionAnswersClearsPendingImages() async throws {
         // Regression (PR #55 review): stale composer attachments must not
         // silently ride a later normal message after a wizard submit
