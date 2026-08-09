@@ -302,6 +302,22 @@ struct ConversationView: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        // Non-destructive dismiss-failure surface (intent-hq/monorepo#1800):
+        // nothing was dismissed — the wizard re-pends via the store's marker
+        // rollback; this alert just makes the failure explicit. `presenting:`
+        // hands the closures a captured non-optional detail so the message
+        // doesn't degrade mid-dismissal (same shape as ConnectionsView).
+        .alert(
+            "Couldn't Dismiss Questions",
+            isPresented: Binding(
+                get: { viewModel.dismissQuestionsError != nil },
+                set: { if !$0 { viewModel.dismissQuestionsError = nil } }),
+            presenting: viewModel.dismissQuestionsError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { detail in
+            Text("The questions were not dismissed and are still pending. " + detail)
+        }
         .navigationDestination(item: $childAgent) { dest in
             ConversationView(
                 agentId: dest.agentId,
