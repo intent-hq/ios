@@ -91,6 +91,13 @@ struct MonitoredPrStoreTests {
         #expect(snapshot.threads == .init(unresolved: 0))
     }
 
+    @Test func parsesLastErrorWhenPresent() throws {
+        var dict = makeMonitorDict()
+        dict["lastError"] = "GitHub API rate limit exceeded"
+        let monitor = try #require(MonitoredPr.parseMonitor(dict))
+        #expect(monitor.lastError == "GitHub API rate limit exceeded")
+    }
+
     @Test func parsesMinimalRowWithPresenceDetectedNils() throws {
         let monitor = try #require(MonitoredPr.parseMonitor(makeMinimalMonitorDict()))
         #expect(monitor.pendingChanges.isEmpty)
@@ -180,7 +187,23 @@ struct MonitoredPrStoreTests {
             data: makeEventData(state: "active")
         )
         #expect(result.monitors[0].state == .active)
-        #expect(result.needsRefetch == false)
+    }
+
+    @Test func foldRegisteredReArmClearsPendingStateAndRefetches() throws {
+        // A re-arm refreshes the baseline server-side (§5.42): the fold
+        // must not leave pre-re-arm pending state visible, and must refetch
+        // to converge on the refreshed row.
+        let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
+        #expect(monitor.hasPendingChanges == true)
+        let result = MonitoredPrStore.foldMonitorEvent(
+            monitors: [monitor],
+            eventType: "prMonitor:registered",
+            data: makeEventData(state: "active")
+        )
+        #expect(result.monitors[0].pendingChanges.isEmpty)
+        #expect(result.monitors[0].hasPendingChanges == false)
+        #expect(result.monitors[0].pendingSince == nil)
+        #expect(result.needsRefetch == true)
     }
 
     @Test func foldChangedReplacesPendingChanges() throws {

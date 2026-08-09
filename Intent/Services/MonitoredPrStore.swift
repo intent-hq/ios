@@ -189,8 +189,15 @@ class MonitoredPrStore: ObservableObject {
         var next = monitors
         switch eventType {
         case "prMonitor:registered":
-            // Fires on registration and on an idempotent re-arm.
+            // Fires on registration and on an idempotent re-arm; a re-arm
+            // refreshes the monitor's baseline server-side, so clear the
+            // pre-re-arm pending state immediately and refetch to converge
+            // on the refreshed row (fresh `lastSnapshot`, timestamps, …).
             next[index].state = payloadState ?? .active
+            next[index].pendingChanges = []
+            next[index].hasPendingChanges = false
+            next[index].pendingSince = nil
+            return FoldResult(monitors: next, needsRefetch: true)
         case "prMonitor:changed":
             next[index].state = payloadState ?? next[index].state
             if let changes = data["changes"] as? [String] {
