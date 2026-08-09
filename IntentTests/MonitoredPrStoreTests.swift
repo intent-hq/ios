@@ -434,9 +434,9 @@ struct MonitoredPrStoreTests {
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        // Suspend the next prMonitor.list so a fold can land while it is
-        // in flight; the suspended response still lists prm-1.
-        fake.delayMap["prMonitor.list"] = 100_000_000
+        // Suspend prMonitor.list requests so a fold can land while one is
+        // in flight.
+        fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
         try await Task.sleep(nanoseconds: 20_000_000)
 
@@ -451,14 +451,22 @@ struct MonitoredPrStoreTests {
         try await Task.sleep(nanoseconds: 20_000_000)
         #expect(store.monitors.isEmpty)
 
-        // Fresh server state (post-cancel) for the queued follow-up fetch.
-        fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
-        await refetchTask.value
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the cancelled monitor. The queued follow-up stays suspended,
+        // so a wrongly applied stale response cannot be masked by
+        // convergence.
+        fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
+        try await Task.sleep(nanoseconds: 20_000_000)
 
         // The stale response must not restore the cancelled monitor; the
         // discarded response queues one follow-up fetch to converge.
         #expect(store.monitors.isEmpty)
         #expect(fake.paramsForMethod("prMonitor.list").count == 2)
+
+        // Fresh server state (post-cancel) for the queued follow-up fetch.
+        fake.resolvePending("prMonitor.list", with: ["monitors": [] as [[String: Any]]])
+        await refetchTask.value
+        #expect(store.monitors.isEmpty)
     }
 
     @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {

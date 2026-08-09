@@ -285,9 +285,8 @@ struct BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        // Suspend the next hook.list so a fold can land while it is in
-        // flight; the suspended response still lists hook-1.
-        fake.delayMap["hook.list"] = 100_000_000
+        // Suspend hook.list requests so a fold can land while one is in flight.
+        fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
         try await Task.sleep(nanoseconds: 20_000_000)
 
@@ -302,14 +301,21 @@ struct BackgroundHookStoreTests {
         try await Task.sleep(nanoseconds: 20_000_000)
         #expect(store.hooks.isEmpty)
 
-        // Fresh server state (post-cancel) for the queued follow-up fetch.
-        fake.responseMap["hook.list"] = ["hooks": [] as [[String: Any]]]
-        await refetchTask.value
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the cancelled hook. The queued follow-up stays suspended, so
+        // a wrongly applied stale response cannot be masked by convergence.
+        fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
+        try await Task.sleep(nanoseconds: 20_000_000)
 
         // The stale response must not restore the cancelled hook; the
         // discarded response queues one follow-up fetch to converge.
         #expect(store.hooks.isEmpty)
         #expect(fake.paramsForMethod("hook.list").count == 2)
+
+        // Fresh server state (post-cancel) for the queued follow-up fetch.
+        fake.resolvePending("hook.list", with: ["hooks": [] as [[String: Any]]])
+        await refetchTask.value
+        #expect(store.hooks.isEmpty)
     }
 
     @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {
