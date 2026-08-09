@@ -7,6 +7,8 @@ class ConversationViewModel: ObservableObject {
     @Published var store = ConversationStore()
     /// Live background hooks for this conversation's workspace (PROTOCOL §5.40).
     @Published var hookStore = BackgroundHookStore()
+    /// Live PR monitors for this conversation's workspace (PROTOCOL §5.42).
+    @Published var monitoredPrStore = MonitoredPrStore()
 
     let agentId: String
     let workspaceId: String
@@ -59,6 +61,18 @@ class ConversationViewModel: ObservableObject {
     var activeAgentHooks: [BackgroundHook] {
         hookStore.activeHooks.filter { $0.agentId == agentId }
     }
+    /// This agent's active PR monitors, for the chip row above the composer
+    /// (rendered above the hooks row, mirroring the FE).
+    var activeAgentMonitors: [MonitoredPr] {
+        monitoredPrStore.activeMonitors.filter { $0.agentId == agentId }
+    }
+    /// `<owner>/<repo>` of this conversation's workspace, or nil when unknown
+    /// (chip labels then fall back to the bare `#<n>` form).
+    var workspaceRepo: String? {
+        guard let ws = WorkspaceStore.shared.workspaces.first(where: { $0.id == workspaceId }),
+              let owner = ws.repositoryOwner, let name = ws.repositoryName else { return nil }
+        return "\(owner)/\(name)"
+    }
 
     // Message input
     @Published var messageText = ""
@@ -77,6 +91,7 @@ class ConversationViewModel: ObservableObject {
 
     private var cancellable: AnyCancellable?
     private var hookStoreCancellable: AnyCancellable?
+    private var monitoredPrStoreCancellable: AnyCancellable?
     private var draftSaveCancellable: AnyCancellable?
 
     init(agentId: String, workspaceId: String, agentName: String) {
@@ -95,6 +110,11 @@ class ConversationViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
         hookStoreCancellable = hookStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        monitoredPrStoreCancellable = monitoredPrStore.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -134,14 +154,17 @@ class ConversationViewModel: ObservableObject {
         async let streamingState: () = store.fetchAgentStreamingState(agentId: agentId, raiseOnly: true)
         // Live background hooks (hook:* subscribe + hook.list seed, §5.40)
         async let hooks: () = hookStore.subscribe(workspaceId: workspaceId, agentId: agentId)
+        // Live PR monitors (prMonitor:* subscribe + prMonitor.list seed, §5.42)
+        async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
-        _ = await (conversation, queue, model, subscriptions, streamingState, hooks)
+        _ = await (conversation, queue, model, subscriptions, streamingState, hooks, monitors)
     }
 
-    /// Tears down the hook subscription when the conversation leaves the
-    /// screen (`load()` re-subscribes on the next appearance).
+    /// Tears down the hook and PR-monitor subscriptions when the conversation
+    /// leaves the screen (`load()` re-subscribes on the next appearance).
     func teardownHooks() async {
         await hookStore.unsubscribe()
+        await monitoredPrStore.unsubscribe()
     }
 
     func cancelWait() async {
