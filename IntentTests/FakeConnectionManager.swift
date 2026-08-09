@@ -34,8 +34,30 @@ class FakeConnectionManager: ConnectionManagerRouting {
     /// for tests that need to interleave work while a request is in flight.
     var delayMap: [String: UInt64] = [:]
 
+    /// Methods whose requests suspend until `resolvePending(_:with:)` supplies the
+    /// payload. Unlike `delayMap` + `responseMap` (which reads the response only
+    /// after the delay), this lets a test pin the exact payload an in-flight
+    /// request resolves with — e.g. a stale list captured before a state change —
+    /// while later requests for the same method stay suspended.
+    var pendingMethods: Set<String> = []
+    private var pendingContinuations: [String: [CheckedContinuation<Any, any Error>]] = [:]
+
+    /// Resolve the oldest suspended request for `method` with `response`.
+    func resolvePending(_ method: String, with response: Any) {
+        guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
+        let continuation = queue.removeFirst()
+        pendingContinuations[method] = queue
+        continuation.resume(returning: response)
+    }
+
     func request(_ method: String, params: [String: Any] = [:]) async throws -> Any {
         requestLog.append((method, params, Date()))
+
+        if pendingMethods.contains(method) {
+            return try await withCheckedThrowingContinuation { continuation in
+                pendingContinuations[method, default: []].append(continuation)
+            }
+        }
 
         if let delay = delayMap[method] {
             try await Task.sleep(nanoseconds: delay)

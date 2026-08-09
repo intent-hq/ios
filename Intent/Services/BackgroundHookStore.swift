@@ -24,6 +24,12 @@ class BackgroundHookStore: ObservableObject {
     private var refetchInFlight = false
     private var refetchQueued = false
 
+    /// Bumped whenever `hooks` changes outside `refetch()` (event folds,
+    /// `unsubscribe()`), so a `hook.list` response that started before the
+    /// change is detected as stale and discarded instead of clobbering the
+    /// newer state.
+    private var generation = 0
+
     /// Hooks in an active state (`scheduled`/`running`), for display.
     var activeHooks: [BackgroundHook] {
         hooks.filter { $0.isActive }
@@ -103,6 +109,7 @@ class BackgroundHookStore: ObservableObject {
         }
         workspaceId = nil
         agentId = nil
+        generation += 1
         hooks = []
     }
 
@@ -227,6 +234,7 @@ class BackgroundHookStore: ObservableObject {
         }
 
         let result = Self.foldHookEvent(hooks: hooks, eventType: eventType, data: data)
+        generation += 1
         hooks = result.hooks
         if result.needsRefetch {
             Task { await refetch() }
@@ -236,7 +244,11 @@ class BackgroundHookStore: ObservableObject {
     // MARK: - Fetch
 
     /// Single-flight `hook.list` refetch: concurrent requests coalesce into
-    /// one queued follow-up so event storms cannot stack fetches.
+    /// one queued follow-up so event storms cannot stack fetches. A response
+    /// is applied only if `generation` is unchanged since the request
+    /// started — an event fold or `unsubscribe()` that landed while the
+    /// request was suspended makes the response stale, so it is discarded
+    /// and one follow-up fetch is queued to converge.
     func refetch() async {
         guard let wsId = workspaceId else { return }
         if refetchInFlight {
@@ -245,12 +257,15 @@ class BackgroundHookStore: ObservableObject {
         }
         refetchInFlight = true
         isLoading = true
+        let startGeneration = generation
         do {
             let result = try await connectionManager.request("hook.list", params: [
                 "workspaceId": wsId
             ])
-            if let dict = result as? [String: Any],
-               let hooksArray = dict["hooks"] as? [[String: Any]] {
+            if generation != startGeneration {
+                refetchQueued = true
+            } else if let dict = result as? [String: Any],
+                      let hooksArray = dict["hooks"] as? [[String: Any]] {
                 hooks = hooksArray.compactMap { BackgroundHook.parseHook($0) }
             }
         } catch {
