@@ -1,7 +1,8 @@
 name: CI
+# No push-to-main trigger: the merge queue (merge_group) already builds and
+# tests the exact commit that lands on main, so a post-merge re-run adds no
+# signal and would occupy the single shared m1mac runner slot for up to 45 min.
 on:
-  push:
-    branches: [main]
   pull_request:
   merge_group:
 
