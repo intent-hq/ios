@@ -152,10 +152,18 @@ struct PendingQuestionSet: Equatable {
     /// still streaming, or a user message trails the last assistant message
     /// (superseded). Because this reads only the transcript, restored sessions
     /// re-surface unanswered questions automatically.
+    ///
+    /// A question set the user dismissed never pends: the daemon persists the
+    /// dismissed message id in session metadata (`agent.dismissQuestions`,
+    /// PROTOCOL §5.5 `dismissedQuestionsMessageId`), so when it matches the
+    /// question-bearing message the set is retired — survives reload, while a
+    /// NEWER question-bearing message (different id) pends normally (FE
+    /// parity: `wizard-gate.ts` / `isQuestionMessageDismissed`).
     static func derive(
         messages: [ConversationMessage],
         isTurnActive: Bool,
-        showingPendingUserMessage: Bool = false
+        showingPendingUserMessage: Bool = false,
+        dismissedQuestionsMessageId: String? = nil
     ) -> PendingQuestionSet? {
         if isTurnActive || showingPendingUserMessage || messages.isEmpty {
             return nil
@@ -171,6 +179,9 @@ struct PendingQuestionSet: Equatable {
             }
         }
         guard let lastAssistant, lastAssistant.isStreaming != true else { return nil }
+        if let dismissedId = dismissedQuestionsMessageId, dismissedId == lastAssistant.id {
+            return nil
+        }
         var seenAttachmentIds = Set<String>()
         var questions: [Question] = []
         for block in lastAssistant.contentBlocks ?? [] {

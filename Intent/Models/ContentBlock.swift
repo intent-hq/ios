@@ -66,12 +66,15 @@ struct ContentBlock: Identifiable, Codable {
     // Metadata
     var metadata: [String: AnyCodable]?
     private var meta: [String: AnyCodable]?  // wire alias for metadata (PROTOCOL §5.5 notice rows)
+    /// Per-message send metadata persisted on the delivered block (PROTOCOL
+    /// §5.5, e.g. the `questions_dismissed` dismissal notice tag).
+    var messageMetadata: [String: AnyCodable]?
 
     enum CodingKeys: String, CodingKey {
         case id, type, text, content, language, name, toolName
         case input, toolCallId, toolUseId, tool_use_id
         case output, isError, is_error
-        case data, mimeType, fileName, resource, metadata, meta
+        case data, mimeType, fileName, resource, metadata, meta, messageMetadata
     }
 
     init(from decoder: Decoder) throws {
@@ -110,6 +113,7 @@ struct ContentBlock: Identifiable, Codable {
         resource = try? container.decode(ResourceContents.self, forKey: .resource)
         metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
         meta = try? container.decode([String: AnyCodable].self, forKey: .meta)
+        messageMetadata = try? container.decode([String: AnyCodable].self, forKey: .messageMetadata)
     }
 
     /// Resolved text content, falling back to legacy `content` field.
@@ -154,7 +158,8 @@ struct ContentBlock: Identifiable, Codable {
         mimeType: String? = nil,
         fileName: String? = nil,
         resource: ResourceContents? = nil,
-        metadata: [String: AnyCodable]? = nil
+        metadata: [String: AnyCodable]? = nil,
+        messageMetadata: [String: AnyCodable]? = nil
     ) {
         self.id = id
         self.type = type
@@ -176,6 +181,7 @@ struct ContentBlock: Identifiable, Codable {
         self.resource = resource
         self.metadata = metadata
         self.meta = nil
+        self.messageMetadata = messageMetadata
     }
 }
 

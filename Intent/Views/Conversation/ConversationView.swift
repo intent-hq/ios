@@ -174,6 +174,13 @@ struct ConversationView: View {
                             await viewModel.submitQuestionAnswers(
                                 answers, answeredQuestionsMessageId: answeredId)
                         }
+                    },
+                    onDismiss: {
+                        // Same mount-time capture discipline as onComplete.
+                        let dismissedId = pendingSet.messageId
+                        Task {
+                            await viewModel.dismissQuestions(messageId: dismissedId)
+                        }
                     }
                 )
                 .id(pendingSet.messageId)

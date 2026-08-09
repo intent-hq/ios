@@ -11,7 +11,12 @@ struct MessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if isUser {
+            // Dismissal notification rows render as a compact divider chip
+            // regardless of the persisted role (PROTOCOL §5.5
+            // `questions_dismissed`; FE parity: ChatMessage.svelte).
+            if let dismissedNotice = message.questionsDismissedNotice {
+                QuestionsDismissedNoticeView(notice: dismissedNotice)
+            } else if isUser {
                 userMessageView
             } else if message.role == .assistant {
                 assistantMessageView

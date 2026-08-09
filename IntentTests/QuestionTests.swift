@@ -309,6 +309,31 @@ struct PendingQuestionDerivationTests {
         let set = try #require(PendingQuestionSet.derive(messages: messages, isTurnActive: false))
         #expect(set.messageId == "a1")
     }
+
+    // MARK: - Dismissal marker (FE `wizard-gate.ts` parity)
+
+    @Test func nilWhenDismissalMarkerMatches() {
+        let messages = [assistant(id: "a1", blocks: [questionBlock(text: questionJSON())])]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false,
+            dismissedQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func newerQuestionSetPendsDespiteOlderDismissalMarker() throws {
+        let messages = [assistant(id: "a2", blocks: [questionBlock(text: questionJSON())])]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false,
+            dismissedQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a2")
+    }
+
+    @Test func nilMarkerLeavesDerivationUnchanged() throws {
+        let messages = [assistant(id: "a1", blocks: [questionBlock(text: questionJSON())])]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false,
+            dismissedQuestionsMessageId: nil))
+        #expect(set.messageId == "a1")
+    }
 }
 
 // MARK: - Answer flattening (FE `answer-message.ts` parity)

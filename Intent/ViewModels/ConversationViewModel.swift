@@ -382,9 +382,12 @@ class ConversationViewModel: ObservableObject {
     /// store raises `isStreaming` optimistically — so the wizard also hides
     /// while a send is in flight. A failed wizard send is rolled back
     /// (`ConversationStore.rollbackFailedSend`) so unanswered questions
-    /// re-pend instead of being permanently superseded.
+    /// re-pend instead of being permanently superseded. A set the user
+    /// dismissed (`agent.dismissQuestions` marker, PROTOCOL §5.5) never pends.
     var pendingQuestions: PendingQuestionSet? {
-        PendingQuestionSet.derive(messages: messages, isTurnActive: isStreaming)
+        PendingQuestionSet.derive(
+            messages: messages, isTurnActive: isStreaming,
+            dismissedQuestionsMessageId: store.dismissedQuestionsMessageId)
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of
@@ -416,6 +419,21 @@ class ConversationViewModel: ObservableObject {
         } catch {
             print("[ConversationViewModel] Submit question answers failed: \(error)")
             store.rollbackFailedSend()
+        }
+    }
+
+    /// Dismiss the pending question set WITHOUT answering
+    /// (`agent.dismissQuestions`). Persistent — unlike Ignore's transient
+    /// collapse, the daemon-persisted marker means the set never re-pends,
+    /// even after reload. `messageId` is the wizard's mount-time
+    /// question-bearing assistant message id (same capture discipline as
+    /// `submitQuestionAnswers`). A failed RPC leaves the wizard pending.
+    func dismissQuestions(messageId: String) async {
+        do {
+            try await store.dismissQuestions(
+                agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+        } catch {
+            print("[ConversationViewModel] Dismiss questions failed: \(error)")
         }
     }
 

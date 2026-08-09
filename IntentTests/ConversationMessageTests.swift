@@ -246,6 +246,92 @@ struct AttentionNoticeTests {
     }
 }
 
+// MARK: - QuestionsDismissedNotice Tests (FE `questions-dismissed-notice.ts` parity)
+
+struct QuestionsDismissedNoticeTests {
+    private let noticeText = "User dismissed your 2 questions without answering."
+
+    @Test func classifiesFromRowMetadata() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [["type": "text", "text": noticeText]],
+            "metadata": ["type": "questions_dismissed", "source": "system",
+                         "dismissedQuestionsMessageId": "a1"] as [String: Any],
+        ]))
+        let notice = try #require(msg.questionsDismissedNotice)
+        #expect(notice.dismissedQuestionsMessageId == "a1")
+        #expect(notice.fullText == noticeText)
+    }
+
+    @Test func classifiesFromBlockMessageMetadataFallback() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [
+                ["type": "text", "text": noticeText,
+                 "messageMetadata": ["type": "questions_dismissed",
+                                     "dismissedQuestionsMessageId": "a1"] as [String: Any]],
+            ],
+        ]))
+        #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "a1")
+    }
+
+    @Test func toleratesAnyRole() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "system",
+            "contentBlocks": [["type": "text", "text": noticeText]],
+            "metadata": ["type": "questions_dismissed"] as [String: Any],
+        ]))
+        #expect(msg.questionsDismissedNotice != nil)
+    }
+
+    @Test func missingDismissedIdReadsAsEmpty() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [["type": "text", "text": noticeText]],
+            "metadata": ["type": "questions_dismissed"] as [String: Any],
+        ]))
+        #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "")
+    }
+
+    @Test func otherMetadataTypesReturnNil() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [["type": "text", "text": "hello"]],
+            "metadata": ["type": "question_answers"] as [String: Any],
+        ]))
+        #expect(msg.questionsDismissedNotice == nil)
+    }
+
+    @Test func plainMessagesReturnNil() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [["type": "text", "text": "hello"]],
+        ]))
+        #expect(msg.questionsDismissedNotice == nil)
+    }
+
+    @Test func nonTextBlockMetadataIsIgnored() throws {
+        let msg = try #require(ConversationMessage.parseMessage([
+            "id": "msg-d", "role": "user",
+            "contentBlocks": [
+                ["type": "tool_use", "name": "t",
+                 "messageMetadata": ["type": "questions_dismissed"] as [String: Any]],
+            ],
+        ]))
+        #expect(msg.questionsDismissedNotice == nil)
+    }
+
+    @Test func classifiesAfterCodableRoundTrip() throws {
+        let json = """
+        {"id":"msg-d","role":"user","timestamp":"2026-08-09T00:00:00Z",
+         "contentBlocks":[{"type":"text","text":"User dismissed your 1 question without answering.",
+           "messageMetadata":{"type":"questions_dismissed","dismissedQuestionsMessageId":"a1"}}]}
+        """
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "a1")
+    }
+}
+
 // MARK: - ConversationMessage Tests
 
 struct ConversationMessageTests {

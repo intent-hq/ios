@@ -6,8 +6,12 @@ import SwiftUI
 /// multi-select keeps a Next button, return in the free-form field advances,
 /// Skip clears + advances, Back returns with the previous answer preserved.
 /// Ignore collapses the well to a compact re-expandable banner (transient —
-/// the host owns the collapse flag; nothing is persisted). On the last
-/// question Send hands the full answers array to `onComplete`.
+/// the host owns the collapse flag; nothing is persisted). Dismiss (both the
+/// expanded header and the collapsed banner carry it, when the host passes
+/// `onDismiss`) retires the set PERSISTENTLY after a destructive confirmation
+/// dialog — the host calls `agent.dismissQuestions`, which survives reload
+/// (FE parity: DismissQuestionsConfirmDialog). On the last question Send
+/// hands the full answers array to `onComplete`.
 /// Single-question wizards hide the step counter, progress segments, and
 /// Back button. The host remounts the wizard (`.id` on the question-bearing
 /// message id) whenever a different question set pends.
@@ -16,6 +20,9 @@ struct QuestionWizardView: View {
     /// Host-owned Ignore state — true renders the compact banner.
     @Binding var collapsed: Bool
     let onComplete: ([QuestionAnswer]) -> Void
+    /// Persistent dismissal — host calls `agent.dismissQuestions`. The
+    /// Dismiss affordance renders only when present.
+    var onDismiss: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -31,15 +38,26 @@ struct QuestionWizardView: View {
     /// (and tappable) until the host reacts to `onComplete`, so rapid
     /// double-taps must not submit duplicate answer messages.
     @State private var submitted = false
+    /// Destructive-confirmation gate for Dismiss.
+    @State private var confirmingDismiss = false
+    /// One-shot dismissal guard (PR #86 review) — set synchronously when the
+    /// user confirms Dismiss, before the host's async `agent.dismissQuestions`
+    /// hop, so a Send (or a second Dismiss) can no longer race the in-flight
+    /// dismissal and discard an answer / duplicate the daemon notice. The host
+    /// unmounts the wizard when the dismissal marker lands; a failed RPC
+    /// remounts it fresh (`.id`-keyed), which resets this flag.
+    @State private var dismissed = false
 
     init(
         questions: [Question],
         collapsed: Binding<Bool>,
-        onComplete: @escaping ([QuestionAnswer]) -> Void
+        onComplete: @escaping ([QuestionAnswer]) -> Void,
+        onDismiss: (() -> Void)? = nil
     ) {
         self.questions = questions
         self._collapsed = collapsed
         self.onComplete = onComplete
+        self.onDismiss = onDismiss
         _drafts = State(initialValue: questions.map { _ in DraftAnswer() })
     }
 
@@ -79,6 +97,23 @@ struct QuestionWizardView: View {
         )
         .animation(.easeInOut(duration: 0.15), value: idx)
         .animation(.easeInOut(duration: 0.15), value: collapsed)
+        .confirmationDialog(
+            "Dismiss questions?",
+            isPresented: $confirmingDismiss,
+            titleVisibility: .visible
+        ) {
+            Button("Dismiss questions", role: .destructive) {
+                guard !dismissed && !submitted else { return }
+                dismissed = true
+                onDismiss?()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(
+                "The agent's questions will be dismissed completely without "
+                    + "answering. This is permanent — they won't come back, "
+                    + "even after a reload.")
+        }
     }
 
     // MARK: - Actions (FE parity)
@@ -96,7 +131,7 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            guard !submitted else { return }
+            guard !submitted && !dismissed else { return }
             submitted = true
             onComplete(buildAnswers())
             return
@@ -138,38 +173,65 @@ struct QuestionWizardView: View {
 
     // MARK: - Collapsed banner (Ignore state)
 
+    /// Tap re-expands; Dismiss is a sibling button (FE parity: the
+    /// hide-collapsed banner keeps the persistent-dismiss affordance).
     @ViewBuilder
     private var collapsedBanner: some View {
-        Button {
-            collapsed = false
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "questionmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
-                Text("Questions")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Text("\(questions.count)")
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(0.12)))
-                    .overlay(
-                        Capsule().strokeBorder(
-                            Theme.primary(for: colorScheme).opacity(0.35), lineWidth: 1)
-                    )
-                Spacer(minLength: 8)
-                Text("Tap to expand")
-                    .font(.caption2)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        HStack(spacing: 0) {
+            Button {
+                collapsed = false
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(Theme.primary(for: colorScheme))
+                    Text("Questions")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text("\(questions.count)")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(0.12)))
+                        .overlay(
+                            Capsule().strokeBorder(
+                                Theme.primary(for: colorScheme).opacity(0.35), lineWidth: 1)
+                        )
+                    Spacer(minLength: 8)
+                    Text("Tap to expand")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            if onDismiss != nil {
+                dismissButton
+                    .padding(.trailing, 8)
+            }
+        }
+    }
+
+    /// Opens the destructive confirmation; the dismissal itself is persistent
+    /// (host calls `agent.dismissQuestions`), unlike the transient Ignore.
+    @ViewBuilder
+    private var dismissButton: some View {
+        Button {
+            confirmingDismiss = true
+        } label: {
+            Text("Dismiss")
+                .font(.caption)
+                .foregroundStyle(Theme.destructive(for: colorScheme))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(dismissed)
+        .opacity(dismissed ? 0.5 : 1)
     }
 
     // MARK: - Header row
@@ -212,6 +274,9 @@ struct QuestionWizardView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
             .buttonStyle(.plain)
+            if onDismiss != nil {
+                dismissButton
+            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 10)
@@ -401,8 +466,8 @@ struct QuestionWizardView: View {
                     .background(Capsule().fill(Theme.primary(for: colorScheme)))
                 }
                 .buttonStyle(.plain)
-                .disabled(nextDisabled || submitted)
-                .opacity(nextDisabled || submitted ? 0.5 : 1)
+                .disabled(nextDisabled || submitted || dismissed)
+                .opacity(nextDisabled || submitted || dismissed ? 0.5 : 1)
             }
         }
         .padding(.horizontal, 14)

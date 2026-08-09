@@ -394,6 +394,47 @@ struct ConversationViewModelTests {
         #expect(vm.pendingImages.isEmpty)
     }
 
+    @Test func dismissQuestionsRetiresPendingSet() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        vm.store.messages = [questionMessage(id: "a1")]
+        #expect(vm.pendingQuestions != nil)
+
+        await vm.dismissQuestions(messageId: "a1")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.dismissQuestions" })
+        #expect(sent.params["agentId"] as? String == "test-agent")
+        #expect(sent.params["messageId"] as? String == "a1")
+        #expect(sent.params["workspaceId"] as? String == "test-ws")
+        #expect(vm.pendingQuestions == nil, "the dismissed set never re-pends")
+    }
+
+    @Test func failedDismissKeepsQuestionsPending() async {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        vm.store.messages = [questionMessage(id: "a1")]
+
+        await vm.dismissQuestions(messageId: "a1")
+
+        #expect(vm.pendingQuestions != nil, "a failed dismiss must leave the wizard pending")
+    }
+
+    @Test func newerQuestionSetPendsAfterDismissingOlderOne() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        vm.store.messages = [questionMessage(id: "a1")]
+        await vm.dismissQuestions(messageId: "a1")
+
+        vm.store.messages.append(questionMessage(id: "a2"))
+
+        let set = try #require(vm.pendingQuestions)
+        #expect(set.messageId == "a2", "a newer question set pends normally")
+    }
+
     @Test func failedSubmitRollsBackOptimisticMessageAndRestoresQuestions() async throws {
         // Regression (PR #55 review): a failed send must not permanently
         // supersede the pending questions — the optimistic user message is
