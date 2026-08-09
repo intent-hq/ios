@@ -405,4 +405,56 @@ struct MonitoredPrStoreTests {
         #expect(store.monitors.isEmpty)
         #expect(fake.eventHandlerCount == 0)
     }
+
+    @Test func staleListResponseAfterCancelledFoldIsDiscarded() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
+        fake.clearRequestLog()
+
+        // Suspend the next prMonitor.list so a fold can land while it is
+        // in flight; the suspended response still lists prm-1.
+        fake.delayMap["prMonitor.list"] = 100_000_000
+        let refetchTask = Task { await store.refetch() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "sub-prmon",
+            "event": [
+                "type": "prMonitor:cancelled",
+                "workspaceId": "ws-abc",
+                "data": makeEventData(state: "cancelled")
+            ]
+        ] as [String: Any])
+        try await Task.sleep(nanoseconds: 20_000_000)
+        #expect(store.monitors.isEmpty)
+
+        // Fresh server state (post-cancel) for the queued follow-up fetch.
+        fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
+        await refetchTask.value
+
+        // The stale response must not restore the cancelled monitor; the
+        // discarded response queues one follow-up fetch to converge.
+        #expect(store.monitors.isEmpty)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
+    }
+
+    @Test func staleListResponseAfterUnsubscribeIsDiscarded() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
+        fake.clearRequestLog()
+
+        fake.delayMap["prMonitor.list"] = 100_000_000
+        let refetchTask = Task { await store.refetch() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        await store.unsubscribe()
+        #expect(store.monitors.isEmpty)
+
+        await refetchTask.value
+
+        // The stale response must not repopulate the cleared list, and the
+        // queued follow-up bails out (no workspace bound anymore).
+        #expect(store.monitors.isEmpty)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 1)
+    }
 }

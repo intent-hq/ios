@@ -25,6 +25,12 @@ class MonitoredPrStore: ObservableObject {
     private var refetchInFlight = false
     private var refetchQueued = false
 
+    /// Bumped whenever `monitors` changes outside `refetch()` (event folds,
+    /// `unsubscribe()`), so a `prMonitor.list` response that started before
+    /// the change is detected as stale and discarded instead of clobbering
+    /// the newer state.
+    private var generation = 0
+
     /// Monitors in the `active` state, for display.
     var activeMonitors: [MonitoredPr] {
         monitors.filter { $0.isActive }
@@ -105,6 +111,7 @@ class MonitoredPrStore: ObservableObject {
         }
         workspaceId = nil
         agentId = nil
+        generation += 1
         monitors = []
     }
 
@@ -243,6 +250,7 @@ class MonitoredPrStore: ObservableObject {
         }
 
         let result = Self.foldMonitorEvent(monitors: monitors, eventType: eventType, data: data)
+        generation += 1
         monitors = result.monitors
         if result.needsRefetch {
             Task { await refetch() }
@@ -252,7 +260,11 @@ class MonitoredPrStore: ObservableObject {
     // MARK: - Fetch
 
     /// Single-flight `prMonitor.list` refetch: concurrent requests coalesce
-    /// into one queued follow-up so event storms cannot stack fetches.
+    /// into one queued follow-up so event storms cannot stack fetches. A
+    /// response is applied only if `generation` is unchanged since the
+    /// request started — an event fold or `unsubscribe()` that landed while
+    /// the request was suspended makes the response stale, so it is
+    /// discarded and one follow-up fetch is queued to converge.
     func refetch() async {
         guard let wsId = workspaceId else { return }
         if refetchInFlight {
@@ -261,12 +273,15 @@ class MonitoredPrStore: ObservableObject {
         }
         refetchInFlight = true
         isLoading = true
+        let startGeneration = generation
         do {
             let result = try await connectionManager.request("prMonitor.list", params: [
                 "workspaceId": wsId
             ])
-            if let dict = result as? [String: Any],
-               let monitorsArray = dict["monitors"] as? [[String: Any]] {
+            if generation != startGeneration {
+                refetchQueued = true
+            } else if let dict = result as? [String: Any],
+                      let monitorsArray = dict["monitors"] as? [[String: Any]] {
                 monitors = monitorsArray.compactMap { MonitoredPr.parseMonitor($0) }
             }
         } catch {
