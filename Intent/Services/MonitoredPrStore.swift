@@ -1,0 +1,282 @@
+import Foundation
+import Combine
+
+/// Live PR-monitor list for one workspace (PROTOCOL §5.42, §6.5).
+///
+/// Monitors are agent-owned (registration is MCP-only); this store reads via
+/// `prMonitor.list`, flushes via `prMonitor.flush`, cancels via
+/// `prMonitor.cancel`, and stays live by folding the `prMonitor:*` event
+/// family into the list. The `prMonitor:*` family is not part of the bare-`*`
+/// category expansion, so the store owns its own `events.subscribe` with a
+/// `prMonitor:*` prefix filter.
+@MainActor
+class MonitoredPrStore: ObservableObject {
+    @Published var monitors: [MonitoredPr] = []
+    @Published var isLoading = false
+
+    private var workspaceId: String?
+    private var agentId: String?
+    private var subscriptionId: String?
+    private var eventHandlerId: UUID?
+    private var cancellables = Set<AnyCancellable>()
+    private let connectionManager: ConnectionManagerRouting
+
+    // Single-flight refetch guard
+    private var refetchInFlight = false
+    private var refetchQueued = false
+
+    /// Monitors in the `active` state, for display.
+    var activeMonitors: [MonitoredPr] {
+        monitors.filter { $0.isActive }
+    }
+
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
+
+        connectionManager.connectionStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                if state == .connected {
+                    Task { await self?.onConnected() }
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func onConnected() async {
+        // Subscriptions are per-connection (§6.1) — replay and re-seed
+        subscriptionId = nil
+        if let wsId = workspaceId, let agentId = agentId {
+            await subscribe(workspaceId: wsId, agentId: agentId)
+        }
+    }
+
+    // MARK: - Public API
+
+    /// Registers a `prMonitor:*` `events.subscribe` scoped to the workspace,
+    /// then seeds via `prMonitor.list` (seed after the ack so no event falls
+    /// between the snapshot and the subscription window). The replace group
+    /// is keyed per conversation (workspace + agent) so two simultaneously
+    /// mounted same-workspace conversations don't supersede each other's
+    /// subscription.
+    func subscribe(workspaceId: String, agentId: String) async {
+        self.workspaceId = workspaceId
+        self.agentId = agentId
+
+        if eventHandlerId == nil {
+            eventHandlerId = connectionManager.onEvent { [weak self] method, params in
+                Task { @MainActor in
+                    self?.handleEvent(method, params: params)
+                }
+            }
+        }
+
+        do {
+            let result = try await connectionManager.request("events.subscribe", params: [
+                "eventTypes": ["prMonitor:*"],
+                "workspaceId": workspaceId,
+                "replaceGroup": "ios-pr-monitors-\(workspaceId)-\(agentId)"
+            ])
+            if let dict = result as? [String: Any],
+               let subId = dict["subscriptionId"] as? String {
+                subscriptionId = subId
+            }
+        } catch {
+            print("[MonitoredPrStore] events.subscribe (prMonitor:*) failed: \(error)")
+        }
+        // Without a subscription still serve the one-shot snapshot
+        await refetch()
+    }
+
+    func unsubscribe() async {
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+            eventHandlerId = nil
+        }
+        if let subId = subscriptionId {
+            subscriptionId = nil
+            do {
+                let _ = try await connectionManager.request("events.unsubscribe", params: [
+                    "subscriptionId": subId
+                ])
+            } catch {
+                print("[MonitoredPrStore] events.unsubscribe failed: \(error)")
+            }
+        }
+        workspaceId = nil
+        agentId = nil
+        monitors = []
+    }
+
+    /// `prMonitor.flush` (§5.42) — delivers a monitor's pending consolidated
+    /// wake now; ack only, the outcome arrives as `prMonitor:*` events.
+    func flush(monitorId: String) async {
+        guard let wsId = workspaceId else { return }
+        do {
+            let _ = try await connectionManager.request("prMonitor.flush", params: [
+                "workspaceId": wsId,
+                "monitorId": monitorId
+            ])
+        } catch {
+            print("[MonitoredPrStore] prMonitor.flush failed: \(error)")
+        }
+    }
+
+    /// `prMonitor.cancel` (§5.42) — the `prMonitor:cancelled` event drops
+    /// the monitor.
+    func cancel(monitorId: String) async {
+        guard let wsId = workspaceId else { return }
+        do {
+            let _ = try await connectionManager.request("prMonitor.cancel", params: [
+                "workspaceId": wsId,
+                "monitorId": monitorId
+            ])
+        } catch {
+            print("[MonitoredPrStore] prMonitor.cancel failed: \(error)")
+        }
+    }
+
+    // MARK: - Event folding
+
+    struct FoldResult {
+        let monitors: [MonitoredPr]
+        /// The event referenced a monitor this list has never seen — the
+        /// fold cannot invent the missing wire fields (`createdAt`,
+        /// `lastSnapshot`, …) since `prMonitor:*` payloads carry only
+        /// `{ workspaceId, agentId, monitorId, repo, prNumber, state }`
+        /// (plus `changes` on `prMonitor:changed`), so the caller should
+        /// re-run `prMonitor.list` to converge.
+        let needsRefetch: Bool
+    }
+
+    /// Pure fold of one `prMonitor:*` event into the current monitor list.
+    static func foldMonitorEvent(
+        monitors: [MonitoredPr],
+        eventType: String,
+        data: [String: Any]
+    ) -> FoldResult {
+        guard let monitorId = data["monitorId"] as? String else {
+            return FoldResult(monitors: monitors, needsRefetch: false)
+        }
+
+        // Cancelled rows are excluded from `prMonitor.list` — drop them.
+        if eventType == "prMonitor:cancelled" {
+            return FoldResult(
+                monitors: monitors.filter { $0.monitorId != monitorId },
+                needsRefetch: false
+            )
+        }
+
+        guard let index = monitors.firstIndex(where: { $0.monitorId == monitorId }) else {
+            switch eventType {
+            case "prMonitor:registered", "prMonitor:changed",
+                 "prMonitor:emitted", "prMonitor:completed":
+                return FoldResult(monitors: monitors, needsRefetch: true)
+            default:
+                return FoldResult(monitors: monitors, needsRefetch: false)
+            }
+        }
+
+        let payloadState = (data["state"] as? String).flatMap(MonitoredPr.State.init)
+
+        var next = monitors
+        switch eventType {
+        case "prMonitor:registered":
+            // Fires on registration and on an idempotent re-arm.
+            next[index].state = payloadState ?? .active
+        case "prMonitor:changed":
+            next[index].state = payloadState ?? next[index].state
+            if let changes = data["changes"] as? [String] {
+                next[index].pendingChanges = changes
+                next[index].hasPendingChanges = !changes.isEmpty
+            }
+        case "prMonitor:emitted":
+            // The consolidated wake was delivered — pending changes cleared.
+            next[index].state = payloadState ?? next[index].state
+            next[index].pendingChanges = []
+            next[index].hasPendingChanges = false
+            next[index].pendingSince = nil
+        case "prMonitor:completed":
+            // PR merged/closed — the row is retained (completed monitors
+            // stay visible) with the immediate final wake delivered.
+            next[index].state = payloadState ?? .completed
+            next[index].pendingChanges = []
+            next[index].hasPendingChanges = false
+            next[index].pendingSince = nil
+        default:
+            return FoldResult(monitors: monitors, needsRefetch: false)
+        }
+        return FoldResult(monitors: next, needsRefetch: false)
+    }
+
+    // MARK: - Event handling
+
+    func handleEvent(_ method: String, params: Any) {
+        guard let dict = params as? [String: Any] else { return }
+
+        // Events from the event bridge are wrapped:
+        // { subscriptionId, event: { type, workspaceId, timestamp, data } }
+        let event: [String: Any]
+        if let innerEvent = dict["event"] as? [String: Any] {
+            event = innerEvent
+        } else {
+            event = dict
+        }
+
+        guard let eventType = event["type"] as? String,
+              eventType.hasPrefix("prMonitor:") else { return }
+
+        let data = event["data"] as? [String: Any] ?? [:]
+
+        // Scope to this workspace (data-level first, envelope fallback)
+        guard let wsId = workspaceId else { return }
+        let eventWorkspaceId = (data["workspaceId"] as? String)
+            ?? (event["workspaceId"] as? String)
+        guard eventWorkspaceId == wsId else { return }
+
+        // Match on our subscription id once known; before the ack lands,
+        // accept any monitor event for this workspace (the folds are idempotent)
+        if let subId = subscriptionId,
+           let envelopeSubId = dict["subscriptionId"] as? String,
+           envelopeSubId != subId {
+            return
+        }
+
+        let result = Self.foldMonitorEvent(monitors: monitors, eventType: eventType, data: data)
+        monitors = result.monitors
+        if result.needsRefetch {
+            Task { await refetch() }
+        }
+    }
+
+    // MARK: - Fetch
+
+    /// Single-flight `prMonitor.list` refetch: concurrent requests coalesce
+    /// into one queued follow-up so event storms cannot stack fetches.
+    func refetch() async {
+        guard let wsId = workspaceId else { return }
+        if refetchInFlight {
+            refetchQueued = true
+            return
+        }
+        refetchInFlight = true
+        isLoading = true
+        do {
+            let result = try await connectionManager.request("prMonitor.list", params: [
+                "workspaceId": wsId
+            ])
+            if let dict = result as? [String: Any],
+               let monitorsArray = dict["monitors"] as? [[String: Any]] {
+                monitors = monitorsArray.compactMap { MonitoredPr.parseMonitor($0) }
+            }
+        } catch {
+            print("[MonitoredPrStore] prMonitor.list failed: \(error)")
+        }
+        isLoading = false
+        refetchInFlight = false
+        if refetchQueued {
+            refetchQueued = false
+            await refetch()
+        }
+    }
+}
