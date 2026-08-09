@@ -40,6 +40,13 @@ struct QuestionWizardView: View {
     @State private var submitted = false
     /// Destructive-confirmation gate for Dismiss.
     @State private var confirmingDismiss = false
+    /// One-shot dismissal guard (PR #86 review) — set synchronously when the
+    /// user confirms Dismiss, before the host's async `agent.dismissQuestions`
+    /// hop, so a Send (or a second Dismiss) can no longer race the in-flight
+    /// dismissal and discard an answer / duplicate the daemon notice. The host
+    /// unmounts the wizard when the dismissal marker lands; a failed RPC
+    /// remounts it fresh (`.id`-keyed), which resets this flag.
+    @State private var dismissed = false
 
     init(
         questions: [Question],
@@ -96,6 +103,8 @@ struct QuestionWizardView: View {
             titleVisibility: .visible
         ) {
             Button("Dismiss questions", role: .destructive) {
+                guard !dismissed && !submitted else { return }
+                dismissed = true
                 onDismiss?()
             }
             Button("Cancel", role: .cancel) {}
@@ -122,7 +131,7 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            guard !submitted else { return }
+            guard !submitted && !dismissed else { return }
             submitted = true
             onComplete(buildAnswers())
             return
@@ -221,6 +230,8 @@ struct QuestionWizardView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(dismissed)
+        .opacity(dismissed ? 0.5 : 1)
     }
 
     // MARK: - Header row
@@ -455,8 +466,8 @@ struct QuestionWizardView: View {
                     .background(Capsule().fill(Theme.primary(for: colorScheme)))
                 }
                 .buttonStyle(.plain)
-                .disabled(nextDisabled || submitted)
-                .opacity(nextDisabled || submitted ? 0.5 : 1)
+                .disabled(nextDisabled || submitted || dismissed)
+                .opacity(nextDisabled || submitted || dismissed ? 0.5 : 1)
             }
         }
         .padding(.horizontal, 14)

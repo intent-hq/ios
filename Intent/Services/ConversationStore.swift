@@ -995,20 +995,35 @@ class ConversationStore: ObservableObject {
     /// `dismissedQuestionsMessageId` marker (survives restarts, so the set
     /// never re-surfaces), releases the question hold, and notifies the model
     /// with a system-origin `questions_dismissed` notice. The marker is raised
-    /// optimistically from the RPC result so the wizard retires immediately
-    /// instead of waiting for the `agent:updated` push; a failed call leaves
-    /// state untouched (the wizard keeps pending) and rethrows.
+    /// optimistically BEFORE the RPC (FE parity: the mutation middleware
+    /// stamps session metadata first) so the wizard unmounts immediately —
+    /// closing the in-flight window where a Send or a second Dismiss could
+    /// race the same question message (PR #86 review). A failed call rolls
+    /// the marker back (the wizard re-pends) and rethrows.
     func dismissQuestions(agentId: String, messageId: String, workspaceId: String) async throws {
-        let result = try await connectionManager.request(
-            "agent.dismissQuestions",
-            params: [
-                "agentId": agentId,
-                "messageId": messageId,
-                "workspaceId": workspaceId,
-            ]
-        )
-        let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"] as? String
-        dismissedQuestionsMessageId = confirmedId ?? messageId
+        let previousMarker = dismissedQuestionsMessageId
+        dismissedQuestionsMessageId = messageId
+        do {
+            let result = try await connectionManager.request(
+                "agent.dismissQuestions",
+                params: [
+                    "agentId": agentId,
+                    "messageId": messageId,
+                    "workspaceId": workspaceId,
+                ]
+            )
+            if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
+                as? String {
+                dismissedQuestionsMessageId = confirmedId
+            }
+        } catch {
+            // Roll back only if nothing else (agent:updated push, a second
+            // dismissal) moved the marker while the RPC was in flight.
+            if dismissedQuestionsMessageId == messageId {
+                dismissedQuestionsMessageId = previousMarker
+            }
+            throw error
+        }
     }
 
     // MARK: - Queue message
