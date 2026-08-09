@@ -1,9 +1,10 @@
 name: CI
+# No push-to-main trigger: the repo ruleset requires PR branches to be up to
+# date with main before merging, so the squash commit that lands on main has
+# the identical tree the PR CI just tested. A post-merge re-run adds no signal
+# and would occupy the single shared m1mac runner slot for up to 45 min.
 on:
-  push:
-    branches: [main]
   pull_request:
-  merge_group:
 
 permissions:
   contents: read

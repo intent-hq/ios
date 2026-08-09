@@ -379,18 +379,31 @@ class ConversationViewModel: ObservableObject {
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of
-    /// `Q:`/`A:` pairs and send it through the ordinary send path (wire
-    /// contract — no metadata, no image attachments). Completing the wizard
-    /// clears any pending composer image attachments (FE parity:
-    /// `ChatPanel.performLocalSendCleanup`) so stale images never ride a
-    /// later message.
-    func submitQuestionAnswers(_ answers: [QuestionAnswer]) async {
+    /// `Q:`/`A:` pairs and send it through the ordinary send path tagged with
+    /// `messageMetadata { type: "question_answers",
+    /// answeredQuestionsMessageId }` (wire contract — no image attachments).
+    /// The structured tag, never the answer text, is what makes the daemon
+    /// retire the question hold and demote `needs_attention` (FE parity:
+    /// `answer-message.ts` / `ChatPanel`). `answeredQuestionsMessageId` is the
+    /// wizard's mount-time question-bearing assistant message id (the wizard
+    /// is `.id`-keyed on it) — passed in rather than re-derived here so a
+    /// derivation flip between the tap and this main-actor hop (pushed stream
+    /// start, superseding row from another client) can never send the answer
+    /// untagged. Completing the wizard clears any pending composer image
+    /// attachments (FE parity: `ChatPanel.performLocalSendCleanup`) so stale
+    /// images never ride a later message.
+    func submitQuestionAnswers(_ answers: [QuestionAnswer],
+                               answeredQuestionsMessageId: String) async {
         pendingImages.removeAll()
         do {
             try await store.sendMessage(
                 agentId: agentId,
                 content: QuestionAnswer.flattenToMessage(answers),
-                workspaceId: workspaceId)
+                workspaceId: workspaceId,
+                messageMetadata: [
+                    "type": "question_answers",
+                    "answeredQuestionsMessageId": answeredQuestionsMessageId,
+                ])
         } catch {
             print("[ConversationViewModel] Submit question answers failed: \(error)")
             store.rollbackFailedSend()

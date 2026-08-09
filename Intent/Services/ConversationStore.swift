@@ -874,8 +874,13 @@ class ConversationStore: ObservableObject {
 
     // MARK: - Send message
 
+    /// `messageMetadata`, when present, rides the `agent.sendMessage` request
+    /// verbatim (PROTOCOL §5.5) — the Agent Q&A wizard tags its answer with
+    /// `{ type: "question_answers", answeredQuestionsMessageId }` so the
+    /// daemon retires the question hold. Plain sends omit the key entirely.
     func sendMessage(agentId: String, content: String, workspaceId: String,
-                     imageBlocks: [[String: Any]]? = nil) async throws {
+                     imageBlocks: [[String: Any]]? = nil,
+                     messageMetadata: [String: Any]? = nil) async throws {
         // Reuse messageId if retrying the same content after a failure
         let messageId: String
         if let failed = lastFailedSend, failed.content == content {
@@ -893,6 +898,9 @@ class ConversationStore: ObservableObject {
         ]
         if let imageBlocks = imageBlocks {
             params["imageBlocks"] = imageBlocks
+        }
+        if let messageMetadata = messageMetadata {
+            params["messageMetadata"] = messageMetadata
         }
 
         // Add user message locally for immediate UI feedback (use messageId for

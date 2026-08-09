@@ -189,7 +189,9 @@ struct PendingQuestionSet: Equatable {
 /// pairs separated by a blank line — multi-select answers comma-joined,
 /// free-form replies prefixed `(Other)`, skipped questions reported as
 /// `(skipped)`. The message travels through the ordinary `agent.sendMessage`
-/// path with NO metadata; the model correlates from context. Port of the FE's
+/// path tagged with `messageMetadata { type: "question_answers",
+/// answeredQuestionsMessageId }` — the structured tag (never the answer text)
+/// is what resolves the pending set on the daemon. Port of the FE's
 /// `chat/questions/answer-message.ts`.
 struct QuestionAnswer: Equatable {
     let question: Question
