@@ -422,18 +422,27 @@ class ConversationViewModel: ObservableObject {
         }
     }
 
+    /// User-facing message for a failed `agent.dismissQuestions`
+    /// (intent-hq/monorepo#1800) — the view presents it as a non-destructive
+    /// alert. Nil when there is nothing to surface.
+    @Published var dismissQuestionsError: String?
+
     /// Dismiss the pending question set WITHOUT answering
     /// (`agent.dismissQuestions`). Persistent — unlike Ignore's transient
     /// collapse, the daemon-persisted marker means the set never re-pends,
     /// even after reload. `messageId` is the wizard's mount-time
     /// question-bearing assistant message id (same capture discipline as
-    /// `submitQuestionAnswers`). A failed RPC leaves the wizard pending.
+    /// `submitQuestionAnswers`). A failed RPC leaves the wizard pending
+    /// (the store rolls the optimistic marker back) and surfaces
+    /// `dismissQuestionsError`.
     func dismissQuestions(messageId: String) async {
+        dismissQuestionsError = nil
         do {
             try await store.dismissQuestions(
                 agentId: agentId, messageId: messageId, workspaceId: workspaceId)
         } catch {
             print("[ConversationViewModel] Dismiss questions failed: \(error)")
+            dismissQuestionsError = error.localizedDescription
         }
     }
 

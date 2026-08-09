@@ -421,6 +421,42 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions != nil, "a failed dismiss must leave the wizard pending")
     }
 
+    @Test func failedDismissSurfacesVisibleError() async {
+        // Regression (intent-hq/monorepo#1800): a failed dismiss must surface
+        // an explicit user-visible error, not just silently re-pend the
+        // wizard — and the surface must be non-destructive (rollback intact).
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        vm.store.messages = [questionMessage(id: "a1")]
+        #expect(vm.dismissQuestionsError == nil)
+
+        await vm.dismissQuestions(messageId: "a1")
+
+        #expect(vm.dismissQuestionsError != nil,
+                "a failed dismiss surfaces a user-visible error")
+        #expect(vm.pendingQuestions != nil,
+                "the error surface is non-destructive — the wizard still re-pends")
+    }
+
+    @Test func successfulDismissRetryClearsPriorError() async {
+        // A later successful dismiss must not leave a stale error surfaced.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        vm.store.messages = [questionMessage(id: "a1")]
+        await vm.dismissQuestions(messageId: "a1")
+        #expect(vm.dismissQuestionsError != nil)
+
+        fake.errorMap["agent.dismissQuestions"] = nil
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        await vm.dismissQuestions(messageId: "a1")
+
+        #expect(vm.dismissQuestionsError == nil,
+                "a successful retry clears the stale error")
+        #expect(vm.pendingQuestions == nil)
+    }
+
     @Test func newerQuestionSetPendsAfterDismissingOlderOne() async throws {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.dismissQuestions"] = [
