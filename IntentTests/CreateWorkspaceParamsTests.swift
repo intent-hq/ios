@@ -251,4 +251,31 @@ struct CreateWorkspaceParamsTests {
         // An empty in-flight list can't be told apart from a seat with no providers
         #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
     }
+
+    // MARK: - preselectedBranch
+
+    @Test func preselectedBranchKeepsStillValidSelection() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: "dev", branches: ["main", "dev"], defaultBranch: "main"
+        ) == "dev")
+    }
+
+    @Test func preselectedBranchPrefersDefaultWhenSelectionInvalid() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: ["dev", "main"], defaultBranch: "main"
+        ) == "main")
+        // A stale selection from a previously picked repo is dropped
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: "feature/x", branches: ["dev", "main"], defaultBranch: "main"
+        ) == "main")
+    }
+
+    @Test func preselectedBranchFallsBackToFirstBranch() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: ["dev", "main"], defaultBranch: nil
+        ) == "dev")
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: [], defaultBranch: "main"
+        ) == nil)
+    }
 }

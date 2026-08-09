@@ -70,8 +70,15 @@ struct CreateWorkspaceView: View {
                 }
             }
             .onChange(of: selectedRepo?.id) { _, _ in
-                // Reset idempotency key when repo changes
+                // Reset idempotency key and branch state when the repo
+                // changes so a branch selected for the previous repo can't
+                // carry over (a shared name like "main" would otherwise
+                // survive and override the new repo's default).
                 idempotencyKey = UUID().uuidString
+                selectedBranch = nil
+                remoteBranches = []
+                defaultBranch = nil
+                isLoadingBranches = true
             }
     }
 
@@ -327,20 +334,34 @@ struct CreateWorkspaceView: View {
         guard let repo = selectedRepo else { return }
         isLoadingBranches = true
         branchLoadError = nil
-        defaultBranch = repo.defaultBranch
         do {
-            let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
-            remoteBranches = branches
-            // Keep a still-valid selection (e.g. re-entering the step);
-            // otherwise pre-select the default branch, falling back to first.
-            if selectedBranch == nil || !branches.contains(selectedBranch!) {
-                selectedBranch = branches.first(where: { $0 == repo.defaultBranch }) ?? branches.first
+            // Search results omit `defaultBranch`; resolve it via
+            // `github.repos.get` (best-effort) so the default label and
+            // pre-selection still work.
+            var resolvedDefault = repo.defaultBranch
+            if resolvedDefault == nil {
+                resolvedDefault = await githubStore.fetchDefaultBranch(owner: repo.owner, repo: repo.name)
             }
+            let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
+            defaultBranch = resolvedDefault
+            remoteBranches = branches
+            selectedBranch = Self.preselectedBranch(
+                current: selectedBranch,
+                branches: branches,
+                defaultBranch: resolvedDefault
+            )
         } catch {
             remoteBranches = []
             branchLoadError = error.localizedDescription
         }
         isLoadingBranches = false
+    }
+
+    /// Keep a still-valid selection (e.g. re-entering the step); otherwise
+    /// pre-select the default branch, falling back to the first branch.
+    static func preselectedBranch(current: String?, branches: [String], defaultBranch: String?) -> String? {
+        if let current, branches.contains(current) { return current }
+        return branches.first(where: { $0 == defaultBranch }) ?? branches.first
     }
 
     private func fetchSpecialists() async {

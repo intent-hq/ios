@@ -180,6 +180,36 @@ struct GitHubRepoStoreTests {
         #expect(store.isLoading == false)
     }
 
+    // MARK: - fetchDefaultBranch
+
+    @Test func fetchDefaultBranchReadsRepoGet() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.repos.get"] = ["repo": makeRepoDict(defaultBranch: "develop")]
+        let branch = await store.fetchDefaultBranch(owner: "intent-hq", repo: "intentd")
+        #expect(branch == "develop")
+        let params = fake.paramsForMethod("github.repos.get")
+        #expect(params.count == 1)
+        #expect(params[0]["owner"] as? String == "intent-hq")
+        #expect(params[0]["repo"] as? String == "intentd")
+    }
+
+    @Test func fetchDefaultBranchNilOnNullRepo() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.repos.get"] = ["repo": NSNull()]
+        let branch = await store.fetchDefaultBranch(owner: "o", repo: "r")
+        #expect(branch == nil)
+    }
+
+    @Test func fetchDefaultBranchNilOnError() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.errorMap["github.repos.get"] = NSError(domain: "t", code: -1)
+        let branch = await store.fetchDefaultBranch(owner: "o", repo: "r")
+        #expect(branch == nil)
+    }
+
     // MARK: - fetchRemoteBranches pagination
 
     @Test func fetchRemoteBranchesAccumulatesPages() async throws {

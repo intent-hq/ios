@@ -89,6 +89,23 @@ class GitHubRepoStore: ObservableObject {
         isLoading = false
     }
 
+    /// `github.repos.get` — resolve a repo's `defaultBranch` when the
+    /// list/search DTO omitted it (global-search results often do).
+    /// Best-effort: errors and `{ repo: null }` return nil.
+    func fetchDefaultBranch(owner: String, repo: String) async -> String? {
+        do {
+            let result = try await connectionManager.request("github.repos.get", params: [
+                "owner": owner,
+                "repo": repo
+            ])
+            let repoDict = (result as? [String: Any])?["repo"] as? [String: Any]
+            return repoDict?["defaultBranch"] as? String
+        } catch {
+            print("[GitHubRepoStore] github.repos.get failed: \(error)")
+            return nil
+        }
+    }
+
     // MARK: - Branches
 
     /// `github.branches.list` — remote branch names, accumulated across
