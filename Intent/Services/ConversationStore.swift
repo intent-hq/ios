@@ -25,6 +25,12 @@ class ConversationStore: ObservableObject {
     /// open agent. Transient transport errors never raise this. The view
     /// observes it to fall back to the agent list.
     @Published var agentNotFound = false
+    /// The question-dismissal marker (PROTOCOL §5.5): id of the question-bearing
+    /// assistant message the user dismissed via `agent.dismissQuestions`.
+    /// Daemon-persisted in session metadata (survives restarts); refreshed from
+    /// `agent.get` and updated push-style by `agent:updated`. The wizard gate
+    /// retires a pending set whose message id matches it.
+    @Published var dismissedQuestionsMessageId: String?
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -136,6 +142,12 @@ class ConversationStore: ObservableObject {
                     isStreaming = serverIsStreaming
                 }
                 attentionRequest = AgentSession.parsePendingAttentionRequest(agentDict)
+                // Question-dismissal marker (AgentLite serves it under
+                // metadata; omitted when nothing was dismissed).
+                if let metadata = agentDict["metadata"] as? [String: Any],
+                   let dismissedId = metadata["dismissedQuestionsMessageId"] as? String {
+                    dismissedQuestionsMessageId = dismissedId
+                }
             }
         } catch {
             raiseAgentNotFoundIfDefinitive(error)
@@ -319,7 +331,7 @@ class ConversationStore: ObservableObject {
                         "agent:subscribed", "agent:unsubscribed",
                         "agent:status-changed", "agent:idle",
                         "agent:woken-by-subscription",
-                        "agent:deleted",
+                        "agent:deleted", "agent:updated",
                     ],
                     "workspaceId": workspaceId,
                     "replaceGroup": "streaming-\(agentId)",
@@ -789,6 +801,13 @@ class ConversationStore: ObservableObject {
             if let agentId = self.agentId {
                 Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
             }
+        case "agent:updated":
+            // Session-mutation invalidation (PROTOCOL §6.5). The dismissal
+            // marker persist carries it in the payload — apply push-style so
+            // a dismissal from another client retires the wizard here too.
+            if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
+                dismissedQuestionsMessageId = dismissedId
+            }
         default:
             break
         }
@@ -967,6 +986,29 @@ class ConversationStore: ObservableObject {
             messages.removeAll { $0.id == failed.messageId }
             isStreaming = false
         }
+    }
+
+    // MARK: - Dismiss questions
+
+    /// Dismiss the pending Agent Q&A question set WITHOUT answering
+    /// (`agent.dismissQuestions`, PROTOCOL §5.5). The daemon persists the
+    /// `dismissedQuestionsMessageId` marker (survives restarts, so the set
+    /// never re-surfaces), releases the question hold, and notifies the model
+    /// with a system-origin `questions_dismissed` notice. The marker is raised
+    /// optimistically from the RPC result so the wizard retires immediately
+    /// instead of waiting for the `agent:updated` push; a failed call leaves
+    /// state untouched (the wizard keeps pending) and rethrows.
+    func dismissQuestions(agentId: String, messageId: String, workspaceId: String) async throws {
+        let result = try await connectionManager.request(
+            "agent.dismissQuestions",
+            params: [
+                "agentId": agentId,
+                "messageId": messageId,
+                "workspaceId": workspaceId,
+            ]
+        )
+        let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"] as? String
+        dismissedQuestionsMessageId = confirmedId ?? messageId
     }
 
     // MARK: - Queue message
@@ -1294,6 +1336,7 @@ class ConversationStore: ObservableObject {
         lastFailedSend = nil
         attentionRequest = nil
         agentNotFound = false
+        dismissedQuestionsMessageId = nil
         watchedAgentLastRefresh.removeAll()
         chatLive = false
         // Unregister handler on reset

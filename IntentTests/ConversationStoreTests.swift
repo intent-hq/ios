@@ -382,5 +382,117 @@ struct ConversationStoreTests {
         store.reset()
         #expect(!store.agentNotFound)
     }
+
+    // MARK: - dismissQuestions (agent.dismissQuestions, PROTOCOL §5.5)
+
+    @Test func dismissQuestionsCallsRpcAndRaisesMarker() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.dismissQuestions" })
+        #expect(sent.params["agentId"] as? String == "a")
+        #expect(sent.params["messageId"] as? String == "a1")
+        #expect(sent.params["workspaceId"] as? String == "w")
+        #expect(store.dismissedQuestionsMessageId == "a1")
+    }
+
+    @Test func dismissQuestionsFallsBackToRequestedIdWhenResultOmitsMarker() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.dismissQuestions"] = ["success": true] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
+
+        #expect(store.dismissedQuestionsMessageId == "a1")
+    }
+
+    @Test func failedDismissLeavesMarkerUntouchedAndRethrows() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
+        }
+
+        #expect(store.dismissedQuestionsMessageId == nil,
+                "a failed dismiss must not retire the wizard")
+    }
+
+    @Test func agentUpdatedEventAppliesDismissalMarkerPushStyle() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "dismissedQuestionsMessageId": "a1"]] as [String: Any]
+        ])
+
+        #expect(store.dismissedQuestionsMessageId == "a1",
+                "a dismissal from another client must retire the wizard here too")
+    }
+
+    @Test func agentUpdatedEventForOtherAgentIsIgnored() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "someone-else",
+                               "dismissedQuestionsMessageId": "x1"]] as [String: Any]
+        ])
+
+        #expect(store.dismissedQuestionsMessageId == nil)
+    }
+
+    @Test func agentUpdatedEventWithoutMarkerLeavesStateUntouched() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        store.dismissedQuestionsMessageId = "a1"
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "lastSeenMessageId": "m9"]] as [String: Any]
+        ])
+
+        #expect(store.dismissedQuestionsMessageId == "a1",
+                "an unrelated agent:updated must not clear the marker")
+    }
+
+    @Test func fetchAgentStreamingStateRestoresDismissalMarkerFromMetadata() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "Test",
+                "metadata": ["dismissedQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.dismissedQuestionsMessageId == "a1",
+                "the daemon-persisted marker must survive reload (AgentLite metadata)")
+    }
+
+    @Test func resetClearsDismissalMarker() {
+        let store = ConversationStore()
+        store.dismissedQuestionsMessageId = "a1"
+        store.reset()
+        #expect(store.dismissedQuestionsMessageId == nil)
+    }
 }
 
