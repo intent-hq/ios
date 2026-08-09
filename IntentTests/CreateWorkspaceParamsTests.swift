@@ -22,14 +22,15 @@ struct CreateWorkspaceParamsTests {
     }
 
     private func buildParams(
+        baseRef: String = "main",
         specialist: SpecialistInfo? = nil,
         provider: ProviderInfo? = nil,
         model: ModelInfo? = nil,
         message: String = ""
     ) -> [String: Any] {
         CreateWorkspaceView.buildCreateWorkspaceParams(
-            repositoryPath: "/repos/example",
-            baseRef: "main",
+            githubUrl: "https://github.com/intent-hq/intentd",
+            baseRef: baseRef,
             idempotencyKey: "key-123",
             specialist: specialist,
             provider: provider,
@@ -53,13 +54,28 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["prompt"] as? String == "Just a prompt")
     }
 
-    // MARK: - Base params
+    // MARK: - Base params (githubUrl-based cache-hydrated creation)
 
     @Test func baseParamsAlwaysPresent() {
         let params = buildParams()
-        #expect(params["repositoryPath"] as? String == "/repos/example")
+        #expect(params["githubUrl"] as? String == "https://github.com/intent-hq/intentd")
         #expect(params["baseRef"] as? String == "main")
         #expect(params["idempotencyKey"] as? String == "key-123")
+    }
+
+    @Test func localPathParamsOmitted() {
+        // Omitting repositoryPath/clonePath alongside githubUrl selects the
+        // daemon's cache-hydrated clone path (PROTOCOL §5.1).
+        let params = buildParams()
+        #expect(params["repositoryPath"] == nil)
+        #expect(params["clonePath"] == nil)
+    }
+
+    @Test func baseRefSentAsPlainBranchName() {
+        // Remote branch names from github.branches.list are plain names —
+        // no remote-prefix normalization is applied (or expected).
+        let params = buildParams(baseRef: "feature/x")
+        #expect(params["baseRef"] as? String == "feature/x")
     }
 
     @Test func noInitialAgentWithoutSpecialistModelOrMessage() {
@@ -234,5 +250,32 @@ struct CreateWorkspaceParamsTests {
         #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
         // An empty in-flight list can't be told apart from a seat with no providers
         #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
+    }
+
+    // MARK: - preselectedBranch
+
+    @Test func preselectedBranchKeepsStillValidSelection() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: "dev", branches: ["main", "dev"], defaultBranch: "main"
+        ) == "dev")
+    }
+
+    @Test func preselectedBranchPrefersDefaultWhenSelectionInvalid() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: ["dev", "main"], defaultBranch: "main"
+        ) == "main")
+        // A stale selection from a previously picked repo is dropped
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: "feature/x", branches: ["dev", "main"], defaultBranch: "main"
+        ) == "main")
+    }
+
+    @Test func preselectedBranchFallsBackToFirstBranch() {
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: ["dev", "main"], defaultBranch: nil
+        ) == "dev")
+        #expect(CreateWorkspaceView.preselectedBranch(
+            current: nil, branches: [], defaultBranch: "main"
+        ) == nil)
     }
 }

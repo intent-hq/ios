@@ -79,15 +79,6 @@ struct Workspace: Codable, Identifiable, Equatable {
     let agentSummaryAgents: [WorkspaceAgentInfo]?
 }
 
-struct KnownRepo: Identifiable {
-    let path: String
-    let name: String
-    let owner: String?
-    let addedAt: String?
-    let lastUsedAt: String?
-    var id: String { path }
-}
-
 /// A model available for the agent.
 struct ModelInfo: Identifiable {
     let id: String       // model id (e.g. "sonnet4.5")

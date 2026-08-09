@@ -23,7 +23,12 @@ class FakeConnectionManager: ConnectionManagerRouting {
     
     /// Map of method names to response values. If a method is not in this map, request() throws.
     var responseMap: [String: Any] = [:]
-    
+
+    /// Per-method FIFO response queues. When non-empty for a method, each request()
+    /// pops the next response — takes precedence over responseMap. Useful for
+    /// pagination tests where consecutive calls return different pages.
+    var responseQueueMap: [String: [Any]] = [:]
+
     /// Map of method names to errors. If a method is in this map, request() throws the error.
     var errorMap: [String: Error] = [:]
     
@@ -66,7 +71,13 @@ class FakeConnectionManager: ConnectionManagerRouting {
         if let error = errorMap[method] {
             throw error
         }
-        
+
+        if var queue = responseQueueMap[method], !queue.isEmpty {
+            let response = queue.removeFirst()
+            responseQueueMap[method] = queue
+            return response
+        }
+
         guard let response = responseMap[method] else {
             throw NSError(
                 domain: "FakeConnectionManager",

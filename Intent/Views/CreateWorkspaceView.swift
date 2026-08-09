@@ -8,17 +8,15 @@ struct CreateWorkspaceView: View {
     // Navigation state
     @State private var navigationPath = NavigationPath()
 
-    // Step 1: Repo selection
-    @State private var repos: [KnownRepo] = []
-    @State private var isLoadingRepos = true
-    @State private var selectedRepo: KnownRepo?
+    // Step 1: GitHub repo selection
+    @StateObject private var githubStore = GitHubRepoStore()
+    @State private var selectedRepo: GitHubRepo?
 
     // Step 2: Branch selection
-    @State private var localBranches: [String] = []
     @State private var remoteBranches: [String] = []
-    @State private var currentBranch: String?
     @State private var defaultBranch: String?
     @State private var isLoadingBranches = true
+    @State private var branchLoadError: String?
     @State private var selectedBranch: String?
 
     // Step 3: Specialist + Provider + Model + Message
@@ -52,82 +50,36 @@ struct CreateWorkspaceView: View {
     // MARK: - Step 1: Repository Selection
 
     private var repoSelectionView: some View {
-        ZStack {
-            Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if isLoadingRepos {
-                ProgressView("Loading repositories...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if repos.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "folder.badge.questionmark")
-                        .font(.largeTitle)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    Text("No repositories found")
-                        .font(.headline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text("Add a repository in the desktop app first.")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-            } else {
-                List {
-                    ForEach(repos) { repo in
-                        Button {
-                            selectedRepo = repo
-                        } label: {
-                            HStack(spacing: 12) {
-                                RepoOwnerAvatarView(owner: repo.owner)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(repo.name)
-                                        .font(.headline)
-                                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                                    Text(repo.path)
-                                        .font(.subheadline)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if selectedRepo?.id == repo.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Theme.primary(for: colorScheme))
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .listRowBackground(Theme.card(for: colorScheme))
+        GitHubRepoPickerView(store: githubStore, selectedRepo: $selectedRepo)
+            .navigationTitle("Select Repository")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundStyle(Theme.foreground(for: colorScheme))
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            }
-        }
-        .navigationTitle("Select Repository")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Next") {
+                        navigationPath.append("branches")
+                    }
+                    .disabled(selectedRepo == nil)
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Next") {
-                    navigationPath.append("branches")
-                }
-                .disabled(selectedRepo == nil)
+            .onChange(of: selectedRepo?.id) { _, _ in
+                // Reset idempotency key and branch state when the repo
+                // changes so a branch selected for the previous repo can't
+                // carry over (a shared name like "main" would otherwise
+                // survive and override the new repo's default).
+                idempotencyKey = UUID().uuidString
+                selectedBranch = nil
+                remoteBranches = []
+                defaultBranch = nil
+                isLoadingBranches = true
             }
-        }
-        .task {
-            await fetchRepos()
-        }
-        .onChange(of: selectedRepo?.id) { _, _ in
-            // Reset idempotency key when repo changes
-            idempotencyKey = UUID().uuidString
-        }
     }
 
     // MARK: - Step 2: Branch Selection
@@ -139,75 +91,53 @@ struct CreateWorkspaceView: View {
             if isLoadingBranches {
                 ProgressView("Loading branches...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            } else if let branchLoadError {
+                VStack(spacing: 12) {
+                    Text("Couldn't load branches")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text(branchLoadError)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .multilineTextAlignment(.center)
+                    Button("Retry") {
+                        Task { await fetchBranches() }
+                    }
+                }
+                .padding(24)
             } else {
                 List {
-                    if !localBranches.isEmpty {
-                        Section("Local Branches") {
-                            ForEach(localBranches, id: \.self) { branch in
-                                Button {
-                                    selectedBranch = branch
-                                } label: {
-                                    HStack {
-                                        Text(branch)
-                                            .font(.body)
-                                            .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Section("Branches") {
+                        ForEach(remoteBranches, id: \.self) { branch in
+                            Button {
+                                selectedBranch = branch
+                            } label: {
+                                HStack {
+                                    Text(branch)
+                                        .font(.body)
+                                        .foregroundStyle(Theme.foreground(for: colorScheme))
 
-                                        Spacer()
+                                    Spacer()
 
-                                        if branch == defaultBranch {
-                                            Text("default")
-                                                .font(.caption)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Theme.primary(for: colorScheme).opacity(0.15))
-                                                .foregroundStyle(Theme.primary(for: colorScheme))
-                                                .clipShape(Capsule())
-                                        }
-
-                                        if branch == currentBranch {
-                                            Text("current")
-                                                .font(.caption)
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 2)
-                                                .background(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                                .clipShape(Capsule())
-                                        }
-
-                                        if selectedBranch == branch {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(Theme.primary(for: colorScheme))
-                                                .fontWeight(.semibold)
-                                        }
+                                    if branch == defaultBranch {
+                                        Text("default")
+                                            .font(.caption)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Theme.primary(for: colorScheme).opacity(0.15))
+                                            .foregroundStyle(Theme.primary(for: colorScheme))
+                                            .clipShape(Capsule())
                                     }
-                                    .padding(.vertical, 2)
-                                }
-                                .listRowBackground(Theme.card(for: colorScheme))
-                            }
-                        }
-                    }
 
-                    if !remoteBranches.isEmpty {
-                        Section("Remote Branches") {
-                            ForEach(remoteBranches, id: \.self) { branch in
-                                Button {
-                                    selectedBranch = branch
-                                } label: {
-                                    HStack {
-                                        Text(branch)
-                                            .font(.body)
-                                            .foregroundStyle(Theme.foreground(for: colorScheme))
-                                        Spacer()
-                                        if selectedBranch == branch {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(Theme.primary(for: colorScheme))
-                                                .fontWeight(.semibold)
-                                        }
+                                    if selectedBranch == branch {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Theme.primary(for: colorScheme))
+                                            .fontWeight(.semibold)
                                     }
-                                    .padding(.vertical, 2)
                                 }
-                                .listRowBackground(Theme.card(for: colorScheme))
+                                .padding(.vertical, 2)
                             }
+                            .listRowBackground(Theme.card(for: colorScheme))
                         }
                     }
                 }
@@ -337,7 +267,7 @@ struct CreateWorkspaceView: View {
                 Color.black.opacity(0.3).ignoresSafeArea()
                 VStack(spacing: 12) {
                     ProgressView()
-                    Text("Creating workspace...")
+                    Text("Cloning repository…")
                         .font(.subheadline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
@@ -398,57 +328,40 @@ struct CreateWorkspaceView: View {
 
     // MARK: - Data Fetching
 
-    private func fetchRepos() async {
-        isLoadingRepos = true
-        do {
-            let result = try await ConnectionManager.shared.request("repo.list")
-            if let dict = result as? [String: Any],
-               let items = dict["repos"] as? [[String: Any]] {
-                repos = items.compactMap { item in
-                    guard let path = item["path"] as? String,
-                          let name = item["name"] as? String else { return nil }
-                    return KnownRepo(
-                        path: path,
-                        name: name,
-                        owner: item["owner"] as? String,
-                        addedAt: item["addedAt"] as? String,
-                        lastUsedAt: item["lastUsedAt"] as? String
-                    )
-                }
-            }
-        } catch {
-            print("[CreateWorkspace] Failed to fetch repos: \(error)")
-        }
-        isLoadingRepos = false
-    }
-
+    /// Fetch the picked repo's remote branches (`github.branches.list`),
+    /// pre-selecting its `defaultBranch` (falling back to the first branch).
     private func fetchBranches() async {
         guard let repo = selectedRepo else { return }
         isLoadingBranches = true
+        branchLoadError = nil
         do {
-            let result = try await ConnectionManager.shared.request(
-                "git.getBranches",
-                params: ["repoPath": repo.path, "includeRemote": true]
-            )
-            if let dict = result as? [String: Any] {
-                if let branches = dict["branches"] as? [String] {
-                    localBranches = branches
-                }
-                if let remote = dict["remoteBranches"] as? [String] {
-                    remoteBranches = remote
-                }
-                currentBranch = dict["currentBranch"] as? String
-                defaultBranch = dict["defaultBranch"] as? String
-
-                // Auto-select default branch, or current branch, or first local branch
-                if selectedBranch == nil {
-                    selectedBranch = defaultBranch ?? currentBranch ?? localBranches.first
-                }
+            // Search results omit `defaultBranch`; resolve it via
+            // `github.repos.get` (best-effort) so the default label and
+            // pre-selection still work.
+            var resolvedDefault = repo.defaultBranch
+            if resolvedDefault == nil {
+                resolvedDefault = await githubStore.fetchDefaultBranch(owner: repo.owner, repo: repo.name)
             }
+            let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
+            defaultBranch = resolvedDefault
+            remoteBranches = branches
+            selectedBranch = Self.preselectedBranch(
+                current: selectedBranch,
+                branches: branches,
+                defaultBranch: resolvedDefault
+            )
         } catch {
-            print("[CreateWorkspace] Failed to fetch branches: \(error)")
+            remoteBranches = []
+            branchLoadError = error.localizedDescription
         }
         isLoadingBranches = false
+    }
+
+    /// Keep a still-valid selection (e.g. re-entering the step); otherwise
+    /// pre-select the default branch, falling back to the first branch.
+    static func preselectedBranch(current: String?, branches: [String], defaultBranch: String?) -> String? {
+        if let current, branches.contains(current) { return current }
+        return branches.first(where: { $0 == defaultBranch }) ?? branches.first
     }
 
     private func fetchSpecialists() async {
@@ -526,12 +439,13 @@ struct CreateWorkspaceView: View {
 
         Task {
             do {
-                // Normalize branch name: strip "origin/" or other known remote prefixes
-                let normalizedBranch = normalizeBranchName(branch)
-
+                // githubUrl (no repositoryPath/clonePath) triggers the daemon's
+                // cache-hydrated, CoW-preferred clone path (PROTOCOL §5.1).
+                // Remote branch names from github.branches.list are plain
+                // names, so baseRef needs no remote-prefix normalization.
                 let params = Self.buildCreateWorkspaceParams(
-                    repositoryPath: repo.path,
-                    baseRef: normalizedBranch,
+                    githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
+                    baseRef: branch,
                     idempotencyKey: idempotencyKey,
                     specialist: selectedSpecialist,
                     provider: selectedProvider,
@@ -564,10 +478,12 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    /// Builds the `workspace.create` params. Agent IDs are server-assigned, so
-    /// `initialAgent` must never contain an `agentId` (the server returns the minted id).
+    /// Builds the `workspace.create` params. `githubUrl` without
+    /// `repositoryPath`/`clonePath` selects the daemon's cache-hydrated clone
+    /// path. Agent IDs are server-assigned, so `initialAgent` must never
+    /// contain an `agentId` (the server returns the minted id).
     static func buildCreateWorkspaceParams(
-        repositoryPath: String,
+        githubUrl: String,
         baseRef: String,
         idempotencyKey: String,
         specialist: SpecialistInfo?,
@@ -576,7 +492,7 @@ struct CreateWorkspaceView: View {
         message: String
     ) -> [String: Any] {
         var params: [String: Any] = [
-            "repositoryPath": repositoryPath,
+            "githubUrl": githubUrl,
             "baseRef": baseRef,
             "idempotencyKey": idempotencyKey
         ]
@@ -608,17 +524,6 @@ struct CreateWorkspaceView: View {
         }
 
         return params
-    }
-
-    /// Normalize a branch name by stripping known remote prefixes (e.g., "origin/main" -> "main")
-    private func normalizeBranchName(_ branch: String) -> String {
-        let knownRemotes = ["origin/", "upstream/", "fork/"]
-        for remote in knownRemotes {
-            if branch.hasPrefix(remote) {
-                return String(branch.dropFirst(remote.count))
-            }
-        }
-        return branch
     }
 
     /// Outcome of a completed model fetch, or nil when the fetch is stale
