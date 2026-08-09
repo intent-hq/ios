@@ -317,7 +317,7 @@ struct ConversationView: View {
         }
         .onDisappear {
             NotificationManager.shared.currentAgentId = nil
-            Task { await viewModel.teardownHooks() }
+            Task { await viewModel.teardownLiveStores() }
         }
     }
 

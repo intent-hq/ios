@@ -94,9 +94,18 @@ struct MonitoredPrsRowTests {
             approvals: .init(decision: "approved", have: 1, needed: 2, changesRequested: 0)))
         #expect(MonitoredPrsRow.approvalsSummary(known) == "approved (1/2 approvals)")
         let unknown = makeMonitor(snapshot: makeSnapshot(
-            approvals: .init(decision: "approved", have: 1, needed: nil, changesRequested: 0)))
-        #expect(MonitoredPrsRow.approvalsSummary(unknown) == "approved (1 approvals)")
+            approvals: .init(decision: "approved", have: 2, needed: nil, changesRequested: 0)))
+        #expect(MonitoredPrsRow.approvalsSummary(unknown) == "approved (2 approvals)")
         #expect(MonitoredPrsRow.approvalsSummary(makeMonitor()) == nil)
+    }
+
+    @Test func approvalsSummarySingularizesOneApproval() {
+        let neededOne = makeMonitor(snapshot: makeSnapshot(
+            approvals: .init(decision: "approved", have: 1, needed: 1, changesRequested: 0)))
+        #expect(MonitoredPrsRow.approvalsSummary(neededOne) == "approved (1/1 approval)")
+        let haveOne = makeMonitor(snapshot: makeSnapshot(
+            approvals: .init(decision: "approved", have: 1, needed: nil, changesRequested: 0)))
+        #expect(MonitoredPrsRow.approvalsSummary(haveOne) == "approved (1 approval)")
     }
 
     @Test func threadsSummaryPluralizesAndHidesZero() {
@@ -130,14 +139,16 @@ struct MonitoredPrsRowTests {
         let lines = MonitoredPrsRow.detailLines(monitor)
         #expect(lines == [
             "Add review wire surface — open",
-            "octo/repo#12 · 1/3 failing · approved (1/1 approvals) · 2 unresolved threads",
+            "octo/repo#12 · 1/3 failing · approved (1/1 approval) · 2 unresolved threads",
             "1 pending change"
         ])
     }
 
-    @Test func detailLinesFallBackWithoutTitleOrSnapshot() {
+    @Test func detailLinesDropDuplicateSummaryWithoutTitleOrSnapshot() {
+        // The no-title/no-snapshot fallback would render the summary line
+        // identical to the title line — it is dropped so lines stay distinct.
         let monitor = makeMonitor(title: nil)
         let lines = MonitoredPrsRow.detailLines(monitor)
-        #expect(lines == ["octo/repo#12", "octo/repo#12", "No pending changes"])
+        #expect(lines == ["octo/repo#12", "No pending changes"])
     }
 }

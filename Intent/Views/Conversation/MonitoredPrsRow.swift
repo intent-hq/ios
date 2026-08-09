@@ -42,8 +42,10 @@ struct MonitoredPrsRow: View {
     @ViewBuilder
     private func monitorChip(_ monitor: MonitoredPr) -> some View {
         Menu {
-            // Detail header: last-refresh summary (mirrors the FE hover card)
-            ForEach(Self.detailLines(monitor), id: \.self) { line in
+            // Detail header: last-refresh summary (mirrors the FE hover card).
+            // Positional IDs: lines are display strings with no inherent
+            // identity, and \.self would collide if two lines ever matched.
+            ForEach(Array(Self.detailLines(monitor).enumerated()), id: \.offset) { _, line in
                 Text(line)
             }
             Divider()
@@ -112,7 +114,9 @@ struct MonitoredPrsRow: View {
     }
 
     /// Menu-header detail lines: title (+ state), repo#number with
-    /// checks/approvals/threads summary, and pending status.
+    /// checks/approvals/threads summary, and pending status. The summary
+    /// line is dropped when it would duplicate the title line (the
+    /// no-title/no-snapshot fallback), so every line is distinct.
     static func detailLines(_ monitor: MonitoredPr) -> [String] {
         var lines: [String] = []
         var titleLine = monitor.title ?? "\(monitor.repo)#\(monitor.prNumber)"
@@ -125,7 +129,10 @@ struct MonitoredPrsRow: View {
         if let checks = checksSummary(monitor) { summary.append(checks) }
         if let approvals = approvalsSummary(monitor) { summary.append(approvals) }
         if let threads = threadsSummary(monitor) { summary.append(threads) }
-        lines.append(summary.joined(separator: " · "))
+        let summaryLine = summary.joined(separator: " · ")
+        if summaryLine != titleLine {
+            lines.append(summaryLine)
+        }
 
         lines.append(pendingSummary(monitor))
         return lines
@@ -139,13 +146,15 @@ struct MonitoredPrsRow: View {
         return "\(checks.passed)/\(checks.total) passing"
     }
 
-    /// Compact approvals summary, e.g. "APPROVED (1/2 approvals)".
+    /// Compact approvals summary, e.g. "approved (1/2 approvals)".
     static func approvalsSummary(_ monitor: MonitoredPr) -> String? {
         guard let approvals = monitor.lastSnapshot?.approvals else { return nil }
         if let needed = approvals.needed {
-            return "\(approvals.decision) (\(approvals.have)/\(needed) approvals)"
+            let noun = needed == 1 ? "approval" : "approvals"
+            return "\(approvals.decision) (\(approvals.have)/\(needed) \(noun))"
         }
-        return "\(approvals.decision) (\(approvals.have) approvals)"
+        let noun = approvals.have == 1 ? "approval" : "approvals"
+        return "\(approvals.decision) (\(approvals.have) \(noun))"
     }
 
     /// Unresolved-threads summary; nil when there are none.

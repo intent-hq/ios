@@ -92,6 +92,7 @@ class ConversationViewModel: ObservableObject {
     private var cancellable: AnyCancellable?
     private var hookStoreCancellable: AnyCancellable?
     private var monitoredPrStoreCancellable: AnyCancellable?
+    private var workspaceStoreCancellable: AnyCancellable?
     private var draftSaveCancellable: AnyCancellable?
 
     init(agentId: String, workspaceId: String, agentName: String) {
@@ -115,6 +116,13 @@ class ConversationViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
         monitoredPrStoreCancellable = monitoredPrStore.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+        // `workspaceRepo` reads WorkspaceStore.shared on the fly — forward its
+        // changes so chip labels pick up the repo once the workspace list loads.
+        workspaceStoreCancellable = WorkspaceStore.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
@@ -160,9 +168,10 @@ class ConversationViewModel: ObservableObject {
         _ = await (conversation, queue, model, subscriptions, streamingState, hooks, monitors)
     }
 
-    /// Tears down the hook and PR-monitor subscriptions when the conversation
-    /// leaves the screen (`load()` re-subscribes on the next appearance).
-    func teardownHooks() async {
+    /// Tears down the live-store subscriptions (background hooks + PR
+    /// monitors) when the conversation leaves the screen (`load()`
+    /// re-subscribes on the next appearance).
+    func teardownLiveStores() async {
         await hookStore.unsubscribe()
         await monitoredPrStore.unsubscribe()
     }
