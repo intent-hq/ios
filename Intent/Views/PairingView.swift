@@ -105,6 +105,7 @@ struct PairingOptionButton: View {
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .multilineTextAlignment(.leading)
                 }
 
                 Spacer()
