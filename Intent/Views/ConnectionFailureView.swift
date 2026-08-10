@@ -8,6 +8,7 @@ struct ConnectionFailureView: View {
     @State private var isRetrying = false
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
+    @State private var savedConnections: [StoredConnection] = []
 
     var body: some View {
         ZStack {
@@ -66,6 +67,19 @@ struct ConnectionFailureView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(Theme.primary(for: colorScheme))
+
+                    // Other saved connections — switch instead of re-pairing
+                    if !savedConnections.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Saved Connections")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            ForEach(savedConnections) { connection in
+                                savedConnectionRow(connection)
+                            }
+                        }
+                        .padding(.top, 8)
+                    }
                 }
                 .padding(.horizontal, 24)
 
@@ -86,6 +100,9 @@ struct ConnectionFailureView: View {
             }
         }
         .onAppear {
+            savedConnections = ConnectionFailureView.alternativeConnections(
+                connections: PersistenceManager.shared.loadConnections(),
+                activeId: PersistenceManager.shared.activeConnection()?.id)
             if !isCertMismatch {
                 startAutoRetry()
             }
@@ -93,6 +110,49 @@ struct ConnectionFailureView: View {
         .onDisappear {
             retryTask?.cancel()
         }
+    }
+
+    /// Saved connections other than the currently failing active one,
+    /// most recently used first.
+    static func alternativeConnections(
+        connections: [StoredConnection], activeId: UUID?
+    ) -> [StoredConnection] {
+        connections
+            .filter { $0.id != activeId }
+            .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
+    }
+
+    private func savedConnectionRow(_ connection: StoredConnection) -> some View {
+        Button {
+            retryTask?.cancel()
+            coordinator.onSwitchConnection(id: connection.id)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "desktopcomputer")
+                    .font(.body)
+                    .foregroundStyle(Theme.primary(for: colorScheme))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(connection.displayName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(Theme.muted(for: colorScheme).opacity(0.3))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 
     private func startAutoRetry() {

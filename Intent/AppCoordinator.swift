@@ -250,6 +250,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onReconnect() {
+        pairingShowsSavedConnections = !PersistenceManager.shared.loadConnections().isEmpty
         currentScreen = .pairing
     }
 
