@@ -237,6 +237,71 @@ struct AppCoordinatorTests {
         #expect(!coordinator.pairingShowsSavedConnections)
     }
 
+    @Test @MainActor func onReconnect_flagsSavedConnections_whenConnectionsExist() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let stored = PersistenceManager.shared.upsertConnection(Self.makeConnection(port: 1))
+        PersistenceManager.shared.setActiveConnection(id: stored.id)
+
+        let coordinator = AppCoordinator()
+        coordinator.onReconnect()
+
+        #expect(coordinator.pairingShowsSavedConnections,
+                "Pairing surface should offer saved connections after a startup connection failure")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onReconnect_noSavedConnections_behavesLikeFirstRun() {
+        Self.resetConnectionState()
+        defer { Self.resetConnectionState() }
+
+        let coordinator = AppCoordinator()
+        coordinator.pairingShowsSavedConnections = true
+        coordinator.onReconnect()
+
+        #expect(!coordinator.pairingShowsSavedConnections,
+                "No saved connections must leave the pairing surface in first-run mode")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Connection-failure saved-connection alternatives
+
+    @Test func alternativeConnections_excludesActiveConnection() {
+        let active = Self.makeConnection(port: 1)
+        let other = Self.makeConnection(port: 2)
+
+        let result = ConnectionFailureView.alternativeConnections(
+            connections: [active, other], activeId: active.id)
+
+        #expect(result.map(\.id) == [other.id])
+    }
+
+    @Test func alternativeConnections_sortsMostRecentlyUsedFirst() {
+        let older = StoredConnection(
+            server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),
+            token: "t1", lastConnectedAt: Date(timeIntervalSinceNow: -3600))
+        let newer = StoredConnection(
+            server: PairedServer(hosts: ["10.0.0.2"], port: 2, name: "b", pairedAt: Date()),
+            token: "t2", lastConnectedAt: Date())
+        let never = StoredConnection(
+            server: PairedServer(hosts: ["10.0.0.3"], port: 3, name: "c", pairedAt: Date()),
+            token: "t3")
+
+        let result = ConnectionFailureView.alternativeConnections(
+            connections: [never, older, newer], activeId: nil)
+
+        #expect(result.map(\.id) == [newer.id, older.id, never.id])
+    }
+
     @Test @MainActor func onSwitchConnection_activatesTargetAndRoutesToConnecting() {
         Self.resetConnectionState()
         defer {
