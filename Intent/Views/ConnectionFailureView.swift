@@ -68,15 +68,22 @@ struct ConnectionFailureView: View {
                     .buttonStyle(.bordered)
                     .tint(Theme.primary(for: colorScheme))
 
-                    // Other saved connections — switch instead of re-pairing
+                    // Other saved connections — switch instead of re-pairing.
+                    // Scrollable with a bounded height so a long list never
+                    // pushes the controls or rows off a small viewport.
                     if !savedConnections.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Saved Connections")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            ForEach(savedConnections) { connection in
-                                savedConnectionRow(connection)
+                            ScrollView {
+                                VStack(spacing: 8) {
+                                    ForEach(savedConnections) { connection in
+                                        savedConnectionRow(connection)
+                                    }
+                                }
                             }
+                            .frame(maxHeight: 220)
                         }
                         .padding(.top, 8)
                     }
@@ -184,7 +191,14 @@ struct ConnectionFailureView: View {
                         token: pairing.token,
                         certFingerprint: pairing.server.certFingerprint
                     )
-                    await MainActor.run { coordinator.onConnectionSuccess() }
+                    // A cancelled retry must never route: the user may have
+                    // switched to another saved connection while this connect
+                    // was in flight, and a stale success would restore the
+                    // failing daemon over the selected one.
+                    await MainActor.run {
+                        guard !Task.isCancelled else { return }
+                        coordinator.onConnectionSuccess()
+                    }
                     return
                 } catch {
                     // Continue retrying
