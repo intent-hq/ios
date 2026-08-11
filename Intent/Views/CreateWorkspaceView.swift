@@ -18,6 +18,12 @@ struct CreateWorkspaceView: View {
     @State private var isLoadingBranches = true
     @State private var branchLoadError: String?
     @State private var selectedBranch: String?
+    @State private var branchSearchText = ""
+    /// The trimmed prefix the current `branchSearchResults` answer; nil until
+    /// a search completes, so stale results never surface.
+    @State private var completedBranchQuery: String?
+    @State private var branchSearchResults: [String] = []
+    @State private var branchSearchTask: Task<Void, Never>?
 
     // Step 3: Specialist + Provider + Model + Message
     @State private var specialists: [SpecialistInfo] = []
@@ -79,6 +85,10 @@ struct CreateWorkspaceView: View {
                 remoteBranches = []
                 defaultBranch = nil
                 isLoadingBranches = true
+                branchSearchTask?.cancel()
+                branchSearchText = ""
+                completedBranchQuery = nil
+                branchSearchResults = []
             }
     }
 
@@ -108,7 +118,16 @@ struct CreateWorkspaceView: View {
             } else {
                 List {
                     Section("Branches") {
-                        ForEach(remoteBranches, id: \.self) { branch in
+                        if displayedBranches.isEmpty {
+                            let trimmedQuery = branchSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Text(trimmedQuery.isEmpty
+                                ? "No branches found."
+                                : "No branches match \"\(trimmedQuery)\".")
+                                .font(.subheadline)
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .listRowBackground(Theme.card(for: colorScheme))
+                        }
+                        ForEach(displayedBranches, id: \.self) { branch in
                             Button {
                                 selectedBranch = branch
                             } label: {
@@ -143,6 +162,11 @@ struct CreateWorkspaceView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
+                .searchable(
+                    text: $branchSearchText,
+                    placement: .navigationBarDrawer(displayMode: .always),
+                    prompt: "Search branches"
+                )
             }
         }
         .navigationTitle("Select Branch")
@@ -162,6 +186,53 @@ struct CreateWorkspaceView: View {
             // Reset idempotency key when branch changes
             idempotencyKey = UUID().uuidString
         }
+        .onChange(of: branchSearchText) { _, newValue in
+            scheduleBranchSearch(for: newValue)
+        }
+    }
+
+    /// Branches currently shown in the branch step.
+    private var displayedBranches: [String] {
+        Self.displayedBranches(
+            loaded: remoteBranches,
+            defaultBranch: defaultBranch,
+            query: branchSearchText,
+            searchResults: branchSearchResults,
+            completedQuery: completedBranchQuery
+        )
+    }
+
+    /// No query: the loaded page with the default branch pinned first.
+    /// Active query: the latest server prefix-search results (or the pinned
+    /// loaded page as an interim while the debounced search is in flight),
+    /// narrowed by a local prefix filter — the local filter keeps results
+    /// correct even if the daemon ignores `prefix`, and the pinned interim
+    /// source keeps an out-of-page default branch matchable.
+    static func displayedBranches(
+        loaded: [String],
+        defaultBranch: String?,
+        query: String,
+        searchResults: [String],
+        completedQuery: String?
+    ) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return orderedBranches(loaded, defaultBranch: defaultBranch)
+        }
+        let source = completedQuery == trimmed
+            ? searchResults
+            : orderedBranches(loaded, defaultBranch: defaultBranch)
+        return source.filter { $0.hasPrefix(trimmed) }
+    }
+
+    /// Pin the default branch to the top of the list (deduped), inserting it
+    /// when it falls outside the fetched page so it is always visible. An
+    /// empty list stays empty: a successful fetch returning zero branches
+    /// means the repo genuinely has none (transport errors take the error
+    /// path), so no nonexistent ref is fabricated from repo metadata.
+    static func orderedBranches(_ branches: [String], defaultBranch: String?) -> [String] {
+        guard let defaultBranch, !defaultBranch.isEmpty, !branches.isEmpty else { return branches }
+        return [defaultBranch] + branches.filter { $0 != defaultBranch }
     }
 
 
@@ -328,8 +399,9 @@ struct CreateWorkspaceView: View {
 
     // MARK: - Data Fetching
 
-    /// Fetch the picked repo's remote branches (`github.branches.list`),
-    /// pre-selecting its `defaultBranch` (falling back to the first branch).
+    /// Fetch one page of the picked repo's remote branches
+    /// (`github.branches.list`), pre-selecting its `defaultBranch` (falling
+    /// back to the first branch).
     private func fetchBranches() async {
         guard let repo = selectedRepo else { return }
         isLoadingBranches = true
@@ -345,9 +417,11 @@ struct CreateWorkspaceView: View {
             let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
             defaultBranch = resolvedDefault
             remoteBranches = branches
+            // Pre-select against the pinned ordering so the default branch
+            // is selectable even when it falls outside the fetched page.
             selectedBranch = Self.preselectedBranch(
                 current: selectedBranch,
-                branches: branches,
+                branches: Self.orderedBranches(branches, defaultBranch: resolvedDefault),
                 defaultBranch: resolvedDefault
             )
         } catch {
@@ -355,6 +429,36 @@ struct CreateWorkspaceView: View {
             branchLoadError = error.localizedDescription
         }
         isLoadingBranches = false
+    }
+
+    /// Debounce server-side branch prefix search ~300ms so rapid keystrokes
+    /// coalesce into a single `github.branches.list` request (same pattern
+    /// as the repo picker's `scheduleSearch`). Errors keep the previous
+    /// results — the local prefix filter over the loaded page still applies.
+    private func scheduleBranchSearch(for text: String) {
+        branchSearchTask?.cancel()
+        let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, let repo = selectedRepo else {
+            completedBranchQuery = nil
+            branchSearchResults = []
+            return
+        }
+        // Already answered (e.g. only surrounding whitespace changed) — skip
+        // the redundant round-trip.
+        guard query != completedBranchQuery else { return }
+        branchSearchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            guard let results = try? await githubStore.fetchRemoteBranches(
+                owner: repo.owner, repo: repo.name, prefix: query
+            ) else { return }
+            // Publish results + the query they answer together, only if this
+            // task is still the latest — an out-of-order older response can't
+            // overwrite a newer one's results.
+            guard !Task.isCancelled else { return }
+            branchSearchResults = results
+            completedBranchQuery = query
+        }
     }
 
     /// Keep a still-valid selection (e.g. re-entering the step); otherwise
