@@ -807,5 +807,57 @@ struct ConnectionManagerTests {
         // Clean up
         manager.unregisterSubscriptionHandler(id: "buf-chat-race")
     }
+
+    // MARK: - Host route merge (post-connect refresh)
+
+    @Test @MainActor func mergeHostsAppendsNewReportedIps() {
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["192.168.1.10"],
+            reported: ["192.168.1.10", "10.0.0.5", "172.16.0.2"])
+        #expect(merged == ["192.168.1.10", "10.0.0.5", "172.16.0.2"])
+    }
+
+    @Test @MainActor func mergeHostsKeepsExistingOrderFirstAndNeverDrops() {
+        // The user-entered host is not in the daemon-reported list (e.g. a
+        // hostname or NAT address) — it must stay, and stay first.
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["daemon.local", "10.0.0.5"],
+            reported: ["10.0.0.5", "192.168.1.10"])
+        #expect(merged == ["daemon.local", "10.0.0.5", "192.168.1.10"])
+    }
+
+    @Test @MainActor func mergeHostsDedupesAndSkipsEmptyReportedEntries() {
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["a"],
+            reported: ["b", "b", "", "  ", "a", " c "])
+        #expect(merged == ["a", "b", "c"])
+    }
+
+    @Test @MainActor func mergeHostsWithNoReportedIpsIsUnchanged() {
+        #expect(ConnectionManager.mergeHosts(existing: ["a", "b"], reported: []) == ["a", "b"])
+    }
+
+    // MARK: - localIps parsing (system.status)
+
+    @Test @MainActor func localIpsParsedFromSystemStatusResult() {
+        let result: [String: Any] = [
+            "version": "1.2.3",
+            "hostname": "mac.local",
+            "localIps": ["192.168.1.10", "10.0.0.5"],
+        ]
+        #expect(ConnectionManager.localIps(fromSystemStatus: result) == ["192.168.1.10", "10.0.0.5"])
+    }
+
+    @Test @MainActor func localIpsNilWhenFieldAbsentOnOlderDaemon() {
+        let result: [String: Any] = ["version": "1.0.0"]
+        #expect(ConnectionManager.localIps(fromSystemStatus: result) == nil)
+    }
+
+    @Test @MainActor func localIpsNilWhenMalformed() {
+        #expect(ConnectionManager.localIps(fromSystemStatus: ["localIps": "not-an-array"]) == nil)
+        #expect(ConnectionManager.localIps(fromSystemStatus: ["localIps": [1, 2]]) == nil)
+        #expect(ConnectionManager.localIps(fromSystemStatus: "not-a-dict") == nil)
+        #expect(ConnectionManager.localIps(fromSystemStatus: NSNull()) == nil)
+    }
 }
 

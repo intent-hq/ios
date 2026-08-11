@@ -18,6 +18,10 @@ enum ConnectionPairing {
                 server: server, token: token,
                 displayName: displayName, lastConnectedAt: Date()))
         PersistenceManager.shared.setActiveConnection(id: stored.id)
+        // Re-trigger the post-connect route refresh now that the record exists:
+        // the refresh fired by connect() may have run before the upsert above
+        // and found no stored record to persist the daemon-reported IPs into.
+        Task { await ConnectionManager.shared.refreshHostRoutes() }
         return stored
     }
 }

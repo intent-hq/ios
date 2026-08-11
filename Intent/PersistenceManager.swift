@@ -53,6 +53,27 @@ class PersistenceManager {
         }
     }
 
+    /// Replaces the stored host list of the connection with the given id,
+    /// preserving the record identity. Unlike `upsertConnection` (which matches
+    /// by host set + port and would treat a grown host set as a new pairing),
+    /// this never inserts or duplicates records. No-op when the id is unknown.
+    func updateConnectionHosts(id: UUID, hosts: [String]) {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            var connections = loadConnectionsLocked()
+            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+            let server = connections[index].server
+            connections[index].server = PairedServer(
+                hosts: hosts,
+                port: server.port,
+                name: server.name,
+                pairedAt: server.pairedAt,
+                certFingerprint: server.certFingerprint
+            )
+            saveConnectionsLocked(connections)
+        }
+    }
+
     func deleteConnection(id: UUID) {
         syncQueue.sync {
             migrateLegacyPairingIfNeeded()
