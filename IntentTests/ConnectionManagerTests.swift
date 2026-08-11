@@ -116,12 +116,28 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.defaultRequestTimeout == 10)
     }
 
+    /// Regression (PR #94 review): a daemon that NEVER responds must still
+    /// produce the timeout error. Previously the timeout child's throw left
+    /// the task group awaiting the suspended continuation child (which does
+    /// not observe cancellation), hanging the request forever.
+    @Test @MainActor func timeoutFiresWhenDaemonNeverResponds() async {
+        let manager = ConnectionManager.shared
+        let start = ContinuousClock.now
+        do {
+            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05, write: {})
+            Issue.record("Expected timeout error but got success")
+        } catch {
+            #expect(error.localizedDescription.contains("timed out"))
+        }
+        #expect(ContinuousClock.now - start < .seconds(5))
+        // Pending continuation is cleaned up by the timeout path itself
+        #expect(manager.pendingRequests[7003] == nil)
+    }
+
     /// Regression (#1954): the request timeout was hardcoded to 10s with no
     /// per-call override. A short per-call timeout must fire at the configured
-    /// bound — well before the 10s default would. The task group only returns
-    /// once both children finish, so a late response is dispatched to resume
-    /// the continuation child (mirrors a slow daemon reply landing after the
-    /// client-side timeout has already fired); the timeout error still wins.
+    /// bound — well before the 10s default would. A response landing after the
+    /// timeout has already fired is ignored; the timeout error wins.
     @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now

@@ -195,27 +195,29 @@ class ConnectionManager: ObservableObject {
     /// Registers a pending continuation for `id`, performs `write`, and races
     /// the response against `timeout`. Internal for test visibility (lets tests
     /// exercise the timeout race without a live socket).
+    ///
+    /// The continuation is resumed exactly once by whichever side wins:
+    /// whoever removes the entry from `pendingRequests` (all on MainActor)
+    /// owns the resume — a response via `handleTextMessage`, a disconnect via
+    /// `failAllPending`, or the timeout task below. This guarantees a
+    /// never-responding daemon still produces the timeout error instead of
+    /// suspending forever (a suspended CheckedContinuation does not observe
+    /// task cancellation).
     func awaitResponse(id: Int, timeout: TimeInterval,
                        write: @escaping @MainActor () -> Void) async throws -> Any {
-        return try await withThrowingTaskGroup(of: Any.self) { [weak self] group in
-            group.addTask { @MainActor in
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, Error>) in
-                    self?.pendingRequests[id] = continuation
-                    write()
-                }
+        let timeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            if let continuation = self?.pendingRequests.removeValue(forKey: id) {
+                continuation.resume(throwing: NSError(
+                    domain: "WebSocket", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]))
             }
-            group.addTask {
-                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-                throw NSError(domain: "WebSocket", code: -2,
-                              userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            // Clean up pending request on timeout
-            await MainActor.run {
-                self?.pendingRequests.removeValue(forKey: id)
-            }
-            return result
+        }
+        defer { timeoutTask.cancel() }
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, Error>) in
+            pendingRequests[id] = continuation
+            write()
         }
     }
     func removeEventHandler(id: UUID) {
