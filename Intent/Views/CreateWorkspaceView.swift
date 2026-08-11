@@ -119,9 +119,10 @@ struct CreateWorkspaceView: View {
                 List {
                     Section("Branches") {
                         if displayedBranches.isEmpty {
-                            Text(branchSearchText.isEmpty
+                            let trimmedQuery = branchSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Text(trimmedQuery.isEmpty
                                 ? "No branches found."
-                                : "No branches match \"\(branchSearchText)\".")
+                                : "No branches match \"\(trimmedQuery)\".")
                                 .font(.subheadline)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .listRowBackground(Theme.card(for: colorScheme))
@@ -202,10 +203,11 @@ struct CreateWorkspaceView: View {
     }
 
     /// No query: the loaded page with the default branch pinned first.
-    /// Active query: the latest server prefix-search results (or the loaded
-    /// page as an interim while the debounced search is in flight), narrowed
-    /// by a local prefix filter — the local filter keeps results correct
-    /// even if the daemon ignores `prefix`.
+    /// Active query: the latest server prefix-search results (or the pinned
+    /// loaded page as an interim while the debounced search is in flight),
+    /// narrowed by a local prefix filter — the local filter keeps results
+    /// correct even if the daemon ignores `prefix`, and the pinned interim
+    /// source keeps an out-of-page default branch matchable.
     static func displayedBranches(
         loaded: [String],
         defaultBranch: String?,
@@ -217,14 +219,19 @@ struct CreateWorkspaceView: View {
         guard !trimmed.isEmpty else {
             return orderedBranches(loaded, defaultBranch: defaultBranch)
         }
-        let source = completedQuery == trimmed ? searchResults : loaded
+        let source = completedQuery == trimmed
+            ? searchResults
+            : orderedBranches(loaded, defaultBranch: defaultBranch)
         return source.filter { $0.hasPrefix(trimmed) }
     }
 
     /// Pin the default branch to the top of the list (deduped), inserting it
-    /// when it falls outside the fetched page so it is always visible.
+    /// when it falls outside the fetched page so it is always visible. An
+    /// empty list stays empty: a successful fetch returning zero branches
+    /// means the repo genuinely has none (transport errors take the error
+    /// path), so no nonexistent ref is fabricated from repo metadata.
     static func orderedBranches(_ branches: [String], defaultBranch: String?) -> [String] {
-        guard let defaultBranch, !defaultBranch.isEmpty else { return branches }
+        guard let defaultBranch, !defaultBranch.isEmpty, !branches.isEmpty else { return branches }
         return [defaultBranch] + branches.filter { $0 != defaultBranch }
     }
 
@@ -436,6 +443,9 @@ struct CreateWorkspaceView: View {
             branchSearchResults = []
             return
         }
+        // Already answered (e.g. only surrounding whitespace changed) — skip
+        // the redundant round-trip.
+        guard query != completedBranchQuery else { return }
         branchSearchTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }

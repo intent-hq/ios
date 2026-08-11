@@ -295,6 +295,14 @@ struct CreateWorkspaceParamsTests {
         ) == ["main", "a", "b"])
     }
 
+    @Test func orderedBranchesLeavesEmptyListEmpty() {
+        // An empty repo can still report a default_branch in metadata; no
+        // nonexistent ref is fabricated for it.
+        #expect(CreateWorkspaceView.orderedBranches(
+            [], defaultBranch: "main"
+        ) == [])
+    }
+
     @Test func orderedBranchesWithoutDefaultLeavesOrderUnchanged() {
         #expect(CreateWorkspaceView.orderedBranches(
             ["b", "a"], defaultBranch: nil
@@ -328,6 +336,16 @@ struct CreateWorkspaceParamsTests {
             loaded: ["main", "dev", "develop"], defaultBranch: "main",
             query: "dev", searchResults: ["feature/x"], completedQuery: "feature/"
         ) == ["dev", "develop"])
+    }
+
+    @Test func displayedBranchesInterimIncludesOutOfPageDefault() {
+        // The interim source is the pinned ordering, so a prefix of an
+        // out-of-page default branch matches while the search is in flight
+        // (and if the server search fails).
+        #expect(CreateWorkspaceView.displayedBranches(
+            loaded: ["a", "b"], defaultBranch: "main",
+            query: "ma", searchResults: [], completedQuery: nil
+        ) == ["main"])
     }
 
     @Test func displayedBranchesLocallyFiltersServerResults() {
