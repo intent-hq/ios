@@ -5,9 +5,8 @@ import Combine
 ///
 /// Reads via `repo.list`, `github.authStatus`, `github.repos.list`,
 /// `github.repos.search` and `github.branches.list` over the shared JSON-RPC
-/// connection. Branch list reads follow the uniform pagination contract
-/// (`limit` + opaque `nextToken`) and accumulate pages up to a hard cap;
-/// repo reads are single-page so the picker renders fast.
+/// connection. All reads are single-page so the pickers render after one
+/// round-trip; server-side search covers anything beyond the first page.
 @MainActor
 class GitHubRepoStore: ObservableObject {
     @Published var isConfigured = false
@@ -17,13 +16,14 @@ class GitHubRepoStore: ObservableObject {
     @Published var isLoading = false
     @Published var lastError: String?
 
-    /// Page size for paginated reads (§5.27 default 50, max 200).
+    /// Page size for `github.repos.search` (§5.27 default 50, max 200).
     static let pageLimit = 100
-    /// Hard cap on accumulated items so pagination cannot run away.
-    static let maxAccumulated = 500
     /// Single-page cap for `github.repos.list` — the picker shows recents
     /// first, so only the first page of GitHub repos is blended in below.
     static let ownReposLimit = 50
+    /// Single-page cap for `github.branches.list` — the branch picker pins
+    /// the default branch on top and prefix search covers the rest.
+    static let branchesLimit = 50
 
     private let connectionManager: ConnectionManagerRouting
 
@@ -132,16 +132,23 @@ class GitHubRepoStore: ObservableObject {
 
     // MARK: - Branches
 
-    /// `github.branches.list` — remote branch names, accumulated across
-    /// `nextToken` pages up to `maxAccumulated`. Throws on transport failure
-    /// so callers can distinguish "no branches" from an error.
-    func fetchRemoteBranches(owner: String, repo: String) async throws -> [String] {
-        try await fetchAllPages(
-            method: "github.branches.list",
-            params: ["owner": owner, "repo": repo],
-            itemsKey: "branches",
-            parse: { $0 }
-        )
+    /// `github.branches.list` — a single page (`branchesLimit`) of remote
+    /// branch names, optionally narrowed server-side by `prefix` (omitted
+    /// when nil/blank). Deliberately not paginated: the branch picker pins
+    /// the default branch on top and prefix search covers the rest. Throws
+    /// on transport failure so callers can distinguish "no branches" from
+    /// an error.
+    func fetchRemoteBranches(owner: String, repo: String, prefix: String? = nil) async throws -> [String] {
+        var params: [String: Any] = [
+            "owner": owner,
+            "repo": repo,
+            "limit": Self.branchesLimit
+        ]
+        if let prefix, !prefix.isEmpty {
+            params["prefix"] = prefix
+        }
+        let result = try await connectionManager.request("github.branches.list", params: params)
+        return (result as? [String: Any])?["branches"] as? [String] ?? []
     }
 
     // MARK: - Query rewrite
@@ -162,32 +169,5 @@ class GitHubRepoStore: ObservableObject {
         case (true, false): return name
         case (true, true): return ""
         }
-    }
-
-    // MARK: - Pagination
-
-    /// Accumulate a paginated `github.*` list read: follows the opaque
-    /// `nextToken` cursor until it is absent/null or `maxAccumulated` is hit.
-    private func fetchAllPages<Item, Raw>(
-        method: String,
-        params: [String: Any],
-        itemsKey: String,
-        parse: (Raw) -> Item?
-    ) async throws -> [Item] {
-        var accumulated: [Item] = []
-        var nextToken: String?
-        repeat {
-            var pageParams = params
-            pageParams["limit"] = Self.pageLimit
-            if let token = nextToken {
-                pageParams["nextToken"] = token
-            }
-            let result = try await connectionManager.request(method, params: pageParams)
-            let dict = result as? [String: Any] ?? [:]
-            let items = dict[itemsKey] as? [Raw] ?? []
-            accumulated.append(contentsOf: items.compactMap(parse))
-            nextToken = dict["nextToken"] as? String
-        } while nextToken != nil && accumulated.count < Self.maxAccumulated
-        return accumulated
     }
 }
