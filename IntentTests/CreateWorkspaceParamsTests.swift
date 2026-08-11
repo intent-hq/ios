@@ -71,6 +71,13 @@ struct CreateWorkspaceParamsTests {
         #expect(params["clonePath"] == nil)
     }
 
+    @Test func createRequestTimeoutMatchesCloudlandsFe() {
+        // 120s mirrors cloudlands-fe's CREATE_TIMEOUT_MS (#1954): the daemon's
+        // ~70s NPX budget plus first-turn overhead exceeds the flat 10s default.
+        #expect(CreateWorkspaceView.createRequestTimeout == 120)
+        #expect(CreateWorkspaceView.createRequestTimeout > ConnectionManager.defaultRequestTimeout)
+    }
+
     @Test func baseRefSentAsPlainBranchName() {
         // Remote branch names from github.branches.list are plain names —
         // no remote-prefix normalization is applied (or expected).

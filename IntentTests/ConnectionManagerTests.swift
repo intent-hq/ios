@@ -110,6 +110,78 @@ struct ConnectionManagerTests {
         }
     }
 
+    // MARK: - Request timeout (per-call override)
+
+    @Test @MainActor func defaultRequestTimeoutIsTenSeconds() {
+        #expect(ConnectionManager.defaultRequestTimeout == 10)
+    }
+
+    /// Regression (PR #94 review): a daemon that NEVER responds must still
+    /// produce the timeout error. Previously the timeout child's throw left
+    /// the task group awaiting the suspended continuation child (which does
+    /// not observe cancellation), hanging the request forever.
+    @Test @MainActor func timeoutFiresWhenDaemonNeverResponds() async {
+        let manager = ConnectionManager.shared
+        let start = ContinuousClock.now
+        do {
+            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05, write: {})
+            Issue.record("Expected timeout error but got success")
+        } catch {
+            #expect(error.localizedDescription.contains("timed out"))
+        }
+        #expect(ContinuousClock.now - start < .seconds(5))
+        // Pending continuation is cleaned up by the timeout path itself
+        #expect(manager.pendingRequests[7003] == nil)
+    }
+
+    /// Regression (#1954): the request timeout was hardcoded to 10s with no
+    /// per-call override. A short per-call timeout must fire at the configured
+    /// bound — well before the 10s default would. A response landing after the
+    /// timeout has already fired is ignored; the timeout error wins.
+    @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async {
+        let manager = ConnectionManager.shared
+        let start = ContinuousClock.now
+        let pending = Task { @MainActor in
+            try await manager.awaitResponse(id: 7001, timeout: 0.05, write: {})
+        }
+        await waitForPendingRequest(manager, id: 7001)
+
+        try? await Task.sleep(nanoseconds: 200_000_000) // let the 0.05s timeout fire
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
+        """)
+
+        do {
+            _ = try await pending.value
+            Issue.record("Expected timeout error but got success")
+        } catch {
+            #expect(error.localizedDescription.contains("timed out"))
+        }
+        #expect(ContinuousClock.now - start < .seconds(5))
+        // Pending continuation is cleaned up
+        #expect(manager.pendingRequests[7001] == nil)
+    }
+
+    /// A response arriving after a delay but within the per-call override must
+    /// resolve the request instead of timing out (the daemon's structured
+    /// result wins over the client-side transport timeout).
+    @Test @MainActor func perCallTimeoutOverrideHonored() async throws {
+        let manager = ConnectionManager.shared
+        let pending = Task { @MainActor in
+            try await manager.awaitResponse(id: 7002, timeout: 5.0, write: {})
+        }
+        await waitForPendingRequest(manager, id: 7002)
+
+        try? await Task.sleep(nanoseconds: 100_000_000) // outlast a hypothetical short bound
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","id":7002,"result":{"ok":true}}
+        """)
+
+        let result = try await pending.value
+        #expect(result is [String: Any])
+        #expect(manager.pendingRequests[7002] == nil)
+    }
+
     /// Deterministically wait (bounded) until the continuation-registration Task
     /// has stored its continuation, instead of a fixed sleep (flake-prone under
     /// CI load). The registration Task inherits the main actor, so yielding here
