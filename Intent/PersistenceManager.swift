@@ -24,7 +24,14 @@ class PersistenceManager {
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when one with the same host set + port already exists. Returns the stored value.
+    /// id) when one at the same port shares at least one host. Returns the stored value.
+    ///
+    /// Overlap (not set equality) is the match key because the post-connect route
+    /// refresh grows stored host sets over time: a re-pair of the same daemon via a
+    /// single manually entered host (or a QR payload with a different host list) must
+    /// still update the grown record in place instead of inserting a duplicate. On a
+    /// match, the existing record's hosts are kept (in order) and new hosts appended,
+    /// so previously known routes are never dropped by a narrower re-pair.
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
         syncQueue.sync {
@@ -32,13 +39,21 @@ class PersistenceManager {
             var connections = loadConnectionsLocked()
             let stored: StoredConnection
             if let index = connections.firstIndex(where: {
-                Set($0.server.hosts) == Set(connection.server.hosts)
-                    && $0.server.port == connection.server.port
+                $0.server.port == connection.server.port
+                    && !Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
             }) {
                 let existing = connections[index]
+                let server = connection.server
                 stored = StoredConnection(
                     id: existing.id,
-                    server: connection.server,
+                    server: PairedServer(
+                        hosts: Self.mergeHostLists(
+                            existing: existing.server.hosts, incoming: server.hosts),
+                        port: server.port,
+                        name: server.name,
+                        pairedAt: server.pairedAt,
+                        certFingerprint: server.certFingerprint
+                    ),
                     token: connection.token,
                     displayName: connection.displayName,
                     lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt
@@ -51,6 +66,18 @@ class PersistenceManager {
             saveConnectionsLocked(connections)
             return stored
         }
+    }
+
+    /// Existing hosts keep their order and are never dropped; incoming hosts not
+    /// already present are appended, deduped.
+    static func mergeHostLists(existing: [String], incoming: [String]) -> [String] {
+        var merged = existing
+        var seen = Set(existing)
+        for host in incoming where !seen.contains(host) {
+            merged.append(host)
+            seen.insert(host)
+        }
+        return merged
     }
 
     /// Replaces the stored host list of the connection with the given id,

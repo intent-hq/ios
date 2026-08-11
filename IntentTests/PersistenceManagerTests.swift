@@ -320,6 +320,46 @@ struct ConnectionPersistenceTests {
         #expect(pm.loadConnections().count == 2)
     }
 
+    @Test func upsertOverlappingHostSetUpdatesInPlaceAndMergesHosts() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // Simulates a re-pair after the route refresh grew the stored host set:
+        // upsert [h], grow to [h, ip] via updateConnectionHosts, then re-pair
+        // with [h] again — must update the grown record, not insert a duplicate.
+        let original = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old"))
+        pm.updateConnectionHosts(id: original.id, hosts: ["192.168.1.10", "10.0.0.5"])
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-new"))
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        // Previously known routes are never dropped by a narrower re-pair.
+        #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
+    }
+
+    @Test func upsertDisjointHostSetSamePortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    @Test func mergeHostListsKeepsExistingFirstAndAppendsNew() {
+        #expect(PersistenceManager.mergeHostLists(
+            existing: ["nat.example.com", "192.168.1.10"],
+            incoming: ["192.168.1.10", "10.0.0.5"])
+            == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
+        #expect(PersistenceManager.mergeHostLists(existing: [], incoming: ["a"]) == ["a"])
+        #expect(PersistenceManager.mergeHostLists(existing: ["a"], incoming: []) == ["a"])
+    }
+
     // MARK: - updateConnectionHosts
 
     @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {

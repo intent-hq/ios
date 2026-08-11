@@ -370,10 +370,18 @@ class ConnectionManager: ObservableObject {
         // record and re-triggers this refresh. Matching by token + port alone
         // would be ambiguous: the same daemon can be saved as separate records
         // with different host sets at the same port.
+        //
+        // Merge against the STORED hosts, not just the in-memory merge: this
+        // session may have connected with a narrower host list than the
+        // record holds (e.g. a single-host manual re-pair while the record
+        // also has a NAT hostname), and persisting the in-memory merge alone
+        // would drop those hosts.
         if let stored = PersistenceManager.shared.activeConnection(),
-            stored.token == token, stored.server.port == port,
-            stored.server.hosts != merged {
-            PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: merged)
+            stored.token == token, stored.server.port == port {
+            let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
+            if stored.server.hosts != persistedHosts {
+                PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: persistedHosts)
+            }
         }
     }
 

@@ -837,6 +837,20 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.mergeHosts(existing: ["a", "b"], reported: []) == ["a", "b"])
     }
 
+    @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
+        // Reviewer scenario: the stored record holds a NAT hostname the current
+        // session didn't connect with. The persisted list is the stored hosts
+        // merged with the session's merge result — the NAT hostname survives.
+        let storedHosts = ["nat.example.com", "192.168.1.10"]
+        let sessionMerged = ConnectionManager.mergeHosts(
+            existing: ["192.168.1.10"],
+            reported: ["192.168.1.10", "10.0.0.5"])
+        #expect(sessionMerged == ["192.168.1.10", "10.0.0.5"])
+
+        let persisted = ConnectionManager.mergeHosts(existing: storedHosts, reported: sessionMerged)
+        #expect(persisted == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
+    }
+
     // MARK: - localIps parsing (system.status)
 
     @Test @MainActor func localIpsParsedFromSystemStatusResult() {
