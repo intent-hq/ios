@@ -115,6 +115,16 @@ struct GitHubRepoStoreTests {
         #expect(store.recentRepos == [existing])
     }
 
+    @Test func fetchRecentReposMalformedResponseLeavesRecentsUnchanged() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        store.recentRepos = [existing]
+        fake.responseMap["repo.list"] = ["unexpected": "shape"]
+        await store.fetchRecentRepos()
+        #expect(store.recentRepos == [existing])
+    }
+
     // MARK: - fetchOwnRepos (single page)
 
     @Test func fetchOwnReposIssuesExactlyOneRequestWithLimit() async {

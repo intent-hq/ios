@@ -52,6 +52,20 @@ struct GitHubRepoSuggestionsTests {
         #expect(sections.others == [repo("intent-hq", "ios")])
     }
 
+    @Test func mergedDropsDuplicatesWithinRecents() {
+        // The registry is keyed by path, so two local clones of the same
+        // repo yield two entries with the same owner/name.
+        let recents = [repo("intent-hq", "intentd"), repo("Intent-HQ", "IntentD")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: recents,
+            ownRepos: [],
+            searchResults: [],
+            searchQuery: nil,
+            currentQuery: ""
+        )
+        #expect(sections.recents == [repo("intent-hq", "intentd")])
+    }
+
     @Test func mergedPrefixFiltersBothRecentsAndOwnRepos() {
         let recents = [repo("intent-hq", "intentd"), repo("panghy", "tools")]
         let own = [repo("intent-hq", "ios"), repo("other", "unrelated")]

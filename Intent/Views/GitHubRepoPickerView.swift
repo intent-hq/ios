@@ -6,7 +6,9 @@ import SwiftUI
 /// below, both prefix-filtered client-side by the typed text, followed by
 /// deduped debounced global search results. When GitHub is not connected
 /// (`github.authStatus.isConfigured == false`) the screen shows
-/// desktop-setup guidance instead — there is no fallback flow.
+/// desktop-setup guidance instead — there is no fallback flow, so recents
+/// are deliberately auth-gated at render time too: picking a repo needs
+/// GitHub for branch listing and workspace creation either way.
 struct GitHubRepoPickerView: View {
     @ObservedObject var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?

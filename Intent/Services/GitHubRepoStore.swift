@@ -55,11 +55,12 @@ class GitHubRepoStore: ObservableObject {
     /// §5.11). Entries without an `owner` are skipped (they cannot be
     /// addressed as GitHub repos); the daemon's MRU order is preserved.
     /// No GitHub round-trip, so recents render before `github.repos.list`
-    /// answers. Best-effort: errors leave `recentRepos` unchanged.
+    /// answers. Best-effort: errors and malformed responses leave
+    /// `recentRepos` unchanged.
     func fetchRecentRepos() async {
         do {
             let result = try await connectionManager.request("repo.list")
-            let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
+            guard let items = (result as? [String: Any])?["repos"] as? [[String: Any]] else { return }
             recentRepos = items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
             print("[GitHubRepoStore] repo.list failed: \(error)")
