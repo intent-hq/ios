@@ -334,9 +334,10 @@ class ConnectionManager: ObservableObject {
     /// Shared post-connect hook: queries `system.status` for the daemon's
     /// `localIps` and merges them into the known host routes — both the
     /// in-memory list used by reconnect racing and the persisted
-    /// `StoredConnection` record (matched by token + port, updated by record
-    /// id; `upsertConnection` matches by host set + port and would duplicate
-    /// the record when the host set grows).
+    /// `StoredConnection` record (the active connection, verified against the
+    /// live token + port; updated by record id since `upsertConnection`
+    /// matches by host set + port and would duplicate the record when the
+    /// host set grows).
     ///
     /// Failures are non-fatal: older daemons without `localIps` and transport
     /// errors are skipped silently and the connection proceeds unchanged.
@@ -362,11 +363,15 @@ class ConnectionManager: ObservableObject {
             hosts = merged
         }
 
-        // Persist to the stored record for this pairing, if one exists yet
-        // (during initial pairing the record is created by
-        // ConnectionPairing.finalize, which re-triggers this refresh).
-        if let stored = PersistenceManager.shared.loadConnections()
-            .first(where: { $0.token == token && $0.server.port == port }),
+        // Persist to the record we actually connected through: the active
+        // connection. Token + port must match the live connection — during
+        // initial pairing the active record is still the previous one (or
+        // absent) until ConnectionPairing.finalize saves + activates the new
+        // record and re-triggers this refresh. Matching by token + port alone
+        // would be ambiguous: the same daemon can be saved as separate records
+        // with different host sets at the same port.
+        if let stored = PersistenceManager.shared.activeConnection(),
+            stored.token == token, stored.server.port == port,
             stored.server.hosts != merged {
             PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: merged)
         }

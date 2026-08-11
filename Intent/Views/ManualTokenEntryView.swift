@@ -145,6 +145,12 @@ struct ManualTokenEntryView: View {
         connectTask = Task {
             let fingerprint = await probeCertFingerprint(host: host, port: portNum)
 
+            // The user may have hit Cancel while the probe was in flight: the
+            // cancelled URLSession request surfaces here as a nil fingerprint,
+            // and processing it would show a spurious certificate error (or
+            // clobber the state of a newer attempt). Drop the result instead.
+            guard !Task.isCancelled else { return }
+
             switch ManualTokenEntryView.probeOutcome(forFingerprint: fingerprint) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
