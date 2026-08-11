@@ -1,10 +1,14 @@
 import SwiftUI
 
-/// Searchable GitHub repo picker (Create Workspace Step 1), mirroring the
-/// desktop RepoSelector: the user's own repos filtered client-side by the
-/// typed text, followed by deduped debounced global search results. When
-/// GitHub is not connected (`github.authStatus.isConfigured == false`) the
-/// screen shows desktop-setup guidance instead — there is no fallback flow.
+/// Searchable GitHub repo picker (Create Workspace Step 1): recent repos
+/// from the daemon's known-repo registry render immediately on top (no
+/// GitHub round-trip), the first page of the user's GitHub repos blends in
+/// below, both prefix-filtered client-side by the typed text, followed by
+/// deduped debounced global search results. When GitHub is not connected
+/// (`github.authStatus.isConfigured == false`) the screen shows
+/// desktop-setup guidance instead — there is no fallback flow, so recents
+/// are deliberately auth-gated at render time too: picking a repo needs
+/// GitHub for branch listing and workspace creation either way.
 struct GitHubRepoPickerView: View {
     @ObservedObject var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
@@ -20,8 +24,9 @@ struct GitHubRepoPickerView: View {
     /// not-connected guidance doesn't flash while the status is unknown.
     @State private var authChecked = false
 
-    private var suggestions: [GitHubRepo] {
+    private var suggestions: GitHubRepoSuggestions.Sections {
         GitHubRepoSuggestions.merged(
+            recentRepos: store.recentRepos,
             ownRepos: store.ownRepos,
             searchResults: store.searchResults,
             searchQuery: completedSearchQuery,
@@ -43,11 +48,16 @@ struct GitHubRepoPickerView: View {
             }
         }
         .task {
+            // Recents come from the daemon registry (no GitHub round-trip),
+            // so fetch them concurrently with the auth-gated GitHub list —
+            // they render as soon as they arrive.
+            async let recents: Void = store.fetchRecentRepos()
             let configured = await store.fetchAuthStatus()
             authChecked = true
             if configured {
                 await store.fetchOwnRepos()
             }
+            await recents
         }
         .onChange(of: searchText) { _, newValue in
             scheduleSearch(for: newValue)
@@ -65,31 +75,19 @@ struct GitHubRepoPickerView: View {
                 emptyState
             } else {
                 List {
-                    ForEach(suggestions) { repo in
-                        Button {
-                            selectedRepo = repo
-                        } label: {
-                            HStack(spacing: 12) {
-                                RepoOwnerAvatarView(owner: repo.owner)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(repo.name)
-                                        .font(.headline)
-                                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                                    Text(repo.fullName)
-                                        .font(.subheadline)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                if selectedRepo?.id == repo.id {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(Theme.primary(for: colorScheme))
-                                        .fontWeight(.semibold)
-                                }
+                    if !suggestions.recents.isEmpty {
+                        Section("Recent") {
+                            ForEach(suggestions.recents) { repo in
+                                repoRow(repo)
                             }
-                            .padding(.vertical, 4)
                         }
-                        .listRowBackground(Theme.card(for: colorScheme))
+                    }
+                    if !suggestions.others.isEmpty {
+                        Section {
+                            ForEach(suggestions.others) { repo in
+                                repoRow(repo)
+                            }
+                        }
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -101,6 +99,33 @@ struct GitHubRepoPickerView: View {
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search GitHub repositories"
         )
+    }
+
+    private func repoRow(_ repo: GitHubRepo) -> some View {
+        Button {
+            selectedRepo = repo
+        } label: {
+            HStack(spacing: 12) {
+                RepoOwnerAvatarView(owner: repo.owner)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(repo.name)
+                        .font(.headline)
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Text(repo.fullName)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .lineLimit(1)
+                }
+                Spacer()
+                if selectedRepo?.id == repo.id {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.primary(for: colorScheme))
+                        .fontWeight(.semibold)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .listRowBackground(Theme.card(for: colorScheme))
     }
 
     private var emptyState: some View {
