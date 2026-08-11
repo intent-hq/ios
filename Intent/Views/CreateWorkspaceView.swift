@@ -433,6 +433,13 @@ struct CreateWorkspaceView: View {
         selectedModel = outcome.selectedModel
     }
 
+    /// Transport timeout for `workspace.create`, mirroring cloudlands-fe's
+    /// CREATE_TIMEOUT_MS (120_000 ms): cold Claude Code ACP session opens run
+    /// under the daemon's ~70s NPX budget plus first-turn overhead, which
+    /// exceeds the flat 10s request default. The daemon's structured result
+    /// (success or error) must win over a client-side transport timeout.
+    static let createRequestTimeout: TimeInterval = 120
+
     private func createWorkspace() {
         guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
@@ -453,7 +460,8 @@ struct CreateWorkspaceView: View {
                     message: messageText
                 )
 
-                let result = try await ConnectionManager.shared.request("workspace.create", params: params)
+                let result = try await ConnectionManager.shared.request(
+                    "workspace.create", params: params, timeout: Self.createRequestTimeout)
 
                 if let dict = result as? [String: Any],
                    let wsDict = dict["workspace"] as? [String: Any],

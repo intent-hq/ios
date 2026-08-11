@@ -55,7 +55,8 @@ class FakeConnectionManager: ConnectionManagerRouting {
         continuation.resume(returning: response)
     }
 
-    func request(_ method: String, params: [String: Any] = [:]) async throws -> Any {
+    func request(_ method: String, params: [String: Any] = [:],
+                 timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
         requestLog.append((method, params, Date()))
 
         if pendingMethods.contains(method) {

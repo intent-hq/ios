@@ -18,7 +18,7 @@ enum ConnectionState: Equatable {
 protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
-    func request(_ method: String, params: [String: Any]) async throws -> Any
+    func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void)
@@ -28,7 +28,12 @@ protocol ConnectionManagerRouting: AnyObject {
 extension ConnectionManagerRouting {
     /// Convenience for calling request without params. Preserves existing call sites.
     func request(_ method: String) async throws -> Any {
-        return try await request(method, params: [:])
+        return try await request(method, params: [:], timeout: ConnectionManager.defaultRequestTimeout)
+    }
+
+    /// Convenience for calling request without a timeout override. Preserves existing call sites.
+    func request(_ method: String, params: [String: Any]) async throws -> Any {
+        return try await request(method, params: params, timeout: ConnectionManager.defaultRequestTimeout)
     }
 }
 
@@ -149,7 +154,20 @@ class ConnectionManager: ObservableObject {
 
     // MARK: - Public API
 
-    func request(_ method: String, params: [String: Any] = [:]) async throws -> Any {
+    /// Default per-request RPC timeout. Individual calls may pass a longer
+    /// `timeout` to `request(_:params:timeout:)` when the daemon operation is
+    /// known to outlast this bound (e.g. `workspace.create`).
+    static let defaultRequestTimeout: TimeInterval = 10
+
+    /// Sends a JSON-RPC request and awaits its response.
+    ///
+    /// - Parameter timeout: Per-call timeout override in seconds (defaults to
+    ///   `defaultRequestTimeout`). Long-running daemon operations must pass a
+    ///   bound above the daemon's own budget so the daemon's structured result
+    ///   (success or error) wins over a client-side transport timeout —
+    ///   mirrors the per-call `timeoutMs` override in cloudlands-fe.
+    func request(_ method: String, params: [String: Any] = [:],
+                 timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
         guard socket != nil else {
             throw NSError(domain: "WebSocket", code: -4,
                           userInfo: [NSLocalizedDescriptionKey: "Not connected"])
@@ -165,19 +183,29 @@ class ConnectionManager: ObservableObject {
         let data = try JSONSerialization.data(withJSONObject: rpcDict)
         let str = String(data: data, encoding: .utf8)!
 
+        return try await awaitResponse(id: id, timeout: timeout) { [weak self] in
+            print("[ConnectionManager] Writing request id=\(id) method=\(method), socket=\(self?.socket != nil ? "exists" : "nil")")
+            self?.socket?.write(string: str, completion: {
+                print("[ConnectionManager] Write completed for request id=\(id) method=\(method)")
+            })
+            print("[ConnectionManager] Queued write for request id=\(id) method=\(method)")
+        }
+    }
+
+    /// Registers a pending continuation for `id`, performs `write`, and races
+    /// the response against `timeout`. Internal for test visibility (lets tests
+    /// exercise the timeout race without a live socket).
+    func awaitResponse(id: Int, timeout: TimeInterval,
+                       write: @escaping @MainActor () -> Void) async throws -> Any {
         return try await withThrowingTaskGroup(of: Any.self) { [weak self] group in
             group.addTask { @MainActor in
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Any, Error>) in
                     self?.pendingRequests[id] = continuation
-                    print("[ConnectionManager] Writing request id=\(id) method=\(method), socket=\(self?.socket != nil ? "exists" : "nil")")
-                    self?.socket?.write(string: str, completion: {
-                        print("[ConnectionManager] Write completed for request id=\(id) method=\(method)")
-                    })
-                    print("[ConnectionManager] Queued write for request id=\(id) method=\(method)")
+                    write()
                 }
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
                 throw NSError(domain: "WebSocket", code: -2,
                               userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
             }
