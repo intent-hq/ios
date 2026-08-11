@@ -8,103 +8,157 @@ struct GitHubRepoSuggestionsTests {
         GitHubRepo(owner: owner, name: name, htmlUrl: nil, defaultBranch: nil, updatedAt: nil)
     }
 
-    // MARK: - Own-repo filtering
+    // MARK: - Prefix filtering
 
-    @Test func emptyQueryKeepsAllOwnReposInOrder() {
-        let own = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "") == own)
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "   ") == own)
+    @Test func emptyQueryKeepsAllReposInOrder() {
+        let repos = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "") == repos)
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "   ") == repos)
     }
 
-    @Test func filtersOwnReposCaseInsensitivelyAcrossOwnerSlashName() {
-        let own = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "IOS") == [repo("intent-hq", "ios")])
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "hq/int") == [repo("intent-hq", "intentd")])
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "PANGHY") == [repo("panghy", "tools")])
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "nomatch").isEmpty)
+    @Test func prefixFiltersCaseInsensitivelyOnNameAndFullName() {
+        let repos = [repo("intent-hq", "intentd"), repo("intent-hq", "ios"), repo("panghy", "tools")]
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "IOS") == [repo("intent-hq", "ios")])
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "intent")
+            == [repo("intent-hq", "intentd"), repo("intent-hq", "ios")])
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "PANGHY/") == [repo("panghy", "tools")])
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "nomatch").isEmpty)
+    }
+
+    @Test func prefixFilterDoesNotMatchMidStringSubstrings() {
+        let repos = [repo("panghy", "tools")]
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "ools").isEmpty)
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "anghy").isEmpty)
     }
 
     @Test func trimsQueryBeforeFiltering() {
-        let own = [repo("intent-hq", "intentd")]
-        #expect(GitHubRepoSuggestions.filteredOwnRepos(own, query: "  intentd  ") == own)
+        let repos = [repo("intent-hq", "intentd")]
+        #expect(GitHubRepoSuggestions.prefixFiltered(repos, query: "  intentd  ") == repos)
     }
 
-    // MARK: - Search-result dedup
+    // MARK: - Merged sections
 
-    @Test func dropsSearchResultsAlreadyOwned() {
-        let own = [repo("intent-hq", "intentd")]
-        let search = [repo("Intent-HQ", "IntentD"), repo("other", "intentd")]
-        let deduped = GitHubRepoSuggestions.dedupedSearchResults(search, ownRepos: own)
-        #expect(deduped == [repo("other", "intentd")])
+    @Test func mergedPinsRecentsAboveOwnReposDeduped() {
+        let recents = [repo("intent-hq", "monorepo"), repo("intent-hq", "intentd")]
+        let own = [repo("Intent-HQ", "IntentD"), repo("intent-hq", "ios")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: recents,
+            ownRepos: own,
+            searchResults: [],
+            searchQuery: nil,
+            currentQuery: ""
+        )
+        #expect(sections.recents == recents)
+        #expect(sections.others == [repo("intent-hq", "ios")])
     }
 
-    @Test func dropsDuplicatesWithinSearchResultsPreservingOrder() {
-        let search = [repo("a", "x"), repo("b", "y"), repo("A", "X"), repo("c", "z")]
-        let deduped = GitHubRepoSuggestions.dedupedSearchResults(search, ownRepos: [])
-        #expect(deduped == [repo("a", "x"), repo("b", "y"), repo("c", "z")])
+    @Test func mergedPrefixFiltersBothRecentsAndOwnRepos() {
+        let recents = [repo("intent-hq", "intentd"), repo("panghy", "tools")]
+        let own = [repo("intent-hq", "ios"), repo("other", "unrelated")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: recents,
+            ownRepos: own,
+            searchResults: [],
+            searchQuery: nil,
+            currentQuery: "intent"
+        )
+        #expect(sections.recents == [repo("intent-hq", "intentd")])
+        #expect(sections.others == [repo("intent-hq", "ios")])
     }
 
-    // MARK: - Merged ordering
-
-    @Test func mergedListsFilteredOwnReposBeforeSearchResults() {
-        let own = [repo("intent-hq", "intentd"), repo("intent-hq", "ios")]
-        let search = [repo("other", "intentd"), repo("intent-hq", "intentd")]
-        let merged = GitHubRepoSuggestions.merged(
+    @Test func mergedListsSearchResultsAfterOwnReposDedupedAgainstBoth() {
+        let recents = [repo("intent-hq", "intentd")]
+        let own = [repo("intent-hq", "ios")]
+        let search = [repo("Intent-HQ", "IntentD"), repo("intent-hq", "IOS"), repo("other", "intentd")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: recents,
             ownRepos: own,
             searchResults: search,
             searchQuery: "intent",
             currentQuery: "intent"
         )
-        #expect(merged == [
-            repo("intent-hq", "intentd"),
-            repo("intent-hq", "ios"),
-            repo("other", "intentd")
-        ])
+        #expect(sections.recents == [repo("intent-hq", "intentd")])
+        #expect(sections.others == [repo("intent-hq", "ios"), repo("other", "intentd")])
+    }
+
+    @Test func dropsDuplicatesWithinSearchResultsPreservingOrder() {
+        let search = [repo("a", "xx"), repo("b", "yy"), repo("A", "XX"), repo("c", "zz")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: [],
+            ownRepos: [],
+            searchResults: search,
+            searchQuery: "xx",
+            currentQuery: "xx"
+        )
+        #expect(sections.others == [repo("a", "xx"), repo("b", "yy"), repo("c", "zz")])
+    }
+
+    @Test func searchSurfacesOwnRepoHiddenByPrefixFilter() {
+        // Dedupe runs against the *displayed* rows, so a repo the local
+        // prefix filter hides can still come back via server-side search.
+        let own = [repo("intent-hq", "intentd")]
+        let search = [repo("intent-hq", "intentd")]
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: [],
+            ownRepos: own,
+            searchResults: search,
+            searchQuery: "hq",
+            currentQuery: "hq"
+        )
+        #expect(sections.recents.isEmpty)
+        #expect(sections.others == [repo("intent-hq", "intentd")])
     }
 
     @Test func excludesStaleSearchResults() {
-        let own = [repo("intent-hq", "intentd")]
-        let search = [repo("other", "intentd")]
-        let merged = GitHubRepoSuggestions.merged(
-            ownRepos: own,
-            searchResults: search,
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: [],
+            ownRepos: [repo("intent-hq", "intentd")],
+            searchResults: [repo("other", "intentd")],
             searchQuery: "old-query",
             currentQuery: "intent"
         )
-        #expect(merged == [repo("intent-hq", "intentd")])
+        #expect(sections.others == [repo("intent-hq", "intentd")])
     }
 
     @Test func excludesSearchResultsWhenNoSearchCompleted() {
-        let search = [repo("other", "intentd")]
-        let merged = GitHubRepoSuggestions.merged(
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: [],
             ownRepos: [repo("intent-hq", "intentd")],
-            searchResults: search,
+            searchResults: [repo("other", "intentd")],
             searchQuery: nil,
             currentQuery: "intent"
         )
-        #expect(merged == [repo("intent-hq", "intentd")])
+        #expect(sections.others == [repo("intent-hq", "intentd")])
     }
 
-    @Test func emptyQueryShowsOnlyOwnRepos() {
+    @Test func emptyQueryShowsOnlyRecentsAndOwnRepos() {
+        let recents = [repo("intent-hq", "monorepo")]
         let own = [repo("intent-hq", "intentd"), repo("intent-hq", "ios")]
-        let merged = GitHubRepoSuggestions.merged(
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: recents,
             ownRepos: own,
             searchResults: [repo("other", "intentd")],
             searchQuery: "",
             currentQuery: ""
         )
-        #expect(merged == own)
+        #expect(sections.recents == recents)
+        #expect(sections.others == own)
     }
 
     @Test func trimsCurrentQueryWhenMatchingSearchQuery() {
-        let own = [repo("intent-hq", "intentd")]
-        let search = [repo("other", "intentd")]
-        let merged = GitHubRepoSuggestions.merged(
-            ownRepos: own,
-            searchResults: search,
+        let sections = GitHubRepoSuggestions.merged(
+            recentRepos: [],
+            ownRepos: [repo("intent-hq", "intentd")],
+            searchResults: [repo("other", "intentd")],
             searchQuery: "intentd",
             currentQuery: "  intentd  "
         )
-        #expect(merged == [repo("intent-hq", "intentd"), repo("other", "intentd")])
+        #expect(sections.others == [repo("intent-hq", "intentd"), repo("other", "intentd")])
+    }
+
+    @Test func sectionsIsEmptyOnlyWhenBothSectionsAreEmpty() {
+        #expect(GitHubRepoSuggestions.Sections().isEmpty)
+        #expect(!GitHubRepoSuggestions.Sections(recents: [repo("a", "b")], others: []).isEmpty)
+        #expect(!GitHubRepoSuggestions.Sections(recents: [], others: [repo("a", "b")]).isEmpty)
     }
 }

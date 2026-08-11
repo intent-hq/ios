@@ -3,13 +3,15 @@ import Combine
 
 /// GitHub repo data layer for the repo picker (PROTOCOL §5.27).
 ///
-/// Reads via `github.authStatus`, `github.repos.list`, `github.repos.search`
-/// and `github.branches.list` over the shared JSON-RPC connection. List reads
-/// follow the uniform pagination contract (`limit` + opaque `nextToken`) and
-/// accumulate pages up to a hard cap.
+/// Reads via `repo.list`, `github.authStatus`, `github.repos.list`,
+/// `github.repos.search` and `github.branches.list` over the shared JSON-RPC
+/// connection. Branch list reads follow the uniform pagination contract
+/// (`limit` + opaque `nextToken`) and accumulate pages up to a hard cap;
+/// repo reads are single-page so the picker renders fast.
 @MainActor
 class GitHubRepoStore: ObservableObject {
     @Published var isConfigured = false
+    @Published var recentRepos: [GitHubRepo] = []
     @Published var ownRepos: [GitHubRepo] = []
     @Published var searchResults: [GitHubRepo] = []
     @Published var isLoading = false
@@ -19,6 +21,9 @@ class GitHubRepoStore: ObservableObject {
     static let pageLimit = 100
     /// Hard cap on accumulated items so pagination cannot run away.
     static let maxAccumulated = 500
+    /// Single-page cap for `github.repos.list` — the picker shows recents
+    /// first, so only the first page of GitHub repos is blended in below.
+    static let ownReposLimit = 50
 
     private let connectionManager: ConnectionManagerRouting
 
@@ -46,18 +51,33 @@ class GitHubRepoStore: ObservableObject {
 
     // MARK: - Repos
 
-    /// `github.repos.list` — the authenticated user's repositories,
-    /// accumulated across `nextToken` pages up to `maxAccumulated`.
+    /// `repo.list` — the daemon's known-repo registry, MRU-first (PROTOCOL
+    /// §5.11). Entries without an `owner` are skipped (they cannot be
+    /// addressed as GitHub repos); the daemon's MRU order is preserved.
+    /// No GitHub round-trip, so recents render before `github.repos.list`
+    /// answers. Best-effort: errors leave `recentRepos` unchanged.
+    func fetchRecentRepos() async {
+        do {
+            let result = try await connectionManager.request("repo.list")
+            let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
+            recentRepos = items.compactMap { GitHubRepo.parseRepo($0) }
+        } catch {
+            print("[GitHubRepoStore] repo.list failed: \(error)")
+        }
+    }
+
+    /// `github.repos.list` — a single page (`ownReposLimit`) of the
+    /// authenticated user's repositories. Deliberately not paginated: the
+    /// picker pins recents on top and server-side search covers the rest.
     func fetchOwnRepos() async {
         isLoading = true
         lastError = nil
         do {
-            ownRepos = try await fetchAllPages(
-                method: "github.repos.list",
-                params: [:],
-                itemsKey: "repos",
-                parse: GitHubRepo.parseRepo
-            )
+            let result = try await connectionManager.request("github.repos.list", params: [
+                "limit": Self.ownReposLimit
+            ])
+            let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
+            ownRepos = items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
             print("[GitHubRepoStore] github.repos.list failed: \(error)")
             lastError = error.localizedDescription

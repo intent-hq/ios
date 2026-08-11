@@ -86,32 +86,54 @@ struct GitHubRepoStoreTests {
         #expect(store.isConfigured == false)
     }
 
-    // MARK: - fetchOwnRepos pagination
+    // MARK: - fetchRecentRepos
 
-    @Test func fetchOwnReposAccumulatesPages() async {
+    @Test func fetchRecentReposMapsOwnedEntriesInMRUOrder() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        fake.responseQueueMap["github.repos.list"] = [
-            ["repos": [makeRepoDict(name: "a")], "nextToken": "tok-1"],
-            ["repos": [makeRepoDict(name: "b")], "nextToken": NSNull()],
+        fake.responseMap["repo.list"] = [
+            "repos": [
+                ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
+                ["path": "/repos/local-only", "name": "local-only",
+                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-09T10:00:00Z"],
+                ["path": "/repos/intentd", "name": "intentd", "owner": "intent-hq",
+                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-08T10:00:00Z"],
+            ]
+        ]
+        await store.fetchRecentRepos()
+        #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo", "intent-hq/intentd"])
+    }
+
+    @Test func fetchRecentReposErrorLeavesRecentsUnchanged() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        store.recentRepos = [existing]
+        fake.errorMap["repo.list"] = NSError(domain: "t", code: -1)
+        await store.fetchRecentRepos()
+        #expect(store.recentRepos == [existing])
+    }
+
+    // MARK: - fetchOwnRepos (single page)
+
+    @Test func fetchOwnReposIssuesExactlyOneRequestWithLimit() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.repos.list"] = [
+            "repos": [makeRepoDict(name: "a"), makeRepoDict(name: "b")],
+            "nextToken": "tok-1",
         ]
         await store.fetchOwnRepos()
         #expect(store.ownRepos.map(\.name) == ["a", "b"])
         #expect(store.lastError == nil)
 
+        // Exactly one request with the 50-repo cap; the nextToken is ignored.
         let calls = fake.paramsForMethod("github.repos.list")
-        #expect(calls.count == 2)
+        #expect(calls.count == 1)
+        #expect(calls[0]["limit"] as? Int == GitHubRepoStore.ownReposLimit)
+        #expect(GitHubRepoStore.ownReposLimit == 50)
         #expect(calls[0]["nextToken"] == nil)
-        #expect(calls[1]["nextToken"] as? String == "tok-1")
-    }
-
-    @Test func fetchOwnReposStopsWhenTokenAbsent() async {
-        let fake = FakeConnectionManager()
-        let store = GitHubRepoStore(connectionManager: fake)
-        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict()]]
-        await store.fetchOwnRepos()
-        #expect(store.ownRepos.count == 1)
-        #expect(fake.paramsForMethod("github.repos.list").count == 1)
     }
 
     @Test func fetchOwnReposSkipsUnparsableRows() async {
