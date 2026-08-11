@@ -145,27 +145,41 @@ struct ManualTokenEntryView: View {
         connectTask = Task {
             let fingerprint = await probeCertFingerprint(host: host, port: portNum)
 
-            if let fingerprint = fingerprint {
+            // The user may have hit Cancel while the probe was in flight: the
+            // cancelled URLSession request surfaces here as a nil fingerprint,
+            // and processing it would show a spurious certificate error (or
+            // clobber the state of a newer attempt). Drop the result instead.
+            guard !Task.isCancelled else { return }
+
+            switch ManualTokenEntryView.probeOutcome(forFingerprint: fingerprint) {
+            case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
                 showFingerprintConfirmation = true
-            } else {
-                // No TLS cert (plain WS) — connect directly without pinning
-                do {
-                    try await ConnectionManager.shared.connect(hosts: [host], port: portNum, token: token)
-                    let server = PairedServer(hosts: [host], port: portNum, name: "Intent", pairedAt: Date())
-                    let stored = await ConnectionPairing.finalize(server: server, token: token)
-                    dismiss()
-                    if let onPaired {
-                        onPaired(stored)
-                    } else {
-                        coordinator.onConnectionSuccess()
-                    }
-                } catch {
-                    errorMessage = "Connection failed: \(error.localizedDescription)"
-                    isValidating = false
-                }
+            case .abort(let message):
+                // Never connect unpinned: without a probed certificate there is
+                // no way to verify the server's identity.
+                errorMessage = message
+                isValidating = false
             }
         }
+    }
+
+    /// Decision for a completed TLS probe. Manual connects must always be
+    /// pinned, so a missing fingerprint aborts instead of falling back to
+    /// plain WS. Static so tests can cover the no-TLS abort.
+    enum ProbeOutcome: Equatable {
+        case confirmFingerprint(String)
+        case abort(message: String)
+    }
+
+    static let noCertErrorMessage =
+        "Could not verify the server's TLS certificate. Check the host and port, make sure the desktop app is running, and try again."
+
+    static func probeOutcome(forFingerprint fingerprint: String?) -> ProbeOutcome {
+        if let fingerprint, !fingerprint.isEmpty {
+            return .confirmFingerprint(fingerprint)
+        }
+        return .abort(message: noCertErrorMessage)
     }
 
     private func connectWithFingerprint() {

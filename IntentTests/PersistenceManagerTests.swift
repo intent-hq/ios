@@ -320,6 +320,108 @@ struct ConnectionPersistenceTests {
         #expect(pm.loadConnections().count == 2)
     }
 
+    @Test func upsertOverlappingHostSetUpdatesInPlaceAndMergesHosts() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // Simulates a re-pair after the route refresh grew the stored host set:
+        // upsert [h], grow to [h, ip] via updateConnectionHosts, then re-pair
+        // with [h] again — must update the grown record, not insert a duplicate.
+        let original = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old"))
+        pm.updateConnectionHosts(id: original.id, hosts: ["192.168.1.10", "10.0.0.5"])
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-new"))
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        // Previously known routes are never dropped by a narrower re-pair.
+        #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
+    }
+
+    @Test func upsertDisjointHostSetSamePortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    @Test func mergeHostListsKeepsExistingFirstAndAppendsNew() {
+        #expect(PersistenceManager.mergeHostLists(
+            existing: ["nat.example.com", "192.168.1.10"],
+            incoming: ["192.168.1.10", "10.0.0.5"])
+            == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
+        #expect(PersistenceManager.mergeHostLists(existing: [], incoming: ["a"]) == ["a"])
+        #expect(PersistenceManager.mergeHostLists(existing: ["a"], incoming: []) == ["a"])
+    }
+
+    // MARK: - updateConnectionHosts
+
+    @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["192.168.1.10", "10.0.0.5"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.id == stored.id)
+        #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
+        // Everything else on the record is preserved.
+        #expect(loaded.first?.token == "tok")
+        #expect(loaded.first?.server.port == stored.server.port)
+        #expect(loaded.first?.server.name == stored.server.name)
+        #expect(loaded.first?.server.pairedAt == stored.server.pairedAt)
+        #expect(loaded.first?.displayName == stored.displayName)
+    }
+
+    @Test func updateConnectionHostsPreservesCertFingerprint() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), certFingerprint: "ab:cd")
+        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+
+        #expect(pm.loadConnections().first?.server.certFingerprint == "ab:cd")
+    }
+
+    @Test func updateConnectionHostsUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionHosts(id: UUID(), hosts: ["1.2.3.4"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server.hosts == stored.server.hosts)
+    }
+
+    @Test func updateConnectionHostsDoesNotAffectOtherRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
+        let b = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
+        pm.updateConnectionHosts(id: a.id, hosts: ["a.local", "10.0.0.9"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.first { $0.id == a.id }?.server.hosts == ["a.local", "10.0.0.9"])
+        #expect(loaded.first { $0.id == b.id }?.server.hosts == ["b.local"])
+    }
+
     // MARK: - Delete
 
     @Test func deleteRemovesConnectionAndClearsActivePointer() {

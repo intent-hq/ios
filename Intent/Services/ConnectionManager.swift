@@ -137,6 +137,7 @@ class ConnectionManager: ObservableObject {
         connectionState = .connected
         subscribeToAllEvents()
         startPingTimer()
+        scheduleHostRoutesRefresh()
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         print("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
@@ -319,6 +320,92 @@ class ConnectionManager: ObservableObject {
     @MainActor
     func dispatchMessage(_ text: String) {
         handleTextMessage(text)
+    }
+
+    // MARK: - Host route refresh
+
+    /// Fire-and-forget wrapper around `refreshHostRoutes()`. Called from every
+    /// successful connect path (initial connect and reconnect) so route refresh
+    /// never delays the connection becoming usable.
+    private func scheduleHostRoutesRefresh() {
+        Task { await self.refreshHostRoutes() }
+    }
+
+    /// Shared post-connect hook: queries `system.status` for the daemon's
+    /// `localIps` and merges them into the known host routes — both the
+    /// in-memory list used by reconnect racing and the persisted
+    /// `StoredConnection` record (the active connection, verified against the
+    /// live token + port; updated by record id since `upsertConnection`
+    /// matches by host set + port and would duplicate the record when the
+    /// host set grows).
+    ///
+    /// Failures are non-fatal: older daemons without `localIps` and transport
+    /// errors are skipped silently and the connection proceeds unchanged.
+    func refreshHostRoutes() async {
+        guard connectionState == .connected, let token = token, let port = port else { return }
+        let myGeneration = connectionGeneration
+
+        guard let result = try? await request("system.status") else {
+            print("[ConnectionManager] Host route refresh: system.status failed (skipping)")
+            return
+        }
+        guard let reported = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
+            print("[ConnectionManager] Host route refresh: no localIps reported (skipping)")
+            return
+        }
+
+        // A newer connect() may have superseded us while the RPC was in flight.
+        guard connectionGeneration == myGeneration else { return }
+
+        let merged = Self.mergeHosts(existing: hosts, reported: reported)
+        if merged != hosts {
+            print("[ConnectionManager] Host route refresh: hosts \(hosts) -> \(merged)")
+            hosts = merged
+        }
+
+        // Persist to the record we actually connected through: the active
+        // connection. Token + port must match the live connection — during
+        // initial pairing the active record is still the previous one (or
+        // absent) until ConnectionPairing.finalize saves + activates the new
+        // record and re-triggers this refresh. Matching by token + port alone
+        // would be ambiguous: the same daemon can be saved as separate records
+        // with different host sets at the same port.
+        //
+        // Merge against the STORED hosts, not just the in-memory merge: this
+        // session may have connected with a narrower host list than the
+        // record holds (e.g. a single-host manual re-pair while the record
+        // also has a NAT hostname), and persisting the in-memory merge alone
+        // would drop those hosts.
+        if let stored = PersistenceManager.shared.activeConnection(),
+            stored.token == token, stored.server.port == port {
+            let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
+            if stored.server.hosts != persistedHosts {
+                PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: persistedHosts)
+            }
+        }
+    }
+
+    /// Extracts the `localIps` array from a `system.status` result. Returns nil
+    /// when the field is absent (older daemon) or malformed.
+    static func localIps(fromSystemStatus result: Any) -> [String]? {
+        guard let status = result as? [String: Any],
+              let ips = status["localIps"] as? [String] else { return nil }
+        return ips
+    }
+
+    /// Merges daemon-reported IPs into the existing host list: existing hosts
+    /// (originally paired/entered) keep their order and are never dropped;
+    /// reported IPs not already present are appended, deduped.
+    static func mergeHosts(existing: [String], reported: [String]) -> [String] {
+        var merged = existing
+        var seen = Set(existing)
+        for ip in reported {
+            let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !seen.contains(trimmed) else { continue }
+            merged.append(trimmed)
+            seen.insert(trimmed)
+        }
+        return merged
     }
 
     // MARK: - Private
@@ -647,6 +734,7 @@ class ConnectionManager: ObservableObject {
                         self?.connectionState = .connected
                         self?.subscribeToAllEvents()
                         self?.startPingTimer()
+                        self?.scheduleHostRoutesRefresh()
                         return true
                     }
                     guard genOk else {
