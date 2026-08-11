@@ -255,24 +255,49 @@ struct GitHubRepoStoreTests {
         #expect(branch == nil)
     }
 
-    // MARK: - fetchRemoteBranches pagination
+    // MARK: - fetchRemoteBranches (single page)
 
-    @Test func fetchRemoteBranchesAccumulatesPages() async throws {
+    @Test func fetchRemoteBranchesIssuesExactlyOneRequestWithLimit() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        fake.responseQueueMap["github.branches.list"] = [
-            ["branches": ["main", "dev"], "nextToken": "tok-1"],
-            ["branches": ["feature/x"]],
+        fake.responseMap["github.branches.list"] = [
+            "branches": ["main", "dev"],
+            "nextToken": "tok-1",
         ]
         let branches = try await store.fetchRemoteBranches(owner: "intent-hq", repo: "intentd")
-        #expect(branches == ["main", "dev", "feature/x"])
+        #expect(branches == ["main", "dev"])
 
+        // Exactly one request with the 50-branch cap; the nextToken is ignored.
         let calls = fake.paramsForMethod("github.branches.list")
-        #expect(calls.count == 2)
+        #expect(calls.count == 1)
         #expect(calls[0]["owner"] as? String == "intent-hq")
         #expect(calls[0]["repo"] as? String == "intentd")
+        #expect(calls[0]["limit"] as? Int == GitHubRepoStore.branchesLimit)
+        #expect(GitHubRepoStore.branchesLimit == 50)
         #expect(calls[0]["nextToken"] == nil)
-        #expect(calls[1]["nextToken"] as? String == "tok-1")
+        #expect(calls[0]["prefix"] == nil)
+    }
+
+    @Test func fetchRemoteBranchesSendsPrefixParam() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.list"] = ["branches": ["feature/x"]]
+        let branches = try await store.fetchRemoteBranches(
+            owner: "intent-hq", repo: "intentd", prefix: "feature/"
+        )
+        #expect(branches == ["feature/x"])
+        let calls = fake.paramsForMethod("github.branches.list")
+        #expect(calls.count == 1)
+        #expect(calls[0]["prefix"] as? String == "feature/")
+        #expect(calls[0]["limit"] as? Int == GitHubRepoStore.branchesLimit)
+    }
+
+    @Test func fetchRemoteBranchesOmitsEmptyPrefix() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.list"] = ["branches": ["main"]]
+        _ = try await store.fetchRemoteBranches(owner: "o", repo: "r", prefix: "")
+        #expect(fake.paramsForMethod("github.branches.list")[0]["prefix"] == nil)
     }
 
     @Test func fetchRemoteBranchesThrowsOnTransportError() async {
