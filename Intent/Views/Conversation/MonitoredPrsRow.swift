@@ -50,11 +50,13 @@ struct MonitoredPrsRow: View {
             }
             Divider()
             Button {
-                Task { await viewModel.monitoredPrStore.flush(monitorId: monitor.monitorId) }
+                Task {
+                    await viewModel.monitoredPrStore.flush(
+                        monitorId: monitor.monitorId, check: true)
+                }
             } label: {
-                Label("Flush now", systemImage: "paperplane")
+                Label("Check and flush", systemImage: "arrow.triangle.2.circlepath")
             }
-            .disabled(!monitor.hasPendingChanges)
             Button {
                 if let url = URL(string: Self.prUrl(monitor)) {
                     openURL(url)
