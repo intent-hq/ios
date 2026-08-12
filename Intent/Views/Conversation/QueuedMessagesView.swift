@@ -64,7 +64,7 @@ struct QueuedMessagesView: View {
                 wakeRowLabel(
                     icon: "bolt.fill",
                     name: hookWake.displayName,
-                    preview: HookWakeAttribution.displayText(message.content))
+                    preview: HookWakeAttribution.displayText(message.content, attribution: hookWake))
                 sendNowButton(message)
                 removeButton(message)
             } else if let prWake = message.prMonitorWakeAttribution {
