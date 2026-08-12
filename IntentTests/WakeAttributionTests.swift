@@ -23,10 +23,21 @@ struct HookWakeAttributionTests {
     @Test func fallsBackToHookNameWhenAbsentOrEmpty() {
         let absent = HookWakeAttribution.from(["type": AnyCodable("hook_wake")])
         #expect(absent?.displayName == "Hook")
-        let empty = HookWakeAttribution.from([
+        let blank = HookWakeAttribution.from([
             "type": AnyCodable("hook_wake"), "hookName": AnyCodable("   "),
         ])
-        #expect(empty?.displayName == "Hook")
+        #expect(blank?.displayName == "Hook")
+        // rawName stays verbatim — the daemon used it as-is in the prefix.
+        #expect(blank?.rawName == "   ")
+    }
+
+    @Test func keepsEdgeWhitespaceInRawNameWhileTrimmingDisplayName() {
+        let attribution = HookWakeAttribution.from([
+            "type": AnyCodable("hook_wake"),
+            "hookName": AnyCodable(" my \"quoted\" hook "),
+        ])
+        #expect(attribution?.rawName == " my \"quoted\" hook ")
+        #expect(attribution?.displayName == "my \"quoted\" hook")
     }
 
     @Test func truncatesLongNames() {
@@ -72,6 +83,22 @@ struct HookWakeAttributionTests {
         let quoted = "[Background hook \"my \"quoted\" hook\"] Build failed"
         #expect(HookWakeAttribution.stripPrefix(
             quoted, attribution: attribution(named: "my \"quoted\" hook")) == "Build failed")
+    }
+
+    @Test func stripPrefixStripsEdgeWhitespaceAndQuotedName() {
+        // The verbatim (untrimmed) rawName matches the daemon's literal
+        // prefix even when the name carries edge whitespace.
+        let text = "[Background hook \" my \"quoted\" hook \"] Build failed"
+        #expect(HookWakeAttribution.stripPrefix(
+            text, attribution: attribution(named: " my \"quoted\" hook ")) == "Build failed")
+    }
+
+    @Test func stripPrefixStripsWhitespaceOnlyName() {
+        // A whitespace-only name falls back to "Hook" for display but the
+        // daemon still used it verbatim in the prefix.
+        let text = "[Background hook \"   \"] Build failed"
+        #expect(HookWakeAttribution.stripPrefix(
+            text, attribution: attribution(named: "   ")) == "Build failed")
     }
 
     @Test func stripPrefixWithoutMetadataLeavesQuotedHookNameUnstripped() {
