@@ -10,6 +10,9 @@ import Foundation
 struct HookWakeAttribution: Equatable {
     /// Hook id (may be empty when the daemon omitted it).
     let hookId: String
+    /// Raw (untruncated) hook name from metadata; empty when absent. Used to
+    /// build the exact literal wake prefix for metadata-first stripping.
+    let rawName: String
     /// Display name for the hook ("Hook" fallback, truncated to ~20 chars).
     let displayName: String
     /// Wake reason (`dispatched` / `evicted` / …; empty when absent).
@@ -36,6 +39,7 @@ struct HookWakeAttribution: Equatable {
             : name
         return HookWakeAttribution(
             hookId: hookId,
+            rawName: rawName,
             displayName: displayName,
             reason: metadata["reason"]?.stringValue ?? "",
             hookStillActive: metadata["hookStillActive"]?.boolValue)
@@ -58,9 +62,22 @@ struct HookWakeAttribution: Equatable {
 
     /// Literal wake prefix the daemon prepends to hook wake message content:
     /// `[Background hook "<name>"] `. Display-only strip — the stored message
-    /// text is never mutated. Returns the input unchanged when no prefix matches.
-    static func stripPrefix(_ text: String) -> String {
-        text.replacingOccurrences(
+    /// text is never mutated. Metadata-first: when the attribution carries the
+    /// raw hook name, strip the exact literal prefix built from it (works for
+    /// names containing double quotes, which defeat the regex); otherwise fall
+    /// back to the regex. Returns the input unchanged when no prefix matches.
+    static func stripPrefix(_ text: String, attribution: HookWakeAttribution? = nil) -> String {
+        if let rawName = attribution?.rawName, !rawName.isEmpty {
+            let literal = "[Background hook \"\(rawName)\"]"
+            if text.hasPrefix(literal) {
+                return String(text.dropFirst(literal.count))
+                    .replacingOccurrences(
+                        of: "^\\s*",
+                        with: "",
+                        options: .regularExpression)
+            }
+        }
+        return text.replacingOccurrences(
             of: "^\\[Background hook \"[^\"]*\"\\]\\s*",
             with: "",
             options: .regularExpression)
@@ -79,8 +96,8 @@ struct HookWakeAttribution: Equatable {
     }
 
     /// Display text for a hook-wake body: prefix and state note stripped.
-    static func displayText(_ text: String) -> String {
-        stripStateNote(stripPrefix(text))
+    static func displayText(_ text: String, attribution: HookWakeAttribution? = nil) -> String {
+        stripStateNote(stripPrefix(text, attribution: attribution))
     }
 }
 

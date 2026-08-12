@@ -76,7 +76,7 @@ struct MessageView: View {
         prWake: PrMonitorWakeAttribution?
     ) -> some View {
         let display: String = {
-            if hookWake != nil { return Self.stripSupervisorTags(HookWakeAttribution.displayText(text)) }
+            if let hookWake { return Self.stripSupervisorTags(HookWakeAttribution.displayText(text, attribution: hookWake)) }
             if prWake != nil { return Self.stripSupervisorTags(PrMonitorWakeAttribution.displayText(text)) }
             return Self.stripSupervisorTags(text)
         }()
