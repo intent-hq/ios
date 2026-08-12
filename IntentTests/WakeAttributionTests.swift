@@ -54,6 +54,14 @@ struct HookWakeAttributionTests {
         #expect(HookWakeAttribution.stripPrefix("No prefix here") == "No prefix here")
     }
 
+    @Test func stripPrefixLeavesQuotedHookNameUnstripped() {
+        // FE parity (hook-wake-attribution.ts): the prefix regex matches
+        // `"[^"]*"`, so a hook name containing a double quote defeats the
+        // match and the prefix is deliberately left in place on both clients.
+        let quoted = "[Background hook \"my \"quoted\" hook\"] Build failed"
+        #expect(HookWakeAttribution.stripPrefix(quoted) == quoted)
+    }
+
     @Test func stripsTrailingStateNote() {
         let text = "Build failed\n\n[This hook has now been retired.]"
         #expect(HookWakeAttribution.stripStateNote(text) == "Build failed")

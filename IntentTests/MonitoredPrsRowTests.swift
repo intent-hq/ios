@@ -178,7 +178,7 @@ struct MonitoredPrsRowTests {
         let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:30Z"))
         #expect(MonitoredPrsRow.detailLines(monitor, now: now) == [
             "Add review wire surface — open",
-            "octo/repo#12",
+            "octo/repo#12 · none (0 approvals)",
             "Not mergeable",
             "Last change 5m 30s ago",
             "No pending changes"
