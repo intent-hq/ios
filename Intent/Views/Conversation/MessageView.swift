@@ -31,17 +31,27 @@ struct MessageView: View {
 
     @ViewBuilder
     private var userMessageView: some View {
+        // Wake attribution (PROTOCOL §5.40 / §5.42): hook and PR-monitor wake
+        // rows replace the "You" header with an attribution header and get
+        // the machine prefix/state note display-stripped from the body.
+        // Absent/malformed metadata falls back to the plain user rendering.
+        let hookWake = message.hookWakeAttribution
+        let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
+
         VStack(alignment: .leading, spacing: 4) {
-            Text("You")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            if let hookWake {
+                HookWakeAttributionView(attribution: hookWake)
+            } else if let prWake {
+                PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+            } else {
+                Text("You")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
 
             ForEach(blocks) { block in
                 if block.type == .text, let text = block.resolvedText {
-                    Text(Self.stripSupervisorTags(text))
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
-                        .textSelection(.enabled)
+                    userTextBlock(text, hookWake: hookWake, prWake: prWake)
                 } else if block.type == .image {
                     ContentBlockView(block: block, allBlocks: blocks, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
                 }
@@ -51,6 +61,39 @@ struct MessageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.muted(for: colorScheme).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// A user-row text block: wake rows get the daemon's literal
+    /// `[Background hook "…"]` / `[PR monitor …]` prefix (plus the trailing
+    /// `[This hook …]` state note for hook wakes) stripped display-only — the
+    /// attribution header already names the hook / PR and conveys the
+    /// post-fire state — and drop the block entirely when nothing remains.
+    /// Non-wake rows render exactly as before.
+    @ViewBuilder
+    private func userTextBlock(
+        _ text: String,
+        hookWake: HookWakeAttribution?,
+        prWake: PrMonitorWakeAttribution?
+    ) -> some View {
+        let display: String = {
+            if hookWake != nil { return Self.stripSupervisorTags(HookWakeAttribution.displayText(text)) }
+            if prWake != nil { return Self.stripSupervisorTags(PrMonitorWakeAttribution.displayText(text)) }
+            return Self.stripSupervisorTags(text)
+        }()
+        if (hookWake == nil && prWake == nil) || !display.isEmpty {
+            Text(display)
+                .font(.subheadline)
+                .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
+                .textSelection(.enabled)
+        }
+    }
+
+    /// `<owner>/<repo>` of this message's workspace, or nil when unknown
+    /// (one-time read; the PR chip label then falls back to the bare `#<n>`).
+    private var workspaceRepo: String? {
+        guard let ws = WorkspaceStore.shared.workspaces.first(where: { $0.id == workspaceId }),
+              let owner = ws.repositoryOwner, let name = ws.repositoryName else { return nil }
+        return "\(owner)/\(name)"
     }
 
     @ViewBuilder

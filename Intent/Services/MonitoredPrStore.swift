@@ -117,13 +117,20 @@ class MonitoredPrStore: ObservableObject {
 
     /// `prMonitor.flush` (§5.42) — delivers a monitor's pending consolidated
     /// wake now; ack only, the outcome arrives as `prMonitor:*` events.
-    func flush(monitorId: String) async {
+    /// `check: true` makes the daemon re-poll the PR first and flush anything
+    /// that changed vs. the emit baseline (additive param, default `false`);
+    /// nil omits the key entirely so older daemons see the pre-check request.
+    func flush(monitorId: String, check: Bool? = nil) async {
         guard let wsId = workspaceId else { return }
+        var params: [String: Any] = [
+            "workspaceId": wsId,
+            "monitorId": monitorId
+        ]
+        if let check {
+            params["check"] = check
+        }
         do {
-            let _ = try await connectionManager.request("prMonitor.flush", params: [
-                "workspaceId": wsId,
-                "monitorId": monitorId
-            ])
+            let _ = try await connectionManager.request("prMonitor.flush", params: params)
         } catch {
             print("[MonitoredPrStore] prMonitor.flush failed: \(error)")
         }

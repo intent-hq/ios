@@ -5,9 +5,11 @@ import SwiftUI
 /// `BackgroundHooksRow`. One chip per `scheduled`/`running` hook: a spinner
 /// while a run is in flight, a thin shrinking time-to-next-run bar while
 /// scheduled (derived from `nextRunAt` − now over `delayMs`; a local
-/// animation, no daemon polling). Tapping a chip opens a menu with Run now /
-/// Cancel hook. The parent hides the row entirely when the agent has no
-/// active hooks. No code preview on iOS (per spec decision).
+/// animation, no daemon polling). Perpetual hooks carry a small repeat glyph.
+/// Tapping a chip opens a menu whose header shows name/state, next run,
+/// TTL expiry and last error, with Run now / Cancel hook actions. The parent
+/// hides the row entirely when the agent has no active hooks. No code preview
+/// on iOS (per spec decision).
 struct BackgroundHooksRow: View {
     @ObservedObject var viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
@@ -43,7 +45,12 @@ struct BackgroundHooksRow: View {
     @ViewBuilder
     private func hookChip(_ hook: BackgroundHook) -> some View {
         Menu {
-            Text("\(hook.name) — \(stateLabel(hook))")
+            // Detail header: name/state plus timing + error lines (mirrors
+            // the FE hover card). Positional IDs: lines are display strings
+            // with no inherent identity.
+            ForEach(Array(Self.detailLines(hook).enumerated()), id: \.offset) { _, line in
+                Text(line)
+            }
             Divider()
             Button {
                 Task { await viewModel.hookStore.runNow(hookId: hook.hookId) }
@@ -68,6 +75,10 @@ struct BackgroundHooksRow: View {
             Text(truncatedName(hook.name))
                 .font(.caption2)
                 .lineLimit(1)
+            if hook.perpetual {
+                Image(systemName: "repeat")
+                    .font(.system(size: 8))
+            }
             if hook.state == .running {
                 ProgressView()
                     .controlSize(.mini)
@@ -102,7 +113,28 @@ struct BackgroundHooksRow: View {
         return name.prefix(Self.nameMaxLength) + "…"
     }
 
-    private func stateLabel(_ hook: BackgroundHook) -> String {
+    // MARK: - Display helpers (pure, unit-tested)
+
+    /// Menu-header detail lines: name/state, "next run in …" / "expires
+    /// in …" relative durations (mirroring the FE hover card's
+    /// nextRunIn/expiresIn helpers; computed against `now` when the menu
+    /// renders), and the last run error when present. Timing lines are
+    /// dropped when the underlying timestamp is absent or unparseable.
+    static func detailLines(_ hook: BackgroundHook, now: Date = Date()) -> [String] {
+        var lines = ["\(hook.name) — \(stateLabel(hook))"]
+        if let next = ISO8601DateFormatter.lenientDate(from: hook.nextRunAt) {
+            lines.append("Next run: in \(DurationFormat.compact(next.timeIntervalSince(now)))")
+        }
+        if let expires = ISO8601DateFormatter.lenientDate(from: hook.expiresAt) {
+            lines.append("TTL: expires in \(DurationFormat.compact(expires.timeIntervalSince(now)))")
+        }
+        if let lastError = hook.lastError, !lastError.isEmpty {
+            lines.append("Last error: \(lastError)")
+        }
+        return lines
+    }
+
+    static func stateLabel(_ hook: BackgroundHook) -> String {
         hook.state == .running ? "Running" : "Scheduled"
     }
 }

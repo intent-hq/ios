@@ -149,6 +149,25 @@ struct ConversationViewModelTests {
         #expect(vm.queuedMessages.isEmpty)
     }
 
+    @Test func queuedMessagesKeepsWakeEntries() async {
+        // Hook and PR-monitor wakes render as compact attribution rows
+        // (PROTOCOL §5.40 / §5.42), so they stay visible in the queue.
+        let vm = makeVM()
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-hook", metadata: [
+                "type": AnyCodable("hook_wake"), "hookId": AnyCodable("h-1"),
+                "hookName": AnyCodable("CI watcher"), "reason": AnyCodable("dispatched"),
+            ]),
+            queuedEntry(id: "q-pr", metadata: [
+                "type": AnyCodable("pr_monitor_wake"), "monitorId": AnyCodable("m-1"),
+                "repo": AnyCodable("intent-hq/intentd"), "prNumber": AnyCodable(7),
+            ]),
+            // Malformed PR wake (no repo): stays a bare typed entry → hidden.
+            queuedEntry(id: "q-pr-bad", metadata: ["type": AnyCodable("pr_monitor_wake")]),
+        ]
+        #expect(vm.queuedMessages.map(\.id) == ["q-hook", "q-pr"])
+    }
+
     // MARK: - suggestedPrompts
 
     @Test func suggestedPromptsParsesSinglePrompt() async {

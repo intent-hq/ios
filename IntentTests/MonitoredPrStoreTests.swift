@@ -394,9 +394,25 @@ struct MonitoredPrStoreTests {
         let flushParams = try #require(fake.paramsForMethod("prMonitor.flush").first)
         #expect(flushParams["workspaceId"] as? String == "ws-abc")
         #expect(flushParams["monitorId"] as? String == "prm-1")
+        // `check` nil must omit the key entirely (presence-detection
+        // convention — wire-compatible with pre-check daemons).
+        #expect(flushParams["check"] == nil)
         let cancelParams = try #require(fake.paramsForMethod("prMonitor.cancel").first)
         #expect(cancelParams["workspaceId"] as? String == "ws-abc")
         #expect(cancelParams["monitorId"] as? String == "prm-1")
+    }
+
+    @Test func flushWithCheckSendsCheckTrue() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSubscribedStore(fake)
+        fake.responseMap["prMonitor.flush"] = ["ok": true, "flushed": true]
+
+        await store.flush(monitorId: "prm-1", check: true)
+
+        let flushParams = try #require(fake.paramsForMethod("prMonitor.flush").first)
+        #expect(flushParams["workspaceId"] as? String == "ws-abc")
+        #expect(flushParams["monitorId"] as? String == "prm-1")
+        #expect(flushParams["check"] as? Bool == true)
     }
 
     @Test func reconnectResubscribesAndReseeds() async throws {
