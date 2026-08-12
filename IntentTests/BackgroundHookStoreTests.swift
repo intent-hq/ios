@@ -8,7 +8,8 @@ struct BackgroundHookStoreTests {
     private func makeHookDict(
         hookId: String = "hook-1",
         state: String = "scheduled",
-        nextRunAt: String? = "2026-07-31T10:06:00Z"
+        nextRunAt: String? = "2026-07-31T10:06:00Z",
+        perpetual: Bool? = nil
     ) -> [String: Any] {
         var dict: [String: Any] = [
             "hookId": hookId,
@@ -23,6 +24,7 @@ struct BackgroundHookStoreTests {
             "runCount": 6
         ]
         if let nextRunAt { dict["nextRunAt"] = nextRunAt }
+        if let perpetual { dict["perpetual"] = perpetual }
         return dict
     }
 
@@ -41,7 +43,15 @@ struct BackgroundHookStoreTests {
         #expect(hook.expiresAt == "2026-07-31T11:00:00Z")
         #expect(hook.nextRunAt == "2026-07-31T10:06:00Z")
         #expect(hook.runCount == 6)
+        #expect(hook.perpetual == false)
         #expect(hook.lastError == nil)
+    }
+
+    @Test func parsesPerpetualFlag() throws {
+        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: true)))
+        #expect(perpetual.perpetual == true)
+        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: false)))
+        #expect(oneShot.perpetual == false)
     }
 
     @Test func parsesAllStatesAndIsActive() throws {
@@ -65,6 +75,42 @@ struct BackgroundHookStoreTests {
         missingId.removeValue(forKey: "hookId")
         #expect(BackgroundHook.parseHook(missingId) == nil)
         #expect(BackgroundHook.parseHook(makeHookDict(state: "someFutureState")) == nil)
+    }
+
+    // MARK: - Detail lines (BackgroundHooksRow pure helpers)
+
+    @Test func detailLinesShowTimingRelativeToNow() throws {
+        let hook = try #require(BackgroundHook.parseHook(makeHookDict()))
+        let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:15Z"))
+        #expect(BackgroundHooksRow.detailLines(hook, now: now) == [
+            "ci-watch — Scheduled",
+            "Next run: in 45s",
+            "TTL: expires in 54m 45s"
+        ])
+    }
+
+    @Test func detailLinesDropAbsentTimingAndShowLastError() throws {
+        var dict = makeHookDict(state: "running", nextRunAt: nil)
+        dict.removeValue(forKey: "expiresAt")
+        dict["lastError"] = "boom"
+        let hook = try #require(BackgroundHook.parseHook(dict))
+        #expect(BackgroundHooksRow.detailLines(hook) == [
+            "ci-watch — Running",
+            "Last error: boom"
+        ])
+    }
+
+    @Test func compactDurationRendersTwoAdjacentUnitsAndClamps() {
+        #expect(DurationFormat.compact(-5) == "0s")
+        #expect(DurationFormat.compact(42) == "42s")
+        #expect(DurationFormat.compact(59.6) == "1m")
+        #expect(DurationFormat.compact(12 * 60) == "12m")
+        #expect(DurationFormat.compact(12 * 60 + 30) == "12m 30s")
+        #expect(DurationFormat.compact(3_600) == "1h")
+        #expect(DurationFormat.compact(3_600 + 5 * 60 + 30) == "1h 5m")
+        #expect(DurationFormat.compact(3_600 + 30) == "1h")
+        #expect(DurationFormat.compact(2 * 86_400 + 3 * 3_600) == "2d 3h")
+        #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
 
     // MARK: - Fold

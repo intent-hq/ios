@@ -7,9 +7,10 @@ import SwiftUI
 /// `<owner/repo>: ` only when the monitor's repo differs from the workspace
 /// repo, with an amber dot while changes are pending the debounce emit.
 /// Tapping a chip opens a menu whose header shows the last-refresh detail
-/// (title, repo#number, checks/approvals/threads summary, pending status)
-/// with Flush now / Open PR / Cancel monitor actions. The parent hides the
-/// row entirely when the agent has no active monitors.
+/// (title, repo#number, checks/approvals/threads summary, mergeable/blocked
+/// status, last change time, pending status) with Check and flush / Open PR /
+/// Cancel monitor actions. The parent hides the row entirely when the agent
+/// has no active monitors.
 struct MonitoredPrsRow: View {
     @ObservedObject var viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
@@ -116,10 +117,11 @@ struct MonitoredPrsRow: View {
     }
 
     /// Menu-header detail lines: title (+ state), repo#number with
-    /// checks/approvals/threads summary, and pending status. The summary
-    /// line is dropped when it would duplicate the title line (the
-    /// no-title/no-snapshot fallback), so every line is distinct.
-    static func detailLines(_ monitor: MonitoredPr) -> [String] {
+    /// checks/approvals/threads summary, mergeable/blocked status, "last
+    /// change … ago" (relative to `now` when the menu renders), and pending
+    /// status. The summary line is dropped when it would duplicate the title
+    /// line (the no-title/no-snapshot fallback), so every line is distinct.
+    static func detailLines(_ monitor: MonitoredPr, now: Date = Date()) -> [String] {
         var lines: [String] = []
         var titleLine = monitor.title ?? "\(monitor.repo)#\(monitor.prNumber)"
         if let state = monitor.lastSnapshot?.state {
@@ -136,8 +138,26 @@ struct MonitoredPrsRow: View {
             lines.append(summaryLine)
         }
 
+        if let merge = mergeSummary(monitor) { lines.append(merge) }
+        if let lastChange = ISO8601DateFormatter.lenientDate(from: monitor.lastChangeAt) {
+            lines.append("Last change \(DurationFormat.compact(now.timeIntervalSince(lastChange))) ago")
+        }
+
         lines.append(pendingSummary(monitor))
         return lines
+    }
+
+    /// Mergeable / blocked line; prefers the explicit blocked reason (nil
+    /// while the forge is still computing mergeability).
+    static func mergeSummary(_ monitor: MonitoredPr) -> String? {
+        guard let snapshot = monitor.lastSnapshot else { return nil }
+        if let reason = snapshot.mergeBlockedReason, !reason.isEmpty {
+            return "Merge blocked: \(reason)"
+        }
+        if let mergeable = snapshot.mergeable {
+            return mergeable ? "Mergeable" : "Not mergeable"
+        }
+        return nil
     }
 
     /// Compact checks summary from the last snapshot, e.g. "3/4 passing".

@@ -30,6 +30,9 @@ struct BackgroundHook: Identifiable, Equatable {
     var lastRunAt: String?
     var nextRunAt: String?
     let runCount: Int
+    /// Perpetual hooks re-arm after a dispatch instead of retiring (v6.0);
+    /// always present on the wire from v6.0, defaulted false when absent.
+    let perpetual: Bool
     var lastError: String?
 
     var id: String { hookId }
@@ -57,6 +60,7 @@ struct BackgroundHook: Identifiable, Equatable {
             lastRunAt: dict["lastRunAt"] as? String,
             nextRunAt: dict["nextRunAt"] as? String,
             runCount: dict["runCount"] as? Int ?? 0,
+            perpetual: dict["perpetual"] as? Bool ?? false,
             lastError: dict["lastError"] as? String
         )
     }

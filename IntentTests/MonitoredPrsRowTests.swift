@@ -13,6 +13,7 @@ struct MonitoredPrsRowTests {
         title: String? = "Add review wire surface",
         url: String? = "https://github.com/octo/repo/pull/12",
         pendingChanges: [String] = [],
+        lastChangeAt: String? = nil,
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
         MonitoredPr(
@@ -21,19 +22,21 @@ struct MonitoredPrsRowTests {
             pendingChanges: pendingChanges,
             hasPendingChanges: !pendingChanges.isEmpty,
             createdAt: nil, updatedAt: nil, pendingSince: nil,
-            lastChangeAt: nil, lastPolledAt: nil, lastError: nil,
+            lastChangeAt: lastChangeAt, lastPolledAt: nil, lastError: nil,
             title: title, url: url, lastSnapshot: snapshot
         )
     }
 
     private func makeSnapshot(
+        mergeable: Bool? = nil,
+        mergeBlockedReason: String? = nil,
         checks: MonitoredPr.Snapshot.Checks = .init(total: 0, passed: 0, failed: 0, pending: 0),
         approvals: MonitoredPr.Snapshot.Approvals = .init(decision: "none", have: 0, needed: nil, changesRequested: 0),
         threads: MonitoredPr.Snapshot.Threads = .init(unresolved: 0)
     ) -> MonitoredPr.Snapshot {
         MonitoredPr.Snapshot(
             state: "open", isDraft: false, hasConflicts: false, isBehind: false,
-            mergeable: nil, mergeBlockedReason: nil,
+            mergeable: mergeable, mergeBlockedReason: mergeBlockedReason,
             checks: checks, approvals: approvals, threads: threads
         )
     }
@@ -150,5 +153,35 @@ struct MonitoredPrsRowTests {
         let monitor = makeMonitor(title: nil)
         let lines = MonitoredPrsRow.detailLines(monitor)
         #expect(lines == ["octo/repo#12", "No pending changes"])
+    }
+
+    // MARK: - Merge summary / last change
+
+    @Test func mergeSummaryPrefersBlockedReasonOverMergeable() {
+        #expect(MonitoredPrsRow.mergeSummary(makeMonitor()) == nil)
+        let unknown = makeMonitor(snapshot: makeSnapshot())
+        #expect(MonitoredPrsRow.mergeSummary(unknown) == nil)
+        let blocked = makeMonitor(snapshot: makeSnapshot(
+            mergeable: true, mergeBlockedReason: "2 failing checks"))
+        #expect(MonitoredPrsRow.mergeSummary(blocked) == "Merge blocked: 2 failing checks")
+        let mergeable = makeMonitor(snapshot: makeSnapshot(mergeable: true))
+        #expect(MonitoredPrsRow.mergeSummary(mergeable) == "Mergeable")
+        let notMergeable = makeMonitor(snapshot: makeSnapshot(mergeable: false))
+        #expect(MonitoredPrsRow.mergeSummary(notMergeable) == "Not mergeable")
+    }
+
+    @Test func detailLinesIncludeMergeAndLastChangeLines() throws {
+        let monitor = makeMonitor(
+            lastChangeAt: "2026-07-31T10:00:00Z",
+            snapshot: makeSnapshot(mergeable: false)
+        )
+        let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:30Z"))
+        #expect(MonitoredPrsRow.detailLines(monitor, now: now) == [
+            "Add review wire surface — open",
+            "octo/repo#12",
+            "Not mergeable",
+            "Last change 5m 30s ago",
+            "No pending changes"
+        ])
     }
 }
