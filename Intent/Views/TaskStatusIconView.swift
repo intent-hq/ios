@@ -20,7 +20,9 @@ struct TaskStatusIconView: View {
     /// Scale factor from the 24×24 reference space to the rendered size.
     private var s: CGFloat { size / 24 }
 
-    private enum Palette {
+    /// Shared task-status palette; `amber` doubles as the warning color for
+    /// conflict relation chips (fe `text-warning`).
+    enum Palette {
         // #99999966
         static let gray = Color(red: 0.6, green: 0.6, blue: 0.6).opacity(0.4)
         // #f59e0b

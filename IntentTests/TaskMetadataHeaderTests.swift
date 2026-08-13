@@ -1,9 +1,10 @@
+import Foundation
 import Testing
 @testable import Intent
 
 /// Tests for the task-note metadata header's pure helpers: reverse dependency
-/// edge derivation and unmet-dependency highlight suppression (fe
-/// `NoteMetadataBar.svelte` parity).
+/// edge derivation, unmet-dependency highlight suppression, and assignee
+/// dedup/ordering (fe `NoteMetadataBar.svelte` parity).
 struct TaskMetadataHeaderTests {
     private func makeNote(
         id: String,
@@ -75,5 +76,24 @@ struct TaskMetadataHeaderTests {
             id: "t", taskStatus: "complete",
             dependsOn: ["a", "b"], unmetDependsOn: ["b"])
         #expect(TaskMetadataHeaderView.showsUnmetDependency("b", note: note) == false)
+    }
+
+    // MARK: - Assignee dedup and ordering
+
+    @Test func sortedAssigneeIdsDedupsAndSortsByCreation() {
+        let created: [String: Date] = [
+            "newer": Date(timeIntervalSince1970: 200),
+            "older": Date(timeIntervalSince1970: 100),
+        ]
+        let result = TaskMetadataHeaderView.sortedAssigneeIds(
+            ["newer", "older", "newer"], createdAt: { created[$0] })
+        #expect(result == ["older", "newer"])
+    }
+
+    @Test func sortedAssigneeIdsUnresolvedSortLastInWireOrder() {
+        let created: [String: Date] = ["known": Date(timeIntervalSince1970: 100)]
+        let result = TaskMetadataHeaderView.sortedAssigneeIds(
+            ["mystery-b", "known", "mystery-a"], createdAt: { created[$0] })
+        #expect(result == ["known", "mystery-b", "mystery-a"])
     }
 }

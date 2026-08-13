@@ -48,6 +48,10 @@ struct NoteDetailView: View {
                                 resolveAgentName: { id in
                                     agentStore.agents.first { $0.id == id }?.name
                                 },
+                                resolveAgentCreatedAt: { id in
+                                    ISO8601DateFormatter.lenientDate(
+                                        from: agentStore.agents.first { $0.id == id }?.createdAt)
+                                },
                                 onNavigateToNote: { navigateToNote($0) },
                                 onSetStatus: { status in
                                     Task {

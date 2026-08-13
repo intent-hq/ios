@@ -10,6 +10,8 @@ struct TaskMetadataHeaderView: View {
     let notes: [Note]
     /// Resolve an agent ID to a display name; nil when unknown.
     let resolveAgentName: (String) -> String?
+    /// Resolve an agent ID to its creation date (assignee ordering); nil when unknown.
+    let resolveAgentCreatedAt: (String) -> Date?
     /// Navigate to a related note by ID.
     let onNavigateToNote: (String) -> Void
     /// Write this task note's metadata status (PROTOCOL §5.4 vocabulary).
@@ -44,6 +46,25 @@ struct TaskMetadataHeaderView: View {
     /// unmet highlighting is suppressed once the task is complete).
     static func showsUnmetDependency(_ depId: String, note: Note) -> Bool {
         note.taskStatus != "complete" && note.unmetDependsOn.contains(depId)
+    }
+
+    /// Assignee ids for display (fe parity): deduplicated preserving first
+    /// occurrence, then sorted by agent creation date (oldest first; agents
+    /// with no resolvable date sort last, keeping their wire order).
+    static func sortedAssigneeIds(
+        _ ids: [String], createdAt: (String) -> Date?
+    ) -> [String] {
+        var seen = Set<String>()
+        let unique = ids.filter { seen.insert($0).inserted }
+        return unique
+            .enumerated()
+            .sorted { a, b in
+                let dateA = createdAt(a.element) ?? .distantFuture
+                let dateB = createdAt(b.element) ?? .distantFuture
+                if dateA != dateB { return dateA < dateB }
+                return a.offset < b.offset
+            }
+            .map(\.element)
     }
 
     var body: some View {
@@ -111,7 +132,10 @@ struct TaskMetadataHeaderView: View {
 
     private var agentNames: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(note.assignedAgentIds, id: \.self) { agentId in
+            ForEach(
+                Self.sortedAssigneeIds(note.assignedAgentIds, createdAt: resolveAgentCreatedAt),
+                id: \.self
+            ) { agentId in
                 Text(resolveAgentName(agentId) ?? Self.truncatedId(agentId))
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -165,8 +189,8 @@ private struct TaskRelationChip: View {
     let onTap: () -> Void
     @Environment(\.colorScheme) var colorScheme
 
-    // #f59e0b — fe `text-warning` treatment for conflict chips.
-    private static let warning = Color(red: 0xF5 / 255, green: 0x9E / 255, blue: 0x0B / 255)
+    // fe `text-warning` treatment for conflict chips (shared #f59e0b amber).
+    private static let warning = TaskStatusIconView.Palette.amber
 
     private var title: String {
         relatedNote?.title ?? fallbackId
