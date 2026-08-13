@@ -3,13 +3,14 @@ import SwiftUI
 /// Compact circular task status indicator, visually matching the desktop
 /// frontend's `TaskStatusIcon.svelte`:
 /// - notStarted / unknown: empty gray outline circle
-/// - waiting: gray outline circle with a clock glyph
+/// - waiting: gray outline circle with a clock glyph (deliberate addition;
+///   the fe currently renders waiting identically to not_started)
 /// - discussionNeeded: amber filled circle with a question mark
 /// - blocked: red filled circle with an exclamation mark
 /// - inProgress: blue outline, right half filled
 /// - reviewRequired: blue filled circle with an eye
 /// - complete: green filled circle with a white checkmark
-/// - cancelled: gray filled circle with a diagonal line
+/// - cancelled: gray outline circle with a diagonal line
 ///
 /// All geometry is defined in the fe's 24×24 viewBox space and scaled to `size`.
 struct TaskStatusIconView: View {
@@ -48,16 +49,17 @@ struct TaskStatusIconView: View {
         }
     }
 
-    /// Inner fill circle: color and radius in reference units (0 = no fill).
+    /// Inner fill circle: color and radius in reference units (nil = no fill).
+    /// Cancelled has no fill in the fe (innerCircleRPercentage 0) — it renders
+    /// as a gray outline with a diagonal line.
     private var fill: (color: Color, radius: CGFloat)? {
         switch status {
-        case .notStarted, .waiting, .unknown: return nil
+        case .notStarted, .waiting, .cancelled, .unknown: return nil
         case .discussionNeeded: return (Palette.amber, 12)
         case .blocked: return (Palette.red, 12)
         case .inProgress: return (Palette.skyBlue, 6.6)
         case .reviewRequired: return (Palette.blue, 12)
         case .complete: return (Palette.greenFill, 12)
-        case .cancelled: return (Palette.gray, 12)
         }
     }
 
@@ -69,6 +71,13 @@ struct TaskStatusIconView: View {
             Circle()
                 .stroke(strokeColor, lineWidth: 2.5 * s)
                 .frame(width: 21.6 * s, height: 21.6 * s)
+            if status == .inProgress {
+                // fe draws an extra inner ring (r=10, width 2) that thickens
+                // the in-progress outline inward.
+                Circle()
+                    .stroke(strokeColor, lineWidth: 2 * s)
+                    .frame(width: 20 * s, height: 20 * s)
+            }
             glyph
         }
         .frame(width: size, height: size)
@@ -82,8 +91,14 @@ struct TaskStatusIconView: View {
             .frame(width: radius * 2 * s, height: radius * 2 * s)
         if status == .inProgress {
             // Half fill: only the part right of x = 11.52 (48% of 24) is visible.
-            // The fill circle spans x ∈ [12 − radius, 12 + radius].
-            circle.mask(Rectangle().padding(.leading, (11.52 - (12 - radius)) * s))
+            // The fill circle spans x ∈ [12 − radius, 12 + radius]. The mask is
+            // pinned to LTR so the visible half never flips under RTL (the fe
+            // clip is an absolute x=48% rect).
+            circle.mask(
+                Rectangle()
+                    .padding(.leading, (11.52 - (12 - radius)) * s)
+                    .environment(\.layoutDirection, .leftToRight)
+            )
         } else {
             circle
         }

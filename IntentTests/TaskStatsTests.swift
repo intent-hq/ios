@@ -121,9 +121,9 @@ struct TaskStatsTests {
     }
 
     @Test func indentedAndStarBulletCheckboxesAreRecognized() {
-        let content = "  - [x] [Nested](intent://local/task/id-1)\n* [ ] [Star](intent://local/task/id-2)"
+        let content = "  - [x] [Nested](intent://local/task/id-1)\n* [ ] [Star](intent://local/task/id-2)\n- [X] [Upper](intent://local/task/id-3)"
         let lines = TaskContentParser.linkedTaskLines(in: content)
-        #expect(lines.map(\.checkboxMarker) == ["x", " "])
+        #expect(lines.map(\.checkboxMarker) == ["x", " ", "x"])
     }
 
     @Test func emptyContentReturnsNoLines() {

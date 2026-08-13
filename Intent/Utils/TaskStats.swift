@@ -22,7 +22,8 @@ struct LinkedTaskLine: Equatable {
     /// Task note ID from the link URL.
     let noteId: String
     /// Checkbox marker preceding the link (" ", "x", "/") when the line is a
-    /// checkbox list item; nil when the line has no checkbox.
+    /// checkbox list item; nil when the line has no checkbox. An uppercase
+    /// "X" in the source is normalized to "x".
     let checkboxMarker: Character?
 }
 
@@ -90,7 +91,7 @@ enum TaskContentParser {
             let checkboxMarker: Character? = checkboxRegex
                 .firstMatch(in: line, range: lineNSRange)
                 .flatMap { Range($0.range(at: 1), in: line) }
-                .map { line[$0.lowerBound] }
+                .map { Character(line[$0.lowerBound].lowercased()) }
 
             taskLinkRegex.enumerateMatches(in: line, range: lineNSRange) { match, _, _ in
                 guard let match,
