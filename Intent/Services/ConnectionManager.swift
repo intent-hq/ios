@@ -157,10 +157,19 @@ class ConnectionManager: ObservableObject {
     /// Subscriptions are per-connection (PROTOCOL §6.1): once the connection is gone the
     /// registered handlers route nothing, so drop them instead of letting dead entries
     /// accumulate. Stores re-subscribe (and re-register) on reconnect.
+    ///
+    /// Buffered unrouted pushes and unregister tombstones are per-connection for the same
+    /// reason — subscriptionIds can be reused after a daemon restart, so a stale
+    /// prior-connection frame left in the buffer could replay into a fresh post-reconnect
+    /// handler registered under a reused id, and a stale tombstone could suppress
+    /// buffering for that id. Clear them alongside the handlers.
     private func clearSubscriptionHandlers() {
-        guard !subscriptionHandlers.isEmpty else { return }
-        print("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s) on disconnect")
+        guard !subscriptionHandlers.isEmpty || !unroutedPushBuffer.isEmpty
+            || !recentlyUnregisteredIds.isEmpty else { return }
+        print("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s), \(unroutedPushBuffer.count) buffered push(es) on disconnect")
         subscriptionHandlers.removeAll()
+        unroutedPushBuffer.removeAll()
+        recentlyUnregisteredIds.removeAll()
     }
 
     // MARK: - Public API
