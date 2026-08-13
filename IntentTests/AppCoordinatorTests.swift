@@ -854,10 +854,12 @@ struct AppCoordinatorTests {
 
     // MARK: - Fetch-driven workspace validation (lastUpdated race)
 
-    private static func makeWorkspace(id: String, status: String? = nil) -> Workspace {
+    private static func makeWorkspace(id: String, status: String? = nil,
+                                      attention: String? = nil) -> Workspace {
         Workspace(
             id: id, title: "WS \(id)", branch: nil, baseRef: nil,
             status: status, activity: nil, displayStatus: nil,
+            attention: attention,
             lastActivity: nil, updatedAt: nil,
             repositoryOwner: nil, repositoryName: nil, prStatus: nil,
             prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
@@ -869,6 +871,56 @@ struct AppCoordinatorTests {
     /// Let main-queue-hopping Combine sinks and spawned validation tasks run.
     private static func drainMainQueue() async {
         try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+
+    // MARK: - workspace.markSeen on open
+
+    @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async {
+        let wsId = "test-coord-markseen-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
+        let fake = FakeConnectionManager()
+        fake.responseMap["workspace.markSeen"] = ["workspace": ["id": wsId]] as [String: Any]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("workspace.markSeen"))
+        #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
+        #expect(store.workspaces.first?.attention == "none",
+                "Opening a workspace must optimistically clear the local unread flag")
+    }
+
+    @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async {
+        let wsId = "test-coord-markseen-fail-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        let store = WorkspaceStore(forTesting: true)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
+        let fake = FakeConnectionManager()
+        // Older daemon without the method — must not disturb navigation
+        fake.errorMap["workspace.markSeen"] = NSError(
+            domain: "WebSocket", code: -32601,
+            userInfo: [NSLocalizedDescriptionKey: "Method not found"])
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("markSeen failure must not affect navigation, got \(coordinator.currentScreen)")
+        }
     }
 
     @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async {
