@@ -398,6 +398,43 @@ struct ConnectionManagerTests {
         #expect(receivedCount == 1) // Still 1, not incremented
     }
 
+    // Subscriptions are per-connection (PROTOCOL §6.1, monorepo#2213): disconnect
+    // must drop all registered subscription handlers, buffered unrouted pushes, and
+    // unregister tombstones — ids can be reused after a daemon restart, so stale
+    // prior-connection buffer/tombstone state must not leak into the next connection.
+    @Test @MainActor func disconnectClearsSubscriptionHandlers() async {
+        let manager = ConnectionManager.shared
+        var receivedCount = 0
+
+        manager.registerSubscriptionHandler(id: "disc-sub-1") { _ in
+            receivedCount += 1
+        }
+        #expect(manager.subscriptionHandlerCount >= 1)
+
+        // Seed per-connection buffer + tombstone state: an unrouted push for an
+        // unregistered id gets buffered, and unregistering lays a tombstone.
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-buffered","kind":"snapshot","seq":0,"snapshot":[]}}
+        """)
+        manager.unregisterSubscriptionHandler(id: "disc-sub-tombstoned")
+        #expect(manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "disc-sub-buffered" })
+        #expect(manager.recentlyUnregisteredIds["disc-sub-tombstoned"] != nil)
+
+        manager.disconnect()
+        #expect(manager.subscriptionHandlerCount == 0)
+        #expect(manager.unroutedPushBuffer.isEmpty)
+        #expect(manager.recentlyUnregisteredIds.isEmpty)
+
+        // A push for the cleared id no longer reaches the handler
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-1","kind":"snapshot","seq":0,"snapshot":[]}}
+        """)
+        #expect(receivedCount == 0)
+
+        // Clean up: the unrouted push above was buffered for replay; drop it
+        manager.unroutedPushBuffer.removeAll { $0.push.subscriptionId == "disc-sub-1" }
+    }
+
     @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() async {
         let manager = ConnectionManager.shared
         var receivedPush1: SubscriptionPush?

@@ -206,7 +206,7 @@ struct TaskStoreIntegrationTests {
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
 
-    // MARK: - deinit removes event handler (monorepo#2211)
+    // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
 
     @Test func deinitRemovesEventHandler() async throws {
         let fake = FakeConnectionManager()
@@ -217,14 +217,16 @@ struct TaskStoreIntegrationTests {
         fake.simulateConnect()
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(fake.eventHandlerCount == 1)
+        #expect(fake.subscriptionHandlerCount == 1)
         #expect(store != nil)
 
         store = nil
-        // deinit hops to the main actor to remove the handler; wait for that task
+        // deinit hops to the main actor to remove the handlers; wait for that task
         for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 { break }
+            if fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0 { break }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         #expect(fake.eventHandlerCount == 0)
+        #expect(fake.subscriptionHandlerCount == 0)
     }
 }

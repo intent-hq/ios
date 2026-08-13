@@ -151,6 +151,25 @@ class ConnectionManager: ObservableObject {
         socket = nil
         connectionState = .disconnected
         failAllPending(error: "Connection closed")
+        clearSubscriptionHandlers()
+    }
+
+    /// Subscriptions are per-connection (PROTOCOL §6.1): once the connection is gone the
+    /// registered handlers route nothing, so drop them instead of letting dead entries
+    /// accumulate. Stores re-subscribe (and re-register) on reconnect.
+    ///
+    /// Buffered unrouted pushes and unregister tombstones are per-connection for the same
+    /// reason — subscriptionIds can be reused after a daemon restart, so a stale
+    /// prior-connection frame left in the buffer could replay into a fresh post-reconnect
+    /// handler registered under a reused id, and a stale tombstone could suppress
+    /// buffering for that id. Clear them alongside the handlers.
+    private func clearSubscriptionHandlers() {
+        guard !subscriptionHandlers.isEmpty || !unroutedPushBuffer.isEmpty
+            || !recentlyUnregisteredIds.isEmpty else { return }
+        print("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s), \(unroutedPushBuffer.count) buffered push(es) on disconnect")
+        subscriptionHandlers.removeAll()
+        unroutedPushBuffer.removeAll()
+        recentlyUnregisteredIds.removeAll()
     }
 
     // MARK: - Public API
@@ -248,6 +267,11 @@ class ConnectionManager: ObservableObject {
         recentlyUnregisteredIds.removeValue(forKey: id)
         print("[ConnectionManager] Registered subscription handler for id=\(id)")
         replayBufferedPushes(for: id, to: handler)
+    }
+
+    /// Count of registered subscription handlers. Internal for test visibility.
+    var subscriptionHandlerCount: Int {
+        subscriptionHandlers.count
     }
 
     /// Unregister the handler for the given subscriptionId. After this call, pushes for this
@@ -684,6 +708,7 @@ class ConnectionManager: ObservableObject {
         socket = nil
         connectionState = .reconnecting(attempt: 1)
         failAllPending(error: "Connection lost")
+        clearSubscriptionHandlers()
         startReconnection(disconnectTime: disconnectTime)
     }
 
