@@ -897,6 +897,40 @@ struct AppCoordinatorTests {
                 "Opening a workspace must optimistically clear the local unread flag")
     }
 
+    @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async {
+        let wsId = "test-coord-restore-markseen-\(UUID().uuidString)"
+        defer {
+            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: wsId)
+            Self.cleanupLastScreen()
+        }
+
+        // Cold-start restore into a workspace counts as viewing it (mirrors
+        // the FE, which marks seen whenever the workspace surface activates).
+        PersistenceManager.shared.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: wsId,
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+
+        let store = WorkspaceStore(forTesting: true)
+        store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
+        let fake = FakeConnectionManager()
+        fake.responseMap["workspace.markSeen"] = ["workspace": ["id": wsId]] as [String: Any]
+        let coordinator = AppCoordinator(workspaceStore: store, connection: fake)
+
+        coordinator.onConnectionSuccess()
+        await Self.drainMainQueue()
+
+        #expect(fake.didCallMethod("workspace.markSeen"))
+        #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
+        #expect(store.workspaces.first?.attention == "none",
+                "Restoring into a workspace must clear the local unread flag")
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async {
         let wsId = "test-coord-markseen-fail-\(UUID().uuidString)"
         defer {

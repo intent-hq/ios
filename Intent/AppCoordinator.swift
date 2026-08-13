@@ -193,11 +193,15 @@ class AppCoordinator: ObservableObject {
     }
 
     func onConnectionSuccess() {
-        // Try to restore last viewed screen
+        // Try to restore last viewed screen. Restoring into a workspace counts
+        // as viewing it, so it marks the workspace seen — mirroring the FE,
+        // where the workspace surface marks seen whenever it becomes active
+        // (including cold-start restore).
         if let saved = PersistenceManager.shared.loadLastScreen() {
             switch saved.screen {
             case "workspaceDetail":
                 if let workspaceId = saved.workspaceId {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
@@ -208,6 +212,7 @@ class AppCoordinator: ObservableObject {
                 if let agentId = saved.agentId,
                    let workspaceId = saved.workspaceId,
                    let agentName = saved.agentName {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
@@ -223,6 +228,7 @@ class AppCoordinator: ObservableObject {
                 if let noteId = saved.noteId,
                    let workspaceId = saved.workspaceId,
                    let noteTitle = saved.noteTitle {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
