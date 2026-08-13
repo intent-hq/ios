@@ -76,6 +76,17 @@ enum TaskContentParser {
         return TaskStats(total: total, completed: completed, inProgress: inProgress)
     }
 
+    /// First `[title](intent://local/task/{id})` link in `line`, if any.
+    static func firstTaskLink(in line: String) -> LinkedTaskRef? {
+        let range = NSRange(line.startIndex..., in: line)
+        guard let match = taskLinkRegex.firstMatch(in: line, range: range),
+              let titleRange = Range(match.range(at: 1), in: line),
+              let idRange = Range(match.range(at: 2), in: line) else {
+            return nil
+        }
+        return LinkedTaskRef(title: String(line[titleRange]), noteId: String(line[idRange]))
+    }
+
     /// Extract linked-task lines from `content`, in document order. Lines with
     /// several task links produce one entry per link. Plain checkboxes without
     /// a task link are not returned.
