@@ -8,6 +8,7 @@ struct NoteDetailView: View {
     /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     @StateObject private var noteStore = NoteStore()
+    @StateObject private var agentStore = AgentStore()
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var note: Note?
@@ -36,6 +37,26 @@ struct NoteDetailView: View {
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 }
                             }
+                        }
+
+                        // Task-note metadata header (status, agents, relations),
+                        // matching fe NoteMetadataBar; never shown for the spec.
+                        if note.taskStatus != nil && !note.isDefault {
+                            TaskMetadataHeaderView(
+                                note: note,
+                                notes: noteStore.notes,
+                                resolveAgentName: { id in
+                                    agentStore.agents.first { $0.id == id }?.name
+                                },
+                                onNavigateToNote: { navigateToNote($0) },
+                                onSetStatus: { status in
+                                    Task {
+                                        await noteStore.updateTaskNoteStatus(
+                                            noteId: noteId, workspaceId: workspaceId,
+                                            status: status)
+                                    }
+                                }
+                            )
                         }
 
                         // Content: markdown segments interleaved with native task rows
@@ -87,6 +108,10 @@ struct NoteDetailView: View {
             await loadNote()
             // Also fetch all notes so we can resolve titles for intent:// links
             await noteStore.fetchNotes(workspaceId: workspaceId)
+            // Agents back the metadata header's assignee names; observe events
+            // so names stay current while the note is open.
+            agentStore.startObservingEvents()
+            await agentStore.fetchAgents(workspaceId: workspaceId)
             noteStore.onNoteChanged = { [self] in
                 Task { await self.refreshNote() }
             }
