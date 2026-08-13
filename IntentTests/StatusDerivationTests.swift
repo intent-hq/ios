@@ -7,11 +7,13 @@ struct StatusDerivationTests {
     // overridden by the parallel PR surface.
     private func makeWorkspace(
         displayStatus: String? = nil,
+        attention: String? = nil,
         prStatus: String? = nil
     ) -> Workspace {
         Workspace(
             id: "test", title: "Test", branch: nil, baseRef: nil,
             status: nil, activity: nil, displayStatus: displayStatus,
+            attention: attention,
             lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
             repositoryName: nil, prStatus: prStatus, prNumber: nil,
             diffSummaryTotalFiles: nil,
@@ -31,7 +33,9 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus(wireValue: "idle") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "not_started") == .notStarted)
         #expect(WorkspaceDisplayStatus(wireValue: "in_progress") == .inProgress)
-        #expect(WorkspaceDisplayStatus(wireValue: "unread") == .unread)
+        // Legacy wire value from older daemons — unread is now the
+        // attention-flag dot, so the status folds into .idle.
+        #expect(WorkspaceDisplayStatus(wireValue: "unread") == .idle)
         #expect(WorkspaceDisplayStatus(wireValue: "complete") == .complete)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_ready") == .prReady)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_open") == .prOpen)
@@ -85,9 +89,25 @@ struct StatusDerivationTests {
         #expect(resolveDisplayStatus(for: ws) == .blocked)
     }
 
-    @Test func resolveMapsUnread() async throws {
+    @Test func resolveMapsLegacyUnreadToIdle() async throws {
         let ws = makeWorkspace(displayStatus: "unread")
-        #expect(resolveDisplayStatus(for: ws) == .unread)
+        #expect(resolveDisplayStatus(for: ws) == .idle)
+    }
+
+    // MARK: - Unread attention flag (blue dot)
+
+    @Test func unreadAttentionFlag() async throws {
+        #expect(hasUnreadAttention(makeWorkspace(attention: "unread")))
+        #expect(!hasUnreadAttention(makeWorkspace(attention: "none")))
+        #expect(!hasUnreadAttention(makeWorkspace(attention: "review_required")))
+        #expect(!hasUnreadAttention(makeWorkspace()))
+    }
+
+    @Test func unreadAttentionIndependentOfDisplayStatus() async throws {
+        // The dot overlays the real status: a complete workspace can be unread.
+        let ws = makeWorkspace(displayStatus: "complete", attention: "unread")
+        #expect(resolveDisplayStatus(for: ws) == .complete)
+        #expect(hasUnreadAttention(ws))
     }
 
     // MARK: - Labels
@@ -99,7 +119,6 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus.idle.label == "Idle")
         #expect(WorkspaceDisplayStatus.notStarted.label == "No Code Changes")
         #expect(WorkspaceDisplayStatus.inProgress.label == "In Progress")
-        #expect(WorkspaceDisplayStatus.unread.label == "Unread")
         #expect(WorkspaceDisplayStatus.complete.label == "Complete")
         #expect(WorkspaceDisplayStatus.prReady.label == "PR Mergeable")
         #expect(WorkspaceDisplayStatus.prOpen.label == "PR Open")
@@ -111,7 +130,7 @@ struct StatusDerivationTests {
 
     @Test func sortOrderOrdering() async throws {
         let ordered: [WorkspaceDisplayStatus] = [
-            .failed, .blocked, .needsAttention, .idle, .inProgress, .unread,
+            .failed, .blocked, .needsAttention, .idle, .inProgress,
             .prReady, .prOpen, .notStarted, .complete, .prMerged, .unknown,
         ]
         for i in 0..<ordered.count - 1 {

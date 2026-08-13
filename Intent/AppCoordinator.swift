@@ -193,11 +193,15 @@ class AppCoordinator: ObservableObject {
     }
 
     func onConnectionSuccess() {
-        // Try to restore last viewed screen
+        // Try to restore last viewed screen. Restoring into a workspace counts
+        // as viewing it, so it marks the workspace seen — mirroring the FE,
+        // where the workspace surface marks seen whenever it becomes active
+        // (including cold-start restore).
         if let saved = PersistenceManager.shared.loadLastScreen() {
             switch saved.screen {
             case "workspaceDetail":
                 if let workspaceId = saved.workspaceId {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
@@ -208,6 +212,7 @@ class AppCoordinator: ObservableObject {
                 if let agentId = saved.agentId,
                    let workspaceId = saved.workspaceId,
                    let agentName = saved.agentName {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
@@ -223,6 +228,7 @@ class AppCoordinator: ObservableObject {
                 if let noteId = saved.noteId,
                    let workspaceId = saved.workspaceId,
                    let noteTitle = saved.noteTitle {
+                    markWorkspaceSeen(workspaceId)
                     suppressWorkspaceNavigation = true
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
@@ -324,6 +330,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onSelectWorkspace(_ workspaceId: String) {
+        markWorkspaceSeen(workspaceId)
         // Check for a saved per-workspace sub-screen and restore it
         if let saved = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: workspaceId) {
             suppressWorkspaceNavigation = true
@@ -359,6 +366,22 @@ class AppCoordinator: ObservableObject {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+    }
+
+    /// Fire-and-forget workspace.markSeen: clears the server-owned unread
+    /// attention flag (blue dot) across clients when the user opens a
+    /// workspace, mirroring the FE. Failures are logged and ignored — an
+    /// older daemon without the method just keeps its legacy behavior.
+    private func markWorkspaceSeen(_ workspaceId: String) {
+        workspaceStore.clearUnreadAttentionLocally(workspaceId: workspaceId)
+        Task { @MainActor in
+            do {
+                _ = try await connection.request(
+                    "workspace.markSeen", params: ["workspaceId": workspaceId])
+            } catch {
+                print("[AppCoordinator] workspace.markSeen failed: \(error)")
+            }
+        }
     }
 
     /// Called when a restored workspace is no longer found in the workspace list.

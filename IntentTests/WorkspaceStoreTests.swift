@@ -296,6 +296,66 @@ struct WorkspaceStoreHighWaterMarkTests {
     }
 }
 
+// MARK: - Unread attention flag tests
+
+@MainActor
+struct WorkspaceStoreAttentionTests {
+
+    private func makeWorkspace(id: String, attention: String?) -> Workspace {
+        Workspace(
+            id: id, title: "WS \(id)", branch: nil, baseRef: nil,
+            status: nil, activity: nil, displayStatus: nil,
+            attention: attention,
+            lastActivity: nil, updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
+            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+            taskStatsCompleted: nil, taskStatsInProgress: nil,
+            agentSummaryCount: nil, agentSummaryAgents: nil
+        )
+    }
+
+    @Test func parseWorkspaceDecodesAttention() async throws {
+        let ws = WorkspaceStore.parseWorkspace(
+            ["id": "ws-1", "title": "T", "attention": "unread"])
+        #expect(ws?.attention == "unread")
+    }
+
+    @Test func clearUnreadAttentionLocallyClearsUnread() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
+        store.clearUnreadAttentionLocally(workspaceId: "ws-1")
+        #expect(store.workspaces[0].attention == "none")
+    }
+
+    @Test func clearUnreadAttentionLocallyGuardedOnUnread() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        // review_required must survive (mirrors the server-side markSeen guard)
+        store.workspaces = [makeWorkspace(id: "ws-1", attention: "review_required")]
+        store.clearUnreadAttentionLocally(workspaceId: "ws-1")
+        #expect(store.workspaces[0].attention == "review_required")
+
+        // Absent flag stays absent
+        store.workspaces = [makeWorkspace(id: "ws-2", attention: nil)]
+        store.clearUnreadAttentionLocally(workspaceId: "ws-2")
+        #expect(store.workspaces[0].attention == nil)
+    }
+
+    @Test func clearUnreadAttentionLocallyUnknownWorkspaceIsNoOp() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
+        store.clearUnreadAttentionLocally(workspaceId: "ws-other")
+        #expect(store.workspaces[0].attention == "unread")
+    }
+
+    @Test func attentionSurvivesLastActivityRebuild() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        #expect(store.workspaces[0].attention == "unread",
+                "The lastActivity rebuild must carry the attention flag through")
+    }
+}
+
 // MARK: - Fetch publish-order regression tests
 
 @MainActor

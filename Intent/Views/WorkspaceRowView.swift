@@ -26,7 +26,7 @@ struct WorkspaceRowView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Status icon with agent activity dot overlay
+            // Status icon with agent activity / unread dot overlays
             ZStack(alignment: .topTrailing) {
                 statusIcon
 
@@ -36,8 +36,15 @@ struct WorkspaceRowView: View {
                         .frame(width: 5, height: 5)
                         .offset(x: 2, y: -2)
                 }
-                // Blue dot removed — it was showing for all workspaces with any agents.
-                // In the Electron app, blue = unread messages, which iOS doesn't track yet.
+
+                // Blue dot: server-owned unread attention flag, overlaying the
+                // real status; cleared via workspace.markSeen on open.
+                if hasUnreadAttention(workspace) {
+                    Circle()
+                        .fill(workspaceUnreadColor)
+                        .frame(width: 5, height: 5)
+                        .offset(x: 2, y: hasActiveAgents ? 5 : -2)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -180,12 +187,6 @@ struct WorkspaceRowView: View {
                     .foregroundColor(.white)
             }
             .frame(width: size, height: size)
-
-        case .unread:
-            // Solid blue dot — unseen output on an otherwise quiet workspace
-            Circle()
-                .fill(color)
-                .frame(width: size, height: size)
 
         case .unknown:
             // Neutral question mark for a wire value this build doesn't know

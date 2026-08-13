@@ -14,7 +14,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     case idle
     case notStarted
     case inProgress
-    case unread
     case complete
     case prReady
     case prOpen
@@ -25,6 +24,9 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     /// Maps the BE-owned wire value (snake_case) to a display status.
     /// Returns nil for unknown values.
+    /// The retired `"unread"` value (older daemons) maps to `.idle`: unread
+    /// is now the workspace `attention` flag rendered as a dot overlay, not
+    /// a first-class status.
     init?(wireValue: String) {
         switch wireValue {
         case "failed": self = .failed
@@ -33,7 +35,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case "idle": self = .idle
         case "not_started": self = .notStarted
         case "in_progress": self = .inProgress
-        case "unread": self = .unread
+        case "unread": self = .idle
         case "complete": self = .complete
         case "pr_ready": self = .prReady
         case "pr_open": self = .prOpen
@@ -50,7 +52,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .idle: return Color.gray.opacity(0.6)
         case .notStarted: return Color.gray.opacity(0.4)
         case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
-        case .unread: return Color(red: 0.23, green: 0.51, blue: 0.96) // Blue #3B82F6
         case .complete: return Color(red: 0.0, green: 0.74, blue: 0.49) // Green #00BD7D
         case .prReady: return Color(red: 0.13, green: 0.77, blue: 0.37) // Green #22C55E
         case .prOpen: return Color(red: 0.43, green: 0.50, blue: 0.96) // Indigo
@@ -67,7 +68,6 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .idle: return "Idle"
         case .notStarted: return "No Code Changes"
         case .inProgress: return "In Progress"
-        case .unread: return "Unread"
         case .complete: return "Complete"
         case .prReady: return "PR Mergeable"
         case .prOpen: return "PR Open"
@@ -89,15 +89,25 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .needsAttention: return 2
         case .idle: return 3
         case .inProgress: return 4
-        case .unread: return 5
-        case .prReady: return 6
-        case .prOpen: return 7
-        case .notStarted: return 8
-        case .complete: return 9
-        case .prMerged: return 10
-        case .unknown: return 11
+        case .prReady: return 5
+        case .prOpen: return 6
+        case .notStarted: return 7
+        case .complete: return 8
+        case .prMerged: return 9
+        case .unknown: return 10
         }
     }
+}
+
+/// The unread-dot blue (#3B82F6), shared by the row overlay and any other
+/// unread affordances.
+let workspaceUnreadColor = Color(red: 0.23, green: 0.51, blue: 0.96)
+
+/// True when the workspace carries the server-owned unread attention flag
+/// (the blue dot). `review_required` and `none` don't count — only `unread`
+/// is cleared by opening the workspace (workspace.markSeen).
+func hasUnreadAttention(_ workspace: Workspace) -> Bool {
+    workspace.attention == "unread"
 }
 
 /// Resolves the display status for a workspace from the BE-owned

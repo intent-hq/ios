@@ -16,6 +16,7 @@ struct WorkspaceParsingTests {
             "prStatus": "Open",
             "prNumber": 42,
             "displayStatus": "pr_open",
+            "attention": "unread",
             "diffSummary": ["totalFiles": 5],
             "taskStats": ["total": 10, "completed": 3, "inProgress": 2]
         ]
@@ -32,6 +33,7 @@ struct WorkspaceParsingTests {
         #expect(ws?.prStatus == "Open")
         #expect(ws?.prNumber == 42)
         #expect(ws?.displayStatus == "pr_open")
+        #expect(ws?.attention == "unread")
         #expect(ws?.diffSummaryTotalFiles == 5)
         #expect(ws?.taskStatsTotal == 10)
         #expect(ws?.taskStatsCompleted == 3)
@@ -66,6 +68,7 @@ struct WorkspaceParsingTests {
         #expect(ws?.title == "Minimal")
         #expect(ws?.branch == nil)
         #expect(ws?.displayStatus == nil)
+        #expect(ws?.attention == nil)
         #expect(ws?.prStatus == nil)
         #expect(ws?.diffSummaryTotalFiles == nil)
         #expect(ws?.taskStatsTotal == nil)

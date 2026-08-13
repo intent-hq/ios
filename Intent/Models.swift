@@ -65,6 +65,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let status: String?
     let activity: String?      // "idle" | "agent_running" from daemon
     let displayStatus: String? // BE-owned wire value (snake_case, e.g. "pr_open"); nil on older daemons
+    let attention: String?     // "none" | "unread" | "review_required"; nil on older daemons
     let lastActivity: String?
     let updatedAt: String?
     let repositoryOwner: String?
@@ -77,6 +78,37 @@ struct Workspace: Codable, Identifiable, Equatable {
     let taskStatsInProgress: Int?    // from taskStats.inProgress
     let agentSummaryCount: Int?
     let agentSummaryAgents: [WorkspaceAgentInfo]?
+
+    /// Explicit initializer so `attention` can default to nil — existing
+    /// call sites (and test fixtures) that predate the field stay valid.
+    init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
+         activity: String?, displayStatus: String?, attention: String? = nil,
+         lastActivity: String?, updatedAt: String?, repositoryOwner: String?,
+         repositoryName: String?, prStatus: String?, prNumber: Int?,
+         diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
+         taskStatsInProgress: Int?, agentSummaryCount: Int?,
+         agentSummaryAgents: [WorkspaceAgentInfo]?) {
+        self.id = id
+        self.title = title
+        self.branch = branch
+        self.baseRef = baseRef
+        self.status = status
+        self.activity = activity
+        self.displayStatus = displayStatus
+        self.attention = attention
+        self.lastActivity = lastActivity
+        self.updatedAt = updatedAt
+        self.repositoryOwner = repositoryOwner
+        self.repositoryName = repositoryName
+        self.prStatus = prStatus
+        self.prNumber = prNumber
+        self.diffSummaryTotalFiles = diffSummaryTotalFiles
+        self.taskStatsTotal = taskStatsTotal
+        self.taskStatsCompleted = taskStatsCompleted
+        self.taskStatsInProgress = taskStatsInProgress
+        self.agentSummaryCount = agentSummaryCount
+        self.agentSummaryAgents = agentSummaryAgents
+    }
 }
 
 /// A model available for the agent.

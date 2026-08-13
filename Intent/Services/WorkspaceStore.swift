@@ -129,6 +129,7 @@ class WorkspaceStore: ObservableObject {
                     status: ws.status,
                     activity: ws.activity,
                     displayStatus: ws.displayStatus,
+                    attention: ws.attention,
                     lastActivity: hwm,
                     updatedAt: ws.updatedAt,
                     repositoryOwner: ws.repositoryOwner,
@@ -244,6 +245,7 @@ class WorkspaceStore: ObservableObject {
             if !workspaceLive {
                 if eventType == "workspace:activity-changed" ||
                    eventType == "workspace:displayStatus-changed" ||
+                   eventType == "workspace:attention-changed" ||
                    eventType == "workspace:updated" ||
                    eventType == "workspace:deleted" {
                     Task { await fetchAll() }
@@ -347,6 +349,7 @@ class WorkspaceStore: ObservableObject {
                 status: ws.status,
                 activity: ws.activity,
                 displayStatus: ws.displayStatus,
+                attention: ws.attention,
                 lastActivity: effectiveTimestamp,
                 updatedAt: ws.updatedAt,
                 repositoryOwner: ws.repositoryOwner,
@@ -361,6 +364,40 @@ class WorkspaceStore: ObservableObject {
                 agentSummaryAgents: ws.agentSummaryAgents
             )
         }
+    }
+
+    /// Optimistically clears the unread attention flag locally (guarded on
+    /// "unread", mirroring the server-side workspace.markSeen guard) so the
+    /// dot disappears immediately; the authoritative state converges via
+    /// workspace:attention-changed / the live subscription delta.
+    func clearUnreadAttentionLocally(workspaceId: String) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
+              workspaces[index].attention == "unread" else { return }
+        let ws = workspaces[index]
+        let updated = Workspace(
+            id: ws.id,
+            title: ws.title,
+            branch: ws.branch,
+            baseRef: ws.baseRef,
+            status: ws.status,
+            activity: ws.activity,
+            displayStatus: ws.displayStatus,
+            attention: "none",
+            lastActivity: ws.lastActivity,
+            updatedAt: ws.updatedAt,
+            repositoryOwner: ws.repositoryOwner,
+            repositoryName: ws.repositoryName,
+            prStatus: ws.prStatus,
+            prNumber: ws.prNumber,
+            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
+            taskStatsTotal: ws.taskStatsTotal,
+            taskStatsCompleted: ws.taskStatsCompleted,
+            taskStatsInProgress: ws.taskStatsInProgress,
+            agentSummaryCount: ws.agentSummaryCount,
+            agentSummaryAgents: ws.agentSummaryAgents
+        )
+        workspaces[index] = updated
+        workspaceReconciler?.seed(id: updated.id, value: updated)
     }
 
     // MARK: - Parsing
@@ -417,6 +454,7 @@ class WorkspaceStore: ObservableObject {
             status: dict["status"] as? String,
             activity: dict["activity"] as? String,
             displayStatus: dict["displayStatus"] as? String,
+            attention: dict["attention"] as? String,
             lastActivity: dict["lastActivity"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             repositoryOwner: dict["repositoryOwner"] as? String,
