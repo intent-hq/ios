@@ -318,6 +318,38 @@ struct EventWakeSummaryTests {
         #expect(summary.preview == "All tests pass")
     }
 
+    @Test func fallsBackToLegacyReportKeyForCompletionReport() {
+        var event = structuredEvent(type: "agent:idle", agentId: "agent-1", agentName: "Builder")
+        var data = event["data"] as! [String: Any]
+        data["report"] = "Legacy report text"
+        event["data"] = data
+        let summary = EventWake.summarize(content: "", metadata: [
+            "type": AnyCodable("event_notification"),
+            "events": AnyCodable([event]),
+        ])
+        #expect(summary.preview == "Legacy report text")
+
+        // An empty completionReport also falls through to the report key.
+        data["completionReport"] = "   "
+        event["data"] = data
+        let events = EventWake.parseAgentEvents(content: "", metadata: [
+            "events": AnyCodable([event]),
+        ])
+        #expect(events.count == 1)
+        #expect(events[0].completionReport == "Legacy report text")
+    }
+
+    @Test func joinsAgentLabelsBeforeCategoryLabels() {
+        let summary = EventWake.summarize(content: "", metadata: [
+            "type": AnyCodable("event_notification"),
+            "events": AnyCodable([
+                structuredEvent(type: "agent:idle", agentId: "agent-1", agentName: "Builder"),
+            ]),
+            "eventTypes": AnyCodable(["agent:idle", "file:changed"]),
+        ])
+        #expect(summary.label == "Child agent Builder completed · file changes")
+    }
+
     @Test func countsMultipleCompletionsAndCreations() {
         let summary = EventWake.summarize(content: "", metadata: [
             "type": AnyCodable("event_notification"),

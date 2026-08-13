@@ -49,6 +49,10 @@ enum EventWake {
     /// completion reports) or, when structured events are absent, from the
     /// numbered lines of the message text (legacy support). Deduplicates by
     /// agentId; later events override earlier ones, first-seen order kept.
+    /// Intentional divergence from the FE: a malformed structured event is
+    /// skipped item-by-item (keeping the good ones), whereas the FE's
+    /// `summarizeEventWake` throws and falls back to text-only parsing for
+    /// the whole wake.
     static func parseAgentEvents(content: String, metadata: [String: AnyCodable]?) -> [ParsedAgentEvent] {
         var order: [String] = []
         var byId: [String: ParsedAgentEvent] = [:]
