@@ -13,19 +13,29 @@ struct Note: Identifiable, Equatable {
     let updatedAt: String
 
     /// Display treatment for `taskStatus`; nil when the note is not a task.
-    /// Note: the checkbox markers in `renderedContent` are unaffected — the
-    /// wire checkbox vocabulary is only `[ ]`/`[x]`/`[/]`; `blocked` and
+    /// Note: the checkbox markers in `content` are unaffected — the wire
+    /// checkbox vocabulary is only `[ ]`/`[x]`/`[/]`; `blocked` and
     /// `discussion_needed` exist only in task-note metadata status.
     var taskDisplayStatus: TaskDisplayStatus? {
         taskStatus.map { TaskDisplayStatus(wire: $0) }
     }
 
-    /// Returns content with task checkbox markers replaced by emoji
-    var renderedContent: String {
-        return content
-            .replacingOccurrences(of: "- [ ] ", with: "- ☐ ")
-            .replacingOccurrences(of: "- [x] ", with: "- ✅ ")
-            .replacingOccurrences(of: "- [/] ", with: "- 🔄 ")
+    /// Copy with different content (optimistic local updates).
+    func withContent(_ newContent: String) -> Note {
+        Note(
+            id: id, title: title, content: newContent, tags: tags,
+            isDefault: isDefault, isArchived: isArchived, taskStatus: taskStatus,
+            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt
+        )
+    }
+
+    /// Copy with a different task-note status (optimistic local updates).
+    func withTaskStatus(_ newStatus: String) -> Note {
+        Note(
+            id: id, title: title, content: content, tags: tags,
+            isDefault: isDefault, isArchived: isArchived, taskStatus: newStatus,
+            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt
+        )
     }
 
     /// A short preview of the content for list display

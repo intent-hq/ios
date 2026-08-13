@@ -20,7 +20,7 @@ struct NoteDetailView: View {
             if isLoading {
                 ProgressView("Loading note...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if let note = note, !note.renderedContent.isEmpty {
+            } else if let note = displayNote, !note.content.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         // Tags
@@ -38,19 +38,35 @@ struct NoteDetailView: View {
                             }
                         }
 
-                        // Markdown content
-                        MarkdownTextView(text: note.renderedContent, onOpenURL: { url in
-                            if let targetId = Self.parseIntentNoteLink(url) {
-                                let title = noteStore.note(byId: targetId)?.title ?? "Note"
-                                if let onNavigateToNote = onNavigateToNote {
-                                    onNavigateToNote(targetId, workspaceId, title)
-                                } else {
-                                    coordinator.onSelectNote(targetId, workspaceId: workspaceId, noteTitle: title)
+                        // Content: markdown segments interleaved with native task rows
+                        NoteContentView(
+                            content: note.content,
+                            resolveNote: { noteStore.note(byId: $0) },
+                            onOpenURL: { url in
+                                if let targetId = Self.parseIntentNoteLink(url) {
+                                    navigateToNote(targetId)
+                                    return .handled
                                 }
-                                return .handled
+                                return .systemAction
+                            },
+                            onOpenTaskNote: { targetId in
+                                navigateToNote(targetId)
+                            },
+                            onSetLineStatus: { line, status in
+                                Task {
+                                    await noteStore.updateTaskLineStatus(
+                                        noteId: noteId, workspaceId: workspaceId,
+                                        line: line, status: status)
+                                }
+                            },
+                            onSetTaskNoteStatus: { taskNoteId, status in
+                                Task {
+                                    await noteStore.updateTaskNoteStatus(
+                                        noteId: taskNoteId, workspaceId: workspaceId,
+                                        status: status)
+                                }
                             }
-                            return .systemAction
-                        })
+                        )
                     }
                     .padding(16)
                 }
@@ -86,6 +102,22 @@ struct NoteDetailView: View {
             if note != nil && !newNotes.contains(where: { $0.id == noteId }) {
                 Task { await refreshNote() }
             }
+        }
+    }
+
+    /// The note to render: the store's cached copy when available (so
+    /// optimistic task-status updates show immediately), else the fetched one.
+    private var displayNote: Note? {
+        noteStore.note(byId: noteId) ?? note
+    }
+
+    /// Push a note onto the navigation stack (note-to-note navigation).
+    private func navigateToNote(_ targetId: String) {
+        let title = noteStore.note(byId: targetId)?.title ?? "Note"
+        if let onNavigateToNote = onNavigateToNote {
+            onNavigateToNote(targetId, workspaceId, title)
+        } else {
+            coordinator.onSelectNote(targetId, workspaceId: workspaceId, noteTitle: title)
         }
     }
 
