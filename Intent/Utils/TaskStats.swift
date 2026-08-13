@@ -1,0 +1,109 @@
+import Foundation
+
+/// Per-note linked-task aggregate parsed from markdown content.
+/// Port of the fe's `parseTaskStats` (sidebar utils): a LOCAL count over
+/// `[text](intent://local/task/{id})` links in one note — NOT the canonical
+/// workspace-wide task-progress rollup, which the daemon owns (task.list).
+struct TaskStats: Equatable {
+    var total: Int
+    var completed: Int
+    var inProgress: Int
+}
+
+/// One `[title](intent://local/task/{id})` link found in note content,
+/// with enough line info for a renderer to replace the line's checkbox.
+struct LinkedTaskLine: Equatable {
+    /// 0-based index of the line within the content.
+    let lineIndex: Int
+    /// Range of the full line (excluding the line terminator) in the content.
+    let lineRange: Range<String.Index>
+    /// Link text (the task title as written in the note).
+    let title: String
+    /// Task note ID from the link URL.
+    let noteId: String
+    /// Checkbox marker preceding the link (" ", "x", "/") when the line is a
+    /// checkbox list item; nil when the line has no checkbox.
+    let checkboxMarker: Character?
+}
+
+/// Parsers for `[text](intent://local/task/{id})` links in note markdown.
+/// Mirrors the fe's `TASK_LINK_REGEX_FLEXIBLE` / `parseTaskStats`.
+enum TaskContentParser {
+    /// Matches `[text](intent://local/task/{id})`; group 1 = text, group 2 = id.
+    private static let taskLinkRegex = try! NSRegularExpression(
+        pattern: #"\[([^\]]+)\]\(intent://local/task/([^)]+)\)"#
+    )
+
+    /// Matches a checkbox list-item prefix; group 1 = the marker character.
+    private static let checkboxRegex = try! NSRegularExpression(
+        pattern: #"^\s*[-*]\s+\[([ xX/])\]"#
+    )
+
+    /// Count linked-task progress in `content`, resolving each linked ID
+    /// against `notes`. Classification (matching the fe):
+    /// - cancelled tasks are excluded from the total entirely
+    /// - complete counts as completed
+    /// - in_progress and review_required count as inProgress
+    /// - unresolved IDs and all other statuses count toward total only
+    static func parseTaskStats(content: String?, notes: [Note]) -> TaskStats {
+        guard let content, !content.isEmpty else {
+            return TaskStats(total: 0, completed: 0, inProgress: 0)
+        }
+        let noteById = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+
+        var total = 0
+        var completed = 0
+        var inProgress = 0
+
+        let fullRange = NSRange(content.startIndex..., in: content)
+        taskLinkRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
+            guard let match, let idRange = Range(match.range(at: 2), in: content) else { return }
+            let noteId = String(content[idRange])
+            let status = noteById[noteId]?.taskDisplayStatus
+
+            if status == .cancelled { return }
+            total += 1
+            switch status {
+            case .complete: completed += 1
+            case .inProgress, .reviewRequired: inProgress += 1
+            default: break
+            }
+        }
+
+        return TaskStats(total: total, completed: completed, inProgress: inProgress)
+    }
+
+    /// Extract linked-task lines from `content`, in document order. Lines with
+    /// several task links produce one entry per link. Plain checkboxes without
+    /// a task link are not returned.
+    static func linkedTaskLines(in content: String) -> [LinkedTaskLine] {
+        var results: [LinkedTaskLine] = []
+        var lineIndex = 0
+
+        content.enumerateSubstrings(in: content.startIndex..<content.endIndex, options: [.byLines, .substringNotRequired]) { _, lineRange, _, _ in
+            defer { lineIndex += 1 }
+            let line = String(content[lineRange])
+            let lineNSRange = NSRange(line.startIndex..., in: line)
+
+            let checkboxMarker: Character? = checkboxRegex
+                .firstMatch(in: line, range: lineNSRange)
+                .flatMap { Range($0.range(at: 1), in: line) }
+                .map { line[$0.lowerBound] }
+
+            taskLinkRegex.enumerateMatches(in: line, range: lineNSRange) { match, _, _ in
+                guard let match,
+                      let titleRange = Range(match.range(at: 1), in: line),
+                      let idRange = Range(match.range(at: 2), in: line) else { return }
+                results.append(LinkedTaskLine(
+                    lineIndex: lineIndex,
+                    lineRange: lineRange,
+                    title: String(line[titleRange]),
+                    noteId: String(line[idRange]),
+                    checkboxMarker: checkboxMarker
+                ))
+            }
+        }
+
+        return results
+    }
+}
