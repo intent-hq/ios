@@ -26,8 +26,11 @@ enum EventWake {
     /// Whether an entry is a system event-notification wake. Metadata-first
     /// (`type == "event_notification"`), with the `[WORKSPACE EVENTS]`
     /// content prefix as fallback for daemons that don't send queue metadata.
+    /// The fallback only applies when the metadata doesn't already identify a
+    /// different type (e.g. an `agent_message` whose content happens to start
+    /// with the prefix stays an agent message).
     static func isEventNotification(content: String, metadata: [String: AnyCodable]?) -> Bool {
-        if metadata?["type"]?.stringValue == "event_notification" { return true }
+        if let type = metadata?["type"]?.stringValue { return type == "event_notification" }
         return content.hasPrefix("[WORKSPACE EVENTS]")
     }
 

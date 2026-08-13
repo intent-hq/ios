@@ -293,9 +293,17 @@ struct EventWakeSummaryTests {
         #expect(EventWake.isEventNotification(
             content: "anything", metadata: ["type": AnyCodable("event_notification")]))
         #expect(EventWake.isEventNotification(content: "[WORKSPACE EVENTS] 1 event", metadata: nil))
+        #expect(EventWake.isEventNotification(
+            content: "[WORKSPACE EVENTS] 1 event",
+            metadata: ["userAppMessageId": AnyCodable("uam-1")]))
         #expect(!EventWake.isEventNotification(content: "plain message", metadata: nil))
         #expect(!EventWake.isEventNotification(
             content: "plain", metadata: ["type": AnyCodable("agent_message")]))
+        // A typed non-event entry does not fall back on the content prefix:
+        // an agent_message quoting "[WORKSPACE EVENTS]" stays an agent message.
+        #expect(!EventWake.isEventNotification(
+            content: "[WORKSPACE EVENTS] forwarded text",
+            metadata: ["type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("agent-2")]))
     }
 
     @Test func labelsSingleChildCompletionWithReportPreview() {
