@@ -7,12 +7,14 @@ struct NoteRowIconTests {
         id: String,
         taskStatus: String? = nil,
         isDefault: Bool = false,
-        content: String = ""
+        isArchived: Bool = false,
+        content: String = "",
+        parentId: String? = nil
     ) -> Note {
         Note(
             id: id, title: "Note \(id)", content: content, tags: [],
-            isDefault: isDefault, isArchived: false, taskStatus: taskStatus,
-            parentId: nil, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"
+            isDefault: isDefault, isArchived: isArchived, taskStatus: taskStatus,
+            parentId: parentId, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"
         )
     }
 
@@ -70,6 +72,50 @@ struct NoteRowIconTests {
         let notes = [makeNote(id: "a", taskStatus: "cancelled")]
         let note = makeNote(id: "n1", content: link("a"))
         #expect(NoteRowIcon.kind(for: note, notes: notes) == .document)
+    }
+
+    // MARK: - Children-derived status (fe hasChildrenStatus)
+
+    @Test func parentTaskNoteWithAllChildrenCompleteShowsComplete() {
+        let parent = makeNote(id: "p", taskStatus: "in_progress")
+        let notes = [
+            makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "complete", parentId: "p"),
+        ]
+        #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.complete))
+    }
+
+    @Test func parentTaskNoteWithAllChildrenNotStartedShowsNotStarted() {
+        let parent = makeNote(id: "p", taskStatus: "in_progress")
+        let notes = [
+            makeNote(id: "c1", taskStatus: "not_started", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", parentId: "p"),
+        ]
+        #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.notStarted))
+    }
+
+    @Test func parentTaskNoteWithMixedChildrenShowsInProgress() {
+        let parent = makeNote(id: "p", taskStatus: "blocked")
+        let notes = [
+            makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", parentId: "p"),
+        ]
+        #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.inProgress))
+    }
+
+    @Test func taskNoteWithoutChildrenUsesOwnStatus() {
+        let parent = makeNote(id: "p", taskStatus: "blocked")
+        let unrelated = makeNote(id: "x", taskStatus: "complete", parentId: "other")
+        #expect(NoteRowIcon.kind(for: parent, notes: [unrelated]) == .taskStatus(.blocked))
+    }
+
+    @Test func archivedChildrenAreIgnoredForDerivedStatus() {
+        let parent = makeNote(id: "p", taskStatus: "waiting")
+        let notes = [
+            makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", isArchived: true, parentId: "p"),
+        ]
+        #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.complete))
     }
 
     @Test func statsRecomputeAgainstUpdatedNoteList() {

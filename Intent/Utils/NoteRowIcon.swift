@@ -22,12 +22,25 @@ enum NoteRowIcon: Equatable {
     /// recomputes as task statuses change).
     static func kind(for note: Note, notes: [Note]) -> NoteRowIcon {
         if let status = note.taskDisplayStatus {
-            return .taskStatus(status)
+            return .taskStatus(childrenDerivedStatus(for: note, notes: notes) ?? status)
         }
         let stats = TaskContentParser.parseTaskStats(content: note.content, notes: notes)
         if note.isDefault {
             return stats.total > 0 ? .starWithProgressRing(stats) : .star
         }
         return stats.total > 0 ? .progressRing(stats) : .document
+    }
+
+    /// fe NotesPanel's `hasChildrenStatus` (L450-462): a task note with
+    /// children shows an aggregate of its children's statuses instead of its
+    /// own — complete when all children are `complete`, notStarted when all
+    /// are `not_started`, otherwise inProgress. Compares raw wire statuses
+    /// like the fe; archived children are excluded (NoteStore hides them).
+    private static func childrenDerivedStatus(for note: Note, notes: [Note]) -> TaskDisplayStatus? {
+        let children = notes.filter { !$0.isArchived && $0.parentId == note.id }
+        guard !children.isEmpty else { return nil }
+        if children.allSatisfy({ $0.taskStatus == "complete" }) { return .complete }
+        if children.allSatisfy({ $0.taskStatus == "not_started" }) { return .notStarted }
+        return .inProgress
     }
 }
