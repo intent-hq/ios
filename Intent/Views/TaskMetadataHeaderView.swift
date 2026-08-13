@@ -28,11 +28,13 @@ struct TaskMetadataHeaderView: View {
         (.cancelled, "cancelled"),
     ]
 
-    /// Reverse dependency edges computed client-side (fe parity): task notes
-    /// whose `dependsOn` includes `noteId`, sorted by id for stable order.
+    /// Reverse dependency edges computed client-side (fe parity): non-archived
+    /// task notes whose `dependsOn` includes `noteId`, sorted by id for stable
+    /// order. Archived notes are excluded — the note list hides them and
+    /// navigating to one is treated as not found.
     static func dependedOnBy(noteId: String, in notes: [Note]) -> [String] {
         notes
-            .filter { $0.id != noteId && $0.dependsOn.contains(noteId) }
+            .filter { !$0.isArchived && $0.id != noteId && $0.dependsOn.contains(noteId) }
             .map(\.id)
             .sorted()
     }

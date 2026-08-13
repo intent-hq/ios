@@ -8,12 +8,13 @@ struct TaskMetadataHeaderTests {
     private func makeNote(
         id: String,
         taskStatus: String? = nil,
+        isArchived: Bool = false,
         dependsOn: [String] = [],
         unmetDependsOn: [String] = []
     ) -> Note {
         Note(
             id: id, title: "Note \(id)", content: "", tags: [],
-            isDefault: false, isArchived: false, taskStatus: taskStatus,
+            isDefault: false, isArchived: isArchived, taskStatus: taskStatus,
             parentId: nil, createdAt: "", updatedAt: "",
             dependsOn: dependsOn, unmetDependsOn: unmetDependsOn
         )
@@ -31,6 +32,17 @@ struct TaskMetadataHeaderTests {
         ]
         // Sorted by id for stable order, matching the fe derivation.
         #expect(TaskMetadataHeaderView.dependedOnBy(noteId: "target", in: notes) == ["a", "b"])
+    }
+
+    @Test func dependedOnByExcludesArchivedNotes() {
+        let notes = [
+            makeNote(id: "target", taskStatus: "in_progress"),
+            makeNote(id: "live", taskStatus: "not_started", dependsOn: ["target"]),
+            makeNote(
+                id: "archived", taskStatus: "not_started", isArchived: true,
+                dependsOn: ["target"]),
+        ]
+        #expect(TaskMetadataHeaderView.dependedOnBy(noteId: "target", in: notes) == ["live"])
     }
 
     @Test func dependedOnByExcludesSelfEdge() {

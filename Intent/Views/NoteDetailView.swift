@@ -21,7 +21,7 @@ struct NoteDetailView: View {
             if isLoading {
                 ProgressView("Loading note...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if let note = displayNote, !note.content.isEmpty {
+            } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         // Tags
@@ -41,7 +41,7 @@ struct NoteDetailView: View {
 
                         // Task-note metadata header (status, agents, relations),
                         // matching fe NoteMetadataBar; never shown for the spec.
-                        if note.taskStatus != nil && !note.isDefault {
+                        if showsTaskHeader(note) {
                             TaskMetadataHeaderView(
                                 note: note,
                                 notes: noteStore.notes,
@@ -60,34 +60,36 @@ struct NoteDetailView: View {
                         }
 
                         // Content: markdown segments interleaved with native task rows
-                        NoteContentView(
-                            content: note.content,
-                            resolveNote: { noteStore.note(byId: $0) },
-                            onOpenURL: { url in
-                                if let targetId = Self.parseIntentNoteLink(url) {
+                        if !note.content.isEmpty {
+                            NoteContentView(
+                                content: note.content,
+                                resolveNote: { noteStore.note(byId: $0) },
+                                onOpenURL: { url in
+                                    if let targetId = Self.parseIntentNoteLink(url) {
+                                        navigateToNote(targetId)
+                                        return .handled
+                                    }
+                                    return .systemAction
+                                },
+                                onOpenTaskNote: { targetId in
                                     navigateToNote(targetId)
-                                    return .handled
+                                },
+                                onSetLineStatus: { line, status in
+                                    Task {
+                                        await noteStore.updateTaskLineStatus(
+                                            noteId: noteId, workspaceId: workspaceId,
+                                            line: line, status: status)
+                                    }
+                                },
+                                onSetTaskNoteStatus: { taskNoteId, status in
+                                    Task {
+                                        await noteStore.updateTaskNoteStatus(
+                                            noteId: taskNoteId, workspaceId: workspaceId,
+                                            status: status)
+                                    }
                                 }
-                                return .systemAction
-                            },
-                            onOpenTaskNote: { targetId in
-                                navigateToNote(targetId)
-                            },
-                            onSetLineStatus: { line, status in
-                                Task {
-                                    await noteStore.updateTaskLineStatus(
-                                        noteId: noteId, workspaceId: workspaceId,
-                                        line: line, status: status)
-                                }
-                            },
-                            onSetTaskNoteStatus: { taskNoteId, status in
-                                Task {
-                                    await noteStore.updateTaskNoteStatus(
-                                        noteId: taskNoteId, workspaceId: workspaceId,
-                                        status: status)
-                                }
-                            }
-                        )
+                            )
+                        }
                     }
                     .padding(16)
                 }
@@ -134,6 +136,13 @@ struct NoteDetailView: View {
     /// optimistic task-status updates show immediately), else the fetched one.
     private var displayNote: Note? {
         noteStore.note(byId: noteId) ?? note
+    }
+
+    /// Whether the task-note metadata header renders: any task note except
+    /// the spec. Also keeps metadata-only (empty-content) task notes on the
+    /// detail view instead of the "content unavailable" placeholder.
+    private func showsTaskHeader(_ note: Note) -> Bool {
+        note.taskStatus != nil && !note.isDefault
     }
 
     /// Push a note onto the navigation stack (note-to-note navigation).
