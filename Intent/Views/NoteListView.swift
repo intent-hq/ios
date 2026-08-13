@@ -79,6 +79,7 @@ struct NoteTreeNodeView: View {
             // This note's row — chevron and title have separate tap targets
             NoteRowView(
                 note: note,
+                allNotes: noteStore.notes,
                 depth: depth,
                 hasChildren: hasChildren,
                 isCollapsed: isCollapsed,
@@ -119,6 +120,9 @@ struct NoteTreeNodeView: View {
 
 struct NoteRowView: View {
     let note: Note
+    /// Full note list, used to resolve linked-task IDs for the progress
+    /// ring; recomputed on every NoteStore publish so the ring stays live.
+    var allNotes: [Note] = []
     var depth: Int = 0
     var hasChildren: Bool = false
     var isCollapsed: Bool = false
@@ -159,11 +163,21 @@ struct NoteRowView: View {
                 onNavigate?()
             } label: {
                 HStack(spacing: 4) {
-                    // Note icon
-                    if note.isDefault {
-                        Image(systemName: "star.fill")
+                    // Leading icon (fe NotesPanel parity)
+                    switch NoteRowIcon.kind(for: note, notes: allNotes) {
+                    case .star:
+                        starIcon
+                    case .starWithProgressRing(let stats):
+                        starIcon
+                        TaskProgressRingView(stats: stats)
+                    case .taskStatus(let status):
+                        TaskStatusIconView(status: status, size: 14)
+                    case .progressRing(let stats):
+                        TaskProgressRingView(stats: stats)
+                    case .document:
+                        Image(systemName: "doc.text")
                             .font(.caption)
-                            .foregroundStyle(.yellow)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     }
 
                     // Title and content
@@ -201,6 +215,12 @@ struct NoteRowView: View {
         }
         .padding(.vertical, depth == 0 ? 10 : 9)
         .padding(.horizontal, 4)
+    }
+
+    private var starIcon: some View {
+        Image(systemName: "star.fill")
+            .font(.caption)
+            .foregroundStyle(.yellow)
     }
 }
 
