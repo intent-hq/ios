@@ -68,6 +68,16 @@ class ConversationStore: ObservableObject {
         observeConnection()
     }
 
+    deinit {
+        // deinit is nonisolated: capture the handler id and manager, then hop
+        // to the main actor so the handler entry doesn't outlive the store.
+        guard let handlerId = eventHandlerId else { return }
+        let connectionManager = self.connectionManager
+        Task { @MainActor in
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+    }
+
     /// Test-only helper: activate the chat channel and set its subscriptionId,
     /// bypassing the real subscribe flow, so the strict push gate accepts test payloads.
     func setTestChatChannel(subscriptionId: String) {

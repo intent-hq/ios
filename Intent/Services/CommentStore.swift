@@ -28,6 +28,16 @@ class CommentStore: ObservableObject {
         self.connectionManager = ConnectionManager.shared
         // No connection observation for unit tests
     }
+
+    deinit {
+        // deinit is nonisolated: capture the handler id and manager, then hop
+        // to the main actor so the handler entry doesn't outlive the store.
+        guard let handlerId = eventHandlerId else { return }
+        let connectionManager = self.connectionManager
+        Task { @MainActor in
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+    }
     
     /// Test-only helper to set reconciler for race condition testing
     func setTestReconciler(_ reconciler: DeltaReconciler<CommentThread>) async {

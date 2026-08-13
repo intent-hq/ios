@@ -48,6 +48,16 @@ class BackgroundHookStore: ObservableObject {
             .store(in: &cancellables)
     }
 
+    deinit {
+        // deinit is nonisolated: capture the handler id and manager, then hop
+        // to the main actor so the handler entry doesn't outlive the store.
+        guard let handlerId = eventHandlerId else { return }
+        let connectionManager = self.connectionManager
+        Task { @MainActor in
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+    }
+
     private func onConnected() async {
         // Subscriptions are per-connection (§6.1) — replay and re-seed
         subscriptionId = nil

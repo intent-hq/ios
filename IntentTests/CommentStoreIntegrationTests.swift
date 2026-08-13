@@ -262,4 +262,25 @@ struct CommentStoreIntegrationTests {
         #expect(store.threads[0].id == "t1")
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
+
+    // MARK: - deinit removes event handler (monorepo#2211)
+
+    @Test func deinitRemovesEventHandler() async throws {
+        let fake = FakeConnectionManager()
+        var store: CommentStore? = CommentStore(connectionManager: fake)
+
+        fake.responseMap["comment.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.responseMap["comment.unsubscribe"] = [:] as [String: Any]
+        fake.simulateConnect()
+        await store?.subscribeToNote(workspaceId: "ws-1", noteId: "note-1")
+        #expect(fake.eventHandlerCount == 1)
+
+        store = nil
+        // deinit hops to the main actor to remove the handler; wait for that task
+        for _ in 0..<40 {
+            if fake.eventHandlerCount == 0 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(fake.eventHandlerCount == 0)
+    }
 }
