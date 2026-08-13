@@ -151,6 +151,16 @@ class ConnectionManager: ObservableObject {
         socket = nil
         connectionState = .disconnected
         failAllPending(error: "Connection closed")
+        clearSubscriptionHandlers()
+    }
+
+    /// Subscriptions are per-connection (PROTOCOL §6.1): once the connection is gone the
+    /// registered handlers route nothing, so drop them instead of letting dead entries
+    /// accumulate. Stores re-subscribe (and re-register) on reconnect.
+    private func clearSubscriptionHandlers() {
+        guard !subscriptionHandlers.isEmpty else { return }
+        print("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s) on disconnect")
+        subscriptionHandlers.removeAll()
     }
 
     // MARK: - Public API
@@ -248,6 +258,11 @@ class ConnectionManager: ObservableObject {
         recentlyUnregisteredIds.removeValue(forKey: id)
         print("[ConnectionManager] Registered subscription handler for id=\(id)")
         replayBufferedPushes(for: id, to: handler)
+    }
+
+    /// Count of registered subscription handlers. Internal for test visibility.
+    var subscriptionHandlerCount: Int {
+        subscriptionHandlers.count
     }
 
     /// Unregister the handler for the given subscriptionId. After this call, pushes for this
@@ -684,6 +699,7 @@ class ConnectionManager: ObservableObject {
         socket = nil
         connectionState = .reconnecting(attempt: 1)
         failAllPending(error: "Connection lost")
+        clearSubscriptionHandlers()
         startReconnection(disconnectTime: disconnectTime)
     }
 

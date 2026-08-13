@@ -398,6 +398,30 @@ struct ConnectionManagerTests {
         #expect(receivedCount == 1) // Still 1, not incremented
     }
 
+    // Subscriptions are per-connection (PROTOCOL §6.1, monorepo#2213): disconnect
+    // must drop all registered subscription handlers.
+    @Test @MainActor func disconnectClearsSubscriptionHandlers() async {
+        let manager = ConnectionManager.shared
+        var receivedCount = 0
+
+        manager.registerSubscriptionHandler(id: "disc-sub-1") { _ in
+            receivedCount += 1
+        }
+        #expect(manager.subscriptionHandlerCount >= 1)
+
+        manager.disconnect()
+        #expect(manager.subscriptionHandlerCount == 0)
+
+        // A push for the cleared id no longer reaches the handler
+        await manager.dispatchMessage("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-1","kind":"snapshot","seq":0,"snapshot":[]}}
+        """)
+        #expect(receivedCount == 0)
+
+        // Clean up: the unrouted push above was buffered for replay; drop it
+        manager.unroutedPushBuffer.removeAll { $0.push.subscriptionId == "disc-sub-1" }
+    }
+
     @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() async {
         let manager = ConnectionManager.shared
         var receivedPush1: SubscriptionPush?

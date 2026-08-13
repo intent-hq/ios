@@ -34,12 +34,19 @@ class TaskStore: ObservableObject {
     }
 
     deinit {
-        // deinit is nonisolated: capture the handler id and manager, then hop
-        // to the main actor so the handler entry doesn't outlive the store.
-        guard let handlerId = eventHandlerId else { return }
+        // deinit is nonisolated: capture the handler id, subscriptionId and manager,
+        // then hop to the main actor so the entries don't outlive the store.
+        let handlerId = eventHandlerId
+        let subscriptionId = taskSubscriptionId
+        guard handlerId != nil || subscriptionId != nil else { return }
         let connectionManager = self.connectionManager
         Task { @MainActor in
-            connectionManager.removeEventHandler(id: handlerId)
+            if let handlerId {
+                connectionManager.removeEventHandler(id: handlerId)
+            }
+            if let subscriptionId {
+                connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
+            }
         }
     }
 
