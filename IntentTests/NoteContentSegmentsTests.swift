@@ -47,21 +47,26 @@ struct NoteContentSegmentsTests {
     }
 
     @Test func nestedIndentedCheckboxes() {
-        let content = "- [ ] Parent\n  - [x] Child\n\t- [/] Tab child\n* [ ] Star bullet"
+        let content = "- [ ] Parent\n  - [x] Child\n\t- [/] Tab child"
         let segments = NoteContentSegmenter.segments(for: content)
-        #expect(segments.count == 4)
+        #expect(segments.count == 3)
         guard case .taskLine(let parent) = segments[0],
               case .taskLine(let child) = segments[1],
-              case .taskLine(let tabChild) = segments[2],
-              case .taskLine(let star) = segments[3] else {
-            Issue.record("expected 4 task lines"); return
+              case .taskLine(let tabChild) = segments[2] else {
+            Issue.record("expected 3 task lines"); return
         }
         #expect(parent.indentColumns == 0)
         #expect(child.indentColumns == 2)
         #expect(child.marker == "x")
         #expect(tabChild.indentColumns == 1)
         #expect(tabChild.marker == "/")
-        #expect(star.indentColumns == 0)
+    }
+
+    @Test func starBulletsStayMarkdown() {
+        // The daemon's task.update parser (parse_dash_checkbox) accepts only
+        // `-` bullets, so a `* [ ]` line must not become an interactive row.
+        let content = "* [ ] Star bullet\n* [x] Star done"
+        #expect(NoteContentSegmenter.segments(for: content) == [.markdown(content)])
     }
 
     @Test func uppercaseMarkerNormalizes() {

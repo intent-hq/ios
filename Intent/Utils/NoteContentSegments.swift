@@ -42,12 +42,15 @@ enum NoteContentSegment: Equatable {
 
 /// Splits note markdown into markdown segments and task-line segments so the
 /// note detail view can render checkbox lines as native rows (replacing the
-/// old emoji marker substitution). Checkbox syntax matches the fe / TaskStats
-/// vocabulary: `- [ ]` / `- [x]` / `- [/]` (also `*` bullets, any indent).
+/// old emoji marker substitution). Checkbox syntax: `- [ ]` / `- [x]` / `- [/]`
+/// at any indent. Only `-` bullets — the daemon's `task.update` line parser
+/// (note_ops.rs `parse_dash_checkbox`) rejects `*` bullets, so a `* [ ]` line
+/// must stay ordinary markdown rather than become a row whose status write
+/// would fail.
 enum NoteContentSegmenter {
     /// Groups: 1 = leading indent, 2 = marker, 3 = text after the checkbox.
     private static let checkboxLineRegex = try! NSRegularExpression(
-        pattern: #"^([ \t]*)[-*]\s+\[([ xX/])\]\s?(.*)$"#
+        pattern: #"^([ \t]*)-\s+\[([ xX/])\]\s?(.*)$"#
     )
 
     static func segments(for content: String) -> [NoteContentSegment] {
