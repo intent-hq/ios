@@ -416,4 +416,26 @@ struct ConversationStoreIntegrationTests {
         #expect(!fake.didCallMethod("agent.getQueue"))
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
     }
+
+    // MARK: - deinit removes event handler (monorepo#2211)
+
+    @Test func deinitRemovesEventHandler() async throws {
+        let fake = FakeConnectionManager()
+        var store: ConversationStore? = ConversationStore(connectionManager: fake)
+
+        fake.responseMap["events.subscribe"] = ["subscriptionId": "sub-streaming"]
+        fake.responseMap["events.unsubscribe"] = [:] as [String: Any]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
+        await store?.subscribeToStreaming(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(fake.eventHandlerCount == 1)
+
+        store = nil
+        // deinit hops to the main actor to remove the handler; wait for that task
+        for _ in 0..<40 {
+            if fake.eventHandlerCount == 0 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(fake.eventHandlerCount == 0)
+    }
 }

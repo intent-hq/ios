@@ -205,4 +205,26 @@ struct TaskStoreIntegrationTests {
         #expect(store.tasks[0].id == "task-1")
         #expect(!fake.hasSubscriptionHandler(id: "sub-B"))
     }
+
+    // MARK: - deinit removes event handler (monorepo#2211)
+
+    @Test func deinitRemovesEventHandler() async throws {
+        let fake = FakeConnectionManager()
+        var store: TaskStore? = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+
+        fake.responseMap["task.list"] = ["tasks": []]
+        fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        fake.simulateConnect()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(fake.eventHandlerCount == 1)
+        #expect(store != nil)
+
+        store = nil
+        // deinit hops to the main actor to remove the handler; wait for that task
+        for _ in 0..<40 {
+            if fake.eventHandlerCount == 0 { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(fake.eventHandlerCount == 0)
+    }
 }
