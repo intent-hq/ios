@@ -30,8 +30,10 @@ struct LinkedTaskLine: Equatable {
 /// Mirrors the fe's `TASK_LINK_REGEX_FLEXIBLE` / `parseTaskStats`.
 enum TaskContentParser {
     /// Matches `[text](intent://local/task/{id})`; group 1 = text, group 2 = id.
+    /// Line terminators are excluded from both classes so an unclosed link
+    /// cannot consume a later line's `)` and match across lines.
     private static let taskLinkRegex = try! NSRegularExpression(
-        pattern: #"\[([^\]]+)\]\(intent://local/task/([^)]+)\)"#
+        pattern: #"\[([^\]\r\n]+)\]\(intent://local/task/([^)\r\n]+)\)"#
     )
 
     /// Matches a checkbox list-item prefix; group 1 = the marker character.
