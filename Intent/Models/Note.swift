@@ -11,6 +11,40 @@ struct Note: Identifiable, Equatable {
     let parentId: String?
     let createdAt: String
     let updatedAt: String
+    /// Remaining `metadata.task` fields (PROTOCOL §5.2/§5.4). All are
+    /// omitted-when-empty on the wire; empty array / nil when absent or when
+    /// the note is not a task.
+    let assignedAgentIds: [String]
+    let dependsOn: [String]
+    let conflictsWith: [String]
+    /// Daemon-computed projection of `dependsOn` entries not yet complete.
+    let unmetDependsOn: [String]
+    let estimatedEffort: String?
+
+    init(
+        id: String, title: String, content: String, tags: [String],
+        isDefault: Bool, isArchived: Bool, taskStatus: String?,
+        parentId: String?, createdAt: String, updatedAt: String,
+        assignedAgentIds: [String] = [], dependsOn: [String] = [],
+        conflictsWith: [String] = [], unmetDependsOn: [String] = [],
+        estimatedEffort: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.content = content
+        self.tags = tags
+        self.isDefault = isDefault
+        self.isArchived = isArchived
+        self.taskStatus = taskStatus
+        self.parentId = parentId
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.assignedAgentIds = assignedAgentIds
+        self.dependsOn = dependsOn
+        self.conflictsWith = conflictsWith
+        self.unmetDependsOn = unmetDependsOn
+        self.estimatedEffort = estimatedEffort
+    }
 
     /// Display treatment for `taskStatus`; nil when the note is not a task.
     /// Note: the checkbox markers in `content` are unaffected — the wire
@@ -25,7 +59,10 @@ struct Note: Identifiable, Equatable {
         Note(
             id: id, title: title, content: newContent, tags: tags,
             isDefault: isDefault, isArchived: isArchived, taskStatus: taskStatus,
-            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt
+            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
+            assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
+            conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
+            estimatedEffort: estimatedEffort
         )
     }
 
@@ -34,7 +71,10 @@ struct Note: Identifiable, Equatable {
         Note(
             id: id, title: title, content: content, tags: tags,
             isDefault: isDefault, isArchived: isArchived, taskStatus: newStatus,
-            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt
+            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
+            assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
+            conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
+            estimatedEffort: estimatedEffort
         )
     }
 
@@ -70,7 +110,12 @@ struct Note: Identifiable, Equatable {
             taskStatus: task?["status"] as? String,
             parentId: dict["parentId"] as? String,
             createdAt: dict["createdAt"] as? String ?? now,
-            updatedAt: dict["updatedAt"] as? String ?? now
+            updatedAt: dict["updatedAt"] as? String ?? now,
+            assignedAgentIds: task?["assignedAgentIds"] as? [String] ?? [],
+            dependsOn: task?["dependsOn"] as? [String] ?? [],
+            conflictsWith: task?["conflictsWith"] as? [String] ?? [],
+            unmetDependsOn: task?["unmetDependsOn"] as? [String] ?? [],
+            estimatedEffort: task?["estimatedEffort"] as? String
         )
     }
 }

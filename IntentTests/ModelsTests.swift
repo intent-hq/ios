@@ -208,5 +208,80 @@ struct ModelsTests {
         #expect(plainNote?.taskStatus == nil)
         #expect(plainNote?.taskDisplayStatus == nil)
     }
+
+    @Test func noteParsesExtendedTaskMetadata() {
+        let note = Note.parseNote([
+            "id": "t1",
+            "title": "Task",
+            "metadata": ["task": [
+                "status": "in_progress",
+                "assignedAgentIds": ["agent-1", "agent-2"],
+                "dependsOn": ["dep-a", "dep-b"],
+                "conflictsWith": ["conf-c"],
+                "unmetDependsOn": ["dep-b"],
+                "estimatedEffort": "2h",
+            ] as [String: Any]] as [String: Any]
+        ])
+        #expect(note?.taskStatus == "in_progress")
+        #expect(note?.assignedAgentIds == ["agent-1", "agent-2"])
+        #expect(note?.dependsOn == ["dep-a", "dep-b"])
+        #expect(note?.conflictsWith == ["conf-c"])
+        #expect(note?.unmetDependsOn == ["dep-b"])
+        #expect(note?.estimatedEffort == "2h")
+    }
+
+    @Test func noteTaskMetadataDefaultsWhenOmitted() {
+        // Task metadata with only status: the omitted-when-empty fields
+        // default to empty/nil (PROTOCOL §5.2).
+        let taskNote = Note.parseNote([
+            "id": "t1",
+            "title": "Task",
+            "metadata": ["task": ["status": "not_started"] as [String: Any]] as [String: Any]
+        ])
+        #expect(taskNote?.assignedAgentIds == [])
+        #expect(taskNote?.dependsOn == [])
+        #expect(taskNote?.conflictsWith == [])
+        #expect(taskNote?.unmetDependsOn == [])
+        #expect(taskNote?.estimatedEffort == nil)
+
+        // Non-task note: same defaults.
+        let plainNote = Note.parseNote(["id": "note-2", "title": "Plain"])
+        #expect(plainNote?.assignedAgentIds == [])
+        #expect(plainNote?.dependsOn == [])
+        #expect(plainNote?.conflictsWith == [])
+        #expect(plainNote?.unmetDependsOn == [])
+        #expect(plainNote?.estimatedEffort == nil)
+    }
+
+    @Test func noteCopiesPreserveTaskMetadata() {
+        let note = Note.parseNote([
+            "id": "t1",
+            "title": "Task",
+            "metadata": ["task": [
+                "status": "in_progress",
+                "assignedAgentIds": ["agent-1"],
+                "dependsOn": ["dep-a"],
+                "conflictsWith": ["conf-c"],
+                "unmetDependsOn": ["dep-a"],
+                "estimatedEffort": "30m",
+            ] as [String: Any]] as [String: Any]
+        ])
+
+        let edited = note?.withContent("new content")
+        #expect(edited?.content == "new content")
+        #expect(edited?.assignedAgentIds == ["agent-1"])
+        #expect(edited?.dependsOn == ["dep-a"])
+        #expect(edited?.conflictsWith == ["conf-c"])
+        #expect(edited?.unmetDependsOn == ["dep-a"])
+        #expect(edited?.estimatedEffort == "30m")
+
+        let restatused = note?.withTaskStatus("complete")
+        #expect(restatused?.taskStatus == "complete")
+        #expect(restatused?.assignedAgentIds == ["agent-1"])
+        #expect(restatused?.dependsOn == ["dep-a"])
+        #expect(restatused?.conflictsWith == ["conf-c"])
+        #expect(restatused?.unmetDependsOn == ["dep-a"])
+        #expect(restatused?.estimatedEffort == "30m")
+    }
 }
 
