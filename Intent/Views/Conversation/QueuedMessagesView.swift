@@ -58,6 +58,25 @@ struct QueuedMessagesView: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+            } else if message.isEventNotificationWake {
+                // Workspace event-notification wake: compact summary row,
+                // not user-editable (FE parity: QueuedMessageList).
+                let wake = message.eventWakeSummary
+                wakeRowLabel(
+                    icon: "bell.fill",
+                    name: wake.label,
+                    preview: wake.preview ?? "")
+                sendNowButton(message)
+                removeButton(message)
+            } else if let agentAttr = message.agentMessageAttribution {
+                // Agent-to-agent message: compact attribution row,
+                // not user-editable (FE parity: QueuedMessageList).
+                wakeRowLabel(
+                    icon: "person.crop.circle.fill",
+                    name: agentAttr.displayName,
+                    preview: message.content)
+                sendNowButton(message)
+                removeButton(message)
             } else if let hookWake = message.hookWakeAttribution {
                 // Background-hook wake (PROTOCOL §5.40): compact attribution
                 // row, not user-editable (FE parity: QueuedMessageList).

@@ -122,8 +122,9 @@ struct ConversationViewModelTests {
 
     // MARK: - queuedMessages display filter
 
-    private func queuedEntry(id: String, metadata: [String: AnyCodable]? = nil) -> QueuedMessage {
-        QueuedMessage(id: id, content: "c", queuedAt: "2025-01-01T00:00:00Z",
+    private func queuedEntry(id: String, content: String = "c",
+                             metadata: [String: AnyCodable]? = nil) -> QueuedMessage {
+        QueuedMessage(id: id, content: content, queuedAt: "2025-01-01T00:00:00Z",
                       position: 0, imageBlocks: nil, messageMetadata: metadata)
     }
 
@@ -131,14 +132,38 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-user"),
-            queuedEntry(id: "q-agent", metadata: ["type": AnyCodable("agent_message")]),
-            queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
+            // Malformed agent message (no fromAgentId): no attribution → hidden.
+            queuedEntry(id: "q-agent-bad", metadata: ["type": AnyCodable("agent_message")]),
             queuedEntry(id: "q-system", metadata: ["source": AnyCodable("system")]),
             queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")]),
         ]
         #expect(vm.queuedMessages.map(\.id) == ["q-user", "q-benign"])
         // The store keeps the full queue (flush behavior untouched).
-        #expect(vm.store.queuedMessages.count == 5)
+        #expect(vm.store.queuedMessages.count == 4)
+    }
+
+    @Test func queuedMessagesKeepsAgentMessageEntries() async {
+        // Agent-to-agent sends with attribution render as compact rows.
+        let vm = makeVM()
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-agent", metadata: [
+                "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("agent-2"),
+                "fromAgentName": AnyCodable("Verifier"),
+            ]),
+        ]
+        #expect(vm.queuedMessages.map(\.id) == ["q-agent"])
+        #expect(vm.queuedMessages[0].agentMessageAttribution?.displayName == "Verifier")
+    }
+
+    @Test func queuedMessagesKeepsEventNotificationEntries() async {
+        // Event-notification wakes render as compact summary rows —
+        // metadata-first, with the content prefix as fallback.
+        let vm = makeVM()
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
+            queuedEntry(id: "q-event-legacy", content: "[WORKSPACE EVENTS] 1 event"),
+        ]
+        #expect(vm.queuedMessages.map(\.id) == ["q-event", "q-event-legacy"])
     }
 
     @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() async {

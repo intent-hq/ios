@@ -46,14 +46,20 @@ class ConversationViewModel: ObservableObject {
     }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
-    /// Display-only filter: hide daemon-originated queue entries (agent sends,
-    /// event/system wakes) from the queued-messages section — except hook and
-    /// PR-monitor wakes (PROTOCOL §5.40 / §5.42), which render as compact
-    /// attribution rows (FE parity: QueuedMessageList). The store keeps the
-    /// full queue and flush behavior is unchanged.
+    /// Display-only filter: hide daemon-originated queue entries (system
+    /// wakes without a dedicated row) from the queued-messages section —
+    /// except hook wakes, PR-monitor wakes (PROTOCOL §5.40 / §5.42),
+    /// agent-to-agent sends (`agent_message`), and event-notification wakes,
+    /// which render as compact attribution rows (FE parity:
+    /// QueuedMessageList). The store keeps the full queue and flush behavior
+    /// is unchanged.
     var queuedMessages: [QueuedMessage] {
         store.queuedMessages.filter {
-            $0.isUserMessage || $0.hookWakeAttribution != nil || $0.prMonitorWakeAttribution != nil
+            $0.isUserMessage
+                || $0.hookWakeAttribution != nil
+                || $0.prMonitorWakeAttribution != nil
+                || $0.agentMessageAttribution != nil
+                || $0.isEventNotificationWake
         }
     }
     var isTruncated: Bool { store.isTruncated }
