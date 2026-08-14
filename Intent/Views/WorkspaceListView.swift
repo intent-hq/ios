@@ -6,6 +6,7 @@ struct WorkspaceListView: View {
     @StateObject private var viewModel = WorkspaceListViewModel()
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,31 +36,11 @@ struct WorkspaceListView: View {
             }
 
             // Floating search bar at bottom
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .font(.subheadline)
-                TextField("Search workspaces", text: $viewModel.searchText)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                if !viewModel.searchText.isEmpty {
-                    Button(action: { viewModel.searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .font(.subheadline)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.mutedForeground(for: colorScheme).opacity(0.2), lineWidth: 0.5)
+            WorkspaceSearchBar(
+                text: $viewModel.searchText,
+                isFocused: $searchFocused,
+                colorScheme: colorScheme
             )
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
         }
         .background(Theme.background(for: colorScheme))
         .navigationTitle("Workspaces")
@@ -124,6 +105,7 @@ struct WorkspaceListView: View {
             case .recent:
                 ForEach(viewModel.filteredWorkspaces) { workspace in
                     Button {
+                        searchFocused = false
                         coordinator.onSelectWorkspace(workspace.id)
                     } label: {
                         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
@@ -136,6 +118,7 @@ struct WorkspaceListView: View {
                     Section(header: Text(repoName)) {
                         ForEach(workspaces) { workspace in
                             Button {
+                                searchFocused = false
                                 coordinator.onSelectWorkspace(workspace.id)
                             } label: {
                                 WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
@@ -150,6 +133,7 @@ struct WorkspaceListView: View {
                     Section(header: Text(statusLabel)) {
                         ForEach(workspaces) { workspace in
                             Button {
+                                searchFocused = false
                                 coordinator.onSelectWorkspace(workspace.id)
                             } label: {
                                 WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
@@ -163,6 +147,7 @@ struct WorkspaceListView: View {
         }
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
+        .scrollDismissesKeyboard(.immediately)
         .contentMargins(.bottom, 60)
     }
 }
