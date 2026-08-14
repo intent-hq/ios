@@ -655,6 +655,30 @@ struct ConversationViewModelTests {
         #expect(!vm.agentNotFound)
     }
 
+    @Test func loadSettlesBeforeTranscriptCanMount() async {
+        // Regression (PR #112 review): on first open the transcript view
+        // mounts only after load() settles (the loading placeholder renders
+        // while isLoading is true), so the entry scroll must be runnable from
+        // the transcript's onAppear against already-settled state: isLoading
+        // false and the divider anchor latched by the time load() returns.
+        let (vm, fake) = makeLoadableVM()
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
+            ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]],
+        ]]
+        fake.responseMap["agent.get"] = ["agent": [
+            "id": "test-agent", "name": "Test",
+            "metadata": ["lastSeenMessageId": "m1"],
+        ]] as [String: Any]
+
+        await vm.load()
+
+        #expect(!vm.isLoading, "load() returns with isLoading already settled")
+        #expect(vm.filteredMessages.count == 2)
+        #expect(vm.newMessagesDividerAnchorId == "m1",
+                "the divider anchor is latched before the transcript can mount")
+    }
+
     // MARK: - Image handling
 
     @Test func addImageAppendsToPendingImages() async {
@@ -848,6 +872,21 @@ struct ConversationViewModelTests {
         let optimisticId = try #require(vm.messages.last?.id)
         #expect(params.first?["messageId"] as? String == optimisticId,
                 "the user's own (persisted-id) message is the marker target")
+    }
+
+    @Test func failedSendDoesNotScheduleMarkSeen() async {
+        // Regression (PR #112 review): a failed send delivered nothing, so
+        // the seen marker must not advance — markSeen is scheduled only on
+        // the sendMessage success path (desktop parity).
+        let (vm, fake) = makeSeenVM()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "unseen")]
+
+        await vm.sendMessage("hello")
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"),
+                "a failed send must not schedule the debounced markSeen")
     }
 
     @Test func leavingConversationFiresMarkSeenImmediately() async {

@@ -78,6 +78,10 @@ struct ConversationView: View {
     @State private var childAgent: AgentDestination?
     @State private var userIsScrolledAway: Bool = false
     @State private var hasInitiallyScrolled: Bool = false
+    /// One-shot latch for the entry scroll: set synchronously when the scroll
+    /// is scheduled (hasInitiallyScrolled flips only after the async delays,
+    /// so it alone can't dedupe near-simultaneous triggers).
+    @State private var initialScrollScheduled: Bool = false
     @State private var isScrollingToBottom: Bool = false
     // Agent Q&A Ignore state — transient collapse of the question wizard to a
     // compact banner (never persisted; reset when a different set pends).
@@ -95,106 +99,7 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Pending attention request banner (kind-flavored, PROTOCOL §5.5).
-            // Retires when the daemon clears the fields (agent next messaged).
-            if let attention = viewModel.attentionRequest {
-                AttentionRequestBanner(attention: attention)
-                Divider()
-            }
-
-            // Main content area
-            if viewModel.isLoading && viewModel.filteredMessages.isEmpty {
-                loadingView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if viewModel.filteredMessages.isEmpty {
-                emptyView
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                conversationContent
-            }
-
-            Divider()
-
-            // Agent waiting indicator (above queued messages)
-            if viewModel.store.isWaitingForAgents {
-                VStack(spacing: 0) {
-                    AgentWaitingView(
-                        viewModel: viewModel,
-                        onNavigateToAgent: { agentId, wsId, name in
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                            childAgent = AgentDestination(agentId: agentId, workspaceId: wsId, agentName: name)
-                        }
-                    )
-                    Divider()
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // Monitored PRs chip row (above the hooks row, mirroring the
-            // FE's ordering)
-            if !viewModel.activeAgentMonitors.isEmpty {
-                VStack(spacing: 0) {
-                    MonitoredPrsRow(viewModel: viewModel)
-                    Divider()
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // Background hooks chip row (above queued messages, mirroring
-            // the FE's above-the-input placement)
-            if !viewModel.activeAgentHooks.isEmpty {
-                VStack(spacing: 0) {
-                    BackgroundHooksRow(viewModel: viewModel)
-                    Divider()
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            // Queued messages (above input)
-            if !viewModel.queuedMessages.isEmpty {
-                QueuedMessagesView(viewModel: viewModel)
-                Divider()
-            }
-
-            // Agent Q&A: pending questions replace the composer with the
-            // sequential wizard; Ignore collapses it to a banner and the
-            // composer returns underneath. `.id` remounts (fresh wizard
-            // state) per question-bearing message.
-            if let pendingSet = viewModel.pendingQuestions {
-                QuestionWizardView(
-                    questions: pendingSet.questions,
-                    collapsed: $questionWizardCollapsed,
-                    onComplete: { answers in
-                        // Mount-time capture: this wizard is `.id`-keyed on
-                        // pendingSet.messageId, so this id is by construction
-                        // the set the user answered — never re-derived after
-                        // the Task hop, where a derivation flip could
-                        // otherwise send the answer untagged (#1789).
-                        let answeredId = pendingSet.messageId
-                        Task {
-                            await viewModel.submitQuestionAnswers(
-                                answers, answeredQuestionsMessageId: answeredId)
-                        }
-                    },
-                    onDismiss: {
-                        // Same mount-time capture discipline as onComplete.
-                        let dismissedId = pendingSet.messageId
-                        Task {
-                            await viewModel.dismissQuestions(messageId: dismissedId)
-                        }
-                    }
-                )
-                .id(pendingSet.messageId)
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
-                .padding(.bottom, questionWizardCollapsed ? 4 : 8)
-            }
-
-            // Message input (not rendered while the wizard is expanded —
-            // Q&A replaces chat; the Ignore-collapsed banner restores it)
-            if viewModel.pendingQuestions == nil || questionWizardCollapsed {
-                MessageInputView(viewModel: viewModel)
-            }
+            columnContent
         }
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in
             // Ignore = collapse, not dismiss — reset whenever a different
@@ -361,6 +266,114 @@ struct ConversationView: View {
         coordinator.handleMissingAgent(agentId: viewModel.agentId, workspaceId: viewModel.workspaceId)
     }
 
+    /// The main column's children (attention banner, transcript, chip rows,
+    /// composer). Extracted from `body` so the type checker sees smaller
+    /// expressions instead of one monolithic body (the divider integration
+    /// pushed the single-expression body past its type-check budget).
+    @ViewBuilder
+    private var columnContent: some View {
+        // Pending attention request banner (kind-flavored, PROTOCOL §5.5).
+        // Retires when the daemon clears the fields (agent next messaged).
+        if let attention = viewModel.attentionRequest {
+            AttentionRequestBanner(attention: attention)
+            Divider()
+        }
+
+        // Main content area
+        if viewModel.isLoading && viewModel.filteredMessages.isEmpty {
+            loadingView
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.filteredMessages.isEmpty {
+            emptyView
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            conversationContent
+        }
+
+        Divider()
+
+        // Agent waiting indicator (above queued messages)
+        if viewModel.store.isWaitingForAgents {
+            VStack(spacing: 0) {
+                AgentWaitingView(
+                    viewModel: viewModel,
+                    onNavigateToAgent: { agentId, wsId, name in
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        childAgent = AgentDestination(agentId: agentId, workspaceId: wsId, agentName: name)
+                    }
+                )
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        // Monitored PRs chip row (above the hooks row, mirroring the
+        // FE's ordering)
+        if !viewModel.activeAgentMonitors.isEmpty {
+            VStack(spacing: 0) {
+                MonitoredPrsRow(viewModel: viewModel)
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        // Background hooks chip row (above queued messages, mirroring
+        // the FE's above-the-input placement)
+        if !viewModel.activeAgentHooks.isEmpty {
+            VStack(spacing: 0) {
+                BackgroundHooksRow(viewModel: viewModel)
+                Divider()
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+
+        // Queued messages (above input)
+        if !viewModel.queuedMessages.isEmpty {
+            QueuedMessagesView(viewModel: viewModel)
+            Divider()
+        }
+
+        // Agent Q&A: pending questions replace the composer with the
+        // sequential wizard; Ignore collapses it to a banner and the
+        // composer returns underneath. `.id` remounts (fresh wizard
+        // state) per question-bearing message.
+        if let pendingSet = viewModel.pendingQuestions {
+            QuestionWizardView(
+                questions: pendingSet.questions,
+                collapsed: $questionWizardCollapsed,
+                onComplete: { answers in
+                    // Mount-time capture: this wizard is `.id`-keyed on
+                    // pendingSet.messageId, so this id is by construction
+                    // the set the user answered — never re-derived after
+                    // the Task hop, where a derivation flip could
+                    // otherwise send the answer untagged (#1789).
+                    let answeredId = pendingSet.messageId
+                    Task {
+                        await viewModel.submitQuestionAnswers(
+                            answers, answeredQuestionsMessageId: answeredId)
+                    }
+                },
+                onDismiss: {
+                    // Same mount-time capture discipline as onComplete.
+                    let dismissedId = pendingSet.messageId
+                    Task {
+                        await viewModel.dismissQuestions(messageId: dismissedId)
+                    }
+                }
+            )
+            .id(pendingSet.messageId)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, questionWizardCollapsed ? 4 : 8)
+        }
+
+        // Message input (not rendered while the wizard is expanded —
+        // Q&A replaces chat; the Ignore-collapsed banner restores it)
+        if viewModel.pendingQuestions == nil || questionWizardCollapsed {
+            MessageInputView(viewModel: viewModel)
+        }
+    }
+
     @ViewBuilder
     private var loadingView: some View {
         VStack(spacing: 12) {
@@ -420,6 +433,10 @@ struct ConversationView: View {
 
     @ViewBuilder
     private var conversationContent: some View {
+        // Hoisted out of the ForEach: the latched anchor id is recomputed on
+        // every row otherwise (O(n²) per render pass), and the local also
+        // shrinks the row expression the type checker has to solve.
+        let dividerAnchorId = viewModel.newMessagesDividerAnchorId
         ZStack(alignment: .bottom) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -453,7 +470,7 @@ struct ConversationView: View {
                             // visual bottom→top in the flipped list, so
                             // emitting the divider BEFORE the anchor's
                             // MessageView places it on the newer side.
-                            if message.id == viewModel.newMessagesDividerAnchorId {
+                            if message.id == dividerAnchorId {
                                 NewMessagesDividerView()
                                     .flippedUpsideDown()
                                     .id("new-messages-divider")
@@ -504,6 +521,13 @@ struct ConversationView: View {
                         userIsScrolledAway = isScrolledAway
                     }
                 }
+                // The follow-to-bottom handlers below are gated on
+                // hasInitiallyScrolled (flips ~0.3s after the entry scroll):
+                // until the entry-scroll follow decision has been made,
+                // userIsScrolledAway is still false, so a stream tick or row
+                // arrival in that window would otherwise yank the viewport
+                // off the divider and read the bottom clamp as "follow stays
+                // enabled".
                 .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
                     if newCount > oldCount,
                        let lastMessage = viewModel.filteredMessages.last,
@@ -511,50 +535,44 @@ struct ConversationView: View {
                         // User sent a message — reset scroll state
                         userIsScrolledAway = false
                     }
-                    if !userIsScrolledAway {
+                    if hasInitiallyScrolled && !userIsScrolledAway {
                         scrollToBottom(proxy: proxy)
                     }
                 }
                 .onChange(of: viewModel.isStreaming) { _, _ in
-                    if !userIsScrolledAway {
+                    if hasInitiallyScrolled && !userIsScrolledAway {
                         scrollToBottom(proxy: proxy)
                     }
                 }
                 .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
-                    if !userIsScrolledAway {
+                    if hasInitiallyScrolled && !userIsScrolledAway {
                         scrollToBottom(proxy: proxy)
                     }
                 }
                 .onChange(of: viewModel.queuedMessages.count) { _, _ in
-                    if !userIsScrolledAway {
+                    if hasInitiallyScrolled && !userIsScrolledAway {
                         scrollToBottom(proxy: proxy)
                     }
                 }
                 .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
-                    if !userIsScrolledAway {
+                    if hasInitiallyScrolled && !userIsScrolledAway {
                         scrollToBottom(proxy: proxy)
                     }
                 }
                 .onChange(of: viewModel.isLoading) { _, isLoading in
                     if !isLoading {
-                        // Small delay to let LazyVStack finish layout
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            performInitialScroll(proxy: proxy)
-                            // Mark initial scroll as complete so scroll tracking can begin
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                hasInitiallyScrolled = true
-                            }
-                        }
+                        runInitialScrollIfNeeded(proxy: proxy)
                     }
                 }
                 .onAppear {
-                    // Fallback: if isLoading was already false when the view appeared
-                    // (e.g., cached data), the onChange above never fires.
-                    // Ensure hasInitiallyScrolled gets set after a short delay.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        if !hasInitiallyScrolled {
-                            hasInitiallyScrolled = true
-                        }
+                    // On first open the transcript mounts only after the load
+                    // settles (the loading placeholder renders while
+                    // isLoading is true), so the onChange above never sees the
+                    // true→false transition — run the entry scroll from here
+                    // when the load has already settled. Also covers cached
+                    // data where isLoading never flips.
+                    if !viewModel.isLoading {
+                        runInitialScrollIfNeeded(proxy: proxy)
                     }
                 }
                 .onChange(of: userIsScrolledAway) { _, scrolledAway in
@@ -673,6 +691,25 @@ struct ConversationView: View {
     /// filtered out or not materialized by the LazyVStack), `scrollTo` is a
     /// no-op and the fresh scroll view stays at the bottom — the documented
     /// fallback to bottom-scroll.
+    ///
+    /// `runInitialScrollIfNeeded` runs this exactly once per view lifetime,
+    /// from whichever trigger fires first — the transcript's onAppear (first
+    /// open: the transcript mounts only after the load settles) or
+    /// onChange(of: isLoading) (reloads while the transcript is already
+    /// mounted).
+    private func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
+        guard !initialScrollScheduled else { return }
+        initialScrollScheduled = true
+        // Small delay to let LazyVStack finish layout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            performInitialScroll(proxy: proxy)
+            // Mark initial scroll as complete so scroll tracking can begin
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                hasInitiallyScrolled = true
+            }
+        }
+    }
+
     private func performInitialScroll(proxy: ScrollViewProxy) {
         guard viewModel.newMessagesDividerAnchorId != nil else {
             scrollToBottom(proxy: proxy, animated: false)

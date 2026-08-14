@@ -194,12 +194,16 @@ class ConversationViewModel: ObservableObject {
         // Live PR monitors (prMonitor:* subscribe + prMonitor.list seed, §5.42)
         async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
-        _ = await (conversation, queue, model, subscriptions, streamingState, hooks, monitors)
-
-        // Derive + latch the "New messages" divider anchor exactly once, now
-        // that both the transcript (fetchConversation) and the seen marker
-        // (fetchAgentStreamingState → agent.get metadata) have settled.
+        // Derive + latch the "New messages" divider anchor exactly once, as
+        // soon as both inputs — the transcript (fetchConversation) and the
+        // seen marker (fetchAgentStreamingState → agent.get metadata) — have
+        // settled. Deliberately NOT gated on the ancillary fetches: the entry
+        // scroll fires ~0.1s after isLoading flips false, and a slow
+        // hook/PR-monitor subscription must not delay the latch past it.
+        _ = await (conversation, streamingState)
         latchNewMessagesDividerAnchorIfNeeded()
+
+        _ = await (queue, model, subscriptions, hooks, monitors)
     }
 
     /// Latch the divider anchor from the current store state. Idempotent:
@@ -379,12 +383,15 @@ class ConversationViewModel: ObservableObject {
             try await store.sendMessage(agentId: agentId, content: content, workspaceId: workspaceId, imageBlocks: imageBlocks)
             // Clear draft immediately after successful send
             PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
+            // User send advances the seen marker on the same debounce as turn
+            // finish, with NO focus gate — composing is proof of looking.
+            // Success-only: a failed send delivered nothing, so the unseen
+            // tail is still unseen (desktop parity — the FE marks seen on the
+            // send action's success path).
+            scheduleDebouncedMarkSeen()
         } catch {
             print("[ConversationViewModel] Send failed: \(error)")
         }
-        // User send advances the seen marker on the same debounce as turn
-        // finish, with NO focus gate — composing is proof of looking.
-        scheduleDebouncedMarkSeen()
     }
 
     /// Send a suggested prompt as-is: prompt text only. Unlike `sendMessage`,
