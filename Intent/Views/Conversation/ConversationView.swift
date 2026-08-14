@@ -86,6 +86,10 @@ struct ConversationView: View {
     // Agent Q&A Ignore state — transient collapse of the question wizard to a
     // compact banner (never persisted; reset when a different set pends).
     @State private var questionWizardCollapsed = false
+    // Measured conversation column height — feeds the wizard's step-body cap
+    // (container-relative, not UIScreen, so iPad Split View / Slide Over /
+    // Stage Manager cap against the actual window).
+    @State private var conversationHeight: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -100,6 +104,14 @@ struct ConversationView: View {
     var body: some View {
         VStack(spacing: 0) {
             columnContent
+        }
+        // Measured inside keyboard avoidance on purpose: with the keyboard
+        // up the cap derives from the remaining visible height, keeping the
+        // wizard footer/Send row reachable above the keyboard.
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.height
+        } action: { height in
+            conversationHeight = height
         }
         .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in
             // Ignore = collapse, not dismiss — reset whenever a different
@@ -341,6 +353,7 @@ struct ConversationView: View {
             QuestionWizardView(
                 questions: pendingSet.questions,
                 collapsed: $questionWizardCollapsed,
+                containerHeight: conversationHeight,
                 onComplete: { answers in
                     // Mount-time capture: this wizard is `.id`-keyed on
                     // pendingSet.messageId, so this id is by construction

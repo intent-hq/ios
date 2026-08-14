@@ -19,6 +19,11 @@ struct QuestionWizardView: View {
     let questions: [Question]
     /// Host-owned Ignore state — true renders the compact banner.
     @Binding var collapsed: Bool
+    /// Measured height of the hosting conversation column — the step-body cap
+    /// derives from this (not `UIScreen.main`), so the wizard sizes correctly
+    /// in iPad Split View / Slide Over / Stage Manager where the window is
+    /// smaller than the screen. 0 (unmeasured) falls back to a fixed cap.
+    let containerHeight: CGFloat
     let onComplete: ([QuestionAnswer]) -> Void
     /// Persistent dismissal — host calls `agent.dismissQuestions`. The
     /// Dismiss affordance renders only when present.
@@ -47,18 +52,22 @@ struct QuestionWizardView: View {
     /// unmounts the wizard when the dismissal marker lands; a failed RPC
     /// remounts it fresh (`.id`-keyed), which resets this flag.
     @State private var dismissed = false
-    /// Measured natural height of the step content — the scrollable body hugs
-    /// short steps (no empty filler) and caps at `stepBodyMaxHeight`.
-    @State private var stepContentHeight: CGFloat = 0
+    /// Measured natural height of each step's content, keyed by step index —
+    /// the scrollable body hugs short steps (no empty filler) and caps at
+    /// `stepBodyMaxHeight`. Per-step so navigating never applies a stale
+    /// height from the previous step.
+    @State private var stepContentHeights: [Int: CGFloat] = [:]
 
     init(
         questions: [Question],
         collapsed: Binding<Bool>,
+        containerHeight: CGFloat = 0,
         onComplete: @escaping ([QuestionAnswer]) -> Void,
         onDismiss: (() -> Void)? = nil
     ) {
         self.questions = questions
         self._collapsed = collapsed
+        self.containerHeight = containerHeight
         self.onComplete = onComplete
         self.onDismiss = onDismiss
         _drafts = State(initialValue: questions.map { _ in DraftAnswer() })
@@ -86,7 +95,7 @@ struct QuestionWizardView: View {
                 collapsedBanner
             } else {
                 headerRow
-                stepBody
+                stepBody(for: idx)
                     .id(idx)
                     .transition(.opacity)
                 footerRow
@@ -98,6 +107,10 @@ struct QuestionWizardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Theme.border(for: colorScheme).opacity(0.3), lineWidth: 1)
         )
+        // Cap the well on wide layouts (iPad detail column) so option buttons
+        // don't stretch edge-to-edge; the outer flexible frame centers it.
+        .frame(maxWidth: 640)
+        .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.15), value: idx)
         .animation(.easeInOut(duration: 0.15), value: collapsed)
         .confirmationDialog(
@@ -293,19 +306,28 @@ struct QuestionWizardView: View {
 
     // MARK: - Step body
 
-    /// Cap the scrollable step body at ~half the screen so the header/footer
-    /// rows and the transcript above stay visible under a long question set.
-    /// Deliberate iOS-specific divergence from FE parity: the desktop
-    /// `QuestionWizard.svelte` renders the step body at natural height with
-    /// no cap — on a phone that would push the transcript and footer
-    /// offscreen, so the body scrolls under this cap instead.
-    private var stepBodyMaxHeight: CGFloat { UIScreen.main.bounds.height * 0.5 }
+    /// Cap the scrollable step body at ~half the conversation container so
+    /// the header/footer rows and the transcript above stay visible under a
+    /// long question set. Container-relative (not `UIScreen.main`) so the cap
+    /// tracks the actual window in iPad Split View / Slide Over / Stage
+    /// Manager; on iPhone the container spans the screen, so the value is
+    /// equivalent. Deliberate iOS-specific divergence from FE parity: the
+    /// desktop `QuestionWizard.svelte` renders the step body at natural
+    /// height with no cap — on a phone that would push the transcript and
+    /// footer offscreen, so the body scrolls under this cap instead.
+    private var stepBodyMaxHeight: CGFloat {
+        containerHeight > 0 ? containerHeight * 0.5 : 320
+    }
 
     /// Long steps scroll inside the capped ScrollView; short steps keep their
     /// natural height (the frame caps at the measured content height, so the
-    /// well never pads out with empty filler).
+    /// well never pads out with empty filler). The step index is bound at
+    /// construction (not read live from `idx`) so the outgoing instance of a
+    /// `.id`-keyed step transition can only ever read/write its own height
+    /// slot — a late geometry callback during the fade-out overlap must not
+    /// record the old step's height under the new step's key.
     @ViewBuilder
-    private var stepBody: some View {
+    private func stepBody(for step: Int) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -332,14 +354,13 @@ struct QuestionWizardView: View {
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
-                stepContentHeight = height
+                stepContentHeights[step] = height
             }
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(
-            maxHeight: stepContentHeight > 0
-                ? min(stepContentHeight, stepBodyMaxHeight)
-                : stepBodyMaxHeight
+            maxHeight: stepContentHeights[step].map { min($0, stepBodyMaxHeight) }
+                ?? stepBodyMaxHeight
         )
     }
 
