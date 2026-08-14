@@ -229,9 +229,12 @@ struct PrMonitorWakeAttributionTests {
     }
 
     @Test func messageAttributionChecksRowThenBlockMetadata() {
+        // Conflicting block metadata proves the row is checked first.
         let fromRow = ConversationMessage(
             id: "m1", role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "x")],
+            contentBlocks: [ContentBlock(
+                type: .text, text: "x",
+                messageMetadata: meta(["prNumber": AnyCodable(999)]))],
             timestamp: "2025-01-01T00:00:00Z", metadata: meta())
         #expect(fromRow.prMonitorWakeAttribution?.prNumber == 512)
 
