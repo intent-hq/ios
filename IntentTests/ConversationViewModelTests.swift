@@ -132,7 +132,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-user"),
-            // Malformed agent message (no fromAgentId): no attribution → hidden.
+            // Malformed agent message (no fromAgentId): typed metadata → hidden.
             queuedEntry(id: "q-agent-bad", metadata: ["type": AnyCodable("agent_message")]),
             queuedEntry(id: "q-system", metadata: ["source": AnyCodable("system")]),
             queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")]),
@@ -142,8 +142,8 @@ struct ConversationViewModelTests {
         #expect(vm.store.queuedMessages.count == 4)
     }
 
-    @Test func queuedMessagesKeepsAgentMessageEntries() async {
-        // Agent-to-agent sends with attribution render as compact rows.
+    @Test func queuedMessagesHidesAgentMessageEntries() async {
+        // Agent-to-agent sends are daemon-originated: hidden from the section.
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-agent", metadata: [
@@ -151,19 +151,19 @@ struct ConversationViewModelTests {
                 "fromAgentName": AnyCodable("Verifier"),
             ]),
         ]
-        #expect(vm.queuedMessages.map(\.id) == ["q-agent"])
-        #expect(vm.queuedMessages[0].agentMessageAttribution?.displayName == "Verifier")
+        #expect(vm.queuedMessages.isEmpty)
     }
 
-    @Test func queuedMessagesKeepsEventNotificationEntries() async {
-        // Event-notification wakes render as compact summary rows —
-        // metadata-first, with the content prefix as fallback.
+    @Test func queuedMessagesHidesEventNotificationEntries() async {
+        // Metadata-typed event-notification wakes are hidden; legacy
+        // content-prefix entries without metadata fail open as user-authored
+        // (`isUserMessage` rules unchanged).
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
             queuedEntry(id: "q-event-legacy", content: "[WORKSPACE EVENTS] 1 event"),
         ]
-        #expect(vm.queuedMessages.map(\.id) == ["q-event", "q-event-legacy"])
+        #expect(vm.queuedMessages.map(\.id) == ["q-event-legacy"])
     }
 
     @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() async {
@@ -174,9 +174,9 @@ struct ConversationViewModelTests {
         #expect(vm.queuedMessages.isEmpty)
     }
 
-    @Test func queuedMessagesKeepsWakeEntries() async {
-        // Hook and PR-monitor wakes render as compact attribution rows
-        // (PROTOCOL §5.40 / §5.42), so they stay visible in the queue.
+    @Test func queuedMessagesHidesWakeEntries() async {
+        // Hook and PR-monitor wakes (PROTOCOL §5.40 / §5.42) are
+        // daemon-originated: hidden from the section.
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-hook", metadata: [
@@ -187,10 +187,10 @@ struct ConversationViewModelTests {
                 "type": AnyCodable("pr_monitor_wake"), "monitorId": AnyCodable("m-1"),
                 "repo": AnyCodable("intent-hq/intentd"), "prNumber": AnyCodable(7),
             ]),
-            // Malformed PR wake (no repo): stays a bare typed entry → hidden.
+            // Malformed PR wake (no repo): still a typed entry → hidden.
             queuedEntry(id: "q-pr-bad", metadata: ["type": AnyCodable("pr_monitor_wake")]),
         ]
-        #expect(vm.queuedMessages.map(\.id) == ["q-hook", "q-pr"])
+        #expect(vm.queuedMessages.isEmpty)
     }
 
     // MARK: - suggestedPrompts
