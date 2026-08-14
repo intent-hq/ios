@@ -17,6 +17,7 @@ struct WorkspaceParsingTests {
             "prNumber": 42,
             "displayStatus": "pr_open",
             "attention": "unread",
+            "waiting": true,
             "diffSummary": ["totalFiles": 5],
             "taskStats": ["total": 10, "completed": 3, "inProgress": 2]
         ]
@@ -34,6 +35,7 @@ struct WorkspaceParsingTests {
         #expect(ws?.prNumber == 42)
         #expect(ws?.displayStatus == "pr_open")
         #expect(ws?.attention == "unread")
+        #expect(ws?.waiting == true)
         #expect(ws?.diffSummaryTotalFiles == 5)
         #expect(ws?.taskStatsTotal == 10)
         #expect(ws?.taskStatsCompleted == 3)
@@ -69,9 +71,26 @@ struct WorkspaceParsingTests {
         #expect(ws?.branch == nil)
         #expect(ws?.displayStatus == nil)
         #expect(ws?.attention == nil)
+        #expect(ws?.waiting == false)
         #expect(ws?.prStatus == nil)
         #expect(ws?.diffSummaryTotalFiles == nil)
         #expect(ws?.taskStatsTotal == nil)
+    }
+
+    @Test func parseWaitingField() async throws {
+        // Present-true, present-false, and absent (⇒ false — the wire omits
+        // the field when false, and older daemons never send it).
+        let waitingTrue = WorkspaceStore.parseWorkspace(
+            ["id": "ws-w1", "title": "W", "waiting": true])
+        #expect(waitingTrue?.waiting == true)
+
+        let waitingFalse = WorkspaceStore.parseWorkspace(
+            ["id": "ws-w2", "title": "W", "waiting": false])
+        #expect(waitingFalse?.waiting == false)
+
+        let waitingAbsent = WorkspaceStore.parseWorkspace(
+            ["id": "ws-w3", "title": "W"])
+        #expect(waitingAbsent?.waiting == false)
     }
 
     @Test func parseMissingIdReturnsNil() async throws {

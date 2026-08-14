@@ -110,6 +110,16 @@ func hasUnreadAttention(_ workspace: Workspace) -> Bool {
     workspace.attention == "unread"
 }
 
+/// True when the row should show the grey static waiting dot (protocol 6.17
+/// orthogonal `waiting` flag). Dot precedence: running > unread > waiting —
+/// the waiting dot never outranks the green running or blue unread dots.
+/// Informational only: waiting never feeds attention or badge escalation.
+func showsWaitingDot(_ workspace: Workspace) -> Bool {
+    workspace.waiting
+        && workspace.activity?.lowercased() != "agent_running"
+        && !hasUnreadAttention(workspace)
+}
+
 /// Resolves the display status for a workspace from the BE-owned
 /// `displayStatus` wire value. The daemon always emits the field, including
 /// on the lite workspace.subscribe snapshot (intent-hq/intentd#743); an

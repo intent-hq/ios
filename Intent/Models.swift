@@ -66,6 +66,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let activity: String?      // "idle" | "agent_running" from daemon
     let displayStatus: String? // BE-owned wire value (snake_case, e.g. "pr_open"); nil on older daemons
     let attention: String?     // "none" | "unread" | "review_required"; nil on older daemons
+    let waiting: Bool          // orthogonal waiting flag (protocol 6.17); omitted on the wire when false
     let lastActivity: String?
     let updatedAt: String?
     let repositoryOwner: String?
@@ -79,10 +80,11 @@ struct Workspace: Codable, Identifiable, Equatable {
     let agentSummaryCount: Int?
     let agentSummaryAgents: [WorkspaceAgentInfo]?
 
-    /// Explicit initializer so `attention` can default to nil — existing
-    /// call sites (and test fixtures) that predate the field stay valid.
+    /// Explicit initializer so `attention` / `waiting` can default — existing
+    /// call sites (and test fixtures) that predate the fields stay valid.
     init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
          activity: String?, displayStatus: String?, attention: String? = nil,
+         waiting: Bool = false,
          lastActivity: String?, updatedAt: String?, repositoryOwner: String?,
          repositoryName: String?, prStatus: String?, prNumber: Int?,
          diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
@@ -96,6 +98,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.activity = activity
         self.displayStatus = displayStatus
         self.attention = attention
+        self.waiting = waiting
         self.lastActivity = lastActivity
         self.updatedAt = updatedAt
         self.repositoryOwner = repositoryOwner

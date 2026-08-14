@@ -130,6 +130,7 @@ class WorkspaceStore: ObservableObject {
                     activity: ws.activity,
                     displayStatus: ws.displayStatus,
                     attention: ws.attention,
+                    waiting: ws.waiting,
                     lastActivity: hwm,
                     updatedAt: ws.updatedAt,
                     repositoryOwner: ws.repositoryOwner,
@@ -241,6 +242,14 @@ class WorkspaceStore: ObservableObject {
                let wsId = eventWorkspaceId {
                 updateLocalLastActivity(workspaceId: wsId, timestamp: lastActivity)
             }
+            // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
+            // transition-only, protocol 6.17) — patch the row in place, no refetch.
+            if eventType == "workspace:waiting-changed",
+               let data = event["data"] as? [String: Any],
+               let waiting = data["waiting"] as? Bool,
+               let wsId = (data["workspaceId"] as? String) ?? eventWorkspaceId {
+                updateWaiting(workspaceId: wsId, waiting: waiting)
+            }
             // Only refetch if not in live mode (avoid double-apply)
             if !workspaceLive {
                 if eventType == "workspace:activity-changed" ||
@@ -350,6 +359,7 @@ class WorkspaceStore: ObservableObject {
                 activity: ws.activity,
                 displayStatus: ws.displayStatus,
                 attention: ws.attention,
+                waiting: ws.waiting,
                 lastActivity: effectiveTimestamp,
                 updatedAt: ws.updatedAt,
                 repositoryOwner: ws.repositoryOwner,
@@ -364,6 +374,40 @@ class WorkspaceStore: ObservableObject {
                 agentSummaryAgents: ws.agentSummaryAgents
             )
         }
+    }
+
+    /// Applies a workspace:waiting-changed transition in place (protocol 6.17).
+    /// The event is self-sufficient, so no refetch is needed; the reconciler is
+    /// reseeded so the next live delta doesn't revert the flag.
+    func updateWaiting(workspaceId: String, waiting: Bool) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
+              workspaces[index].waiting != waiting else { return }
+        let ws = workspaces[index]
+        let updated = Workspace(
+            id: ws.id,
+            title: ws.title,
+            branch: ws.branch,
+            baseRef: ws.baseRef,
+            status: ws.status,
+            activity: ws.activity,
+            displayStatus: ws.displayStatus,
+            attention: ws.attention,
+            waiting: waiting,
+            lastActivity: ws.lastActivity,
+            updatedAt: ws.updatedAt,
+            repositoryOwner: ws.repositoryOwner,
+            repositoryName: ws.repositoryName,
+            prStatus: ws.prStatus,
+            prNumber: ws.prNumber,
+            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
+            taskStatsTotal: ws.taskStatsTotal,
+            taskStatsCompleted: ws.taskStatsCompleted,
+            taskStatsInProgress: ws.taskStatsInProgress,
+            agentSummaryCount: ws.agentSummaryCount,
+            agentSummaryAgents: ws.agentSummaryAgents
+        )
+        workspaces[index] = updated
+        workspaceReconciler?.seed(id: updated.id, value: updated)
     }
 
     /// Optimistically clears the unread attention flag locally (guarded on
@@ -383,6 +427,7 @@ class WorkspaceStore: ObservableObject {
             activity: ws.activity,
             displayStatus: ws.displayStatus,
             attention: "none",
+            waiting: ws.waiting,
             lastActivity: ws.lastActivity,
             updatedAt: ws.updatedAt,
             repositoryOwner: ws.repositoryOwner,
@@ -455,6 +500,7 @@ class WorkspaceStore: ObservableObject {
             activity: dict["activity"] as? String,
             displayStatus: dict["displayStatus"] as? String,
             attention: dict["attention"] as? String,
+            waiting: dict["waiting"] as? Bool ?? false,
             lastActivity: dict["lastActivity"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             repositoryOwner: dict["repositoryOwner"] as? String,

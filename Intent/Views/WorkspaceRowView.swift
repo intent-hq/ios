@@ -45,6 +45,15 @@ struct WorkspaceRowView: View {
                         .frame(width: 5, height: 5)
                         .offset(x: 2, y: hasActiveAgents ? 5 : -2)
                 }
+
+                // Grey static dot: orthogonal waiting flag (protocol 6.17).
+                // Lowest precedence — running and unread dots win.
+                if showsWaitingDot(workspace) {
+                    Circle()
+                        .fill(Color.gray)
+                        .frame(width: 5, height: 5)
+                        .offset(x: 2, y: -2)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -76,6 +85,15 @@ struct WorkspaceRowView: View {
                             .padding(.vertical, 2)
                             .background(pillColor.opacity(0.12))
                             .clipShape(Capsule())
+                    }
+
+                    // Dimmed waiting suffix, shown in every state (matches the
+                    // desktop's "/ WAITING" status-label suffix).
+                    if workspace.waiting {
+                        Text("/ WAITING")
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                            .lineLimit(1)
                     }
                 }
             }

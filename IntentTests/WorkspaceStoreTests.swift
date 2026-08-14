@@ -356,6 +356,128 @@ struct WorkspaceStoreAttentionTests {
     }
 }
 
+// MARK: - Waiting flag tests (protocol 6.17)
+
+@MainActor
+struct WorkspaceStoreWaitingTests {
+
+    private func makeWorkspace(id: String, waiting: Bool = false, attention: String? = nil) -> Workspace {
+        Workspace(
+            id: id, title: "WS \(id)", branch: nil, baseRef: nil,
+            status: nil, activity: nil, displayStatus: nil,
+            attention: attention, waiting: waiting,
+            lastActivity: nil, updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
+            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+            taskStatsCompleted: nil, taskStatsInProgress: nil,
+            agentSummaryCount: nil, agentSummaryAgents: nil
+        )
+    }
+
+    @Test func updateWaitingSetsAndClearsFlag() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1")]
+
+        store.updateWaiting(workspaceId: "ws-1", waiting: true)
+        #expect(store.workspaces[0].waiting == true)
+
+        store.updateWaiting(workspaceId: "ws-1", waiting: false)
+        #expect(store.workspaces[0].waiting == false)
+    }
+
+    @Test func updateWaitingUnknownWorkspaceIsNoOp() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1")]
+        store.updateWaiting(workspaceId: "ws-other", waiting: true)
+        #expect(store.workspaces[0].waiting == false)
+    }
+
+    @Test func waitingChangedEventPatchesRowInPlace() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1")]
+
+        // Wrapped shape from the websocket-event-bridge
+        store.handleEvent("event", params: [
+            "subscriptionId": "sub-1",
+            "event": [
+                "type": "workspace:waiting-changed",
+                "workspaceId": "ws-1",
+                "timestamp": "2026-03-01T12:00:00Z",
+                "data": ["workspaceId": "ws-1", "waiting": true] as [String: Any]
+            ] as [String: Any]
+        ] as [String: Any])
+        #expect(store.workspaces[0].waiting == true)
+
+        // Transition back to not-waiting
+        store.handleEvent("event", params: [
+            "event": [
+                "type": "workspace:waiting-changed",
+                "workspaceId": "ws-1",
+                "data": ["workspaceId": "ws-1", "waiting": false] as [String: Any]
+            ] as [String: Any]
+        ] as [String: Any])
+        #expect(store.workspaces[0].waiting == false)
+    }
+
+    @Test func waitingChangedEventLeavesOtherWorkspacesUntouched() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [
+            makeWorkspace(id: "ws-1"),
+            makeWorkspace(id: "ws-2", waiting: true),
+        ]
+        store.handleEvent("event", params: [
+            "event": [
+                "type": "workspace:waiting-changed",
+                "workspaceId": "ws-1",
+                "data": ["workspaceId": "ws-1", "waiting": true] as [String: Any]
+            ] as [String: Any]
+        ] as [String: Any])
+        #expect(store.workspaces[0].waiting == true)
+        #expect(store.workspaces[1].waiting == true)
+    }
+
+    @Test func waitingSurvivesLastActivityRebuild() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        #expect(store.workspaces[0].waiting == true,
+                "The lastActivity rebuild must carry the waiting flag through")
+    }
+
+    @Test func waitingSurvivesHighWaterMarkMerge() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T16:00:00Z")
+
+        var parsed = [WorkspaceStore.parseWorkspace(
+            ["id": "ws-1", "title": "T", "waiting": true, "lastActivity": "2026-03-01T12:00:00Z"])!]
+        store.applyHighWaterMarks(to: &parsed)
+        #expect(parsed[0].lastActivity == "2026-03-01T16:00:00Z")
+        #expect(parsed[0].waiting == true,
+                "The HWM rebuild must carry the waiting flag through")
+    }
+
+    @Test func waitingSurvivesClearUnreadAttention() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", waiting: true, attention: "unread")]
+        store.clearUnreadAttentionLocally(workspaceId: "ws-1")
+        #expect(store.workspaces[0].attention == "none")
+        #expect(store.workspaces[0].waiting == true,
+                "Clearing unread must not drop the waiting flag")
+    }
+
+    @Test func fullRowRefreshDropsWaitingWhenOmitted() async throws {
+        // A full-row refresh (workspace.list / snapshot) that omits `waiting`
+        // means false — the flag must not stick from an older row.
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
+
+        var parsed = [WorkspaceStore.parseWorkspace(["id": "ws-1", "title": "T"])!]
+        store.applyHighWaterMarks(to: &parsed)
+        store.publishFetchedWorkspaces(parsed)
+        #expect(store.workspaces[0].waiting == false)
+    }
+}
+
 // MARK: - Fetch publish-order regression tests
 
 @MainActor
