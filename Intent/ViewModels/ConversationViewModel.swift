@@ -4,7 +4,9 @@ import SwiftUI
 
 @MainActor
 class ConversationViewModel: ObservableObject {
-    @Published var store = ConversationStore()
+    @Published var store = ConversationStore() {
+        didSet { observeStreaming() }
+    }
     /// Live background hooks for this conversation's workspace (PROTOCOL §5.40).
     @Published var hookStore = BackgroundHookStore()
     /// Live PR monitors for this conversation's workspace (PROTOCOL §5.42).
@@ -77,6 +79,26 @@ class ConversationViewModel: ObservableObject {
         return "\(owner)/\(name)"
     }
 
+    /// Id of the message the "New messages" divider renders after, or nil
+    /// when hidden. Applies the latched per-session anchor against the
+    /// current transcript (PROTOCOL §5.5 seen marker; FE parity:
+    /// new-messages-divider.ts): a latched `nil` hides the divider for the
+    /// whole viewing session, and an anchor that left the transcript (e.g.
+    /// `agent.editAndRegenerate` truncation) hides it WITHOUT re-deriving.
+    var newMessagesDividerAnchorId: String? {
+        NewMessagesDivider.resolveLatchedAnchor(
+            messageIds: store.messages.map(\.id),
+            latchedAnchorId: latchedNewMessagesDividerAnchorId)
+    }
+
+    /// Latched divider anchor for this viewing session (FE parity: Redux
+    /// unreadTracking.dividerSessionByAgentId). Derived ONCE when the initial
+    /// `load()` fetches settle and kept for the lifetime of the view model —
+    /// later `agent:updated` marker convergence or new messages never move or
+    /// add the divider.
+    private var latchedNewMessagesDividerAnchorId: String?
+    private var hasLatchedNewMessagesDividerAnchor = false
+
     // Message input
     @Published var messageText = ""
 
@@ -97,6 +119,7 @@ class ConversationViewModel: ObservableObject {
     private var monitoredPrStoreCancellable: AnyCancellable?
     private var workspaceStoreCancellable: AnyCancellable?
     private var draftSaveCancellable: AnyCancellable?
+    private var streamingCancellable: AnyCancellable?
 
     init(agentId: String, workspaceId: String, agentName: String) {
         self.agentId = agentId
@@ -139,10 +162,13 @@ class ConversationViewModel: ObservableObject {
                 PersistenceManager.shared.saveDraft(
                     text, workspaceId: self.workspaceId, agentId: self.agentId)
             }
+
+        observeStreaming()
     }
 
     deinit {
         draftSaveCancellable?.cancel()
+        markSeenDebounceTask?.cancel()
     }
 
     func load() async {
@@ -168,7 +194,28 @@ class ConversationViewModel: ObservableObject {
         // Live PR monitors (prMonitor:* subscribe + prMonitor.list seed, §5.42)
         async let monitors: () = monitoredPrStore.subscribe(workspaceId: workspaceId, agentId: agentId)
 
-        _ = await (conversation, queue, model, subscriptions, streamingState, hooks, monitors)
+        // Derive + latch the "New messages" divider anchor exactly once, as
+        // soon as both inputs — the transcript (fetchConversation) and the
+        // seen marker (fetchAgentStreamingState → agent.get metadata) — have
+        // settled. Deliberately NOT gated on the ancillary fetches: the entry
+        // scroll fires ~0.1s after isLoading flips false, and a slow
+        // hook/PR-monitor subscription must not delay the latch past it.
+        _ = await (conversation, streamingState)
+        latchNewMessagesDividerAnchorIfNeeded()
+
+        _ = await (queue, model, subscriptions, hooks, monitors)
+    }
+
+    /// Latch the divider anchor from the current store state. Idempotent:
+    /// only the first call derives — a `nil` result is latched too, so no
+    /// divider may appear later in the session (re-entry via a later `load()`
+    /// never re-derives).
+    func latchNewMessagesDividerAnchorIfNeeded() {
+        guard !hasLatchedNewMessagesDividerAnchor else { return }
+        hasLatchedNewMessagesDividerAnchor = true
+        latchedNewMessagesDividerAnchorId = NewMessagesDivider.resolveAnchor(
+            messageIds: store.messages.map(\.id),
+            lastSeenMessageId: store.lastSeenMessageId)
     }
 
     /// Tears down the live-store subscriptions (background hooks + PR
@@ -177,6 +224,97 @@ class ConversationViewModel: ObservableObject {
     func teardownLiveStores() async {
         await hookStore.unsubscribe()
         await monitoredPrStore.unsubscribe()
+    }
+
+    // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
+
+    /// Debounce for the "settle" triggers (turn finish, user send) before the
+    /// marker advances — the stop-looking boundary bypasses it. Desktop parity
+    /// (~1s); tests shorten it.
+    var markSeenDebounceNanos: UInt64 = 1_000_000_000
+
+    /// True while the conversation view is on screen (appear/disappear).
+    private var isOnScreen = false
+    /// True while the app scene is active (`scenePhase == .active`).
+    private var isAppActive = true
+    private var previousIsStreaming = false
+    private var markSeenDebounceTask: Task<Void, Never>?
+
+    /// Re-subscribes the turn-finish trigger to the current store's
+    /// `isStreaming` (called from init and whenever `store` is replaced).
+    private func observeStreaming() {
+        previousIsStreaming = store.isStreaming
+        streamingCancellable = store.$isStreaming
+            .removeDuplicates()
+            .sink { [weak self] streaming in
+                guard let self = self else { return }
+                let wasStreaming = self.previousIsStreaming
+                self.previousIsStreaming = streaming
+                if wasStreaming && !streaming {
+                    self.turnFinished()
+                }
+            }
+    }
+
+    /// Turn finish (`isStreaming` true→false): schedule the debounced
+    /// markSeen only while the conversation is on screen and the app is
+    /// active — otherwise the user is not looking at the new content.
+    private func turnFinished() {
+        guard isOnScreen && isAppActive else { return }
+        scheduleDebouncedMarkSeen()
+    }
+
+    /// View lifecycle: conversation appeared. Entry itself never marks seen —
+    /// the "New messages" divider anchor must survive until the user leaves
+    /// or the turn finishes (desktop parity).
+    func conversationAppeared() {
+        isOnScreen = true
+    }
+
+    /// Stop-looking boundary: leaving the conversation fires markSeen
+    /// IMMEDIATELY, superseding any pending debounce.
+    func conversationDisappeared() {
+        isOnScreen = false
+        fireMarkSeenNow()
+    }
+
+    /// Scene-phase mirror of the boundary: backgrounding while the
+    /// conversation is on screen fires markSeen immediately; off screen it
+    /// just drops any pending debounce.
+    func scenePhaseChanged(isActive: Bool) {
+        let wasActive = isAppActive
+        isAppActive = isActive
+        guard wasActive, !isActive else { return }
+        if isOnScreen {
+            fireMarkSeenNow()
+        } else {
+            markSeenDebounceTask?.cancel()
+            markSeenDebounceTask = nil
+        }
+    }
+
+    /// One pending debounce at a time — a re-trigger restarts the window.
+    /// Dedupe against the current marker lives in `ConversationStore.markSeen`.
+    private func scheduleDebouncedMarkSeen() {
+        markSeenDebounceTask?.cancel()
+        markSeenDebounceTask = Task { [weak self] in
+            guard let nanos = self?.markSeenDebounceNanos else { return }
+            try? await Task.sleep(nanoseconds: nanos)
+            guard let self = self, !Task.isCancelled else { return }
+            self.markSeenDebounceTask = nil
+            await self.store.markSeen(agentId: self.agentId, workspaceId: self.workspaceId)
+        }
+    }
+
+    /// Captures the store (not `self`) so the boundary fire still lands even
+    /// if the view model is torn down right after leaving the screen.
+    private func fireMarkSeenNow() {
+        markSeenDebounceTask?.cancel()
+        markSeenDebounceTask = nil
+        let store = self.store
+        let agentId = self.agentId
+        let workspaceId = self.workspaceId
+        Task { await store.markSeen(agentId: agentId, workspaceId: workspaceId) }
     }
 
     func cancelWait() async {
@@ -245,6 +383,12 @@ class ConversationViewModel: ObservableObject {
             try await store.sendMessage(agentId: agentId, content: content, workspaceId: workspaceId, imageBlocks: imageBlocks)
             // Clear draft immediately after successful send
             PersistenceManager.shared.clearDraft(workspaceId: workspaceId, agentId: agentId)
+            // User send advances the seen marker on the same debounce as turn
+            // finish, with NO focus gate — composing is proof of looking.
+            // Success-only: a failed send delivered nothing, so the unseen
+            // tail is still unseen (desktop parity — the FE marks seen on the
+            // send action's success path).
+            scheduleDebouncedMarkSeen()
         } catch {
             print("[ConversationViewModel] Send failed: \(error)")
         }

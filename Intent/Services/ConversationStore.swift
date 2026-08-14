@@ -31,6 +31,12 @@ class ConversationStore: ObservableObject {
     /// `agent.get` and updated push-style by `agent:updated`. The wizard gate
     /// retires a pending set whose message id matches it.
     @Published var dismissedQuestionsMessageId: String?
+    /// The per-conversation seen marker (PROTOCOL §5.5, v4.5): id of the newest
+    /// transcript message the user has seen, advanced via `agent.markSeen`.
+    /// Daemon-persisted in session metadata (survives restarts); refreshed from
+    /// `agent.get` and updated push-style by `agent:updated` so marker moves
+    /// from other clients converge here too.
+    @Published var lastSeenMessageId: String?
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -159,11 +165,15 @@ class ConversationStore: ObservableObject {
                     isStreaming = serverIsStreaming
                 }
                 attentionRequest = AgentSession.parsePendingAttentionRequest(agentDict)
-                // Question-dismissal marker (AgentLite serves it under
-                // metadata; omitted when nothing was dismissed).
-                if let metadata = agentDict["metadata"] as? [String: Any],
-                   let dismissedId = metadata["dismissedQuestionsMessageId"] as? String {
-                    dismissedQuestionsMessageId = dismissedId
+                // Question-dismissal and seen markers (AgentLite serves them
+                // under metadata; omitted when nothing was dismissed/seen).
+                if let metadata = agentDict["metadata"] as? [String: Any] {
+                    if let dismissedId = metadata["dismissedQuestionsMessageId"] as? String {
+                        dismissedQuestionsMessageId = dismissedId
+                    }
+                    if let seenId = metadata["lastSeenMessageId"] as? String {
+                        lastSeenMessageId = seenId
+                    }
                 }
             }
         } catch {
@@ -825,6 +835,11 @@ class ConversationStore: ObservableObject {
             if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
                 dismissedQuestionsMessageId = dismissedId
             }
+            // Seen-marker persist (agent.markSeen, PROTOCOL §5.5) — converge
+            // marker moves from other clients push-style.
+            if let seenId = data["lastSeenMessageId"] as? String {
+                lastSeenMessageId = seenId
+            }
         default:
             break
         }
@@ -1040,6 +1055,58 @@ class ConversationStore: ObservableObject {
                 dismissedQuestionsMessageId = previousMarker
             }
             throw error
+        }
+    }
+
+    // MARK: - Seen marker (agent.markSeen, PROTOCOL §5.5)
+
+    /// Dedupe record for `markSeen`: the last marker id we sent (or attempted
+    /// to send). Cleared on failure so a later trigger retries naturally.
+    private var lastMarkSeenSentId: String?
+
+    /// Newest persisted message id in transcript order — streaming rows
+    /// (partial assistant output not yet persisted daemon-side) are never
+    /// eligible: the marker must only ever point at a message the daemon can
+    /// resolve (FE parity: mark-agent-seen.ts `newestPersistedMessageId`).
+    private var newestPersistedMessageId: String? {
+        for message in messages.reversed() {
+            if message.isStreaming == true { continue }
+            if !message.id.isEmpty { return message.id }
+        }
+        return nil
+    }
+
+    /// Fire-and-forget `agent.markSeen`: advance the per-conversation seen
+    /// marker to the newest persisted message. Never throws — the daemon call
+    /// is idempotent and monotonic, so a failure just leaves the marker behind
+    /// and the next trigger retries (the dedupe record is rolled back).
+    func markSeen(agentId: String, workspaceId: String) async {
+        guard let messageId = newestPersistedMessageId else { return }
+        // Dedupe: no point re-sending the marker id we already sent (or the
+        // daemon already serves).
+        if messageId == lastMarkSeenSentId || messageId == lastSeenMessageId { return }
+        lastMarkSeenSentId = messageId
+        do {
+            let result = try await connectionManager.request(
+                "agent.markSeen",
+                params: [
+                    "agentId": agentId,
+                    "messageId": messageId,
+                    "workspaceId": workspaceId,
+                ]
+            )
+            // Adopt the daemon's confirmed marker — under the monotonic
+            // contract it may be a NEWER id than the one we named.
+            if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
+                lastSeenMessageId = confirmedId
+            }
+        } catch {
+            // Roll back the dedupe record so the next trigger retries — only
+            // if nothing newer was recorded while the RPC was in flight.
+            if lastMarkSeenSentId == messageId {
+                lastMarkSeenSentId = nil
+            }
+            print("[ConversationStore] agent.markSeen failed: \(error)")
         }
     }
 
@@ -1369,6 +1436,8 @@ class ConversationStore: ObservableObject {
         attentionRequest = nil
         agentNotFound = false
         dismissedQuestionsMessageId = nil
+        lastSeenMessageId = nil
+        lastMarkSeenSentId = nil
         watchedAgentLastRefresh.removeAll()
         chatLive = false
         // Unregister handler on reset
