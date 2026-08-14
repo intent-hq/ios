@@ -88,11 +88,3 @@ extension ConversationMessage {
         return nil
     }
 }
-
-extension QueuedMessage {
-    /// PR-monitor wake attribution for a queued entry
-    /// (`messageMetadata.type == "pr_monitor_wake"`, PROTOCOL §5.42).
-    var prMonitorWakeAttribution: PrMonitorWakeAttribution? {
-        PrMonitorWakeAttribution.from(messageMetadata)
-    }
-}

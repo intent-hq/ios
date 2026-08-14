@@ -118,11 +118,3 @@ extension ConversationMessage {
         return nil
     }
 }
-
-extension QueuedMessage {
-    /// Hook-wake attribution for a queued entry
-    /// (`messageMetadata.type == "hook_wake"`, PROTOCOL §5.40).
-    var hookWakeAttribution: HookWakeAttribution? {
-        HookWakeAttribution.from(messageMetadata)
-    }
-}
