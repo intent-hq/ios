@@ -112,6 +112,34 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.agentSummaryCount = agentSummaryCount
         self.agentSummaryAgents = agentSummaryAgents
     }
+
+    /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
+    /// omitted when false) — the synthesized decoder would throw keyNotFound
+    /// on the common not-waiting shape if a JSONDecoder path is ever added.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        branch = try c.decodeIfPresent(String.self, forKey: .branch)
+        baseRef = try c.decodeIfPresent(String.self, forKey: .baseRef)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        activity = try c.decodeIfPresent(String.self, forKey: .activity)
+        displayStatus = try c.decodeIfPresent(String.self, forKey: .displayStatus)
+        attention = try c.decodeIfPresent(String.self, forKey: .attention)
+        waiting = try c.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
+        lastActivity = try c.decodeIfPresent(String.self, forKey: .lastActivity)
+        updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+        repositoryOwner = try c.decodeIfPresent(String.self, forKey: .repositoryOwner)
+        repositoryName = try c.decodeIfPresent(String.self, forKey: .repositoryName)
+        prStatus = try c.decodeIfPresent(String.self, forKey: .prStatus)
+        prNumber = try c.decodeIfPresent(Int.self, forKey: .prNumber)
+        diffSummaryTotalFiles = try c.decodeIfPresent(Int.self, forKey: .diffSummaryTotalFiles)
+        taskStatsTotal = try c.decodeIfPresent(Int.self, forKey: .taskStatsTotal)
+        taskStatsCompleted = try c.decodeIfPresent(Int.self, forKey: .taskStatsCompleted)
+        taskStatsInProgress = try c.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
+        agentSummaryCount = try c.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
+        agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
+    }
 }
 
 /// A model available for the agent.

@@ -93,6 +93,24 @@ struct WorkspaceParsingTests {
         #expect(waitingAbsent?.waiting == false)
     }
 
+    @Test func decodeWaitingViaJSONDecoder() async throws {
+        // The Decodable conformance must honor the same absent ⇒ false
+        // contract as parseWorkspace (PROTOCOL §5.1: the wire omits the
+        // field when false), so a future JSONDecoder path can't throw
+        // keyNotFound on the common not-waiting row shape.
+        let decoder = JSONDecoder()
+
+        let absent = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-d1", "title": "W"}"#.utf8))
+        #expect(absent.waiting == false)
+
+        let present = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-d2", "title": "W", "waiting": true}"#.utf8))
+        #expect(present.waiting == true)
+    }
+
     @Test func parseMissingIdReturnsNil() async throws {
         let dict: [String: Any] = ["title": "No ID"]
         #expect(WorkspaceStore.parseWorkspace(dict) == nil)

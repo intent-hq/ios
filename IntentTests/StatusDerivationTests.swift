@@ -126,6 +126,17 @@ struct StatusDerivationTests {
         #expect(!showsWaitingDot(ws))
     }
 
+    @Test func runningPredicateSharedByGreenAndWaitingDots() async throws {
+        // hasRunningAgents is the single predicate behind both the green
+        // running dot and the waiting-dot precedence check — they can never
+        // disagree on what "running" means (case-insensitive match included).
+        #expect(hasRunningAgents(makeWorkspace(activity: "agent_running")))
+        #expect(hasRunningAgents(makeWorkspace(activity: "AGENT_RUNNING")))
+        #expect(!hasRunningAgents(makeWorkspace(activity: "idle")))
+        #expect(!hasRunningAgents(makeWorkspace(activity: nil)))
+        #expect(!showsWaitingDot(makeWorkspace(activity: "AGENT_RUNNING", waiting: true)))
+    }
+
     @Test func waitingDotYieldsToUnread() async throws {
         let ws = makeWorkspace(attention: "unread", waiting: true)
         #expect(!showsWaitingDot(ws))

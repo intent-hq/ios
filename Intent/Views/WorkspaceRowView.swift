@@ -21,7 +21,13 @@ struct WorkspaceRowView: View {
     }
 
     private var hasActiveAgents: Bool {
-        workspace.activity?.lowercased() == "agent_running"
+        hasRunningAgents(workspace)
+    }
+
+    /// True when something (repo name or PR pill) precedes the waiting
+    /// suffix on the metadata line, so the "/" reads as a separator.
+    private var hasMetadataPrefix: Bool {
+        (showRepo && workspace.repositoryName != nil) || prPillColor != nil
     }
 
     var body: some View {
@@ -88,9 +94,10 @@ struct WorkspaceRowView: View {
                     }
 
                     // Dimmed waiting suffix, shown in every state (matches the
-                    // desktop's "/ WAITING" status-label suffix).
+                    // desktop's "/ WAITING" status-label suffix). The slash is
+                    // a separator — dropped when nothing precedes it.
                     if workspace.waiting {
-                        Text("/ WAITING")
+                        Text(hasMetadataPrefix ? "/ WAITING" : "WAITING")
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
                             .lineLimit(1)

@@ -110,13 +110,20 @@ func hasUnreadAttention(_ workspace: Workspace) -> Bool {
     workspace.attention == "unread"
 }
 
+/// True when the workspace's daemon-reported activity is "agent_running"
+/// (the green dot). Shared by the row's green-dot overlay and the waiting-dot
+/// precedence check so the two predicates can never drift apart.
+func hasRunningAgents(_ workspace: Workspace) -> Bool {
+    workspace.activity?.lowercased() == "agent_running"
+}
+
 /// True when the row should show the grey static waiting dot (protocol 6.17
 /// orthogonal `waiting` flag). Dot precedence: running > unread > waiting —
 /// the waiting dot never outranks the green running or blue unread dots.
 /// Informational only: waiting never feeds attention or badge escalation.
 func showsWaitingDot(_ workspace: Workspace) -> Bool {
     workspace.waiting
-        && workspace.activity?.lowercased() != "agent_running"
+        && !hasRunningAgents(workspace)
         && !hasUnreadAttention(workspace)
 }
 
