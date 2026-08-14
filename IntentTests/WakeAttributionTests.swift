@@ -227,4 +227,27 @@ struct PrMonitorWakeAttributionTests {
         #expect(PrMonitorWakeAttribution.stripPrefix("[PR monitor intent-hq/intentd#512] Checks failed") == "Checks failed")
         #expect(PrMonitorWakeAttribution.stripPrefix("No prefix") == "No prefix")
     }
+
+    @Test func messageAttributionChecksRowThenBlockMetadata() {
+        // Conflicting block metadata proves the row is checked first.
+        let fromRow = ConversationMessage(
+            id: "m1", role: .user,
+            contentBlocks: [ContentBlock(
+                type: .text, text: "x",
+                messageMetadata: meta(["prNumber": AnyCodable(999)]))],
+            timestamp: "2025-01-01T00:00:00Z", metadata: meta())
+        #expect(fromRow.prMonitorWakeAttribution?.prNumber == 512)
+
+        let fromBlock = ConversationMessage(
+            id: "m2", role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "x", messageMetadata: meta())],
+            timestamp: "2025-01-01T00:00:00Z")
+        #expect(fromBlock.prMonitorWakeAttribution?.prNumber == 512)
+
+        let plain = ConversationMessage(
+            id: "m3", role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "x")],
+            timestamp: "2025-01-01T00:00:00Z")
+        #expect(plain.prMonitorWakeAttribution == nil)
+    }
 }
