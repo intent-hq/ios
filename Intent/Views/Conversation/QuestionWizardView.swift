@@ -47,6 +47,9 @@ struct QuestionWizardView: View {
     /// unmounts the wizard when the dismissal marker lands; a failed RPC
     /// remounts it fresh (`.id`-keyed), which resets this flag.
     @State private var dismissed = false
+    /// Measured natural height of the step content — the scrollable body hugs
+    /// short steps (no empty filler) and caps at `stepBodyMaxHeight`.
+    @State private var stepContentHeight: CGFloat = 0
 
     init(
         questions: [Question],
@@ -290,28 +293,54 @@ struct QuestionWizardView: View {
 
     // MARK: - Step body
 
+    /// Cap the scrollable step body at ~half the screen so the header/footer
+    /// rows and the transcript above stay visible under a long question set.
+    /// Deliberate iOS-specific divergence from FE parity: the desktop
+    /// `QuestionWizard.svelte` renders the step body at natural height with
+    /// no cap — on a phone that would push the transcript and footer
+    /// offscreen, so the body scrolls under this cap instead.
+    private var stepBodyMaxHeight: CGFloat { UIScreen.main.bounds.height * 0.5 }
+
+    /// Long steps scroll inside the capped ScrollView; short steps keep their
+    /// natural height (the frame caps at the measured content height, so the
+    /// well never pads out with empty filler).
     @ViewBuilder
     private var stepBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(current.header.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .kerning(0.5)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                Text(current.question)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-            }
-            VStack(spacing: 6) {
-                ForEach(current.options.indices, id: \.self) { oi in
-                    optionButton(oi)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(current.header.uppercased())
+                        .font(.caption2.weight(.semibold))
+                        .kerning(0.5)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(current.question)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                VStack(spacing: 6) {
+                    ForEach(current.options.indices, id: \.self) { oi in
+                        optionButton(oi)
+                    }
+                }
+                otherField
             }
-            otherField
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                stepContentHeight = height
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(
+            maxHeight: stepContentHeight > 0
+                ? min(stepContentHeight, stepBodyMaxHeight)
+                : stepBodyMaxHeight
+        )
     }
 
     @ViewBuilder
@@ -329,10 +358,12 @@ struct QuestionWizardView: View {
                     Text(option.label)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
                     if let description = option.description {
                         Text(description)
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .multilineTextAlignment(.leading)
