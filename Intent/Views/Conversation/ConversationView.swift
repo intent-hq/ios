@@ -101,7 +101,109 @@ struct ConversationView: View {
         ))
     }
 
+    // `body` is decomposed into layered `some View` properties
+    // (intent-hq/monorepo#2352): the Xcode Cloud Release build could not
+    // type-check the former single-expression modifier chain in reasonable
+    // time (Debug builds passed). Each layer is an opaque sub-expression the
+    // type checker solves independently; modifier ORDER is unchanged — the
+    // layers chain bottom-up: column → chrome → presentation → lifecycle.
     var body: some View {
+        conversationLifecycle
+    }
+
+    /// Outermost layer: navigation destination + load/lifecycle handlers.
+    private var conversationLifecycle: some View {
+        conversationPresentation
+            .navigationDestination(item: $childAgent) { dest in
+                ConversationView(
+                    agentId: dest.agentId,
+                    workspaceId: dest.workspaceId,
+                    agentName: dest.agentName
+                )
+                .id(dest.agentId)
+            }
+            .task {
+                await viewModel.load()
+                handleAgentNotFoundIfNeeded()
+            }
+            .onChange(of: viewModel.agentNotFound) { _, notFound in
+                if notFound {
+                    handleAgentNotFoundIfNeeded()
+                }
+            }
+            .onAppear {
+                NotificationManager.shared.currentAgentId = viewModel.agentId
+                // Entry itself never marks seen (the divider anchor must survive
+                // until the user leaves or the turn finishes).
+                viewModel.conversationAppeared()
+            }
+            .onDisappear {
+                NotificationManager.shared.currentAgentId = nil
+                Task { await viewModel.teardownLiveStores() }
+                // Stop-looking boundary — fires markSeen immediately.
+                viewModel.conversationDisappeared()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                viewModel.scenePhaseChanged(isActive: phase == .active)
+            }
+    }
+
+    /// Sheets, confirmation dialog, and alerts.
+    private var conversationPresentation: some View {
+        conversationChrome
+            .sheet(isPresented: $showModelPicker) {
+                ModelPickerView(viewModel: viewModel)
+            }
+            .sheet(item: $presentedNote) { noteInfo in
+                noteSheet(for: noteInfo)
+            }
+            .confirmationDialog(
+                "Delete Agent?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteAgent)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will permanently delete this agent and its conversation history.")
+            }
+            .alert("Rename Agent", isPresented: $showRenameAlert) {
+                TextField("Agent name", text: $renameText)
+                Button("Rename", action: renameAgent)
+                Button("Cancel", role: .cancel) {}
+            }
+            // Non-destructive dismiss-failure surface (intent-hq/monorepo#1800):
+            // nothing was dismissed — the wizard re-pends via the store's marker
+            // rollback; this alert just makes the failure explicit. `presenting:`
+            // hands the closures a captured non-optional detail so the message
+            // doesn't degrade mid-dismissal (same shape as ConnectionsView).
+            .alert(
+                "Couldn't Dismiss Questions",
+                isPresented: dismissQuestionsErrorPresented,
+                presenting: viewModel.dismissQuestionsError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { detail in
+                Text("The questions were not dismissed and are still pending. " + detail)
+            }
+    }
+
+    /// Navigation bar title, background, and toolbar.
+    private var conversationChrome: some View {
+        conversationColumn
+            .navigationTitle(viewModel.agentName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    agentMenu
+                }
+            }
+    }
+
+    /// Innermost layer: the column itself plus geometry/animation modifiers.
+    private var conversationColumn: some View {
         VStack(spacing: 0) {
             columnContent
         }
@@ -122,151 +224,98 @@ struct ConversationView: View {
         .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentMonitors.map(\.monitorId))
-        .navigationTitle(viewModel.agentName)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if let modelId = viewModel.currentModelId {
-                        let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
-                        Text("Model: \(displayName)")
-                    }
-                    if viewModel.filteredMessages.isEmpty {
-                        Button {
-                            showModelPicker = true
-                        } label: {
-                            Label("Change Model", systemImage: "cpu")
-                        }
-                    }
-                    Button {
-                        renameText = viewModel.agentName
-                        showRenameAlert = true
-                    } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    Divider()
-                    Button(role: .destructive) {
-                        showDeleteConfirmation = true
-                    } label: {
-                        Label("Delete Agent", systemImage: "trash")
-                    }
+    }
+
+    /// Presented-or-not binding for the dismiss-failure alert, hoisted out of
+    /// the `body` expression so the type checker doesn't solve the `Binding`
+    /// construction inline.
+    private var dismissQuestionsErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.dismissQuestionsError != nil },
+            set: { if !$0 { viewModel.dismissQuestionsError = nil } })
+    }
+
+    /// Ellipsis toolbar menu (model info, rename, delete).
+    private var agentMenu: some View {
+        Menu {
+            if let modelId = viewModel.currentModelId {
+                let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+                Text("Model: \(displayName)")
+            }
+            if viewModel.filteredMessages.isEmpty {
+                Button {
+                    showModelPicker = true
                 } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                    Label("Change Model", systemImage: "cpu")
                 }
             }
-        }
-        .sheet(isPresented: $showModelPicker) {
-            ModelPickerView(viewModel: viewModel)
-        }
-        .sheet(item: $presentedNote) { noteInfo in
-            NavigationStack {
-                NoteDetailView(
-                    noteId: noteInfo.noteId,
-                    workspaceId: noteInfo.workspaceId,
-                    noteTitle: noteInfo.noteTitle
-                )
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            presentedNote = nil
-                        }
-                    }
-                }
+            Button {
+                renameText = viewModel.agentName
+                showRenameAlert = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
             }
-        }
-        .confirmationDialog(
-            "Delete Agent?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                HapticManager.notification(.warning)
-                selfInitiatedDelete = true
-                Task {
-                    do {
-                        let _ = try await ConnectionManager.shared.request(
-                            "agent.delete",
-                            params: [
-                                "agentId": viewModel.agentId,
-                                "workspaceId": viewModel.workspaceId
-                            ]
-                        )
-                        dismiss()
-                    } catch {
-                        selfInitiatedDelete = false
-                        print("[ConversationView] Failed to delete agent: \(error)")
-                    }
-                }
+            Divider()
+            Button(role: .destructive) {
+                showDeleteConfirmation = true
+            } label: {
+                Label("Delete Agent", systemImage: "trash")
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently delete this agent and its conversation history.")
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(Theme.foreground(for: colorScheme))
         }
-        .alert("Rename Agent", isPresented: $showRenameAlert) {
-            TextField("Agent name", text: $renameText)
-            Button("Rename") {
-                let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !newName.isEmpty else { return }
-                Task {
-                    do {
-                        try await viewModel.renameAgent(newName)
-                    } catch {
-                        print("[ConversationView] Failed to rename agent: \(error)")
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        // Non-destructive dismiss-failure surface (intent-hq/monorepo#1800):
-        // nothing was dismissed — the wizard re-pends via the store's marker
-        // rollback; this alert just makes the failure explicit. `presenting:`
-        // hands the closures a captured non-optional detail so the message
-        // doesn't degrade mid-dismissal (same shape as ConnectionsView).
-        .alert(
-            "Couldn't Dismiss Questions",
-            isPresented: Binding(
-                get: { viewModel.dismissQuestionsError != nil },
-                set: { if !$0 { viewModel.dismissQuestionsError = nil } }),
-            presenting: viewModel.dismissQuestionsError
-        ) { _ in
-            Button("OK", role: .cancel) {}
-        } message: { detail in
-            Text("The questions were not dismissed and are still pending. " + detail)
-        }
-        .navigationDestination(item: $childAgent) { dest in
-            ConversationView(
-                agentId: dest.agentId,
-                workspaceId: dest.workspaceId,
-                agentName: dest.agentName
+    }
+
+    /// Note detail sheet content for a tapped note reference.
+    private func noteSheet(for noteInfo: NoteSheetInfo) -> some View {
+        NavigationStack {
+            NoteDetailView(
+                noteId: noteInfo.noteId,
+                workspaceId: noteInfo.workspaceId,
+                noteTitle: noteInfo.noteTitle
             )
-            .id(dest.agentId)
-        }
-        .task {
-            await viewModel.load()
-            handleAgentNotFoundIfNeeded()
-        }
-        .onChange(of: viewModel.agentNotFound) { _, notFound in
-            if notFound {
-                handleAgentNotFoundIfNeeded()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        presentedNote = nil
+                    }
+                }
             }
         }
-        .onAppear {
-            NotificationManager.shared.currentAgentId = viewModel.agentId
-            // Entry itself never marks seen (the divider anchor must survive
-            // until the user leaves or the turn finishes).
-            viewModel.conversationAppeared()
+    }
+
+    /// Delete-confirmation action: deletes the agent then dismisses this view.
+    private func deleteAgent() {
+        HapticManager.notification(.warning)
+        selfInitiatedDelete = true
+        Task {
+            do {
+                let _ = try await ConnectionManager.shared.request(
+                    "agent.delete",
+                    params: [
+                        "agentId": viewModel.agentId,
+                        "workspaceId": viewModel.workspaceId
+                    ]
+                )
+                dismiss()
+            } catch {
+                selfInitiatedDelete = false
+                print("[ConversationView] Failed to delete agent: \(error)")
+            }
         }
-        .onDisappear {
-            NotificationManager.shared.currentAgentId = nil
-            Task { await viewModel.teardownLiveStores() }
-            // Stop-looking boundary — fires markSeen immediately.
-            viewModel.conversationDisappeared()
-        }
-        .onChange(of: scenePhase) { _, phase in
-            viewModel.scenePhaseChanged(isActive: phase == .active)
+    }
+
+    /// Rename-alert action: applies the trimmed name if non-empty.
+    private func renameAgent() {
+        let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty else { return }
+        Task {
+            do {
+                try await viewModel.renameAgent(newName)
+            } catch {
+                print("[ConversationView] Failed to rename agent: \(error)")
+            }
         }
     }
 
@@ -444,6 +493,10 @@ struct ConversationView: View {
         }
     }
 
+    // `conversationContent` is decomposed the same way as `body`
+    // (intent-hq/monorepo#2352): rows, the scroll container, and the
+    // follow-to-bottom handler stack each type-check as their own
+    // sub-expression instead of one ScrollViewReader mega-expression.
     @ViewBuilder
     private var conversationContent: some View {
         // Hoisted out of the ForEach: the latched anchor id is recomputed on
@@ -452,175 +505,196 @@ struct ConversationView: View {
         let dividerAnchorId = viewModel.newMessagesDividerAnchorId
         ZStack(alignment: .bottom) {
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 16) {
-                        // Scroll anchor at the top (visually the bottom due to flip)
-                        Color.clear.frame(height: 8)
-                            .flippedUpsideDown()
-                            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
-                            .id("scroll-bottom")
-
-                        // Thinking indicator (visually at bottom due to flip)
-                        if viewModel.isStreaming {
-                            thinkingIndicatorView
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                                .flippedUpsideDown()
-                                .id("thinking-indicator")
-                        }
-
-                        // Suggested prompts (visually above newest message due to flip)
-                        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
-                            suggestedPromptsView
-                                .flippedUpsideDown()
-                                .id("suggested-prompts")
-                        }
-
-                        // Messages in reverse order (newest first, which appears at bottom due to flip)
-                        ForEach(viewModel.filteredMessages.reversed()) { message in
-                            // "New messages" divider: belongs visually BELOW
-                            // the anchor row (between the anchor and the first
-                            // unseen message). LazyVStack code order runs
-                            // visual bottom→top in the flipped list, so
-                            // emitting the divider BEFORE the anchor's
-                            // MessageView places it on the newer side.
-                            if message.id == dividerAnchorId {
-                                NewMessagesDividerView()
-                                    .flippedUpsideDown()
-                                    .id("new-messages-divider")
-                            }
-                            MessageView(
-                                message: message,
-                                workspaceId: viewModel.workspaceId,
-                                onNavigateToNote: { noteId, wsId, title in
-                                    presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: wsId, noteTitle: title)
-                                }
-                            )
-
-                                .flippedUpsideDown()
-                                .id(message.id)
-                        }
-
-                        // Truncation banner (appears at the top/oldest end due to flip)
-                        if viewModel.isTruncated {
-                            truncationBanner
-                                .flippedUpsideDown()
-                                .id("truncation-banner")
-                        }
-                    }
-
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 24)
-                }
-                .flippedUpsideDown()
-                .scrollIndicators(.hidden)
-                .scrollBounceBehavior(.always)
-                .simultaneousGesture(
-                    TapGesture().onEnded {
-                        UIApplication.shared.sendAction(
-                            #selector(UIResponder.resignFirstResponder),
-                            to: nil, from: nil, for: nil
-                        )
-                    }
-                )
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    // In the flipped view, "at bottom" means native scroll is at top (contentOffset.y ≈ 0)
-                    let atBottom = geometry.contentOffset.y <= 50
-                    print("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(atBottom)")
-                    return !atBottom
-                } action: { _, isScrolledAway in
-                    print("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
-                    if hasInitiallyScrolled && !isScrollingToBottom {
-                        userIsScrolledAway = isScrolledAway
-                    }
-                }
-                // The follow-to-bottom handlers below are gated on
-                // hasInitiallyScrolled (flips ~0.3s after the entry scroll):
-                // until the entry-scroll follow decision has been made,
-                // userIsScrolledAway is still false, so a stream tick or row
-                // arrival in that window would otherwise yank the viewport
-                // off the divider and read the bottom clamp as "follow stays
-                // enabled".
-                .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
-                    if newCount > oldCount,
-                       let lastMessage = viewModel.filteredMessages.last,
-                       lastMessage.role == .user {
-                        // User sent a message — reset scroll state
-                        userIsScrolledAway = false
-                    }
-                    if hasInitiallyScrolled && !userIsScrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: viewModel.isStreaming) { _, _ in
-                    if hasInitiallyScrolled && !userIsScrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
-                    if hasInitiallyScrolled && !userIsScrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: viewModel.queuedMessages.count) { _, _ in
-                    if hasInitiallyScrolled && !userIsScrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
-                    if hasInitiallyScrolled && !userIsScrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-                .onChange(of: viewModel.isLoading) { _, isLoading in
-                    if !isLoading {
-                        runInitialScrollIfNeeded(proxy: proxy)
-                    }
-                }
-                .onAppear {
-                    // On first open the transcript mounts only after the load
-                    // settles (the loading placeholder renders while
-                    // isLoading is true), so the onChange above never sees the
-                    // true→false transition — run the entry scroll from here
-                    // when the load has already settled. Also covers cached
-                    // data where isLoading never flips.
-                    if !viewModel.isLoading {
-                        runInitialScrollIfNeeded(proxy: proxy)
-                    }
-                }
-                .onChange(of: userIsScrolledAway) { _, scrolledAway in
-                    if !scrolledAway {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
+                transcriptScrollView(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
 
             // "Go to End" floating pill button
             if userIsScrolledAway {
-                Button {
-                    scrollMomentumProxy.stopMomentum()
-                    isScrollingToBottom = true
-                    userIsScrolledAway = false
-                    // The onChange(of: userIsScrolledAway) will call scrollToBottom
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.down")
-                            .font(.caption.weight(.semibold))
-                        Text("Go to End")
-                            .font(.caption.weight(.medium))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                }
-                .buttonStyle(.plain)
-                .padding(.bottom, 8)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .animation(.easeInOut(duration: 0.2), value: userIsScrolledAway)
+                goToEndButton
             }
         }
+    }
+
+    /// Scroll container plus the follow-to-bottom / entry-scroll handlers.
+    ///
+    /// The follow-to-bottom handlers below are gated on
+    /// hasInitiallyScrolled (flips ~0.3s after the entry scroll):
+    /// until the entry-scroll follow decision has been made,
+    /// userIsScrolledAway is still false, so a stream tick or row
+    /// arrival in that window would otherwise yank the viewport
+    /// off the divider and read the bottom clamp as "follow stays
+    /// enabled".
+    private func transcriptScrollView(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
+        transcriptScrollBase(dividerAnchorId: dividerAnchorId)
+            .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
+                if newCount > oldCount,
+                   let lastMessage = viewModel.filteredMessages.last,
+                   lastMessage.role == .user {
+                    // User sent a message — reset scroll state
+                    userIsScrolledAway = false
+                }
+                if hasInitiallyScrolled && !userIsScrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.isStreaming) { _, _ in
+                if hasInitiallyScrolled && !userIsScrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
+                if hasInitiallyScrolled && !userIsScrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.queuedMessages.count) { _, _ in
+                if hasInitiallyScrolled && !userIsScrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
+                if hasInitiallyScrolled && !userIsScrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+            .onChange(of: viewModel.isLoading) { _, isLoading in
+                if !isLoading {
+                    runInitialScrollIfNeeded(proxy: proxy)
+                }
+            }
+            .onAppear {
+                // On first open the transcript mounts only after the load
+                // settles (the loading placeholder renders while
+                // isLoading is true), so the onChange above never sees the
+                // true→false transition — run the entry scroll from here
+                // when the load has already settled. Also covers cached
+                // data where isLoading never flips.
+                if !viewModel.isLoading {
+                    runInitialScrollIfNeeded(proxy: proxy)
+                }
+            }
+            .onChange(of: userIsScrolledAway) { _, scrolledAway in
+                if !scrolledAway {
+                    scrollToBottom(proxy: proxy)
+                }
+            }
+    }
+
+    /// The flipped ScrollView itself: rows, gestures, and scroll geometry.
+    private func transcriptScrollBase(dividerAnchorId: String?) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                transcriptRows(dividerAnchorId: dividerAnchorId)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 24)
+        }
+        .flippedUpsideDown()
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.always)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                UIApplication.shared.sendAction(
+                    #selector(UIResponder.resignFirstResponder),
+                    to: nil, from: nil, for: nil
+                )
+            }
+        )
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            // In the flipped view, "at bottom" means native scroll is at top (contentOffset.y ≈ 0)
+            let atBottom = geometry.contentOffset.y <= 50
+            print("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(atBottom)")
+            return !atBottom
+        } action: { _, isScrolledAway in
+            print("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
+            if hasInitiallyScrolled && !isScrollingToBottom {
+                userIsScrolledAway = isScrolledAway
+            }
+        }
+    }
+
+    /// LazyVStack row content (anchor, indicators, messages, banner).
+    @ViewBuilder
+    private func transcriptRows(dividerAnchorId: String?) -> some View {
+        // Scroll anchor at the top (visually the bottom due to flip)
+        Color.clear.frame(height: 8)
+            .flippedUpsideDown()
+            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
+            .id("scroll-bottom")
+
+        // Thinking indicator (visually at bottom due to flip)
+        if viewModel.isStreaming {
+            thinkingIndicatorView
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .flippedUpsideDown()
+                .id("thinking-indicator")
+        }
+
+        // Suggested prompts (visually above newest message due to flip)
+        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
+            suggestedPromptsView
+                .flippedUpsideDown()
+                .id("suggested-prompts")
+        }
+
+        // Messages in reverse order (newest first, which appears at bottom due to flip)
+        ForEach(viewModel.filteredMessages.reversed()) { message in
+            // "New messages" divider: belongs visually BELOW
+            // the anchor row (between the anchor and the first
+            // unseen message). LazyVStack code order runs
+            // visual bottom→top in the flipped list, so
+            // emitting the divider BEFORE the anchor's
+            // MessageView places it on the newer side.
+            if message.id == dividerAnchorId {
+                NewMessagesDividerView()
+                    .flippedUpsideDown()
+                    .id("new-messages-divider")
+            }
+            MessageView(
+                message: message,
+                workspaceId: viewModel.workspaceId,
+                onNavigateToNote: { noteId, wsId, title in
+                    presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: wsId, noteTitle: title)
+                }
+            )
+
+                .flippedUpsideDown()
+                .id(message.id)
+        }
+
+        // Truncation banner (appears at the top/oldest end due to flip)
+        if viewModel.isTruncated {
+            truncationBanner
+                .flippedUpsideDown()
+                .id("truncation-banner")
+        }
+    }
+
+    /// Floating pill that re-enables follow-to-bottom.
+    private var goToEndButton: some View {
+        Button {
+            scrollMomentumProxy.stopMomentum()
+            isScrollingToBottom = true
+            userIsScrolledAway = false
+            // The onChange(of: userIsScrolledAway) will call scrollToBottom
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                Text("Go to End")
+                    .font(.caption.weight(.medium))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.ultraThinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 8)
+        .transition(.opacity.combined(with: .move(edge: .bottom)))
+        .animation(.easeInOut(duration: 0.2), value: userIsScrolledAway)
     }
 
     @ViewBuilder
