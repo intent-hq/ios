@@ -513,6 +513,13 @@ struct QueuedMessageTests {
         #expect(queued(metadata: ["fromAgentId": AnyCodable("")]).isUserMessage)
     }
 
+    @Test func isUserMessageTrueWithWhitespaceOnlyFromAgentId() {
+        // fe parity: `isUserQueuedMessage` trims `fromAgentId` before its
+        // non-empty check, so a whitespace-only value is treated as absent.
+        #expect(queued(metadata: ["fromAgentId": AnyCodable("   ")]).isUserMessage)
+        #expect(queued(metadata: ["fromAgentId": AnyCodable("\t\n")]).isUserMessage)
+    }
+
     @Test func isUserMessageFalseWithSystemSource() {
         #expect(!queued(metadata: ["source": AnyCodable("system")]).isUserMessage)
     }

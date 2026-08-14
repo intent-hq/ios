@@ -96,7 +96,7 @@ struct QueuedMessage: Identifiable, Codable {
 
     /// Whether this entry was authored by the user. Non-user entries carry
     /// `messageMetadata` with a string `type` (except the user-authored
-    /// `question_answers` wizard tag), a non-empty `fromAgentId`, or
+    /// `question_answers` wizard tag), a non-blank `fromAgentId`, or
     /// `source == "system"` (PROTOCOL §5.5); absent/malformed metadata fails
     /// open (treated as user-authored).
     var isUserMessage: Bool {
@@ -107,7 +107,8 @@ struct QueuedMessage: Identifiable, Codable {
         // during the turn-startup race, so it must stay visible in the queue.
         if metadata["type"]?.stringValue == "question_answers" { return true }
         if metadata["type"]?.stringValue != nil { return false }
-        if let fromAgentId = metadata["fromAgentId"]?.stringValue, !fromAgentId.isEmpty { return false }
+        if let fromAgentId = metadata["fromAgentId"]?.stringValue,
+           !fromAgentId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
         if metadata["source"]?.stringValue == "system" { return false }
         return true
     }
