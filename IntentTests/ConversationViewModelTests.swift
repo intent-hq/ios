@@ -746,5 +746,167 @@ struct ConversationViewModelTests {
         // pendingImages should still be empty after the send completes/fails
         #expect(vm.pendingImages.isEmpty)
     }
+
+    // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
+
+    /// Fake-backed VM with a short markSeen debounce for trigger tests.
+    private func makeSeenVM(debounceNanos: UInt64 = 20_000_000)
+        -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
+        let vm = makeVM()
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+        fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        vm.store = ConversationStore(connectionManager: fake)
+        vm.markSeenDebounceNanos = debounceNanos
+        return (vm, fake)
+    }
+
+    /// Poll (yielding the main actor) until `agent.markSeen` has been called
+    /// `count` times or the timeout elapses.
+    private func waitForMarkSeen(_ fake: FakeConnectionManager, count: Int = 1,
+                                 timeoutMs: Double = 2_000) async {
+        let deadline = Date().addingTimeInterval(timeoutMs / 1000)
+        while Date() < deadline {
+            if fake.paramsForMethod("agent.markSeen").count >= count { return }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+    }
+
+    @Test func turnFinishFiresDebouncedMarkSeenOnceWithNewestPersistedId() async {
+        let (vm, fake) = makeSeenVM()
+        vm.conversationAppeared()
+        vm.store.messages = [
+            textMessage(id: "m1", role: .user, text: "hi"),
+            textMessage(id: "m2", role: .assistant, text: "done"),
+        ]
+
+        vm.store.isStreaming = true
+        vm.store.isStreaming = false
+
+        await waitForMarkSeen(fake)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1, "a single turn finish fires exactly once")
+        #expect(params.first?["messageId"] as? String == "m2")
+    }
+
+    @Test func turnFinishOffScreenDoesNotMarkSeen() async {
+        let (vm, fake) = makeSeenVM()
+        // No conversationAppeared() — the conversation is not on screen.
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
+
+        vm.store.isStreaming = true
+        vm.store.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"),
+                "turn finish is gated on the conversation being on screen")
+    }
+
+    @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async {
+        let (vm, fake) = makeSeenVM()
+        vm.conversationAppeared()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "old")]
+        vm.store.lastSeenMessageId = "m1"
+        vm.scenePhaseChanged(isActive: false)
+        // Let the backgrounding boundary fire settle (it dedupes against the
+        // current marker, so no RPC goes out for it).
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"))
+
+        // A turn finishing while backgrounded must not schedule the debounce
+        // — otherwise m2 (newer than the marker) would be sent below.
+        vm.store.messages.append(textMessage(id: "m2", role: .assistant, text: "new"))
+        vm.store.isStreaming = true
+        vm.store.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"),
+                "turn finish is gated on the app being active")
+    }
+
+    @Test func plainEntryDoesNotMarkSeen() async {
+        let (vm, fake) = makeSeenVM()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "old")]
+
+        vm.conversationAppeared()
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"),
+                "entry never marks seen — the divider anchor must survive")
+    }
+
+    @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
+        let (vm, fake) = makeSeenVM()
+        // No conversationAppeared() — composing is proof of looking.
+
+        await vm.sendMessage("hello")
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        let optimisticId = try #require(vm.messages.last?.id)
+        #expect(params.first?["messageId"] as? String == optimisticId,
+                "the user's own (persisted-id) message is the marker target")
+    }
+
+    @Test func leavingConversationFiresMarkSeenImmediately() async {
+        // Debounce far beyond the poll window: a call proves the immediate path.
+        let (vm, fake) = makeSeenVM(debounceNanos: 10_000_000_000)
+        vm.conversationAppeared()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
+
+        vm.conversationDisappeared()
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+
+    @Test func leaveDuringDebounceWindowDropsPendingMarkSeen() async {
+        let (vm, fake) = makeSeenVM(debounceNanos: 200_000_000)
+        vm.conversationAppeared()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
+        vm.store.isStreaming = true
+        vm.store.isStreaming = false // schedules the 200ms debounce
+
+        vm.conversationDisappeared() // immediate fire supersedes the debounce
+        await waitForMarkSeen(fake)
+        // A message lands after the boundary; the cancelled debounce must NOT
+        // fire a second call targeting it once its window elapses.
+        vm.store.messages.append(textMessage(id: "m2", role: .assistant, text: "late"))
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1, "the pending debounce was dropped, not just deduped")
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+
+    @Test func backgroundingFiresMarkSeenImmediately() async {
+        let (vm, fake) = makeSeenVM(debounceNanos: 10_000_000_000)
+        vm.conversationAppeared()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
+
+        vm.scenePhaseChanged(isActive: false)
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+
+    @Test func boundaryDoesNotResendWhenMarkerAlreadyCurrent() async {
+        let (vm, fake) = makeSeenVM()
+        vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
+        vm.store.lastSeenMessageId = "m1"
+        vm.conversationAppeared()
+
+        vm.conversationDisappeared()
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"),
+                "all triggers funnel through the store's dedupe")
+    }
 }
 

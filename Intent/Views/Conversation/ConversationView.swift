@@ -83,6 +83,7 @@ struct ConversationView: View {
     // compact banner (never persisted; reset when a different set pends).
     @State private var questionWizardCollapsed = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     init(agentId: String, workspaceId: String, agentName: String) {
         _viewModel = StateObject(wrappedValue: ConversationViewModel(
@@ -337,10 +338,18 @@ struct ConversationView: View {
         }
         .onAppear {
             NotificationManager.shared.currentAgentId = viewModel.agentId
+            // Entry itself never marks seen (the divider anchor must survive
+            // until the user leaves or the turn finishes).
+            viewModel.conversationAppeared()
         }
         .onDisappear {
             NotificationManager.shared.currentAgentId = nil
             Task { await viewModel.teardownLiveStores() }
+            // Stop-looking boundary — fires markSeen immediately.
+            viewModel.conversationDisappeared()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            viewModel.scenePhaseChanged(isActive: phase == .active)
         }
     }
 
@@ -438,6 +447,17 @@ struct ConversationView: View {
 
                         // Messages in reverse order (newest first, which appears at bottom due to flip)
                         ForEach(viewModel.filteredMessages.reversed()) { message in
+                            // "New messages" divider: belongs visually BELOW
+                            // the anchor row (between the anchor and the first
+                            // unseen message). LazyVStack code order runs
+                            // visual bottom→top in the flipped list, so
+                            // emitting the divider BEFORE the anchor's
+                            // MessageView places it on the newer side.
+                            if message.id == viewModel.newMessagesDividerAnchorId {
+                                NewMessagesDividerView()
+                                    .flippedUpsideDown()
+                                    .id("new-messages-divider")
+                            }
                             MessageView(
                                 message: message,
                                 workspaceId: viewModel.workspaceId,
@@ -519,7 +539,7 @@ struct ConversationView: View {
                     if !isLoading {
                         // Small delay to let LazyVStack finish layout
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            scrollToBottom(proxy: proxy, animated: false)
+                            performInitialScroll(proxy: proxy)
                             // Mark initial scroll as complete so scroll tracking can begin
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                 hasInitiallyScrolled = true
@@ -633,6 +653,41 @@ struct ConversationView: View {
         .frame(maxWidth: .infinity)
         .background(Theme.muted(for: colorScheme).opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Initial landing position on conversation entry.
+    ///
+    /// Without a latched "New messages" divider this is byte-identical to
+    /// today: an unanimated scroll to the bottom. With a divider, entry
+    /// targets the divider row instead and never enables follow-to-bottom
+    /// on its own. Pragmatic approximation of the FE's
+    /// `dividerVisibleWhenScrolledToBottom` decision (documented choice):
+    /// we always scroll to the divider id with `anchor: .bottom` — in the
+    /// flipped list the layout bottom is the visual top, so this pins the
+    /// divider near the top of the screen; when the whole unseen tail fits
+    /// on one screen the scroll clamps at contentOffset ≈ 0, which IS the
+    /// visual bottom, i.e. today's scroll-to-bottom. Follow-to-bottom is
+    /// then disabled only when the clamp did not occur (we actually landed
+    /// away from the bottom), read from the UIScrollView captured by
+    /// ScrollViewFinder. If the divider row cannot be resolved (anchor row
+    /// filtered out or not materialized by the LazyVStack), `scrollTo` is a
+    /// no-op and the fresh scroll view stays at the bottom — the documented
+    /// fallback to bottom-scroll.
+    private func performInitialScroll(proxy: ScrollViewProxy) {
+        guard viewModel.newMessagesDividerAnchorId != nil else {
+            scrollToBottom(proxy: proxy, animated: false)
+            return
+        }
+        proxy.scrollTo("new-messages-divider", anchor: .bottom)
+        // Let the scroll settle before deciding follow state; runs before
+        // hasInitiallyScrolled flips (+0.2s), so the geometry handler cannot
+        // race this write.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            let offsetY = scrollMomentumProxy.scrollView?.contentOffset.y ?? 0
+            if NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: offsetY) {
+                userIsScrolledAway = true
+            }
+        }
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
