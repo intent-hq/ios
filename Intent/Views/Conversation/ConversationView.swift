@@ -105,6 +105,9 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             columnContent
         }
+        // Measured inside keyboard avoidance on purpose: with the keyboard
+        // up the cap derives from the remaining visible height, keeping the
+        // wizard footer/Send row reachable above the keyboard.
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height
         } action: { height in

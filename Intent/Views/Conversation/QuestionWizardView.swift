@@ -95,7 +95,7 @@ struct QuestionWizardView: View {
                 collapsedBanner
             } else {
                 headerRow
-                stepBody
+                stepBody(for: idx)
                     .id(idx)
                     .transition(.opacity)
                 footerRow
@@ -321,9 +321,13 @@ struct QuestionWizardView: View {
 
     /// Long steps scroll inside the capped ScrollView; short steps keep their
     /// natural height (the frame caps at the measured content height, so the
-    /// well never pads out with empty filler).
+    /// well never pads out with empty filler). The step index is bound at
+    /// construction (not read live from `idx`) so the outgoing instance of a
+    /// `.id`-keyed step transition can only ever read/write its own height
+    /// slot — a late geometry callback during the fade-out overlap must not
+    /// record the old step's height under the new step's key.
     @ViewBuilder
-    private var stepBody: some View {
+    private func stepBody(for step: Int) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
@@ -350,12 +354,12 @@ struct QuestionWizardView: View {
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
-                stepContentHeights[idx] = height
+                stepContentHeights[step] = height
             }
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(
-            maxHeight: stepContentHeights[idx].map { min($0, stepBodyMaxHeight) }
+            maxHeight: stepContentHeights[step].map { min($0, stepBodyMaxHeight) }
                 ?? stepBodyMaxHeight
         )
     }
