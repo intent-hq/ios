@@ -8,12 +8,15 @@ struct StatusDerivationTests {
     private func makeWorkspace(
         displayStatus: String? = nil,
         attention: String? = nil,
-        prStatus: String? = nil
+        prStatus: String? = nil,
+        activity: String? = nil,
+        waiting: Bool = false
     ) -> Workspace {
         Workspace(
             id: "test", title: "Test", branch: nil, baseRef: nil,
-            status: nil, activity: nil, displayStatus: displayStatus,
+            status: nil, activity: activity, displayStatus: displayStatus,
             attention: attention,
+            waiting: waiting,
             lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
             repositoryName: nil, prStatus: prStatus, prNumber: nil,
             diffSummaryTotalFiles: nil,
@@ -108,6 +111,57 @@ struct StatusDerivationTests {
         let ws = makeWorkspace(displayStatus: "complete", attention: "unread")
         #expect(resolveDisplayStatus(for: ws) == .complete)
         #expect(hasUnreadAttention(ws))
+    }
+
+    // MARK: - Waiting flag (grey dot, protocol 6.17)
+
+    @Test func waitingDotShownWhenOnlyWaiting() async throws {
+        #expect(showsWaitingDot(makeWorkspace(waiting: true)))
+        #expect(!showsWaitingDot(makeWorkspace(waiting: false)))
+    }
+
+    @Test func waitingDotYieldsToRunning() async throws {
+        // Dot precedence: running > unread > waiting.
+        let ws = makeWorkspace(activity: "agent_running", waiting: true)
+        #expect(!showsWaitingDot(ws))
+    }
+
+    @Test func runningPredicateSharedByGreenAndWaitingDots() async throws {
+        // hasRunningAgents is the single predicate behind both the green
+        // running dot and the waiting-dot precedence check — they can never
+        // disagree on what "running" means (case-insensitive match included).
+        #expect(hasRunningAgents(makeWorkspace(activity: "agent_running")))
+        #expect(hasRunningAgents(makeWorkspace(activity: "AGENT_RUNNING")))
+        #expect(!hasRunningAgents(makeWorkspace(activity: "idle")))
+        #expect(!hasRunningAgents(makeWorkspace(activity: nil)))
+        #expect(!showsWaitingDot(makeWorkspace(activity: "AGENT_RUNNING", waiting: true)))
+    }
+
+    @Test func waitingDotYieldsToUnread() async throws {
+        let ws = makeWorkspace(attention: "unread", waiting: true)
+        #expect(!showsWaitingDot(ws))
+    }
+
+    @Test func waitingDotShownWithNonUnreadAttention() async throws {
+        // Only the unread dot outranks waiting; other attention values don't
+        // render a dot and must not suppress the waiting affordance.
+        #expect(showsWaitingDot(makeWorkspace(attention: "none", waiting: true)))
+        #expect(showsWaitingDot(makeWorkspace(attention: "review_required", waiting: true)))
+    }
+
+    @Test func waitingOrthogonalToDisplayStatus() async throws {
+        // waiting is orthogonal: any status (including in_progress) can wait,
+        // and it never changes the resolved display status.
+        for wire in ["in_progress", "complete", "pr_ready", "idle"] {
+            let ws = makeWorkspace(displayStatus: wire, waiting: true)
+            #expect(resolveDisplayStatus(for: ws) == WorkspaceDisplayStatus(wireValue: wire))
+            #expect(ws.waiting)
+        }
+    }
+
+    @Test func waitingNeverFeedsUnreadAttention() async throws {
+        // Informational only — no attention/badge escalation from waiting.
+        #expect(!hasUnreadAttention(makeWorkspace(waiting: true)))
     }
 
     // MARK: - Labels
