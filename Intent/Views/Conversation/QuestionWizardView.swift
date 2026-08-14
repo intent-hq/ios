@@ -295,6 +295,10 @@ struct QuestionWizardView: View {
 
     /// Cap the scrollable step body at ~half the screen so the header/footer
     /// rows and the transcript above stay visible under a long question set.
+    /// Deliberate iOS-specific divergence from FE parity: the desktop
+    /// `QuestionWizard.svelte` renders the step body at natural height with
+    /// no cap — on a phone that would push the transcript and footer
+    /// offscreen, so the body scrolls under this cap instead.
     private var stepBodyMaxHeight: CGFloat { UIScreen.main.bounds.height * 0.5 }
 
     /// Long steps scroll inside the capped ScrollView; short steps keep their
@@ -309,6 +313,7 @@ struct QuestionWizardView: View {
                         .font(.caption2.weight(.semibold))
                         .kerning(0.5)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(current.question)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
