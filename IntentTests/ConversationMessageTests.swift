@@ -481,9 +481,28 @@ struct QueuedMessageTests {
     }
 
     @Test func isUserMessageFalseWithTypeString() {
-        for type in ["agent_message", "event_notification", "hook_wake", "task_wake"] {
+        for type in ["agent_message", "event_notification", "hook_wake", "task_wake", "questions_dismissed"] {
             #expect(!queued(metadata: ["type": AnyCodable(type)]).isUserMessage)
         }
+    }
+
+    @Test func isUserMessageTrueWithQuestionAnswersType() {
+        // The Q&A wizard's auto-queued answer entry is user-authored despite
+        // carrying a string `type` (fe parity, cloudlands-fe #1167).
+        #expect(queued(metadata: [
+            "type": AnyCodable("question_answers"),
+            "answeredQuestionsMessageId": AnyCodable("qm-1"),
+        ]).isUserMessage)
+    }
+
+    @Test func isUserMessageQuestionAnswersExemptionPrecedesOtherRules() {
+        // Matches fe ordering: the question_answers exemption returns early,
+        // before the fromAgentId and source hide rules.
+        #expect(queued(metadata: [
+            "type": AnyCodable("question_answers"),
+            "fromAgentId": AnyCodable("agent-2"),
+            "source": AnyCodable("system"),
+        ]).isUserMessage)
     }
 
     @Test func isUserMessageFalseWithFromAgentId() {

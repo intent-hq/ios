@@ -95,11 +95,17 @@ struct QueuedMessage: Identifiable, Codable {
     var messageMetadata: [String: AnyCodable]? = nil
 
     /// Whether this entry was authored by the user. Non-user entries carry
-    /// `messageMetadata` with a string `type`, a non-empty `fromAgentId`, or
+    /// `messageMetadata` with a string `type` (except the user-authored
+    /// `question_answers` wizard tag), a non-empty `fromAgentId`, or
     /// `source == "system"` (PROTOCOL §5.5); absent/malformed metadata fails
     /// open (treated as user-authored).
     var isUserMessage: Bool {
         guard let metadata = messageMetadata else { return true }
+        // The Q&A wizard's answer message is USER-authored despite its tag
+        // (`{ type: "question_answers", answeredQuestionsMessageId }`): it
+        // travels through the ordinary send path and can be auto-queued
+        // during the turn-startup race, so it must stay visible in the queue.
+        if metadata["type"]?.stringValue == "question_answers" { return true }
         if metadata["type"]?.stringValue != nil { return false }
         if let fromAgentId = metadata["fromAgentId"]?.stringValue, !fromAgentId.isEmpty { return false }
         if metadata["source"]?.stringValue == "system" { return false }
