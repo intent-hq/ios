@@ -78,7 +78,7 @@ struct MessageView: View {
         .background(Theme.muted(for: colorScheme).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .contextMenu {
-            copyMenuItem(Self.plainTextContent(from: blocks, hookWake: hookWake, prWake: prWake))
+            copyMenuItem(Self.userCopyText(from: blocks, hookWake: hookWake, prWake: prWake))
         }
     }
 
@@ -160,7 +160,7 @@ struct MessageView: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            copyMenuItem(Self.plainTextContent(from: blocks))
+            copyMenuItem(Self.assistantCopyText(from: blocks))
         }
     }
 
@@ -219,6 +219,46 @@ struct MessageView: View {
                 }
                 let plain = ContextMention.replacingTokensWithTitles(in: stripSupervisorTags(text))
                 return plain.isEmpty ? nil : plain
+            case .code:
+                return block.resolvedText
+            default:
+                return nil
+            }
+        }.joined(separator: "\n\n")
+    }
+
+    /// The string copied from a user row: only the text blocks the row
+    /// renders (`partitionUserBlocks` drops code and other block types, so
+    /// copy can never include content that isn't visible), transformed by
+    /// `plainTextContent`.
+    static func userCopyText(
+        from blocks: [ContentBlock],
+        hookWake: HookWakeAttribution? = nil,
+        prWake: PrMonitorWakeAttribution? = nil
+    ) -> String {
+        plainTextContent(from: partitionUserBlocks(blocks).text, hookWake: hookWake, prWake: prWake)
+    }
+
+    /// The string copied from an assistant row: the displayed text, not the
+    /// raw payload. Blocks go through the same `groupContentBlocks` pass as
+    /// rendering (so `<group:…>` tags never leak into the copy; grouped
+    /// children are flattened back in order) and each text block gets the
+    /// same protocol-block cleaning as `ContentBlockView` (suggested-prompts
+    /// blocks, HTML comments, `<agent_digest>` and supervisor tags). Code
+    /// blocks are kept verbatim; tool, thinking and image blocks are skipped.
+    static func assistantCopyText(from blocks: [ContentBlock]) -> String {
+        let displayed: [ContentBlock] = groupContentBlocks(blocks).flatMap { renderBlock -> [ContentBlock] in
+            switch renderBlock {
+            case .contentBlock(let block): return [block]
+            case .group(let group): return group.children
+            }
+        }
+        return displayed.compactMap { block -> String? in
+            switch block.type {
+            case .text:
+                guard let text = block.resolvedText else { return nil }
+                let cleaned = ContentBlockView.stripSuggestedPrompts(text)
+                return cleaned.isEmpty ? nil : cleaned
             case .code:
                 return block.resolvedText
             default:

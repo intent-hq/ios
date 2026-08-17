@@ -107,4 +107,52 @@ struct MessagePlainTextContentTests {
         let blocks = [ContentBlock(type: .image, data: "aGk=", mimeType: "image/png")]
         #expect(MessageView.plainTextContent(from: blocks).isEmpty)
     }
+
+    // MARK: - User-row copy (mirrors what the row renders)
+
+    @Test func userCopyExcludesCodeAndOtherNonRenderedBlocks() {
+        let blocks = [
+            ContentBlock(type: .text, text: "hello"),
+            ContentBlock(type: .code, text: "let hidden = true"),
+            ContentBlock(type: .file, fileName: "a.txt"),
+            ContentBlock(type: .image, data: "aGk=", mimeType: "image/png"),
+        ]
+        #expect(MessageView.userCopyText(from: blocks) == "hello")
+    }
+
+    @Test func userCopyStripsHookWakePrefix() {
+        let attribution = HookWakeAttribution(
+            hookId: "h-1", rawName: "CI watcher", displayName: "CI watcher",
+            reason: "dispatched", hookStillActive: nil)
+        let blocks = [ContentBlock(type: .text, text: "[Background hook \"CI watcher\"] Checks passed.")]
+        #expect(MessageView.userCopyText(from: blocks, hookWake: attribution) == "Checks passed.")
+    }
+
+    // MARK: - Assistant-row copy (mirrors what the row renders)
+
+    @Test func assistantCopyStripsGroupTagsAndFlattensGroupedText() {
+        let blocks = [
+            ContentBlock(type: .text, text: "<group:Setup>\nreading files\n</group>\nAll done."),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "reading files\n\nAll done.")
+    }
+
+    @Test func assistantCopyStripsProtocolBlocksLikeDisplay() {
+        let blocks = [
+            ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nNext step\n-->"),
+            ContentBlock(type: .text, text: "<agent_digest>internal digest</agent_digest>"),
+            ContentBlock(type: .text, text: "<!-- plain comment -->tail"),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
+    }
+
+    @Test func assistantCopyKeepsCodeAndSkipsToolBlocks() {
+        let blocks = [
+            ContentBlock(type: .text, text: "intro"),
+            ContentBlock(type: .toolUse, name: "read_file"),
+            ContentBlock(type: .code, text: "let x = 1"),
+            ContentBlock(type: .thinking, text: "hmm"),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "intro\n\nlet x = 1")
+    }
 }
