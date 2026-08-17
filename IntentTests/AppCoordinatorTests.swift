@@ -15,6 +15,10 @@ final class AppCoordinatorTests {
     private let suiteName: String
 
     init() {
+        // The coordinator under test uses the injected per-test persistence,
+        // but non-injected globals (e.g. ConnectionManager.shared's route
+        // refresh) can still reach PersistenceManager.shared — keep its
+        // keychain in-memory so SecItem is never hit in headless CI.
         _ = TestKeychainStorage.installed
         suiteName = "AppCoordinatorTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
