@@ -57,6 +57,46 @@ struct WorkspaceAgentInfo: Codable, Identifiable, Equatable {
     let isResponding: Bool
 }
 
+/// One detected PR on a workspace — a lenient subset of PROTOCOL §7.6
+/// `PullRequestInfo`. `status` keeps the raw wire string ("Open" / "Closed" /
+/// "Merged" / "Draft"; serde enum variant names) so unknown future variants
+/// are tolerated; everything but `number`/`status` is optional.
+struct WorkspacePullRequest: Codable, Identifiable, Equatable {
+    let number: Int
+    let status: String
+    let title: String?
+    let url: String?
+    let createdAt: String?
+    let updatedAt: String?
+
+    var id: Int { number }
+
+    init(number: Int, status: String, title: String? = nil, url: String? = nil,
+         createdAt: String? = nil, updatedAt: String? = nil) {
+        self.number = number
+        self.status = status
+        self.title = title
+        self.url = url
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    /// Failable dict-path parse (JSONSerialization wire shape); rows missing
+    /// the required `number`/`status` are dropped by callers via compactMap.
+    init?(wire: [String: Any]) {
+        guard let number = wire["number"] as? Int,
+              let status = wire["status"] as? String else { return nil }
+        self.init(
+            number: number,
+            status: status,
+            title: wire["title"] as? String,
+            url: wire["url"] as? String,
+            createdAt: wire["createdAt"] as? String,
+            updatedAt: wire["updatedAt"] as? String
+        )
+    }
+}
+
 struct Workspace: Codable, Identifiable, Equatable {
     let id: String
     let title: String
@@ -79,9 +119,11 @@ struct Workspace: Codable, Identifiable, Equatable {
     let taskStatsInProgress: Int?    // from taskStats.inProgress
     let agentSummaryCount: Int?
     let agentSummaryAgents: [WorkspaceAgentInfo]?
+    let pullRequests: [WorkspacePullRequest]?  // detected-PR pool (§5.1); nil on older daemons
 
-    /// Explicit initializer so `attention` / `waiting` can default — existing
-    /// call sites (and test fixtures) that predate the fields stay valid.
+    /// Explicit initializer so `attention` / `waiting` / `pullRequests` can
+    /// default — existing call sites (and test fixtures) that predate the
+    /// fields stay valid.
     init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
          activity: String?, displayStatus: String?, attention: String? = nil,
          waiting: Bool = false,
@@ -89,7 +131,8 @@ struct Workspace: Codable, Identifiable, Equatable {
          repositoryName: String?, prStatus: String?, prNumber: Int?,
          diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
          taskStatsInProgress: Int?, agentSummaryCount: Int?,
-         agentSummaryAgents: [WorkspaceAgentInfo]?) {
+         agentSummaryAgents: [WorkspaceAgentInfo]?,
+         pullRequests: [WorkspacePullRequest]? = nil) {
         self.id = id
         self.title = title
         self.branch = branch
@@ -111,6 +154,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.taskStatsInProgress = taskStatsInProgress
         self.agentSummaryCount = agentSummaryCount
         self.agentSummaryAgents = agentSummaryAgents
+        self.pullRequests = pullRequests
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -139,6 +183,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         taskStatsInProgress = try c.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
         agentSummaryCount = try c.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
         agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
+        pullRequests = try c.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
     }
 }
 

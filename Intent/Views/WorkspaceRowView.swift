@@ -4,20 +4,18 @@ struct WorkspaceRowView: View {
     let workspace: Workspace
     let colorScheme: ColorScheme
     var showRepo: Bool = true
+    /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
+    /// indicator; the owning list provides the shared store.
+    @ObservedObject var monitorsSource = WorkspacePrMonitorsStore.shared
 
     private var displayStatus: WorkspaceDisplayStatus {
         resolveDisplayStatus(for: workspace)
     }
 
-    private var prPillColor: Color? {
-        guard let prStatus = workspace.prStatus else { return nil }
-        switch prStatus {
-        case "Merged": return .purple
-        case "Open": return .green
-        case "Draft": return .gray
-        case "Closed": return .red
-        default: return nil
-        }
+    private var prIndicator: PrIndicatorModel {
+        Self.derivePrIndicator(
+            workspace: workspace,
+            monitors: monitorsSource.monitors(for: workspace.id))
     }
 
     private var hasActiveAgents: Bool {
@@ -27,7 +25,7 @@ struct WorkspaceRowView: View {
     /// True when something (repo name or PR pill) precedes the waiting
     /// suffix on the metadata line, so the "/" reads as a separator.
     private var hasMetadataPrefix: Bool {
-        (showRepo && workspace.repositoryName != nil) || prPillColor != nil
+        (showRepo && workspace.repositoryName != nil) || prIndicator.pill != nil
     }
 
     var body: some View {
@@ -83,13 +81,26 @@ struct WorkspaceRowView: View {
                             .lineLimit(1)
                     }
 
-                    if let _ = workspace.prStatus, let pillColor = prPillColor {
-                        Text("PR\(workspace.prNumber.map { " #\($0)" } ?? "")")
+                    if let pill = prIndicator.pill {
+                        let pillColor = Self.pillColor(for: pill.status)
+                        Text("PR\(pill.number.map { " #\($0)" } ?? "")")
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(pillColor)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(pillColor.opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    // "+N": other monitored PRs in the pool beyond the
+                    // primary pill (same capsule styling, muted).
+                    if prIndicator.otherMonitorCount > 0 {
+                        Text("+\(prIndicator.otherMonitorCount)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Theme.mutedForeground(for: colorScheme).opacity(0.12))
                             .clipShape(Capsule())
                     }
 
@@ -116,6 +127,80 @@ struct WorkspaceRowView: View {
         .contentShape(Rectangle())
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
+        .task {
+            await monitorsSource.seed(workspaceId: workspace.id)
+        }
+    }
+
+    // MARK: - PR pill derivation (pure, unit-tested)
+
+    /// What the metadata line shows for PRs: the primary pill (nil renders
+    /// no pill — exactly today's legacy behavior) and the "+N" count.
+    struct PrIndicatorModel: Equatable {
+        struct Pill: Equatable {
+            let status: WorkspacePrPill.Status
+            let number: Int?
+        }
+        let pill: Pill?
+        let otherMonitorCount: Int
+    }
+
+    /// FE `WorkspaceCard` composition (PROTOCOL §6.9): primary =
+    /// `selectPrimaryPr` over `pullRequests` merged with the workspace's
+    /// monitors; legacy `prStatus`/`prNumber` only when the pool is empty;
+    /// "+N" = `countOtherMonitors` against the primary's repo-qualified
+    /// number.
+    static func derivePrIndicator(workspace: Workspace,
+                                  monitors: [MonitoredPr]) -> PrIndicatorModel {
+        var workspaceRepo: String?
+        if let owner = workspace.repositoryOwner, let name = workspace.repositoryName,
+           !owner.isEmpty, !name.isEmpty {
+            workspaceRepo = "\(owner)/\(name)"
+        }
+        let base = (workspace.pullRequests ?? []).map(WorkspacePrPill.PillPr.init)
+        let pool = WorkspacePrPill.mergeMonitoredPRs(base, monitors,
+                                                     workspaceRepo: workspaceRepo)
+        let primary = WorkspacePrPill.selectPrimaryPr(pool)
+
+        let pill: PrIndicatorModel.Pill?
+        if let primary {
+            pill = PrIndicatorModel.Pill(status: primary.status, number: primary.number)
+        } else if let legacy = workspace.prStatus.flatMap(legacyPillStatus) {
+            pill = PrIndicatorModel.Pill(status: legacy, number: workspace.prNumber)
+        } else {
+            pill = nil
+        }
+
+        let count = WorkspacePrPill.countOtherMonitors(
+            monitors,
+            primaryPrNumber: primary?.number ?? workspace.prNumber,
+            repositoryOwner: workspace.repositoryOwner,
+            repositoryName: workspace.repositoryName,
+            primaryCrossRepo: primary?.crossRepo)
+        return PrIndicatorModel(pill: pill, otherMonitorCount: count)
+    }
+
+    /// Legacy `workspace.prStatus` fallback: only the four known wire strings
+    /// render a pill (unknown values hide it, exactly as before).
+    static func legacyPillStatus(_ raw: String) -> WorkspacePrPill.Status? {
+        switch raw {
+        case "Merged": return .merged
+        case "Open": return .open
+        case "Draft": return .draft
+        case "Closed": return .closed
+        default: return nil
+        }
+    }
+
+    /// Existing pill color mapping (Merged purple / Open green / Draft gray /
+    /// Closed red), keyed by pill bucket instead of the raw wire string.
+    static func pillColor(for status: WorkspacePrPill.Status) -> Color {
+        switch status {
+        case .merged: return .purple
+        case .open: return .green
+        case .draft: return .gray
+        case .closed: return .red
+        }
     }
 
     @ViewBuilder
