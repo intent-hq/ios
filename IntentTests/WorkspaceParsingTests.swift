@@ -112,6 +112,57 @@ struct WorkspaceParsingTests {
         #expect(present.waiting == true)
     }
 
+    @Test func parsePullRequests() async throws {
+        // Present array: full row, minimal row, and a malformed row missing
+        // the required `number` (skipped — lenient dict-path parse).
+        let dict: [String: Any] = [
+            "id": "ws-pr1",
+            "title": "PRs",
+            "pullRequests": [
+                [
+                    "id": "pr-1",
+                    "number": 42,
+                    "title": "feat: add thing",
+                    "url": "https://github.com/acme/app/pull/42",
+                    "status": "Open",
+                    "createdAt": "2026-08-01T10:00:00Z",
+                    "updatedAt": "2026-08-02T10:00:00Z",
+                ] as [String: Any],
+                ["number": 43, "status": "Draft"] as [String: Any],
+                ["status": "Open"] as [String: Any],
+            ]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        let prs = try #require(ws?.pullRequests)
+        #expect(prs.count == 2)
+        #expect(prs[0].number == 42)
+        #expect(prs[0].title == "feat: add thing")
+        #expect(prs[0].url == "https://github.com/acme/app/pull/42")
+        #expect(prs[0].status == "Open")
+        #expect(prs[0].createdAt == "2026-08-01T10:00:00Z")
+        #expect(prs[0].updatedAt == "2026-08-02T10:00:00Z")
+        #expect(prs[1].number == 43)
+        #expect(prs[1].status == "Draft")
+        #expect(prs[1].title == nil)
+    }
+
+    @Test func parseAbsentPullRequestsYieldsNil() async throws {
+        let ws = WorkspaceStore.parseWorkspace(["id": "ws-pr2", "title": "No PRs"])
+        #expect(ws != nil)
+        #expect(ws?.pullRequests == nil)
+    }
+
+    @Test func parseUnknownPullRequestStatusKeptRaw() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-pr3",
+            "title": "Future",
+            "pullRequests": [["number": 7, "status": "SomeFutureStatus"] as [String: Any]]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws?.pullRequests?.count == 1)
+        #expect(ws?.pullRequests?.first?.status == "SomeFutureStatus")
+    }
+
     @Test func parseMissingIdReturnsNil() async throws {
         let dict: [String: Any] = ["title": "No ID"]
         #expect(WorkspaceStore.parseWorkspace(dict) == nil)

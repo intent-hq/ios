@@ -58,6 +58,63 @@ struct ModelsTests {
         #expect(ws1 != ws2)
     }
 
+    // MARK: - Workspace.pullRequests (PROTOCOL §5.1 / §7.6)
+
+    @Test func workspaceDecodesPullRequests() async throws {
+        let json = """
+        {
+            "id": "ws-1",
+            "title": "Test",
+            "pullRequests": [
+                {
+                    "id": "pr-1",
+                    "number": 42,
+                    "title": "feat: add thing",
+                    "url": "https://github.com/acme/app/pull/42",
+                    "status": "Open",
+                    "createdAt": "2026-08-01T10:00:00Z",
+                    "updatedAt": "2026-08-02T10:00:00Z"
+                },
+                {
+                    "number": 43,
+                    "status": "Merged"
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+        let ws = try JSONDecoder().decode(Workspace.self, from: json)
+        let prs = try #require(ws.pullRequests)
+        #expect(prs.count == 2)
+        #expect(prs[0].number == 42)
+        #expect(prs[0].title == "feat: add thing")
+        #expect(prs[0].url == "https://github.com/acme/app/pull/42")
+        #expect(prs[0].status == "Open")
+        #expect(prs[0].createdAt == "2026-08-01T10:00:00Z")
+        #expect(prs[0].updatedAt == "2026-08-02T10:00:00Z")
+        #expect(prs[1].number == 43)
+        #expect(prs[1].status == "Merged")
+        #expect(prs[1].title == nil)
+        #expect(prs[1].url == nil)
+    }
+
+    @Test func workspaceDecodesAbsentPullRequestsAsNil() async throws {
+        let json = """
+        {"id": "ws-1", "title": "Test"}
+        """.data(using: .utf8)!
+        let ws = try JSONDecoder().decode(Workspace.self, from: json)
+        #expect(ws.pullRequests == nil)
+    }
+
+    @Test func workspacePullRequestKeepsUnknownStatusRaw() async throws {
+        // Future status variants pass through as raw strings (lenient).
+        let json = """
+        {"id": "ws-1", "title": "Test", "pullRequests": [{"number": 7, "status": "SomeFutureStatus"}]}
+        """.data(using: .utf8)!
+        let ws = try JSONDecoder().decode(Workspace.self, from: json)
+        #expect(ws.pullRequests?.count == 1)
+        #expect(ws.pullRequests?.first?.status == "SomeFutureStatus")
+    }
+
     // MARK: - SpecialistInfo wire decoding (specialist.list)
 
     @Test func specialistInfoWireDecodesResolvedFields() async throws {

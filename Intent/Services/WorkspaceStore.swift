@@ -142,7 +142,8 @@ class WorkspaceStore: ObservableObject {
                     taskStatsCompleted: ws.taskStatsCompleted,
                     taskStatsInProgress: ws.taskStatsInProgress,
                     agentSummaryCount: ws.agentSummaryCount,
-                    agentSummaryAgents: ws.agentSummaryAgents
+                    agentSummaryAgents: ws.agentSummaryAgents,
+                    pullRequests: ws.pullRequests
                 )
             }
         }
@@ -371,7 +372,8 @@ class WorkspaceStore: ObservableObject {
                 taskStatsCompleted: ws.taskStatsCompleted,
                 taskStatsInProgress: ws.taskStatsInProgress,
                 agentSummaryCount: ws.agentSummaryCount,
-                agentSummaryAgents: ws.agentSummaryAgents
+                agentSummaryAgents: ws.agentSummaryAgents,
+                pullRequests: ws.pullRequests
             )
         }
     }
@@ -404,7 +406,8 @@ class WorkspaceStore: ObservableObject {
             taskStatsCompleted: ws.taskStatsCompleted,
             taskStatsInProgress: ws.taskStatsInProgress,
             agentSummaryCount: ws.agentSummaryCount,
-            agentSummaryAgents: ws.agentSummaryAgents
+            agentSummaryAgents: ws.agentSummaryAgents,
+            pullRequests: ws.pullRequests
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -439,7 +442,8 @@ class WorkspaceStore: ObservableObject {
             taskStatsCompleted: ws.taskStatsCompleted,
             taskStatsInProgress: ws.taskStatsInProgress,
             agentSummaryCount: ws.agentSummaryCount,
-            agentSummaryAgents: ws.agentSummaryAgents
+            agentSummaryAgents: ws.agentSummaryAgents,
+            pullRequests: ws.pullRequests
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -472,6 +476,11 @@ class WorkspaceStore: ObservableObject {
             }
         }
         // END DEBUG
+
+        var pullRequests: [WorkspacePullRequest]?
+        if let rawPrs = dict["pullRequests"] as? [[String: Any]] {
+            pullRequests = rawPrs.compactMap { WorkspacePullRequest(wire: $0) }
+        }
 
         var agentInfos: [WorkspaceAgentInfo]?
         if let agents = agentSummary?["agents"] as? [[String: Any]] {
@@ -512,7 +521,8 @@ class WorkspaceStore: ObservableObject {
             taskStatsCompleted: taskStats?["completed"] as? Int,
             taskStatsInProgress: taskStats?["inProgress"] as? Int,
             agentSummaryCount: agentSummary?["count"] as? Int,
-            agentSummaryAgents: agentInfos
+            agentSummaryAgents: agentInfos,
+            pullRequests: pullRequests
         )
     }
 }
