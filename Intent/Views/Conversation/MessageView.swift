@@ -49,12 +49,28 @@ struct MessageView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
 
-            ForEach(blocks) { block in
-                if block.type == .text, let text = block.resolvedText {
+            let partitioned = Self.partitionUserBlocks(blocks)
+
+            ForEach(partitioned.text) { block in
+                if let text = block.resolvedText {
                     userTextBlock(text, hookWake: hookWake, prWake: prWake)
-                } else if block.type == .image {
-                    ContentBlockView(block: block, allBlocks: blocks, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
                 }
+            }
+
+            // Attached images render after the text as a left-aligned wrapping
+            // row of square thumbnails, regardless of block order in the
+            // payload (FE parity: ChatMessage.svelte attached images).
+            if !partitioned.images.isEmpty {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: ImageAttachmentThumbnail.side, maximum: ImageAttachmentThumbnail.side), spacing: 6)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(partitioned.images) { block in
+                        ImageAttachmentThumbnail(block: block)
+                    }
+                }
+                .padding(.top, 4)
             }
         }
         .padding(12)
@@ -68,7 +84,8 @@ struct MessageView: View {
     /// `[This hook …]` state note for hook wakes) stripped display-only — the
     /// attribution header already names the hook / PR and conveys the
     /// post-fire state — and drop the block entirely when nothing remains.
-    /// Non-wake rows render exactly as before.
+    /// `@context[...]` tokens render as compact chips (FE parity:
+    /// ChatMessage.svelte inline mentions) instead of raw base64 walls.
     @ViewBuilder
     private func userTextBlock(
         _ text: String,
@@ -81,11 +98,33 @@ struct MessageView: View {
             return Self.stripSupervisorTags(text)
         }()
         if (hookWake == nil && prWake == nil) || !display.isEmpty {
-            Text(display)
-                .font(.subheadline)
-                .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
-                .textSelection(.enabled)
+            let rows = Self.userTextRows(display)
+            if rows.contains(where: { if case .chips = $0 { return true } else { return false } }) {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                        switch row {
+                        case .text(let run):
+                            userText(run)
+                        case .chips(let mentions):
+                            ChipFlowLayout(spacing: 6) {
+                                ForEach(Array(mentions.enumerated()), id: \.offset) { _, mention in
+                                    ContextMentionChipView(mention: mention)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                userText(display)
+            }
         }
+    }
+
+    private func userText(_ text: String) -> some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
+            .textSelection(.enabled)
     }
 
     /// `<owner>/<repo>` of this message's workspace, or nil when unknown
@@ -137,12 +176,14 @@ struct MessageView: View {
     // MARK: - Plain text extraction
 
     /// Extract plain text content from content blocks for clipboard copy.
+    /// `@context[...]` tokens are replaced with their decoded titles so
+    /// copies aren't base64 walls.
     private static func plainTextContent(from blocks: [ContentBlock]) -> String {
         blocks.compactMap { block -> String? in
             switch block.type {
             case .text:
                 if let text = block.resolvedText {
-                    return stripSupervisorTags(text)
+                    return ContextMention.replacingTokensWithTitles(in: stripSupervisorTags(text))
                 }
                 return nil
             case .code:
@@ -161,6 +202,47 @@ struct MessageView: View {
             with: "",
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - User block partitioning
+
+    /// Split a user row's blocks into text blocks (rendered first) and image
+    /// blocks (rendered after, as a thumbnail row), preserving relative order
+    /// within each kind regardless of interleaving in the payload. Other
+    /// block types don't render in user rows.
+    static func partitionUserBlocks(_ blocks: [ContentBlock]) -> (text: [ContentBlock], images: [ContentBlock]) {
+        (blocks.filter { $0.type == .text }, blocks.filter { $0.type == .image })
+    }
+
+    // MARK: - User text rows
+
+    /// A row of a user text block: a plain-text run or a run of context
+    /// chips (consecutive mentions collapse into one wrapping chip row).
+    enum UserTextRow: Equatable {
+        case text(String)
+        case chips([ContextMention])
+    }
+
+    /// Split user-message text into vertically stacked rows: plain-text runs
+    /// (trimmed; whitespace-only runs dropped) and chip rows. Consecutive
+    /// mentions separated only by whitespace share one chip row so a message
+    /// that leads with several tokens renders as a single wrapping row.
+    static func userTextRows(_ text: String) -> [UserTextRow] {
+        var rows: [UserTextRow] = []
+        for segment in ContextMention.segments(from: text) {
+            switch segment {
+            case .text(let run):
+                let trimmed = run.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { rows.append(.text(trimmed)) }
+            case .mention(let mention):
+                if case .chips(let chips)? = rows.last {
+                    rows[rows.count - 1] = .chips(chips + [mention])
+                } else {
+                    rows.append(.chips([mention]))
+                }
+            }
+        }
+        return rows
     }
 
     // MARK: - Group parsing from blocks

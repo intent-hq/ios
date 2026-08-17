@@ -90,6 +90,24 @@ struct CreateWorkspaceParamsTests {
         #expect(params["initialAgent"] == nil)
     }
 
+    // MARK: - Optional message (creation without a prompt, matching cloudlands-fe)
+
+    @Test func promptOmittedWithSpecialistAndEmptyMessage() throws {
+        // The default flow: a specialist is pre-selected, the message field
+        // is left empty — initialAgent is sent without a `prompt` key.
+        let params = buildParams(specialist: makeSpecialist(), message: "")
+        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(initialAgent["specialist"] as? String == "implementor")
+        #expect(initialAgent["prompt"] == nil)
+    }
+
+    @Test func promptOmittedWithModelPickAndWhitespaceMessage() throws {
+        let params = buildParams(model: makeModel(id: "opus4.6"), message: "  \n ")
+        let initialAgent = try #require(params["initialAgent"] as? [String: Any])
+        #expect(initialAgent["model"] as? String == "opus4.6")
+        #expect(initialAgent["prompt"] == nil)
+    }
+
     // MARK: - Specialist / prompt / model behavior
 
     @Test func specialistIdAndTrimmedPromptCarried() throws {
