@@ -44,11 +44,14 @@ class AppCoordinator: ObservableObject {
 
     private let workspaceStore: WorkspaceStore
     private let connection: ConnectionManagerRouting
+    private let persistence: PersistenceManager
 
     init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
-         connection: ConnectionManagerRouting = ConnectionManager.shared) {
+         connection: ConnectionManagerRouting = ConnectionManager.shared,
+         persistence: PersistenceManager = PersistenceManager.shared) {
         self.workspaceStore = workspaceStore
         self.connection = connection
+        self.persistence = persistence
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -185,7 +188,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onLoadComplete() {
-        if PersistenceManager.shared.activeConnection() != nil {
+        if persistence.activeConnection() != nil {
             currentScreen = .connecting
         } else {
             currentScreen = .pairing
@@ -197,7 +200,7 @@ class AppCoordinator: ObservableObject {
         // as viewing it, so it marks the workspace seen — mirroring the FE,
         // where the workspace surface marks seen whenever it becomes active
         // (including cold-start restore).
-        if let saved = PersistenceManager.shared.loadLastScreen() {
+        if let saved = persistence.loadLastScreen() {
             switch saved.screen {
             case "workspaceDetail":
                 if let workspaceId = saved.workspaceId {
@@ -256,7 +259,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onReconnect() {
-        pairingShowsSavedConnections = !PersistenceManager.shared.loadConnections().isEmpty
+        pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
         currentScreen = .pairing
     }
 
@@ -280,8 +283,8 @@ class AppCoordinator: ObservableObject {
         isDisconnected = false
         ConnectionManager.shared.disconnect()
         resetWorkspaceStore()
-        PersistenceManager.shared.clearLastScreen()
-        PersistenceManager.shared.setActiveConnection(id: id)
+        persistence.clearLastScreen()
+        persistence.setActiveConnection(id: id)
         selectedWorkspaceId = nil
         pairingShowsSavedConnections = false
         currentScreen = .connecting
@@ -291,15 +294,15 @@ class AppCoordinator: ObservableObject {
     /// like Log Off: pairing surface, with the remaining saved connections
     /// offered when any are left.
     func onDeleteConnection(id: UUID) {
-        let wasActive = PersistenceManager.shared.activeConnection()?.id == id
-        PersistenceManager.shared.deleteConnection(id: id)
-        let hasRemaining = !PersistenceManager.shared.loadConnections().isEmpty
+        let wasActive = persistence.activeConnection()?.id == id
+        persistence.deleteConnection(id: id)
+        let hasRemaining = !persistence.loadConnections().isEmpty
         if wasActive {
             hasEverConnected = false
             isDisconnected = false
             ConnectionManager.shared.disconnect()
             resetWorkspaceStore()
-            PersistenceManager.shared.clearLastScreen()
+            persistence.clearLastScreen()
             selectedWorkspaceId = nil
             pairingShowsSavedConnections = hasRemaining
             currentScreen = .pairing
@@ -320,19 +323,19 @@ class AppCoordinator: ObservableObject {
         isDisconnected = false
         ConnectionManager.shared.disconnect()
         resetWorkspaceStore()
-        if let active = PersistenceManager.shared.activeConnection() {
-            PersistenceManager.shared.deleteConnection(id: active.id)
+        if let active = persistence.activeConnection() {
+            persistence.deleteConnection(id: active.id)
         }
-        PersistenceManager.shared.clearLastScreen()
+        persistence.clearLastScreen()
         selectedWorkspaceId = nil
-        pairingShowsSavedConnections = !PersistenceManager.shared.loadConnections().isEmpty
+        pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
         currentScreen = .pairing
     }
 
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
         // Check for a saved per-workspace sub-screen and restore it
-        if let saved = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: workspaceId) {
+        if let saved = persistence.loadWorkspaceScreen(workspaceId: workspaceId) {
             suppressWorkspaceNavigation = true
             selectedWorkspaceId = workspaceId
             suppressWorkspaceNavigation = false
@@ -387,8 +390,8 @@ class AppCoordinator: ObservableObject {
     /// Called when a restored workspace is no longer found in the workspace list.
     /// Navigates back to the workspace list and clears all saved screen state for that workspace.
     func handleMissingWorkspace(workspaceId: String) {
-        PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
-        PersistenceManager.shared.clearLastScreen()
+        persistence.clearWorkspaceScreen(workspaceId: workspaceId)
+        persistence.clearLastScreen()
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
     }
@@ -396,7 +399,7 @@ class AppCoordinator: ObservableObject {
     func onBackToWorkspaceList() {
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
-        PersistenceManager.shared.saveLastScreen(
+        persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceList", workspaceId: nil,
                 agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
@@ -409,7 +412,7 @@ class AppCoordinator: ObservableObject {
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
         // Save per-workspace sub-screen
-        PersistenceManager.shared.saveWorkspaceScreen(
+        persistence.saveWorkspaceScreen(
             workspaceId: workspaceId,
             screen: PersistenceManager.SavedScreen(
                 screen: "conversation", workspaceId: workspaceId,
@@ -420,7 +423,7 @@ class AppCoordinator: ObservableObject {
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()
         // Save per-workspace sub-screen
-        PersistenceManager.shared.saveWorkspaceScreen(
+        persistence.saveWorkspaceScreen(
             workspaceId: workspaceId,
             screen: PersistenceManager.SavedScreen(
                 screen: "note", workspaceId: workspaceId,
@@ -432,7 +435,7 @@ class AppCoordinator: ObservableObject {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
             // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
-            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
+            persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }
 
@@ -441,7 +444,7 @@ class AppCoordinator: ObservableObject {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
             // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
-            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
+            persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }
 
@@ -465,7 +468,7 @@ class AppCoordinator: ObservableObject {
         default:
             return
         }
-        PersistenceManager.shared.saveLastScreen(saved)
+        persistence.saveLastScreen(saved)
     }
 
     /// Validates that a restored agent still exists. Only a definitive not-found falls back —
@@ -504,7 +507,7 @@ class AppCoordinator: ObservableObject {
         // validation must not evict a different conversation in the same workspace.
         if case .agentConversation(let aId, let wsId, _) = currentScreen,
            aId == agentId, wsId == workspaceId {
-            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
+            persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
         }
@@ -525,7 +528,7 @@ class AppCoordinator: ObservableObject {
         // must not evict a different note screen in the same workspace.
         if case .noteDetail(let nId, let wsId, _) = currentScreen,
            nId == noteId, wsId == workspaceId {
-            PersistenceManager.shared.clearWorkspaceScreen(workspaceId: workspaceId)
+            persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
         }
