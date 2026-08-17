@@ -55,3 +55,104 @@ struct MessageBlockPartitionTests {
         #expect(result.images.isEmpty)
     }
 }
+
+/// Copied-string composition for the whole-message Copy action:
+/// `MessageView.plainTextContent` joins text/code blocks, skips
+/// tool/thinking/image blocks, strips supervisor tags and wake prefixes,
+/// and replaces `@context[...]` tokens with their decoded titles.
+struct MessagePlainTextContentTests {
+    @Test func joinsTextAndCodeBlocksSkippingOthers() {
+        let blocks = [
+            ContentBlock(type: .text, text: "intro"),
+            ContentBlock(type: .toolUse, name: "read_file"),
+            ContentBlock(type: .code, text: "let x = 1"),
+            ContentBlock(type: .thinking, text: "hmm"),
+            ContentBlock(type: .image, data: "aGk=", mimeType: "image/png"),
+            ContentBlock(type: .text, text: "outro"),
+        ]
+        #expect(MessageView.plainTextContent(from: blocks) == "intro\n\nlet x = 1\n\noutro")
+    }
+
+    @Test func replacesContextTokensWithTitles() {
+        let blocks = [ContentBlock(type: .text, text: "see @context[linear|AU-1|Fix crash] please")]
+        #expect(MessageView.plainTextContent(from: blocks) == "see Fix crash please")
+    }
+
+    @Test func stripsSupervisorTagsAndDropsEmptiedBlocks() {
+        let blocks = [
+            ContentBlock(type: .text, text: "<supervisor>internal</supervisor>hello"),
+            ContentBlock(type: .text, text: "<supervisor>only internal</supervisor>"),
+        ]
+        #expect(MessageView.plainTextContent(from: blocks) == "hello")
+    }
+
+    @Test func stripsHookWakePrefixAndStateNote() {
+        let attribution = HookWakeAttribution(
+            hookId: "h-1", rawName: "CI watcher", displayName: "CI watcher",
+            reason: "dispatched", hookStillActive: false)
+        let blocks = [ContentBlock(
+            type: .text,
+            text: "[Background hook \"CI watcher\"] Checks passed.\n\n[This hook has now fired and is retired.]")]
+        #expect(MessageView.plainTextContent(from: blocks, hookWake: attribution) == "Checks passed.")
+    }
+
+    @Test func stripsPrMonitorWakePrefix() {
+        let attribution = PrMonitorWakeAttribution(
+            monitorId: "m-1", repo: "intent-hq/ios", prNumber: 7, url: nil)
+        let blocks = [ContentBlock(type: .text, text: "[PR monitor intent-hq/ios#7] PR was approved.")]
+        #expect(MessageView.plainTextContent(from: blocks, prWake: attribution) == "PR was approved.")
+    }
+
+    @Test func imageOnlyBlocksYieldEmptyString() {
+        let blocks = [ContentBlock(type: .image, data: "aGk=", mimeType: "image/png")]
+        #expect(MessageView.plainTextContent(from: blocks).isEmpty)
+    }
+
+    // MARK: - User-row copy (mirrors what the row renders)
+
+    @Test func userCopyExcludesCodeAndOtherNonRenderedBlocks() {
+        let blocks = [
+            ContentBlock(type: .text, text: "hello"),
+            ContentBlock(type: .code, text: "let hidden = true"),
+            ContentBlock(type: .file, fileName: "a.txt"),
+            ContentBlock(type: .image, data: "aGk=", mimeType: "image/png"),
+        ]
+        #expect(MessageView.userCopyText(from: blocks) == "hello")
+    }
+
+    @Test func userCopyStripsHookWakePrefix() {
+        let attribution = HookWakeAttribution(
+            hookId: "h-1", rawName: "CI watcher", displayName: "CI watcher",
+            reason: "dispatched", hookStillActive: nil)
+        let blocks = [ContentBlock(type: .text, text: "[Background hook \"CI watcher\"] Checks passed.")]
+        #expect(MessageView.userCopyText(from: blocks, hookWake: attribution) == "Checks passed.")
+    }
+
+    // MARK: - Assistant-row copy (mirrors what the row renders)
+
+    @Test func assistantCopyStripsGroupTagsAndFlattensGroupedText() {
+        let blocks = [
+            ContentBlock(type: .text, text: "<group:Setup>\nreading files\n</group>\nAll done."),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "reading files\n\nAll done.")
+    }
+
+    @Test func assistantCopyStripsProtocolBlocksLikeDisplay() {
+        let blocks = [
+            ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nNext step\n-->"),
+            ContentBlock(type: .text, text: "<agent_digest>internal digest</agent_digest>"),
+            ContentBlock(type: .text, text: "<!-- plain comment -->tail"),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
+    }
+
+    @Test func assistantCopyKeepsCodeAndSkipsToolBlocks() {
+        let blocks = [
+            ContentBlock(type: .text, text: "intro"),
+            ContentBlock(type: .toolUse, name: "read_file"),
+            ContentBlock(type: .code, text: "let x = 1"),
+            ContentBlock(type: .thinking, text: "hmm"),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "intro\n\nlet x = 1")
+    }
+}

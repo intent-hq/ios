@@ -14,7 +14,7 @@ struct ContentBlockView: View {
         switch block.type {
         case .text:
             if let text = block.resolvedText {
-                let cleaned = stripSuggestedPrompts(text)
+                let cleaned = Self.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
                     MarkdownTextView(text: cleaned, onOpenURL: { url in
                         if let targetId = NoteDetailView.parseIntentNoteLink(url) {
@@ -128,7 +128,10 @@ struct ContentBlockView: View {
         return allBlocks.first { $0.type == .toolResult && ($0.resolvedToolUseId == toolUseId || $0.toolCallId == toolUseId) }
     }
 
-    private func stripSuggestedPrompts(_ text: String) -> String {
+    /// Also shared by MessageView's whole-message copy so the copied text
+    /// matches the rendered text (suggested-prompts blocks, HTML comments,
+    /// `<agent_digest>` and supervisor tags all removed).
+    static func stripSuggestedPrompts(_ text: String) -> String {
         // Only well-formed suggested-prompts blocks are removed; body text
         // that merely looks like one is left intact (see `SuggestedPrompts`).
         var result = SuggestedPrompts.stripBlocks(from: text)
