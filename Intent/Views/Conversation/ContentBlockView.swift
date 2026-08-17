@@ -8,6 +8,7 @@ struct ContentBlockView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
+    @State private var lightboxPresented = false
 
     var body: some View {
         switch block.type {
@@ -83,21 +84,20 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var imageView: some View {
-        if let base64 = block.data,
-           let imageData = Data(base64Encoded: base64),
-           let uiImage = UIImage(data: imageData) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 300)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        } else {
-            HStack(spacing: 4) {
-                Image(systemName: "photo")
-                Text("Image")
+        if let uiImage = Self.decodeImage(block) {
+            Button { lightboxPresented = true } label: {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .font(.caption)
-            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .buttonStyle(.plain)
+            .fullScreenCover(isPresented: $lightboxPresented) {
+                ImageLightboxView(image: uiImage)
+            }
+        } else {
+            ImageDecodeFailureView()
         }
     }
 
@@ -114,6 +114,13 @@ struct ContentBlockView: View {
         .padding(.vertical, 6)
         .background(Theme.muted(for: colorScheme).opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Decode an image block's base64 payload; nil on any decode failure.
+    static func decodeImage(_ block: ContentBlock) -> UIImage? {
+        guard let base64 = block.data,
+              let imageData = Data(base64Encoded: base64) else { return nil }
+        return UIImage(data: imageData)
     }
 
     private func findToolResult(for toolUseBlock: ContentBlock) -> ContentBlock? {
@@ -150,6 +157,53 @@ struct ContentBlockView: View {
         )
 
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Decode-failure fallback shared by inline images and attachment thumbnails.
+struct ImageDecodeFailureView: View {
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "photo")
+            Text("Image")
+        }
+        .font(.caption)
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+    }
+}
+
+/// Square rounded thumbnail for a user-attached image block; tapping opens
+/// the fullscreen lightbox (FE parity: ChatMessage.svelte attached images).
+struct ImageAttachmentThumbnail: View {
+    let block: ContentBlock
+    @Environment(\.colorScheme) var colorScheme
+    @State private var lightboxPresented = false
+
+    static let side: CGFloat = 60
+
+    var body: some View {
+        if let uiImage = ContentBlockView.decodeImage(block) {
+            Button { lightboxPresented = true } label: {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: Self.side, height: Self.side)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Attached image")
+            .fullScreenCover(isPresented: $lightboxPresented) {
+                ImageLightboxView(image: uiImage)
+            }
+        } else {
+            ImageDecodeFailureView()
+        }
     }
 }
 

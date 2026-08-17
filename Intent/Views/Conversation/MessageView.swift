@@ -49,12 +49,28 @@ struct MessageView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
 
-            ForEach(blocks) { block in
-                if block.type == .text, let text = block.resolvedText {
+            let partitioned = Self.partitionUserBlocks(blocks)
+
+            ForEach(partitioned.text) { block in
+                if let text = block.resolvedText {
                     userTextBlock(text, hookWake: hookWake, prWake: prWake)
-                } else if block.type == .image {
-                    ContentBlockView(block: block, allBlocks: blocks, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
                 }
+            }
+
+            // Attached images render after the text as a left-aligned wrapping
+            // row of square thumbnails, regardless of block order in the
+            // payload (FE parity: ChatMessage.svelte attached images).
+            if !partitioned.images.isEmpty {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: ImageAttachmentThumbnail.side, maximum: ImageAttachmentThumbnail.side), spacing: 6)],
+                    alignment: .leading,
+                    spacing: 6
+                ) {
+                    ForEach(partitioned.images) { block in
+                        ImageAttachmentThumbnail(block: block)
+                    }
+                }
+                .padding(.top, 4)
             }
         }
         .padding(12)
@@ -161,6 +177,16 @@ struct MessageView: View {
             with: "",
             options: .regularExpression
         ).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - User block partitioning
+
+    /// Split a user row's blocks into text blocks (rendered first) and image
+    /// blocks (rendered after, as a thumbnail row), preserving relative order
+    /// within each kind regardless of interleaving in the payload. Other
+    /// block types don't render in user rows.
+    static func partitionUserBlocks(_ blocks: [ContentBlock]) -> (text: [ContentBlock], images: [ContentBlock]) {
+        (blocks.filter { $0.type == .text }, blocks.filter { $0.type == .image })
     }
 
     // MARK: - Group parsing from blocks
