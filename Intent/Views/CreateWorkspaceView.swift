@@ -247,8 +247,10 @@ struct CreateWorkspaceView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else {
                 List {
-                    // Message section
-                    Section("Initial Message") {
+                    // Message section. The message is optional, matching
+                    // cloudlands-fe: an empty field still creates the
+                    // workspace, just without an initial prompt.
+                    Section("Initial Message (Optional)") {
                         TextField("Describe what you'd like to do...", text: $messageText, axis: .vertical)
                             .lineLimit(3...6)
                             .font(.body)
