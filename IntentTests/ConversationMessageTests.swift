@@ -581,6 +581,30 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == ["A prompt"])
     }
 
+    @Test func trailingCloserWithRemainderClosesBlock() {
+        // The raw closer-bearing line always matches the Mermaid-edge pattern,
+        // so this also proves the body-text gate runs on the remainder.
+        let text = """
+        Done!
+        <!-- suggested-prompts
+        Run the tests
+        Ship it
+        Leave rewrite parked for now. -->
+        """
+        #expect(SuggestedPrompts.parse(text) == [
+            "Run the tests",
+            "Ship it",
+            "Leave rewrite parked for now.",
+        ])
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
+    }
+
+    @Test func trailingCloserBodyShapedRemainderStripsButYieldsNoPrompts() {
+        let text = "Done!\n<!-- suggested-prompts\n## Heading -->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
+    }
+
     // MARK: - Malformed blocks
 
     @Test func ignoresOpenerInsideFencedCodeRegion() {
