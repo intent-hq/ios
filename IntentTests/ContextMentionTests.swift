@@ -21,7 +21,7 @@ struct ContextMentionTests {
     }
 
     @Test func base64JSONTokenWithoutUrl() {
-        let token = base64(#"{"provider":"github","identifier":"#42","title":"Bug","url":""}"#)
+        let token = base64(##"{"provider":"github","identifier":"#42","title":"Bug","url":""}"##)
         let segments = ContextMention.segments(from: "@context[\(token)]")
         #expect(segments == [.mention(ContextMention(
             provider: "github", identifier: "#42", title: "Bug", url: nil
