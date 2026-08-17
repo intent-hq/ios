@@ -12,7 +12,16 @@ class PersistenceManager {
     let activeConnectionIdKey = "activeConnectionId"
     private let syncQueue = DispatchQueue(label: "com.intent.companion.persistence", qos: .userInitiated)
 
-    private init() {}
+    /// Backing store for non-secret values. Tests inject a private suite so
+    /// persisted state (navigation, drafts, active connection id) can't leak
+    /// between tests or into the real app container.
+    let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard,
+         keychainStorage: KeychainStorage = SecItemKeychainStorage()) {
+        self.defaults = defaults
+        self.keychainStorage = keychainStorage
+    }
 
     // MARK: - Connections
 
@@ -108,7 +117,7 @@ class PersistenceManager {
             connections.removeAll { $0.id == id }
             saveConnectionsLocked(connections)
             if activeConnectionIdLocked() == id {
-                UserDefaults.standard.removeObject(forKey: activeConnectionIdKey)
+                defaults.removeObject(forKey: activeConnectionIdKey)
             }
         }
     }
@@ -123,7 +132,7 @@ class PersistenceManager {
 
     func setActiveConnection(id: UUID) {
         syncQueue.sync {
-            UserDefaults.standard.set(id.uuidString, forKey: activeConnectionIdKey)
+            defaults.set(id.uuidString, forKey: activeConnectionIdKey)
         }
     }
 
@@ -155,7 +164,7 @@ class PersistenceManager {
 
     private func activeConnectionIdLocked() -> UUID? {
         dispatchPrecondition(condition: .onQueue(syncQueue))
-        guard let raw = UserDefaults.standard.string(forKey: activeConnectionIdKey) else { return nil }
+        guard let raw = defaults.string(forKey: activeConnectionIdKey) else { return nil }
         return UUID(uuidString: raw)
     }
 
@@ -168,7 +177,7 @@ class PersistenceManager {
 
         var serverData = loadDataFromKeychain(account: keychainAccountServer)
         if serverData == nil {
-            serverData = UserDefaults.standard.data(forKey: serverKey)
+            serverData = defaults.data(forKey: serverKey)
         }
         guard let data = serverData,
               let server = try? JSONDecoder().decode(PairedServer.self, from: data),
@@ -178,11 +187,11 @@ class PersistenceManager {
 
         let connection = StoredConnection(server: server, token: token)
         guard saveConnectionsLocked([connection]) else { return }
-        UserDefaults.standard.set(connection.id.uuidString, forKey: activeConnectionIdKey)
+        defaults.set(connection.id.uuidString, forKey: activeConnectionIdKey)
 
         deleteFromKeychain(account: keychainAccountServer)
         deleteFromKeychain(account: keychainAccountToken)
-        UserDefaults.standard.removeObject(forKey: serverKey)
+        defaults.removeObject(forKey: serverKey)
     }
 
     // MARK: - Pairing (compatibility shims over the connections API)
@@ -205,7 +214,7 @@ class PersistenceManager {
         // Clean up any legacy entries
         deleteFromKeychain(account: keychainAccountToken)
         deleteFromKeychain(account: keychainAccountServer)
-        UserDefaults.standard.removeObject(forKey: serverKey)
+        defaults.removeObject(forKey: serverKey)
     }
 
     // MARK: - Draft Messages
@@ -215,20 +224,20 @@ class PersistenceManager {
     func saveDraft(_ text: String, workspaceId: String, agentId: String) {
         let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
         if text.isEmpty {
-            UserDefaults.standard.removeObject(forKey: key)
+            defaults.removeObject(forKey: key)
         } else {
-            UserDefaults.standard.set(text, forKey: key)
+            defaults.set(text, forKey: key)
         }
     }
 
     func loadDraft(workspaceId: String, agentId: String) -> String {
         let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        return UserDefaults.standard.string(forKey: key) ?? ""
+        return defaults.string(forKey: key) ?? ""
     }
 
     func clearDraft(workspaceId: String, agentId: String) {
         let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        UserDefaults.standard.removeObject(forKey: key)
+        defaults.removeObject(forKey: key)
     }
 
     // MARK: - Last Viewed Screen
@@ -250,7 +259,6 @@ class PersistenceManager {
     }
 
     func saveLastScreen(_ screen: SavedScreen) {
-        let defaults = UserDefaults.standard
         defaults.set(screen.screen, forKey: lastScreenKey)
         defaults.set(screen.workspaceId, forKey: lastWorkspaceIdKey)
         defaults.set(screen.agentId, forKey: lastAgentIdKey)
@@ -260,7 +268,6 @@ class PersistenceManager {
     }
 
     func loadLastScreen() -> SavedScreen? {
-        let defaults = UserDefaults.standard
         guard let screen = defaults.string(forKey: lastScreenKey) else { return nil }
         return SavedScreen(
             screen: screen,
@@ -273,7 +280,6 @@ class PersistenceManager {
     }
 
     func clearLastScreen() {
-        let defaults = UserDefaults.standard
         defaults.removeObject(forKey: lastScreenKey)
         defaults.removeObject(forKey: lastWorkspaceIdKey)
         defaults.removeObject(forKey: lastAgentIdKey)
@@ -292,7 +298,7 @@ class PersistenceManager {
             if let data = try? JSONEncoder().encode(screen) {
                 dict[workspaceId] = data
             }
-            UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
+            defaults.set(dict, forKey: workspaceScreensKey)
         }
     }
 
@@ -308,13 +314,13 @@ class PersistenceManager {
         syncQueue.sync {
             var dict = loadWorkspaceScreensDict()
             dict.removeValue(forKey: workspaceId)
-            UserDefaults.standard.set(dict, forKey: workspaceScreensKey)
+            defaults.set(dict, forKey: workspaceScreensKey)
         }
     }
 
     private func loadWorkspaceScreensDict() -> [String: Data] {
         dispatchPrecondition(condition: .onQueue(syncQueue))
-        return (UserDefaults.standard.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
+        return (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
     }
 
     // MARK: - Per-Workspace Tab
@@ -325,7 +331,7 @@ class PersistenceManager {
         syncQueue.sync {
             var dict = loadWorkspaceTabsDict()
             dict[workspaceId] = tab
-            UserDefaults.standard.set(dict, forKey: workspaceTabsKey)
+            defaults.set(dict, forKey: workspaceTabsKey)
         }
     }
 
@@ -337,14 +343,14 @@ class PersistenceManager {
 
     private func loadWorkspaceTabsDict() -> [String: Int] {
         dispatchPrecondition(condition: .onQueue(syncQueue))
-        return (UserDefaults.standard.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
+        return (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
     }
 
     // MARK: - Keychain
 
     /// Backend for Keychain-stored values. Tests substitute an in-memory
     /// implementation (SecItem calls fail in headless CI simulators).
-    var keychainStorage: KeychainStorage = SecItemKeychainStorage()
+    var keychainStorage: KeychainStorage
 
     @discardableResult
     func saveDataToKeychain(data: Data, account: String) -> Bool {
