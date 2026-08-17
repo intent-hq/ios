@@ -163,6 +163,48 @@ struct WorkspaceParsingTests {
         #expect(ws?.pullRequests?.first?.status == "SomeFutureStatus")
     }
 
+    @Test func parseActivePullRequest() async throws {
+        let dict: [String: Any] = [
+            "id": "ws-apr1",
+            "title": "Active PR",
+            "activePullRequest": [
+                "id": "pr-1",
+                "number": 42,
+                "title": "feat: add thing",
+                "url": "https://github.com/acme/app/pull/42",
+                "status": "Open",
+                "createdAt": "2026-08-01T10:00:00Z",
+                "updatedAt": "2026-08-02T10:00:00Z",
+            ] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        let pr = try #require(ws?.activePullRequest)
+        #expect(pr.number == 42)
+        #expect(pr.status == "Open")
+        #expect(pr.title == "feat: add thing")
+        #expect(pr.url == "https://github.com/acme/app/pull/42")
+        #expect(pr.createdAt == "2026-08-01T10:00:00Z")
+        #expect(pr.updatedAt == "2026-08-02T10:00:00Z")
+    }
+
+    @Test func parseAbsentActivePullRequestYieldsNil() async throws {
+        let ws = WorkspaceStore.parseWorkspace(["id": "ws-apr2", "title": "No active PR"])
+        #expect(ws != nil)
+        #expect(ws?.activePullRequest == nil)
+    }
+
+    @Test func parseMalformedActivePullRequestDropped() async throws {
+        // Missing the required `number` — the lenient wire init rejects it.
+        let dict: [String: Any] = [
+            "id": "ws-apr3",
+            "title": "Malformed",
+            "activePullRequest": ["status": "Open"] as [String: Any]
+        ]
+        let ws = WorkspaceStore.parseWorkspace(dict)
+        #expect(ws != nil)
+        #expect(ws?.activePullRequest == nil)
+    }
+
     @Test func parseMissingIdReturnsNil() async throws {
         let dict: [String: Any] = ["title": "No ID"]
         #expect(WorkspaceStore.parseWorkspace(dict) == nil)
