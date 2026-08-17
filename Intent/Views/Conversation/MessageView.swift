@@ -77,6 +77,9 @@ struct MessageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.muted(for: colorScheme).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .contextMenu {
+            copyMenuItem(Self.plainTextContent(from: blocks, hookWake: hookWake, prWake: prWake))
+        }
     }
 
     /// A user-row text block: wake rows get the daemon's literal
@@ -156,6 +159,9 @@ struct MessageView: View {
 
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            copyMenuItem(Self.plainTextContent(from: blocks))
+        }
     }
 
     @ViewBuilder
@@ -175,17 +181,44 @@ struct MessageView: View {
 
     // MARK: - Plain text extraction
 
+    /// "Copy" context-menu item putting `text` on the general pasteboard with
+    /// light haptic feedback (matching CodeBlockView's copy affordance).
+    /// Renders nothing when there is no text to copy (e.g. image-only rows).
+    @ViewBuilder
+    private func copyMenuItem(_ text: String) -> some View {
+        if !text.isEmpty {
+            Button {
+                HapticManager.impact(.light)
+                UIPasteboard.general.string = text
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+        }
+    }
+
     /// Extract plain text content from content blocks for clipboard copy.
+    /// Text and code blocks are joined with blank lines; tool, thinking and
+    /// image blocks are skipped. Supervisor tags are stripped and
     /// `@context[...]` tokens are replaced with their decoded titles so
-    /// copies aren't base64 walls.
-    private static func plainTextContent(from blocks: [ContentBlock]) -> String {
+    /// copies aren't base64 walls; on wake rows, pass the row's attribution
+    /// so the machine wake prefix (and hook state note) is stripped like the
+    /// display. Blocks left empty by stripping are dropped.
+    static func plainTextContent(
+        from blocks: [ContentBlock],
+        hookWake: HookWakeAttribution? = nil,
+        prWake: PrMonitorWakeAttribution? = nil
+    ) -> String {
         blocks.compactMap { block -> String? in
             switch block.type {
             case .text:
-                if let text = block.resolvedText {
-                    return ContextMention.replacingTokensWithTitles(in: stripSupervisorTags(text))
+                guard var text = block.resolvedText else { return nil }
+                if let hookWake {
+                    text = HookWakeAttribution.displayText(text, attribution: hookWake)
+                } else if prWake != nil {
+                    text = PrMonitorWakeAttribution.displayText(text)
                 }
-                return nil
+                let plain = ContextMention.replacingTokensWithTitles(in: stripSupervisorTags(text))
+                return plain.isEmpty ? nil : plain
             case .code:
                 return block.resolvedText
             default:
