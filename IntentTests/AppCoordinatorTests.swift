@@ -3,21 +3,28 @@ import Testing
 @testable import Intent
 
 @Suite(.serialized)
-struct AppCoordinatorTests {
+final class AppCoordinatorTests {
 
     /// Per-test isolated persistence. Swift Testing creates a fresh suite
     /// instance per test, so each test gets its own UserDefaults suite and
     /// in-memory keychain — persisted navigation state written by one test
-    /// can never leak into another (intent-hq/monorepo#2677).
+    /// can never leak into another (intent-hq/monorepo#2677). The suite's
+    /// persistent domain is removed again in deinit so runs don't accumulate
+    /// UUID-named plists in the test host.
     private let persistence: PersistenceManager
+    private let suiteName: String
 
     init() {
         _ = TestKeychainStorage.installed
-        let suiteName = "AppCoordinatorTests-\(UUID().uuidString)"
+        suiteName = "AppCoordinatorTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
             defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+    }
+
+    deinit {
+        persistence.defaults.removePersistentDomain(forName: suiteName)
     }
 
     // MARK: - Helper to check AppScreen cases
