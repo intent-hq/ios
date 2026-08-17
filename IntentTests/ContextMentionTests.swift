@@ -114,4 +114,74 @@ struct ContextMentionTests {
             provider: "github", identifier: "#2", title: "Two", url: nil
         )))
     }
+
+    // MARK: - Clipboard/plain-text transformation
+
+    @Test func replacingTokensWithTitlesDecodesBase64Token() {
+        let token = base64(
+            #"{"provider":"linear","identifier":"AU-123","title":"Fix crash","url":"https://linear.app/i/AU-123"}"#
+        )
+        let result = ContextMention.replacingTokensWithTitles(
+            in: "look at @context[\(token)] please"
+        )
+        #expect(result == "look at Fix crash please")
+    }
+
+    @Test func replacingTokensWithTitlesHandlesMultipleTokens() {
+        let result = ContextMention.replacingTokensWithTitles(
+            in: "@context[linear|AU-1|One] and @context[github|#2|Two]"
+        )
+        #expect(result == "One and Two")
+    }
+
+    @Test func replacingTokensWithTitlesLeavesPlainTextUnchanged() {
+        let text = "no mentions here, not even @context without brackets"
+        #expect(ContextMention.replacingTokensWithTitles(in: text) == text)
+    }
+
+    // MARK: - User text rows (MessageView display transformation)
+
+    @Test func userTextRowsSplitsTextAroundChip() {
+        let rows = MessageView.userTextRows("look at @context[linear|AU-1|One] please")
+        #expect(rows == [
+            .text("look at"),
+            .chips([ContextMention(provider: "linear", identifier: "AU-1", title: "One", url: nil)]),
+            .text("please"),
+        ])
+    }
+
+    @Test func userTextRowsCollapsesConsecutiveMentionsIntoOneChipRow() {
+        let rows = MessageView.userTextRows(
+            "@context[linear|AU-1|One] @context[github|#2|Two]\nintro text"
+        )
+        #expect(rows == [
+            .chips([
+                ContextMention(provider: "linear", identifier: "AU-1", title: "One", url: nil),
+                ContextMention(provider: "github", identifier: "#2", title: "Two", url: nil),
+            ]),
+            .text("intro text"),
+        ])
+    }
+
+    @Test func userTextRowsWithoutTokensIsSingleTextRow() {
+        let text = "plain message"
+        #expect(MessageView.userTextRows(text) == [.text(text)])
+    }
+
+    // MARK: - Chip presentation
+
+    @Test func chipDisplayTitleTruncatesLongTitles() {
+        let long = String(repeating: "a", count: 40)
+        let truncated = ContextMentionChipView.displayTitle(long)
+        #expect(truncated == String(repeating: "a", count: 30) + "…")
+        #expect(ContextMentionChipView.displayTitle("short") == "short")
+    }
+
+    @Test func chipIconNamesFollowProviderMapping() {
+        #expect(ContextMentionChipView.iconName(for: "github") == "arrow.triangle.pull")
+        #expect(ContextMentionChipView.iconName(for: "linear") == "ticket")
+        #expect(ContextMentionChipView.iconName(for: "sentry") == "ladybug")
+        #expect(ContextMentionChipView.iconName(for: "browser") == "link")
+        #expect(ContextMentionChipView.iconName(for: "external") == "link")
+    }
 }

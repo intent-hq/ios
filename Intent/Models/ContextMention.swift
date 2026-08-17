@@ -53,6 +53,18 @@ struct ContextMention: Equatable {
         return segments
     }
 
+    /// Replaces each `@context[...]` token in `text` with its decoded title,
+    /// for plain-text surfaces like clipboard copy (mirrors the FE, which
+    /// copies chip labels rather than raw tokens).
+    static func replacingTokensWithTitles(in text: String) -> String {
+        segments(from: text).map { segment in
+            switch segment {
+            case .text(let run): return run
+            case .mention(let mention): return mention.title
+            }
+        }.joined()
+    }
+
     /// Decodes one token payload (the text between the brackets). A payload
     /// starting with `eyJ` (base64 for `{"`) is treated as base64-encoded
     /// JSON; malformed base64/JSON falls back to pipe parsing.
