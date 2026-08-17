@@ -107,9 +107,8 @@ struct QuestionWizardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Theme.border(for: colorScheme).opacity(0.3), lineWidth: 1)
         )
-        // Cap the well on wide layouts (iPad detail column) so option buttons
-        // don't stretch edge-to-edge; the outer flexible frame centers it.
-        .frame(maxWidth: 640)
+        // Fill the full width of the conversation panel on all layouts,
+        // matching the desktop FE's full-width question wizard.
         .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.15), value: idx)
         .animation(.easeInOut(duration: 0.15), value: collapsed)
