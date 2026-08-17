@@ -149,7 +149,8 @@ struct WorkspaceRowView: View {
     /// `selectPrimaryPr` over `pullRequests` merged with the workspace's
     /// monitors; legacy `prStatus`/`prNumber` only when the pool is empty;
     /// "+N" = `countOtherMonitors` against the primary's repo-qualified
-    /// number.
+    /// number. Like FE `mapWorkspacePRs`, an empty/absent `pullRequests`
+    /// falls back to the single `activePullRequest` row before merging.
     static func derivePrIndicator(workspace: Workspace,
                                   monitors: [MonitoredPr]) -> PrIndicatorModel {
         var workspaceRepo: String?
@@ -157,7 +158,15 @@ struct WorkspaceRowView: View {
            !owner.isEmpty, !name.isEmpty {
             workspaceRepo = "\(owner)/\(name)"
         }
-        let base = (workspace.pullRequests ?? []).map(WorkspacePrPill.PillPr.init)
+        let basePrs: [WorkspacePullRequest]
+        if let prs = workspace.pullRequests, !prs.isEmpty {
+            basePrs = prs
+        } else if let activePr = workspace.activePullRequest {
+            basePrs = [activePr]
+        } else {
+            basePrs = []
+        }
+        let base = basePrs.map(WorkspacePrPill.PillPr.init)
         let pool = WorkspacePrPill.mergeMonitoredPRs(base, monitors,
                                                      workspaceRepo: workspaceRepo)
         let primary = WorkspacePrPill.selectPrimaryPr(pool)

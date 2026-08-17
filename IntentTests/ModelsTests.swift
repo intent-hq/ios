@@ -115,6 +115,42 @@ struct ModelsTests {
         #expect(ws.pullRequests?.first?.status == "SomeFutureStatus")
     }
 
+    // MARK: - Workspace.activePullRequest (PROTOCOL §5.1 / §7.6)
+
+    @Test func workspaceDecodesActivePullRequest() async throws {
+        let json = """
+        {
+            "id": "ws-1",
+            "title": "Test",
+            "activePullRequest": {
+                "id": "pr-1",
+                "number": 42,
+                "title": "feat: add thing",
+                "url": "https://github.com/acme/app/pull/42",
+                "status": "Open",
+                "createdAt": "2026-08-01T10:00:00Z",
+                "updatedAt": "2026-08-02T10:00:00Z"
+            }
+        }
+        """.data(using: .utf8)!
+        let ws = try JSONDecoder().decode(Workspace.self, from: json)
+        let pr = try #require(ws.activePullRequest)
+        #expect(pr.number == 42)
+        #expect(pr.status == "Open")
+        #expect(pr.title == "feat: add thing")
+        #expect(pr.url == "https://github.com/acme/app/pull/42")
+        #expect(pr.createdAt == "2026-08-01T10:00:00Z")
+        #expect(pr.updatedAt == "2026-08-02T10:00:00Z")
+    }
+
+    @Test func workspaceDecodesAbsentActivePullRequestAsNil() async throws {
+        let json = """
+        {"id": "ws-1", "title": "Test"}
+        """.data(using: .utf8)!
+        let ws = try JSONDecoder().decode(Workspace.self, from: json)
+        #expect(ws.activePullRequest == nil)
+    }
+
     // MARK: - SpecialistInfo wire decoding (specialist.list)
 
     @Test func specialistInfoWireDecodesResolvedFields() async throws {

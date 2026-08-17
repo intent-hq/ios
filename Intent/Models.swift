@@ -120,10 +120,11 @@ struct Workspace: Codable, Identifiable, Equatable {
     let agentSummaryCount: Int?
     let agentSummaryAgents: [WorkspaceAgentInfo]?
     let pullRequests: [WorkspacePullRequest]?  // detected-PR pool (§5.1); nil on older daemons
+    let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
 
-    /// Explicit initializer so `attention` / `waiting` / `pullRequests` can
-    /// default — existing call sites (and test fixtures) that predate the
-    /// fields stay valid.
+    /// Explicit initializer so `attention` / `waiting` / `pullRequests` /
+    /// `activePullRequest` can default — existing call sites (and test
+    /// fixtures) that predate the fields stay valid.
     init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
          activity: String?, displayStatus: String?, attention: String? = nil,
          waiting: Bool = false,
@@ -132,7 +133,8 @@ struct Workspace: Codable, Identifiable, Equatable {
          diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
          taskStatsInProgress: Int?, agentSummaryCount: Int?,
          agentSummaryAgents: [WorkspaceAgentInfo]?,
-         pullRequests: [WorkspacePullRequest]? = nil) {
+         pullRequests: [WorkspacePullRequest]? = nil,
+         activePullRequest: WorkspacePullRequest? = nil) {
         self.id = id
         self.title = title
         self.branch = branch
@@ -155,6 +157,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.agentSummaryCount = agentSummaryCount
         self.agentSummaryAgents = agentSummaryAgents
         self.pullRequests = pullRequests
+        self.activePullRequest = activePullRequest
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -184,6 +187,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         agentSummaryCount = try c.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
         agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
         pullRequests = try c.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
+        activePullRequest = try c.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
     }
 }
 
