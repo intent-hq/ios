@@ -2,9 +2,10 @@ import Foundation
 
 /// Parsing and stripping of `<!-- suggested-prompts ... -->` blocks.
 ///
-/// A block is well-formed only when the opener ends its own line, the closing
-/// `-->` stands alone on a later line, and the opener is not inside a fenced
-/// code region. Every well-formed block is stripped from the rendered text, and
+/// A block is well-formed only when the opener ends its own line, a later line
+/// closes it — either a standalone `-->`, or a line ending in `-->` whose
+/// non-empty remainder becomes the final body line — and the opener is not
+/// inside a fenced code region. Every well-formed block is stripped from the rendered text, and
 /// only the last one supplies prompts — it yields nothing when any captured line
 /// is body-text-shaped (heading, fence, table row, Mermaid edge), so response
 /// body text can never render as chips.
@@ -83,16 +84,30 @@ enum SuggestedPrompts {
                 index += 1
                 continue
             }
-            // The closing `-->` must stand alone on a later line; an embedded
-            // `-->` (Mermaid edge, prose arrow) never closes a block. A second
-            // opener means this one was never closed.
+            // The closing `-->` either stands alone on a later line, or ends a
+            // later line whose non-empty remainder becomes the final body line;
+            // an embedded `-->` mid-line (Mermaid edge, prose arrow) never
+            // closes a block. A second opener means this one was never closed.
             var closerLine: Int?
+            var closerRemainder: String?
             var scan = index + 1
             while scan < lines.count {
                 let candidate = trimmingTrailingWhitespace(lines[scan])
                 if candidate.trimmingCharacters(in: .whitespaces) == "-->" {
                     closerLine = scan
                     break
+                }
+                if candidate.hasSuffix("-->") {
+                    let remainder = trimmingTrailingWhitespace(String(candidate.dropLast(3)))
+                    // An opener-shaped remainder (`<!-- suggested-prompts -->`)
+                    // must not close the block: stripping is ungated, so it
+                    // would delete the body text under an unclosed opener.
+                    if !remainder.isEmpty,
+                       remainder.range(of: openerPattern, options: .regularExpression) == nil {
+                        closerLine = scan
+                        closerRemainder = remainder
+                        break
+                    }
                 }
                 if candidate.range(of: openerPattern, options: .regularExpression) != nil { break }
                 scan += 1
@@ -103,11 +118,13 @@ enum SuggestedPrompts {
                 index = scan > index ? scan : index + 1
                 continue
             }
+            var body = Array(lines[(index + 1)..<closer])
+            if let remainder = closerRemainder { body.append(remainder) }
             result.append(Block(
                 openerLine: index,
                 closerLine: closer,
                 openerPrefix: String(line[line.startIndex..<openerRange.lowerBound]),
-                body: Array(lines[(index + 1)..<closer])))
+                body: body))
             index = closer + 1
         }
         return result
