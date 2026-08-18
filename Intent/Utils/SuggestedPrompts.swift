@@ -99,7 +99,11 @@ enum SuggestedPrompts {
                 }
                 if candidate.hasSuffix("-->") {
                     let remainder = trimmingTrailingWhitespace(String(candidate.dropLast(3)))
-                    if !remainder.isEmpty {
+                    // An opener-shaped remainder (`<!-- suggested-prompts -->`)
+                    // must not close the block: stripping is ungated, so it
+                    // would delete the body text under an unclosed opener.
+                    if !remainder.isEmpty,
+                       remainder.range(of: openerPattern, options: .regularExpression) == nil {
                         closerLine = scan
                         closerRemainder = remainder
                         break

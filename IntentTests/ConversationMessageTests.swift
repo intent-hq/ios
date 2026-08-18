@@ -605,6 +605,19 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
     }
 
+    @Test func openerShapedTrailingCloserDoesNotCloseBlock() {
+        // `<!-- suggested-prompts -->` under an unclosed opener must stay
+        // inert: closing there would let stripBlocks delete the body text
+        // captured by the outer opener.
+        let text = """
+        <!-- suggested-prompts
+        Response text that must survive
+        <!-- suggested-prompts -->
+        """
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+        #expect(SuggestedPrompts.stripBlocks(from: text) == text)
+    }
+
     // MARK: - Malformed blocks
 
     @Test func ignoresOpenerInsideFencedCodeRegion() {
