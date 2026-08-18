@@ -22,12 +22,6 @@ struct WorkspaceRowView: View {
         hasRunningAgents(workspace)
     }
 
-    /// True when something (repo name or PR pill) precedes the waiting
-    /// suffix on the metadata line, so the "/" reads as a separator.
-    private var hasMetadataPrefix: Bool {
-        (showRepo && workspace.repositoryName != nil) || prIndicator.pill != nil
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             // Status icon with agent activity / unread dot overlays
@@ -102,16 +96,6 @@ struct WorkspaceRowView: View {
                             .padding(.vertical, 2)
                             .background(Theme.mutedForeground(for: colorScheme).opacity(0.12))
                             .clipShape(Capsule())
-                    }
-
-                    // Dimmed waiting suffix, shown in every state (matches the
-                    // desktop's "/ WAITING" status-label suffix). The slash is
-                    // a separator — dropped when nothing precedes it.
-                    if workspace.waiting {
-                        Text(hasMetadataPrefix ? "/ WAITING" : "WAITING")
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
-                            .lineLimit(1)
                     }
                 }
             }
