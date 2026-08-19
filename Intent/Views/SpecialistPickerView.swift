@@ -387,7 +387,7 @@ struct SpecialistPickerView: View {
     @ViewBuilder
     private func specialistRow(_ specialist: SpecialistInfo) -> some View {
         HStack(spacing: 12) {
-            AuggieAvatarView(seed: specialist.id, size: 28, specialist: specialist.id)
+            AgentAvatarView(agentId: specialist.id, size: 28, specialist: specialist.id)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(specialist.name)
