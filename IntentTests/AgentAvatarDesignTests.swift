@@ -56,6 +56,35 @@ struct AgentAvatarDesignTests {
         #expect(designs.count > 1)
     }
 
+    @Test func fallbackMatchesDesktopFixtures() {
+        // Expected values computed with the desktop JS implementation:
+        // stringToSeededRandom(agentId).pick(fallbackAgentAvatarDesigns)
+        // (cloudlands-fe hash.ts + avatar-design.ts). Covers all six
+        // fallback designs.
+        let fixtures: [(String, AgentAvatarDesign)] = [
+            ("", .fallbackGlasses),
+            ("a", .fallbackDots),
+            ("agent-123", .fallbackCode),
+            ("agent-456", .fallbackDots),
+            ("AGENT-123", .fallbackCrown),
+            ("0d9c66aa-1c9e-4a09-b52f-1f6f7a10a1de", .fallbackDots),
+            ("agent-0", .fallbackGlasses),
+            ("agent-1", .fallbackCrownMouth),
+            ("agent-5", .fallbackCrownInverted),
+            ("agent-11", .fallbackCrown),
+            // Seeds where the JS float64 LCG step loses low bits and picks a
+            // different design than exact integer math would — regression
+            // coverage for the Double-based LCG step.
+            ("agent-750158", .fallbackCrownMouth),
+            ("x2191079", .fallbackGlasses),
+        ]
+        for (agentId, expected) in fixtures {
+            #expect(
+                AgentAvatarDesign.fallbackDesign(agentId: agentId) == expected,
+                "\(agentId)")
+        }
+    }
+
     // MARK: - Glyph geometry
 
     @Test func everyDesignHasGlyphGeometryWithinArtBounds() {

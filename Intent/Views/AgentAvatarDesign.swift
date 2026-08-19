@@ -45,13 +45,18 @@ enum AgentAvatarDesign: String, CaseIterable {
 
     /// Deterministic fallback pick seeded from the agent id. Mirrors the
     /// desktop `stringToSeededRandom(agentId).pick(...)` (string hash + one
-    /// LCG step); exact cross-platform hash parity is not guaranteed.
+    /// LCG step) bit-for-bit: JS evaluates `seed * 1103515245 + 12345` in
+    /// float64, losing low bits for seeds >= 2^22, and `& 0x7fffffff`
+    /// applies ToUint32 — so the LCG step is computed in `Double` here
+    /// rather than exact integer math.
     static func fallbackDesign(agentId: String) -> AgentAvatarDesign {
         var hash: Int32 = 0
         for unit in agentId.utf16 {
             hash = (hash &<< 5) &- hash &+ Int32(unit)
         }
-        let seed = (UInt64(hash.magnitude) &* 1_103_515_245 &+ 12345) & 0x7FFF_FFFF
+        let product = Double(hash.magnitude) * 1_103_515_245 + 12345
+        let wrapped = product.truncatingRemainder(dividingBy: 4_294_967_296)
+        let seed = UInt32(wrapped) & 0x7FFF_FFFF
         let index = Int(Double(seed) / Double(0x8000_0000) * Double(fallbackDesigns.count))
         return fallbackDesigns[min(index, fallbackDesigns.count - 1)]
     }
