@@ -4,7 +4,7 @@ IMPORTANT: Intent Companion requires the Intent desktop app. It talks directly t
 
 PAIR IN SECONDS
 • Scan the QR code shown in Intent's settings on your desktop, or enter the host, port, and token manually.
-• Connections are secured end to end: the app pins your daemon's TLS certificate fingerprint and authenticates every request with a per-device bearer token.
+• Connections are secured end to end: the app pins your daemon's TLS certificate fingerprint and authenticates every request with a bearer token.
 • Manual pairing shows the server's certificate fingerprint so you can confirm it before trusting the connection.
 • Save multiple daemons and switch between them at any time.
 
@@ -19,14 +19,14 @@ TALK TO YOUR AGENTS
 • Keep multiple agents moving without going back to your desk.
 
 WORKS OFFLINE
-• Content you have viewed is cached on device, so workspaces, notes, and conversations stay readable when your computer is out of reach.
+• Recently viewed workspaces, notes, and conversations stay readable while your computer is out of reach.
 • The app reconnects automatically as soon as your daemon is reachable again.
 
 PRIVATE BY DESIGN
 • Local network only: your data travels directly between your iPhone or iPad and your computer.
 • No accounts and no sign-up — pairing is device-to-device.
 • No analytics, no tracking, no data collection of any kind.
-• Revoke a device's access at any time from the desktop app.
+• Revoke access at any time by rotating the pairing token in the desktop app.
 
 REQUIREMENTS
 • The Intent desktop app running on a computer on the same network.
