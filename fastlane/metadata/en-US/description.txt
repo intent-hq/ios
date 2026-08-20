@@ -7,6 +7,7 @@ PAIR IN SECONDS
 • Connections are secured end to end: the app pins your daemon's TLS certificate fingerprint and authenticates every request with a bearer token.
 • Manual pairing shows the server's certificate fingerprint so you can confirm it before trusting the connection.
 • Save multiple daemons and switch between them at any time.
+• If the connection drops, the app reconnects automatically as soon as your daemon is reachable again.
 
 STAY ON TOP OF YOUR WORK
 • Browse all your workspaces with their status at a glance.
@@ -17,10 +18,6 @@ TALK TO YOUR AGENTS
 • Follow agent conversations in real time.
 • Send messages and answer agents' questions on the go.
 • Keep multiple agents moving without going back to your desk.
-
-WORKS OFFLINE
-• Recently viewed workspaces, notes, and conversations stay readable while your computer is out of reach.
-• The app reconnects automatically as soon as your daemon is reachable again.
 
 PRIVATE BY DESIGN
 • Local network only: your data travels directly between your iPhone or iPad and your computer.
