@@ -61,30 +61,22 @@ struct QRScannerView: View {
     private func handleScannedCode(_ code: String) {
         guard !isValidating else { return }
 
-        // Parse intent://pair?token=...&host=...&port=...&path=/ws&certFingerprint=...
-        guard let components = URLComponents(string: code),
-              components.scheme == "intent",
-              components.host == "pair",
-              let token = components.queryItems?.first(where: { $0.name == "token" })?.value,
-              let hostStr = components.queryItems?.first(where: { $0.name == "host" })?.value,
-              let portStr = components.queryItems?.first(where: { $0.name == "port" })?.value,
-              let port = Int(portStr) else {
+        // Parse both pairing-URI dialects (canonical `fp=` and legacy
+        // `certFingerprint=`); see PairingPayload.
+        guard let payload = PairingPayload.parse(code) else {
             errorMessage = "Invalid QR code. Make sure you're scanning the code from Intent Settings."
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { errorMessage = nil }
             return
         }
-
-        let certFingerprint = components.queryItems?.first(where: { $0.name == "certFingerprint" })?.value
-        let hosts = hostStr.split(separator: ",").map(String.init)
 
         isValidating = true
         errorMessage = nil
 
         Task {
             do {
-                try await ConnectionManager.shared.connect(hosts: hosts, port: port, token: token, certFingerprint: certFingerprint)
-                let server = PairedServer(hosts: hosts, port: port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint)
-                let stored = await ConnectionPairing.finalize(server: server, token: token)
+                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: payload.certFingerprint)
+                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: payload.certFingerprint)
+                let stored = await ConnectionPairing.finalize(server: server, token: payload.token)
                 dismiss()
                 if let onPaired {
                     onPaired(stored)
