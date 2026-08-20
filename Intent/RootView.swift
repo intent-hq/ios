@@ -77,6 +77,17 @@ struct RootView: View {
         }
     }
 
+    /// True during the launch splash phases (loading and connecting), which
+    /// share a single SplashArtView so the art doesn't reset between them.
+    private var isLaunchSplash: Bool {
+        switch coordinator.currentScreen {
+        case .loading, .connecting:
+            return true
+        default:
+            return false
+        }
+    }
+
     var body: some View {
         Group {
             if isWorkspaceFlow {
@@ -94,24 +105,34 @@ struct RootView: View {
                     .navigationSplitViewStyle(.automatic)
                 }
             } else {
-                switch coordinator.currentScreen {
-                case .loading:
-                    LoadingView()
-                case .pairing:
-                    PairingView()
-                case .connecting:
-                    ConnectingView()
-                case .connectionFailed(let error):
-                    ConnectionFailureView(
-                        errorMessage: error,
-                        isCertMismatch: error.contains("certificate")
-                    )
-                case .settings:
-                    SettingsView()
-                case .disconnected:
-                    DisconnectedView()
-                default:
-                    EmptyView()
+                ZStack {
+                    // One SplashArtView spans the loading and connecting
+                    // phases: keeping it in this stable position preserves
+                    // its seed and reveal state across the transition, so the
+                    // art doesn't visibly reset. LoadingView/ConnectingView
+                    // render only their phase logic on top of it.
+                    if isLaunchSplash {
+                        SplashArtView()
+                    }
+                    switch coordinator.currentScreen {
+                    case .loading:
+                        LoadingView()
+                    case .pairing:
+                        PairingView()
+                    case .connecting:
+                        ConnectingView()
+                    case .connectionFailed(let error):
+                        ConnectionFailureView(
+                            errorMessage: error,
+                            isCertMismatch: error.contains("certificate")
+                        )
+                    case .settings:
+                        SettingsView()
+                    case .disconnected:
+                        DisconnectedView()
+                    default:
+                        EmptyView()
+                    }
                 }
             }
         }

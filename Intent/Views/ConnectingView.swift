@@ -1,13 +1,24 @@
 import SwiftUI
 
+/// Connecting phase overlay: the splash art itself is rendered by RootView in
+/// a position shared with the loading phase (so it doesn't reset on the
+/// loading → connecting transition). This view adds the small bottom HUD pill
+/// (spinner only) and owns the connection attempt.
 struct ConnectingView: View {
     @EnvironmentObject var coordinator: AppCoordinator
 
     var body: some View {
-        LoadingView(isReconnecting: true)
-            .task {
-                await attemptConnection()
-            }
+        VStack {
+            Spacer()
+            ProgressView()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+        }
+        .padding(.bottom, 24)
+        .task {
+            await attemptConnection()
+        }
     }
 
     private func attemptConnection() async {
