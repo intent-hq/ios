@@ -10,6 +10,9 @@ struct QRScannerView: View {
     var onPaired: ((StoredConnection) -> Void)?
     @State private var isValidating = false
     @State private var errorMessage: String?
+    @State private var pendingPayload: PairingPayload?
+    @State private var probedFingerprint: String?
+    @State private var showFingerprintConfirmation = false
 
     var body: some View {
         NavigationStack {
@@ -55,6 +58,20 @@ struct QRScannerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    pendingPayload = nil
+                    isValidating = false
+                }
+                Button("Trust & Connect") {
+                    if let payload = pendingPayload, let fingerprint = probedFingerprint {
+                        pendingPayload = nil
+                        connect(payload: payload, certFingerprint: fingerprint)
+                    }
+                }
+            } message: {
+                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+            }
         }
     }
 
@@ -72,10 +89,35 @@ struct QRScannerView: View {
         isValidating = true
         errorMessage = nil
 
+        if let fingerprint = payload.certFingerprint {
+            connect(payload: payload, certFingerprint: fingerprint)
+        } else {
+            // The payload carries no fingerprint: never downgrade to plain
+            // ws://. Probe the server cert like manual entry does and ask the
+            // user to trust it before connecting pinned over wss.
+            Task {
+                let probed = await CertFingerprintProbe.probeFirst(hosts: payload.hosts, port: payload.port)
+                switch CertFingerprintProbe.outcome(forFingerprint: probed) {
+                case .confirmFingerprint(let fingerprint):
+                    pendingPayload = payload
+                    probedFingerprint = fingerprint
+                    showFingerprintConfirmation = true
+                case .abort(let message):
+                    errorMessage = message
+                    isValidating = false
+                }
+            }
+        }
+    }
+
+    /// Connect over wss with the fingerprint pinned. Every QR pairing path
+    /// goes through here with a non-nil fingerprint (from the payload or the
+    /// trust-confirmed probe), so scanning can never fall back to plain ws://.
+    private func connect(payload: PairingPayload, certFingerprint: String) {
         Task {
             do {
-                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: payload.certFingerprint)
-                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: payload.certFingerprint)
+                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: certFingerprint)
+                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint)
                 let stored = await ConnectionPairing.finalize(server: server, token: payload.token)
                 dismiss()
                 if let onPaired {
