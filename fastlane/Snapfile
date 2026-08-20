@@ -1,0 +1,51 @@
+# Snapfile — configuration for `fastlane snapshot`
+# https://docs.fastlane.tools/actions/snapshot/
+#
+# How to run (Mac only, from the repo root):
+#
+#   bundle exec fastlane screenshots     # via the Fastfile lane
+#   # or, without bundler (fastlane from Homebrew/gem):
+#   fastlane screenshots
+#   # or directly:
+#   fastlane snapshot
+#
+# Output lands in fastlane/screenshots/ (gitignored) with an HTML preview
+# (screenshots.html). The devices below need their simulators available in
+# the selected Xcode; `xcrun simctl list devicetypes` shows what's installed.
+# If a device is missing, create it with
+# `xcrun simctl create "<name>" "<devicetype>"` or install the matching
+# runtime via Xcode → Settings → Components.
+
+# The two required App Store screenshot sizes:
+#   iPhone 6.9" — iPhone 17 Pro Max
+#   iPad 13"    — iPad Pro 13-inch (M4)
+devices([
+  "iPhone 17 Pro Max",
+  "iPad Pro 13-inch (M4)"
+])
+
+languages(["en-US"])
+
+# Dedicated scheme whose test action runs only IntentUITests
+# (Intent.xcodeproj/xcshareddata/xcschemes/IntentScreenshots.xcscheme).
+project("./Intent.xcodeproj")
+scheme("IntentScreenshots")
+
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+
+# Marketing screenshots are captured in light mode.
+dark_mode(false)
+
+# Clean status bar (9:41, full battery/signal) on every device.
+override_status_bar(true)
+
+# The M1 CI/dev Macs run one simulator at a time more reliably.
+concurrent_simulators(false)
+
+stop_after_first_error(true)
+
+# If a stale simulator has leftover app state (e.g. a previously paired
+# connection making the pairing screenshot skip), uncomment to start from
+# factory-fresh simulators (slower):
+# erase_simulator(true)

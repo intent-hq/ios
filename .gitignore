@@ -33,5 +33,10 @@ Pods/
 *.dSYM.zip
 *.dSYM
 
+# fastlane snapshot output
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/report.xml
+
 # OS files
 .DS_Store
