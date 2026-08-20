@@ -4,7 +4,7 @@
 #   bundle exec fastlane deliver --skip-binary-upload --skip-screenshots
 #
 # Prerequisites:
-#   * Fill in every TODO(user) placeholder below and in fastlane/Appfile.
+#   * Fill in every TODO(user) placeholder in fastlane/Appfile.
 #   * Authenticate with App Store Connect (App Store Connect API key or
 #     `fastlane spaceauth`).
 #
@@ -24,16 +24,15 @@ price_tier(0)
 copyright("#{Time.now.year} Intent")
 
 # Contact information for the App Review team.
-# TODO(user): replace every placeholder with real contact details before
-# running deliver. Review notes are loaded from
+# Review notes are loaded from
 # fastlane/metadata/review_information/notes.txt — do not set :notes here,
 # it would override that file. There is no demo account (the app has no
 # account system); see the review notes for details.
 app_review_information(
-  first_name: "TODO(user)",
-  last_name: "TODO(user)",
-  phone_number: "TODO(user e.g. +15555555555)",
-  email_address: "todo-user@example.com"
+  first_name: "Clement",
+  last_name: "Pang",
+  phone_number: "+16502624331",
+  email_address: "clement@shv.com"
 )
 
 # Export compliance: the app uses only the exempt encryption built into the
