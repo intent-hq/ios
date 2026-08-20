@@ -3,7 +3,10 @@ import XCTest
 /// Captures the App Store screenshot set via `fastlane snapshot`.
 ///
 /// Run on a Mac from the repo root with `bundle exec fastlane screenshots`
-/// (or `fastlane snapshot`); see fastlane/Snapfile for device configuration.
+/// (see fastlane/Snapfile for device configuration). Always use that lane —
+/// it erases the simulators and seeds SpringBoard prefs first (Fastfile →
+/// prepare_screenshot_simulators); a direct `fastlane snapshot` run skips
+/// that preparation.
 ///
 /// The app is launched with `--demo-data` (see DemoFixtures.swift), which
 /// skips pairing and serves polished fixture data with no daemon, so every
@@ -12,6 +15,13 @@ final class AppStoreScreenshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        // App Store iPad screenshots are captured in landscape (the split
+        // view shows sidebar + detail side by side); iPhone stays portrait.
+        // Must be set before app.launch() so the app renders at the right
+        // dimensions from the first frame.
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            XCUIDevice.shared.orientation = .landscapeLeft
+        }
     }
 
     /// 01–04: workspace list → workspace detail → agent conversation →
@@ -24,12 +34,13 @@ final class AppStoreScreenshotTests: XCTestCase {
         app.launch()
 
         // 01 — workspace list ("Add usage analytics dashboard" is the first
-        // fixture workspace; on iPad it renders in the sidebar).
+        // fixture workspace; on iPad landscape it renders in the always-
+        // visible sidebar next to the empty-detail placeholder).
         let workspaceRow = app.staticTexts["Add usage analytics dashboard"].firstMatch
         if !workspaceRow.waitForExistence(timeout: 30) {
-            // iPad portrait may launch with the split-view sidebar collapsed
-            // (empty detail column): the first nav-bar button is the sidebar
-            // toggle — reveal the workspace list before failing.
+            // Fallback: if the split-view sidebar launched collapsed, the
+            // first nav-bar button is the sidebar toggle — reveal the
+            // workspace list before failing.
             app.navigationBars.buttons.element(boundBy: 0).tap()
             XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
         }
@@ -71,9 +82,9 @@ final class AppStoreScreenshotTests: XCTestCase {
     }
 
     /// 05: pairing screen — launched WITHOUT demo arguments so the app lands
-    /// on the pairing options (no saved connection exists on the fresh
-    /// simulators fastlane snapshot boots). Marketing-safe: no camera or QR
-    /// scanner is opened, only the option list is shown.
+    /// on the pairing options (no saved connection exists on the freshly
+    /// erased simulators the `screenshots` lane prepares). Marketing-safe:
+    /// no camera or QR scanner is opened, only the option list is shown.
     @MainActor
     func testCapturePairingScreenshot() throws {
         let app = XCUIApplication()

@@ -6,8 +6,12 @@
 #   bundle exec fastlane screenshots     # via the Fastfile lane
 #   # or, without bundler (fastlane from Homebrew/gem):
 #   fastlane screenshots
-#   # or directly:
-#   fastlane snapshot
+#
+# Always go through the `screenshots` lane — it first erases the simulators
+# and seeds SpringBoard prefs (Fastfile → prepare_screenshot_simulators).
+# Running `fastlane snapshot` directly skips that preparation: stale
+# UserDefaults/pairing state and the iPadOS window-resize grabber arc
+# would leak into the captures.
 #
 # Output lands in fastlane/screenshots/ (gitignored) with an HTML preview
 # (screenshots.html). The devices below need their simulators available in
@@ -50,8 +54,11 @@ concurrent_simulators(false)
 
 stop_after_first_error(true)
 
-# Factory-fresh simulators every run (slower, but keeps reruns idempotent):
-# a previous demo run persists the last-viewed screen in UserDefaults, which
-# a later --demo-data launch would restore instead of the workspace list,
-# and stale pairing state would skip the pairing screenshot.
-erase_simulator(true)
+# Simulator erase is handled by the `screenshots` lane (see Fastfile →
+# prepare_screenshot_simulators), which erases the devices AND seeds
+# SpringBoard prefs so iPadOS 26 boots in Full Screen Apps mode — the
+# default Windowed Apps mode draws a window-resize grabber arc in the
+# bottom-right corner of every capture. Keeping erase_simulator off here
+# prevents snapshot from wiping those seeded prefs; the lane's erase keeps
+# reruns idempotent (fresh UserDefaults / no stale pairing state).
+erase_simulator(false)

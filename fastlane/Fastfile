@@ -1,8 +1,46 @@
 default_platform(:ios)
 
+require "fileutils"
+require "json"
+
+# Keep in sync with the devices() list in fastlane/Snapfile.
+SCREENSHOT_DEVICES = ["iPhone 17 Pro Max", "iPad Pro 13-inch (M4)"].freeze
+
 platform :ios do
   desc "Capture App Store screenshots on the devices configured in fastlane/Snapfile"
   lane :screenshots do
+    prepare_screenshot_simulators
     snapshot
+  end
+
+  desc "Erase the screenshot simulators and seed SpringBoard prefs. " \
+       "Replaces snapshot's erase_simulator so reruns stay idempotent " \
+       "(fresh UserDefaults/pairing state) while iPadOS 26 boots in " \
+       "Full Screen Apps mode — Windowed Apps mode draws a window-resize " \
+       "grabber arc in the bottom-right corner of every screenshot."
+  private_lane :prepare_screenshot_simulators do
+    devices = JSON.parse(sh("xcrun simctl list devices available --json", log: false))["devices"]
+      .values.flatten.select { |d| SCREENSHOT_DEVICES.include?(d["name"]) }
+    # Fail fast if a configured device has no available simulator — a silent
+    # no-op here would let snapshot run against stale, unseeded simulators
+    # (grabber arc back, stale UserDefaults/pairing state breaking captures).
+    missing = SCREENSHOT_DEVICES - devices.map { |d| d["name"] }.uniq
+    UI.user_error!("Screenshot simulators not found: #{missing.join(', ')}") unless missing.empty?
+    devices.each do |device|
+      udid = device["udid"]
+      sh("xcrun simctl shutdown #{udid} 2>/dev/null || true", log: false)
+      sh("xcrun simctl erase #{udid}", log: false)
+      plist = File.expand_path(
+        "~/Library/Developer/CoreSimulator/Devices/#{udid}/data/Library/Preferences/com.apple.springboard.plist"
+      )
+      # simctl erase currently leaves data/Library/Preferences in place, but
+      # PlistBuddy won't create parent directories — make that explicit.
+      FileUtils.mkdir_p(File.dirname(plist))
+      ["SBMedusaMultitaskingEnabled", "SBChamoisWindowingEnabled"].each do |key|
+        sh("/usr/libexec/PlistBuddy -c 'Add :#{key} bool false' '#{plist}' 2>/dev/null || " \
+           "/usr/libexec/PlistBuddy -c 'Set :#{key} false' '#{plist}'", log: false)
+      end
+      UI.message("Prepared simulator #{device['name']} (#{udid}): erased + Full Screen Apps mode")
+    end
   end
 end
