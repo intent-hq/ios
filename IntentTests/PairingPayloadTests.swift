@@ -71,6 +71,16 @@ struct PairingPayloadTests {
         #expect(PairingPayload.parse("intent://pair?host=h&port=1&token=t&certFingerprint=")?.certFingerprint == nil)
     }
 
+    /// Precedence is "first non-empty wins, canonical fp= first": an empty
+    /// fp= falls back to a non-empty legacy certFingerprint= rather than
+    /// normalizing the whole result to nil.
+    @Test func emptyFpFallsBackToNonEmptyLegacyFingerprint() {
+        #expect(
+            PairingPayload.parse("intent://pair?host=h&port=1&token=t&fp=&certFingerprint=11:11")?.certFingerprint
+                == "11:11"
+        )
+    }
+
     // MARK: - Tolerated / ignored params
 
     @Test func toleratesVersionPathAndUnknownParams() {

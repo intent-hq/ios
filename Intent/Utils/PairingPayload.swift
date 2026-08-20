@@ -32,10 +32,10 @@ struct PairingPayload: Equatable {
         let hosts = hostStr.split(separator: ",").map(String.init)
         guard !hosts.isEmpty else { return nil }
 
-        // The canonical daemon dialect (`fp=`) wins over the legacy desktop
-        // dialect (`certFingerprint=`) when both are present. Empty values
-        // are normalized to nil so callers take the cert-probe path instead
-        // of pinning an empty string.
+        // The first non-empty fingerprint wins, canonical `fp=` first (so an
+        // empty `fp=` falls back to a non-empty legacy `certFingerprint=`).
+        // Empty values are normalized to nil so callers take the cert-probe
+        // path instead of pinning an empty string.
         let fingerprint = [
             items.first(where: { $0.name == "fp" })?.value,
             items.first(where: { $0.name == "certFingerprint" })?.value,

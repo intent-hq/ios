@@ -67,6 +67,12 @@ struct QRScannerView: View {
                     if let payload = pendingPayload, let fingerprint = probedFingerprint {
                         pendingPayload = nil
                         connect(payload: payload, certFingerprint: fingerprint)
+                    } else {
+                        // Unreachable today (the alert is only presented after
+                        // both values are set), but keep the scanner recoverable
+                        // instead of stuck behind `isValidating` forever.
+                        pendingPayload = nil
+                        isValidating = false
                     }
                 }
             } message: {

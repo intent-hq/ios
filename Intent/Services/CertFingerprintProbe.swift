@@ -25,7 +25,13 @@ enum CertFingerprintProbe {
     /// Probe the server's TLS certificate fingerprint via an HTTPS health check.
     static func probe(host: String, port: Int) async -> String? {
         let delegate = CertProbeDelegate()
-        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        let configuration = URLSessionConfiguration.ephemeral
+        // Fail fast on unroutable hosts (default is 60s): a multi-host QR
+        // payload probes hosts sequentially, so a hung host would otherwise
+        // stall the pairing spinner for minutes. 4s matches the websocket
+        // timeout ConnectionManager.raceHosts uses per host.
+        configuration.timeoutIntervalForRequest = 4
+        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
 
         guard let url = URL(string: "https://\(host):\(port)/health") else { return nil }
