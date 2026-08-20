@@ -1,6 +1,6 @@
 # Appfile — shared fastlane configuration for the Intent iOS app.
 
-app_identifier("io.github.panghy.augmentcode.intent")
+app_identifier("dev.intentapp.intent")
 
 # TODO(user): set the Apple ID email used to sign in to App Store Connect.
 apple_id("todo-user@example.com")
