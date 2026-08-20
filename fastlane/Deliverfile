@@ -1,0 +1,55 @@
+# Deliverfile — `fastlane deliver` configuration for Intent Companion.
+#
+# Usage (metadata only — binary upload and screenshots are handled separately):
+#   bundle exec fastlane deliver --skip-binary-upload --skip-screenshots
+#
+# Prerequisites:
+#   * Fill in every TODO(user) placeholder below and in fastlane/Appfile.
+#   * Authenticate with App Store Connect (App Store Connect API key or
+#     `fastlane spaceauth`).
+#
+# Metadata text lives in fastlane/metadata/en-US/*.txt and the App Review
+# notes in fastlane/metadata/review_information/notes.txt — deliver picks
+# both up automatically from this directory layout.
+
+app_identifier("io.github.panghy.augmentcode.intent")
+
+# App Store categories.
+primary_category("DEVELOPER_TOOLS")
+secondary_category("PRODUCTIVITY")
+
+# Free app.
+price_tier(0)
+
+copyright("#{Time.now.year} Intent")
+
+# Contact information for the App Review team.
+# TODO(user): replace every placeholder with real contact details before
+# running deliver. Review notes are loaded from
+# fastlane/metadata/review_information/notes.txt — do not set :notes here,
+# it would override that file. There is no demo account (the app has no
+# account system); see the review notes for details.
+app_review_information(
+  first_name: "TODO(user)",
+  last_name: "TODO(user)",
+  phone_number: "TODO(user e.g. +15555555555)",
+  email_address: "todo-user@example.com"
+)
+
+# Export compliance: the app uses only the exempt encryption built into the
+# operating system (HTTPS / TLS to the user's own daemon), qualifying for the
+# standard exemption. Matches ITSAppUsesNonExemptEncryption=false in
+# Intent/Info.plist.
+submission_information({
+  export_compliance_uses_encryption: true,
+  export_compliance_is_exempt: true,
+  export_compliance_contains_third_party_cryptography: false,
+  export_compliance_contains_proprietary_cryptography: false,
+  export_compliance_encryption_updated: false,
+  add_id_info_uses_idfa: false
+})
+
+# Upload everything but never submit automatically — a human reviews the
+# result in App Store Connect and presses the button.
+submit_for_review(false)
+automatic_release(false)

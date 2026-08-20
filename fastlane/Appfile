@@ -1,0 +1,13 @@
+# Appfile — shared fastlane configuration for the Intent iOS app.
+
+app_identifier("io.github.panghy.augmentcode.intent")
+
+# TODO(user): set the Apple ID email used to sign in to App Store Connect.
+apple_id("todo-user@example.com")
+
+# Apple Developer Portal team (matches DEVELOPMENT_TEAM in Intent.xcodeproj).
+team_id("6947A73B2N")
+
+# TODO(user): uncomment and set only if the App Store Connect team id differs
+# from the Developer Portal team id (e.g. membership in multiple teams).
+# itc_team_id("123456789")

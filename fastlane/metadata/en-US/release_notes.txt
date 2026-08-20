@@ -1,0 +1,7 @@
+Initial release of Intent Companion.
+
+• Pair with the Intent desktop app by scanning a QR code, or enter host, port, and token manually
+• Secure by design: TLS certificate fingerprint pinning and per-device bearer tokens
+• Browse workspaces, notes, and tasks
+• Chat with your agents in real time
+• Offline cache keeps recently viewed content readable anywhere

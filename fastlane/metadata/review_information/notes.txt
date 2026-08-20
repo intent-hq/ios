@@ -1,0 +1,19 @@
+Thank you for reviewing Intent Companion.
+
+WHAT THE APP IS
+Intent Companion is a local-network companion app for the Intent desktop application, a developer tool that orchestrates AI coding agents. The iOS app connects directly to the Intent daemon running on the user's own computer over the local network. There is no hosted backend and no account system — pairing happens device-to-device using a QR code (or manually entered credentials), secured by TLS certificate fingerprint pinning and a per-device bearer token.
+
+NO DEMO ACCOUNT
+Because the app has no account system, no demo account can be provided. Full functionality requires the Intent desktop app running on a computer on the same network as the review device.
+
+DEMO VIDEO
+A demo video showing the complete pairing flow and the paired experience (workspaces, notes, tasks, and agent chat) is attached here: TODO(user): attach demo video link.
+
+WHAT YOU WILL SEE WITHOUT A DAEMON ON YOUR NETWORK
+1. On first launch the app shows the pairing screen with two options: "Scan QR Code" and "Manual Connection".
+2. "Scan QR Code" asks for camera permission and opens a camera view prompting "Point at the QR code in Intent Settings". The QR code is displayed by the desktop app; without one, nothing scans and the sheet can be dismissed.
+3. "Manual Connection" opens a form with Host, Port (default 5180), and API Token fields. Submitting values without a reachable daemon shows a clear "Connection failed" error and the form stays usable — no crash, no hang.
+4. All app content (workspaces, notes, tasks, agent conversations) appears only after pairing with a daemon.
+
+PERMISSIONS
+The app requests camera access solely to scan the pairing QR code, and local network access solely to connect to the user's own daemon.
