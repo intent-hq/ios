@@ -1,4 +1,3 @@
-import CryptoKit
 import SwiftUI
 
 struct ManualTokenEntryView: View {
@@ -143,7 +142,7 @@ struct ManualTokenEntryView: View {
         errorMessage = nil
 
         connectTask = Task {
-            let fingerprint = await probeCertFingerprint(host: host, port: portNum)
+            let fingerprint = await CertFingerprintProbe.probe(host: host, port: portNum)
 
             // The user may have hit Cancel while the probe was in flight: the
             // cancelled URLSession request surfaces here as a nil fingerprint,
@@ -151,7 +150,7 @@ struct ManualTokenEntryView: View {
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
-            switch ManualTokenEntryView.probeOutcome(forFingerprint: fingerprint) {
+            switch CertFingerprintProbe.outcome(forFingerprint: fingerprint) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
                 showFingerprintConfirmation = true
@@ -162,24 +161,6 @@ struct ManualTokenEntryView: View {
                 isValidating = false
             }
         }
-    }
-
-    /// Decision for a completed TLS probe. Manual connects must always be
-    /// pinned, so a missing fingerprint aborts instead of falling back to
-    /// plain WS. Static so tests can cover the no-TLS abort.
-    enum ProbeOutcome: Equatable {
-        case confirmFingerprint(String)
-        case abort(message: String)
-    }
-
-    static let noCertErrorMessage =
-        "Could not verify the server's TLS certificate. Check the host and port, make sure the desktop app is running, and try again."
-
-    static func probeOutcome(forFingerprint fingerprint: String?) -> ProbeOutcome {
-        if let fingerprint, !fingerprint.isEmpty {
-            return .confirmFingerprint(fingerprint)
-        }
-        return .abort(message: noCertErrorMessage)
     }
 
     private func connectWithFingerprint() {
@@ -203,49 +184,5 @@ struct ManualTokenEntryView: View {
         }
     }
 
-    /// Probe the server's TLS certificate fingerprint via an HTTPS health check.
-    private nonisolated func probeCertFingerprint(host: String, port: Int) async -> String? {
-        let delegate = CertProbeDelegate()
-        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-
-        guard let url = URL(string: "https://\(host):\(port)/health") else { return nil }
-
-        do {
-            let _ = try await session.data(from: url)
-        } catch {
-            // Connection may fail (self-signed cert) but we still capture the cert in the delegate
-        }
-
-        return delegate.capturedFingerprint
-    }
-}
-
-// MARK: - Certificate Probe Delegate
-
-private class CertProbeDelegate: NSObject, URLSessionDelegate {
-    var capturedFingerprint: String?
-
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-
-        if SecTrustGetCertificateCount(serverTrust) > 0,
-           let serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0) {
-            let certData = SecCertificateCopyData(serverCert) as Data
-            let hash = SHA256.hash(data: certData)
-            capturedFingerprint = hash.map { String(format: "%02x", $0) }.joined(separator: ":")
-        }
-
-        // Accept the self-signed cert for this probe
-        completionHandler(.useCredential, URLCredential(trust: serverTrust))
-    }
 }
 

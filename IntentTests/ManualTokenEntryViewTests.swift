@@ -2,29 +2,29 @@ import Foundation
 import Testing
 @testable import Intent
 
-/// Regression coverage for the manual-connect TLS probe decision: manual
-/// connects must always be pinned, so a probe that finds no certificate
-/// aborts with an error instead of falling back to an unpinned plain-WS
-/// connection.
+/// Regression coverage for the pairing TLS probe decision (shared by manual
+/// entry and fingerprint-less QR payloads): pairing connections must always
+/// be pinned, so a probe that finds no certificate aborts with an error
+/// instead of falling back to an unpinned plain-WS connection.
 struct ManualTokenEntryViewTests {
 
     @Test @MainActor func probedFingerprintLeadsToConfirmation() {
         let fingerprint = "ab:cd:ef:01"
-        let outcome = ManualTokenEntryView.probeOutcome(forFingerprint: fingerprint)
+        let outcome = CertFingerprintProbe.outcome(forFingerprint: fingerprint)
         #expect(outcome == .confirmFingerprint(fingerprint))
     }
 
     @Test @MainActor func nilFingerprintAbortsInsteadOfConnectingUnpinned() {
-        let outcome = ManualTokenEntryView.probeOutcome(forFingerprint: nil)
-        #expect(outcome == .abort(message: ManualTokenEntryView.noCertErrorMessage))
+        let outcome = CertFingerprintProbe.outcome(forFingerprint: nil)
+        #expect(outcome == .abort(message: CertFingerprintProbe.noCertErrorMessage))
     }
 
     @Test @MainActor func emptyFingerprintAbortsInsteadOfConnectingUnpinned() {
-        let outcome = ManualTokenEntryView.probeOutcome(forFingerprint: "")
-        #expect(outcome == .abort(message: ManualTokenEntryView.noCertErrorMessage))
+        let outcome = CertFingerprintProbe.outcome(forFingerprint: "")
+        #expect(outcome == .abort(message: CertFingerprintProbe.noCertErrorMessage))
     }
 
     @Test @MainActor func abortMessageIsUserActionable() {
-        #expect(ManualTokenEntryView.noCertErrorMessage.contains("TLS certificate"))
+        #expect(CertFingerprintProbe.noCertErrorMessage.contains("TLS certificate"))
     }
 }
