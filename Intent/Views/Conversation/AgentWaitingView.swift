@@ -80,7 +80,7 @@ struct AgentWaitingView: View {
         HStack(spacing: 8) {
             // Avatar with status indicator
             ZStack(alignment: .topTrailing) {
-                AuggieAvatarView(seed: agent.id, size: 22, specialist: agent.specialist, isActive: agent.isActive)
+                AgentAvatarView(agentId: agent.id, size: 22, specialist: agent.specialist, isActive: agent.isActive)
 
                 if agent.isErrored {
                     // Red X for errored agents

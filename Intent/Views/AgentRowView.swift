@@ -19,7 +19,7 @@ struct AgentRowView: View {
         HStack(spacing: 10) {
             // Avatar with active indicator
             ZStack(alignment: .topTrailing) {
-                AuggieAvatarView(seed: agent.id, size: 24, specialist: agent.specialist, isActive: agent.isActive)
+                AgentAvatarView(agentId: agent.id, size: 24, specialist: agent.specialist, isActive: agent.isActive)
 
                 if agent.isActive {
                     Circle()
@@ -103,7 +103,7 @@ struct DelegatedAgentsRow: View {
                 // Overlapping avatars (up to 5)
                 HStack(spacing: -6) {
                     ForEach(Array(agents.prefix(5))) { agent in
-                        AuggieAvatarView(seed: agent.id, size: 16, specialist: agent.specialist)
+                        AgentAvatarView(agentId: agent.id, size: 16, specialist: agent.specialist)
                     }
                 }
                 .padding(.leading, 40)
@@ -135,7 +135,7 @@ struct BackgroundAgentsHeader: View {
             HStack(spacing: 4) {
                 HStack(spacing: -6) {
                     ForEach(Array(agents.prefix(5))) { agent in
-                        AuggieAvatarView(seed: agent.id, size: 16, specialist: agent.specialist)
+                        AgentAvatarView(agentId: agent.id, size: 16, specialist: agent.specialist)
                     }
                 }
 
