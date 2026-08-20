@@ -188,6 +188,9 @@ class ConnectionManager: ObservableObject {
     ///   mirrors the per-call `timeoutMs` override in cloudlands-fe.
     func request(_ method: String, params: [String: Any] = [:],
                  timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
+        if DemoMode.isEnabled {
+            return DemoFixtures.response(for: method, params: params)
+        }
         guard socket != nil else {
             throw NSError(domain: "WebSocket", code: -4,
                           userInfo: [NSLocalizedDescriptionKey: "Not connected"])
