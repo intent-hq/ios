@@ -11,6 +11,16 @@ struct ConnectingView: View {
     }
 
     private func attemptConnection() async {
+        if DemoMode.pretendPaired {
+            // Demo/screenshot mode: no daemon. Mark the connection live so the
+            // stores run their normal on-connected fetches (served from
+            // DemoFixtures under --demo-data) and go straight to the app.
+            ConnectionManager.shared.connectionState = .connected
+            await waitForWorkspaceData(timeout: 5.0)
+            coordinator.onConnectionSuccess()
+            return
+        }
+
         guard let connection = PersistenceManager.shared.activeConnection() else {
             coordinator.currentScreen = .pairing
             return

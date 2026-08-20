@@ -188,7 +188,7 @@ class AppCoordinator: ObservableObject {
     }
 
     func onLoadComplete() {
-        if persistence.activeConnection() != nil {
+        if DemoMode.pretendPaired || persistence.activeConnection() != nil {
             currentScreen = .connecting
         } else {
             currentScreen = .pairing
