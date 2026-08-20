@@ -17,7 +17,7 @@ The following applies if you choose not to install the desktop app.
 4. All app content (workspaces, notes, tasks, agent conversations) appears only after pairing with a daemon.
 
 WHAT THE PAIRED EXPERIENCE LOOKS LIKE
-The attached screenshots show the paired app connected to a daemon. After pairing, the app shows a workspace list — each workspace is a coding project with a title, status, and repository name. Opening a workspace shows its detail view with the agents working in it and its notes. Selecting an agent shows the agent's conversation: the user's messages, the agent's responses, and its tool activity. Notes open as documents with headings and task checklists whose items can be checked off from the phone. There is no content beyond this — the app is a read/monitor/respond companion for work happening on the user's own computer.
+The attached screenshots show what the app looks like after pairing. After pairing, the app shows a workspace list — each workspace is a coding project with a title, status, and repository name. Opening a workspace shows its detail view with the agents working in it and its notes. Selecting an agent shows the agent's conversation: the user's messages and the agent's responses. Notes open as documents with headings and task checklists whose items can be checked off from the phone. There is no content beyond this — the app is a read/monitor/respond companion for work happening on the user's own computer.
 
 PERMISSIONS
 The app requests camera access solely to scan the pairing QR code, and local network access solely to connect to the user's own daemon.
