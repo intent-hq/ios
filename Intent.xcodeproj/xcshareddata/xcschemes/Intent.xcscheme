@@ -41,6 +41,17 @@
                ReferencedContainer = "container:Intent.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "YES"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "EB655EE32F669E6C00176730"
+               BuildableName = "IntentUITests.xctest"
+               BlueprintName = "IntentUITests"
+               ReferencedContainer = "container:Intent.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
