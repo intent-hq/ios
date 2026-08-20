@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 /// Full-screen renderer for `SplashArtModel`, matching the cloudlands splash
@@ -24,11 +25,22 @@ struct SplashArtView: View {
                         reducedMotion: true, lineColor: Theme.foreground(for: colorScheme))
                 }
             } else {
+                // Parity with app.html's continuous rAF loop: this redraws at
+                // display refresh rate for as long as the splash is visible,
+                // including the idle gaps between ambient bursts. Accepted
+                // tradeoff for now — the splash is short-lived in the typical
+                // launch path; a paused schedule would need the model's next
+                // flip/reveal deadline surfaced into observable view state.
                 TimelineView(.animation) { timeline in
                     Canvas { context, size in
+                        // timeline.date drives redraw invalidation; the model
+                        // clock is monotonic (see nowMilliseconds), so a
+                        // wall-clock adjustment mid-splash can't stall the
+                        // intro or fire flips en masse.
+                        _ = timeline.date
                         renderer.draw(
                             into: &context, size: size,
-                            now: timeline.date.timeIntervalSinceReferenceDate * 1000,
+                            now: Self.nowMilliseconds(),
                             reducedMotion: false,
                             lineColor: Theme.foreground(for: colorScheme))
                     }
@@ -56,9 +68,12 @@ struct SplashArtView: View {
             .onEnded { _ in touchActive = false }
     }
 
-    /// Same clock as the `TimelineView` dates, in the model's millisecond units.
+    /// Monotonic clock in the model's millisecond units, matching the
+    /// source's `performance.now()` (app.html) rather than wall time: NTP
+    /// corrections or user clock changes mid-splash can't jump the reveal
+    /// or flip timelines.
     private static func nowMilliseconds() -> Double {
-        Date().timeIntervalSinceReferenceDate * 1000
+        CACurrentMediaTime() * 1000
     }
 }
 
@@ -67,6 +82,13 @@ struct SplashArtView: View {
 /// flip/reveal state survives view updates without triggering them; the
 /// redraw loop is owned entirely by `TimelineView`, so there are no timers
 /// to clean up when the view disappears.
+///
+/// Note that `draw` mutates renderer/model state (rng carry-over on rebuild,
+/// flip completion via `flipAngle`, ambient scheduling). All of it is keyed
+/// to `now`, so an extra render pass at the same instant is effectively
+/// idempotent — but the design does assume the Canvas renderer runs once per
+/// timeline tick; an out-of-band pass with a *later* `now` (e.g. a snapshot)
+/// would advance the animation state.
 final class SplashArtRenderer {
     private(set) var model: SplashArtModel?
     /// Tile-local stroke paths indexed by orientation; every tile shares the

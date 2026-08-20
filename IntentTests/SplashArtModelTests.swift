@@ -182,6 +182,37 @@ struct SplashArtModelTests {
         #expect(model.tiles[0].flipStart == done + 351)
     }
 
+    @Test func scheduledFlipIsInertUntilItsStart() throws {
+        var model = SplashArtModel(width: 390, height: 844, seed: 3)
+        model.startReveal(at: 1000)
+        let after = 1000 + SplashArtModel.introDuration
+
+        // Touch at tile 0's center with a grid-wide reach: tiles at nonzero
+        // distance get flipStart staggered into the future
+        // (now + distance * 0.45).
+        let anchor = model.tiles[0]
+        model.flipNear(x: anchor.cx, y: anchor.cy, reach: 10_000, now: after)
+        let index = try #require(
+            model.tiles.indices.first { model.tiles[$0].flipStart > after })
+        let scheduled = model.tiles[index].flipStart
+        let orient = model.tiles[index].orient
+        let lastFlip = model.tiles[index].lastFlip
+
+        // Before the scheduled start (the progress <= 0 branch), flipAngle
+        // returns 0 and must not toggle orient, clear flipStart, or stamp
+        // lastFlip.
+        #expect(model.flipAngle(tileIndex: index, now: after) == 0)
+        #expect(model.tiles[index].flipStart == scheduled)
+        #expect(model.tiles[index].orient == orient)
+        #expect(model.tiles[index].lastFlip == lastFlip)
+
+        // Once the staggered start arrives, the flip animates normally.
+        let angle = model.flipAngle(
+            tileIndex: index, now: scheduled + SplashArtModel.flipDuration / 2)
+        #expect(angle > 0 && angle < .pi / 2)
+        #expect(model.tiles[index].orient == orient)
+    }
+
     @Test func ambientFlipSchedulesAndReschedules() {
         var model = SplashArtModel(width: 390, height: 844, seed: 8)
         model.startReveal(at: 0)

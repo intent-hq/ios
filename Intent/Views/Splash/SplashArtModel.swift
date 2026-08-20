@@ -217,34 +217,51 @@ struct SplashArtModel {
 
     // MARK: - Routes
 
-    /// Follows arcs tile-to-tile from a starting tile + entry port until the
-    /// route leaves the grid or revisits a (tile, port) pair.
-    func traceRoute(startIndex: Int, startPort: Int) -> [Segment] {
-        var traced: [Segment] = []
-        var visited = Set<String>()
+    /// One tile-to-tile step of a traced route, before any segment geometry
+    /// is built.
+    typealias RouteStep = (tileIndex: Int, entryPort: Int, exitPort: Int)
+
+    /// Follows the route tile-to-tile from a starting tile + entry port until
+    /// it leaves the grid or revisits a (tile, port) pair, returning raw
+    /// steps only. The layout search runs on these (it just needs coverage),
+    /// skipping `makeSegment`'s trig and any string allocation on its hot
+    /// path: the visit key packs (tile, port) into an Int.
+    func traceRouteSteps(startIndex: Int, startPort: Int) -> [RouteStep] {
+        var steps: [RouteStep] = []
+        var visited = Set<Int>()
         var tileIndex = startIndex
         var entryPort = startPort
         while true {
-            let visitKey = "\(tileIndex):\(entryPort)"
+            let visitKey = tileIndex << 2 | entryPort
             if visited.contains(visitKey) { break }
             visited.insert(visitKey)
             let tile = tiles[tileIndex]
             let exitPort = Self.pairedPort(orient: tile.orient, port: entryPort)
-            var segment = Self.makeSegment(tile, from: entryPort, to: exitPort)
-            segment.key = "\(tileIndex):\(min(entryPort, exitPort))-\(max(entryPort, exitPort))"
-            traced.append(segment)
+            steps.append((tileIndex, entryPort, exitPort))
             let nextCol = tile.col + (exitPort == 1 ? 1 : exitPort == 3 ? -1 : 0)
             let nextRow = tile.row + (exitPort == 2 ? 1 : exitPort == 0 ? -1 : 0)
             if nextCol < 0 || nextCol >= columns || nextRow < 0 || nextRow >= rows { break }
             tileIndex = nextRow * columns + nextCol
             entryPort = Self.oppositePort(exitPort)
         }
-        return traced
+        return steps
     }
 
-    /// Longest route reachable from any boundary port under the current
-    /// tile orientations.
-    func longestRouteForLayout() -> [Segment] {
+    /// Follows arcs tile-to-tile from a starting tile + entry port until the
+    /// route leaves the grid or revisits a (tile, port) pair.
+    func traceRoute(startIndex: Int, startPort: Int) -> [Segment] {
+        traceRouteSteps(startIndex: startIndex, startPort: startPort).map { step in
+            var segment = Self.makeSegment(
+                tiles[step.tileIndex], from: step.entryPort, to: step.exitPort)
+            segment.key = "\(step.tileIndex):"
+                + "\(min(step.entryPort, step.exitPort))-\(max(step.entryPort, step.exitPort))"
+            return segment
+        }
+    }
+
+    /// Longest route (as raw steps) reachable from any boundary port under
+    /// the current tile orientations.
+    func longestRouteStepsForLayout() -> [RouteStep] {
         var starts: [(Int, Int)] = []
         for col in 0..<columns {
             starts.append((col, 0))
@@ -254,17 +271,17 @@ struct SplashArtModel {
             starts.append((row * columns, 3))
             starts.append((row * columns + columns - 1, 1))
         }
-        var longest: [Segment] = []
+        var longest: [RouteStep] = []
         for (tileIndex, port) in starts {
-            let candidate = traceRoute(startIndex: tileIndex, startPort: port)
+            let candidate = traceRouteSteps(startIndex: tileIndex, startPort: port)
             if candidate.count > longest.count { longest = candidate }
         }
         return longest
     }
 
-    func routeCoverage(_ candidate: [Segment]) -> Coverage {
-        let columnsCovered = Set(candidate.map(\.col)).count
-        let rowsCovered = Set(candidate.map(\.row)).count
+    func routeCoverage(_ candidate: [RouteStep]) -> Coverage {
+        let columnsCovered = Set(candidate.map { tiles[$0.tileIndex].col }).count
+        let rowsCovered = Set(candidate.map { tiles[$0.tileIndex].row }).count
         let score = (Double(columnsCovered) / Double(columns))
             * (Double(rowsCovered) / Double(rows)) * 1000
             + Double(candidate.count)
@@ -304,9 +321,10 @@ struct SplashArtModel {
     /// Best-coverage layout search: randomizes tile orientations up to
     /// `maxLayoutAttempts` times, keeping the layout whose longest route
     /// scores best; stops early on full column+row coverage with a route of
-    /// at least 65% of the tile count.
+    /// at least 65% of the tile count. The search traces raw steps only —
+    /// the winning layout's segment geometry is built by `buildAllRoutes`.
     mutating func buildFullWindowRoute() {
-        var bestRoute: [Segment] = []
+        var bestRoute: [RouteStep] = []
         var bestOrientations: [Int] = []
         var bestScore = -1.0
         let targetLength = Int((Double(tiles.count) * 0.65).rounded(.down))
@@ -314,7 +332,7 @@ struct SplashArtModel {
             for index in tiles.indices {
                 tiles[index].orient = rng.next() > 0.5 ? 1 : 0
             }
-            let candidate = longestRouteForLayout()
+            let candidate = longestRouteStepsForLayout()
             let coverage = routeCoverage(candidate)
             if coverage.score > bestScore {
                 bestRoute = candidate

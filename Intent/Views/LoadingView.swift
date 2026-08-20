@@ -11,7 +11,12 @@ struct LoadingView: View {
         Color.clear
             .allowsHitTesting(false)
             .task {
-                // Let the splash intro reveal play, then transition
+                // Advance to connecting after a beat. This timer (1.2s) is
+                // intentionally shorter than the 2.2s intro reveal: RootView
+                // keeps the shared SplashArtView mounted across loading →
+                // connecting, so the intro keeps playing uninterrupted after
+                // the phase change — don't lengthen this to "wait out" the
+                // intro.
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 coordinator.onLoadComplete()
             }
