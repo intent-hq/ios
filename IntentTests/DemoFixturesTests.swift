@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import Intent
 
+@MainActor
 struct DemoFixturesTests {
 
     // MARK: - Launch-argument gating
