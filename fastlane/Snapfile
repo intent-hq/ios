@@ -31,6 +31,11 @@ languages(["en-US"])
 project("./Intent.xcodeproj")
 scheme("IntentScreenshots")
 
+# Only the screenshot suite — skips the Xcode template tests in the target
+# (IntentUITests.swift, IntentUITestsLaunchTests.swift), which would add
+# several extra app launches per device and abort surface.
+only_testing(["IntentUITests/AppStoreScreenshotTests"])
+
 output_directory("./fastlane/screenshots")
 clear_previous_screenshots(true)
 
@@ -45,7 +50,8 @@ concurrent_simulators(false)
 
 stop_after_first_error(true)
 
-# If a stale simulator has leftover app state (e.g. a previously paired
-# connection making the pairing screenshot skip), uncomment to start from
-# factory-fresh simulators (slower):
-# erase_simulator(true)
+# Factory-fresh simulators every run (slower, but keeps reruns idempotent):
+# a previous demo run persists the last-viewed screen in UserDefaults, which
+# a later --demo-data launch would restore instead of the workspace list,
+# and stale pairing state would skip the pairing screenshot.
+erase_simulator(true)

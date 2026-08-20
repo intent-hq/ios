@@ -26,7 +26,13 @@ final class AppStoreScreenshotTests: XCTestCase {
         // 01 — workspace list ("Add usage analytics dashboard" is the first
         // fixture workspace; on iPad it renders in the sidebar).
         let workspaceRow = app.staticTexts["Add usage analytics dashboard"].firstMatch
-        XCTAssertTrue(workspaceRow.waitForExistence(timeout: 30))
+        if !workspaceRow.waitForExistence(timeout: 30) {
+            // iPad portrait may launch with the split-view sidebar collapsed
+            // (empty detail column): the first nav-bar button is the sidebar
+            // toggle — reveal the workspace list before failing.
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
+        }
         snapshot("01-workspace-list")
 
         // 02 — workspace detail (agents tab with fixture agents).
@@ -43,9 +49,15 @@ final class AppStoreScreenshotTests: XCTestCase {
         XCTAssertTrue(conversationMessage.waitForExistence(timeout: 15))
         snapshot("03-agent-conversation")
 
-        // Back to workspace detail (first nav-bar button is the back button
-        // on iPhone and the custom "Agents" button on iPad).
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Back to workspace detail: iPad shows a custom "Agents" leading
+        // button (its nav bar can also contain the sidebar toggle, so avoid
+        // a blind boundBy-0 tap); iPhone uses the standard back button.
+        let agentsBackButton = app.navigationBars.buttons["Agents"].firstMatch
+        if agentsBackButton.exists {
+            agentsBackButton.tap()
+        } else {
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+        }
         XCTAssertTrue(agentRow.waitForExistence(timeout: 15))
 
         // 04 — note with tasks (Context tab → "Spec" fixture note, which
