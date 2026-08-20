@@ -1,61 +1,20 @@
 import SwiftUI
 
+/// Loading phase overlay: the splash art itself is rendered by RootView in a
+/// position shared with the connecting phase (so it doesn't reset on the
+/// loading → connecting transition). This view only owns the launch timer
+/// that advances the coordinator once the intro has had time to play.
 struct LoadingView: View {
-    var isReconnecting: Bool = false
     @EnvironmentObject var coordinator: AppCoordinator
-    @State private var opacity: Double = 0
 
     var body: some View {
-        ZStack {
-            backgroundColor
-                .ignoresSafeArea()
-
-            VStack(spacing: 20) {
-                // Intent logo
-                IntentLogo()
-                    .frame(width: 40, height: 34)
-                    .foregroundStyle(foregroundColor)
-
-                Text(isReconnecting ? "Connecting to Intent..." : "Getting ready to build")
-                    .font(.system(size: 14.5))
-                    .foregroundStyle(mutedForegroundColor)
-            }
-            .opacity(opacity)
-            .onAppear {
-                withAnimation(.easeIn(duration: 0.6)) {
-                    opacity = 1
-                }
-            }
-        }
-        .task {
-            if !isReconnecting {
-                // Wait for the fade-in animation to complete, then transition
+        Color.clear
+            .allowsHitTesting(false)
+            .task {
+                // Let the splash intro reveal play, then transition
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 coordinator.onLoadComplete()
             }
-        }
-    }
-
-    // MARK: - Colors (matching Electron app)
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var backgroundColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.11, green: 0.11, blue: 0.14)
-            : .white
-    }
-
-    private var foregroundColor: Color {
-        colorScheme == .dark
-            ? Color(white: 0.97)
-            : Color(white: 0.09)
-    }
-
-    private var mutedForegroundColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.68, green: 0.66, blue: 0.76)
-            : Color(white: 0.28)
     }
 }
 
@@ -222,15 +181,17 @@ struct IntentLogo: Shape {
     }
 }
 
-#Preview("Loading - First Launch") {
-    LoadingView()
-}
-
-#Preview("Loading - Reconnecting") {
-    LoadingView(isReconnecting: true)
+#Preview("Loading") {
+    ZStack {
+        SplashArtView()
+        LoadingView()
+    }
 }
 
 #Preview("Loading - Dark") {
-    LoadingView()
-        .preferredColorScheme(.dark)
+    ZStack {
+        SplashArtView()
+        LoadingView()
+    }
+    .preferredColorScheme(.dark)
 }
