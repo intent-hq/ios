@@ -3,7 +3,10 @@ import XCTest
 /// Captures the App Store screenshot set via `fastlane snapshot`.
 ///
 /// Run on a Mac from the repo root with `bundle exec fastlane screenshots`
-/// (or `fastlane snapshot`); see fastlane/Snapfile for device configuration.
+/// (see fastlane/Snapfile for device configuration). Always use that lane —
+/// it erases the simulators and seeds SpringBoard prefs first (Fastfile →
+/// prepare_screenshot_simulators); a direct `fastlane snapshot` run skips
+/// that preparation.
 ///
 /// The app is launched with `--demo-data` (see DemoFixtures.swift), which
 /// skips pairing and serves polished fixture data with no daemon, so every
@@ -79,9 +82,9 @@ final class AppStoreScreenshotTests: XCTestCase {
     }
 
     /// 05: pairing screen — launched WITHOUT demo arguments so the app lands
-    /// on the pairing options (no saved connection exists on the fresh
-    /// simulators fastlane snapshot boots). Marketing-safe: no camera or QR
-    /// scanner is opened, only the option list is shown.
+    /// on the pairing options (no saved connection exists on the freshly
+    /// erased simulators the `screenshots` lane prepares). Marketing-safe:
+    /// no camera or QR scanner is opened, only the option list is shown.
     @MainActor
     func testCapturePairingScreenshot() throws {
         let app = XCUIApplication()

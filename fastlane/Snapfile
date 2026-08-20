@@ -6,8 +6,12 @@
 #   bundle exec fastlane screenshots     # via the Fastfile lane
 #   # or, without bundler (fastlane from Homebrew/gem):
 #   fastlane screenshots
-#   # or directly:
-#   fastlane snapshot
+#
+# Always go through the `screenshots` lane — it first erases the simulators
+# and seeds SpringBoard prefs (Fastfile → prepare_screenshot_simulators).
+# Running `fastlane snapshot` directly skips that preparation: stale
+# UserDefaults/pairing state and the iPadOS window-resize grabber arc
+# would leak into the captures.
 #
 # Output lands in fastlane/screenshots/ (gitignored) with an HTML preview
 # (screenshots.html). The devices below need their simulators available in

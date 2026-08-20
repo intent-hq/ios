@@ -1,5 +1,6 @@
 default_platform(:ios)
 
+require "fileutils"
 require "json"
 
 # Keep in sync with the devices() list in fastlane/Snapfile.
@@ -20,6 +21,11 @@ platform :ios do
   private_lane :prepare_screenshot_simulators do
     devices = JSON.parse(sh("xcrun simctl list devices available --json", log: false))["devices"]
       .values.flatten.select { |d| SCREENSHOT_DEVICES.include?(d["name"]) }
+    # Fail fast if a configured device has no available simulator — a silent
+    # no-op here would let snapshot run against stale, unseeded simulators
+    # (grabber arc back, stale UserDefaults/pairing state breaking captures).
+    missing = SCREENSHOT_DEVICES - devices.map { |d| d["name"] }.uniq
+    UI.user_error!("Screenshot simulators not found: #{missing.join(', ')}") unless missing.empty?
     devices.each do |device|
       udid = device["udid"]
       sh("xcrun simctl shutdown #{udid} 2>/dev/null || true", log: false)
@@ -27,6 +33,9 @@ platform :ios do
       plist = File.expand_path(
         "~/Library/Developer/CoreSimulator/Devices/#{udid}/data/Library/Preferences/com.apple.springboard.plist"
       )
+      # simctl erase currently leaves data/Library/Preferences in place, but
+      # PlistBuddy won't create parent directories — make that explicit.
+      FileUtils.mkdir_p(File.dirname(plist))
       ["SBMedusaMultitaskingEnabled", "SBChamoisWindowingEnabled"].each do |key|
         sh("/usr/libexec/PlistBuddy -c 'Add :#{key} bool false' '#{plist}' 2>/dev/null || " \
            "/usr/libexec/PlistBuddy -c 'Set :#{key} false' '#{plist}'", log: false)
