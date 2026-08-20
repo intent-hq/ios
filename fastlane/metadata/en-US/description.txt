@@ -1,0 +1,35 @@
+Intent Companion puts your Intent workspaces in your pocket. Browse workspaces, notes, and tasks, follow what your AI coding agents are doing, and reply to them from anywhere in your home or office.
+
+IMPORTANT: Intent Companion requires the Intent desktop app. It talks directly to the Intent daemon running on your own computer over your local network — there is no cloud service, and the app has nothing to show without the desktop side.
+
+PAIR IN SECONDS
+• Scan the QR code shown in Intent's settings on your desktop, or enter the host, port, and token manually.
+• Connections are secured end to end: the app pins your daemon's TLS certificate fingerprint and authenticates every request with a bearer token.
+• Manual pairing shows the server's certificate fingerprint so you can confirm it before trusting the connection.
+• Save multiple daemons and switch between them at any time.
+
+STAY ON TOP OF YOUR WORK
+• Browse all your workspaces with their status at a glance.
+• Read specs, notes, and documents as they evolve on the desktop.
+• Track tasks and watch progress as agents work through them.
+
+TALK TO YOUR AGENTS
+• Follow agent conversations in real time.
+• Send messages and answer agents' questions on the go.
+• Keep multiple agents moving without going back to your desk.
+
+WORKS OFFLINE
+• Recently viewed workspaces, notes, and conversations stay readable while your computer is out of reach.
+• The app reconnects automatically as soon as your daemon is reachable again.
+
+PRIVATE BY DESIGN
+• Local network only: your data travels directly between your iPhone or iPad and your computer.
+• No accounts and no sign-up — pairing is device-to-device.
+• No analytics, no tracking, no data collection of any kind.
+• Revoke access at any time by rotating the pairing token in the desktop app.
+
+REQUIREMENTS
+• The Intent desktop app running on a computer on the same network.
+• iOS 18 or later.
+
+Intent Companion is the fastest way to keep an eye on your agents when you step away from your desk.
