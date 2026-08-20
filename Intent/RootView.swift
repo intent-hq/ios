@@ -47,6 +47,7 @@ struct AgentDestination: Hashable, Identifiable {
 struct RootView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var notificationManager = NotificationManager.shared
     @State private var showingWorkspaceDetail = false
     @State private var showingConversation = false
@@ -347,7 +348,28 @@ struct RootView: View {
                 }
             }
         } else {
-            Color.clear
+            emptyDetailPlaceholder
+        }
+    }
+
+    /// iPad split-view detail placeholder shown when no workspace is selected.
+    private var emptyDetailPlaceholder: some View {
+        ZStack {
+            Theme.background(for: colorScheme).ignoresSafeArea()
+
+            VStack(spacing: 12) {
+                Image(systemName: "sidebar.left")
+                    .font(.largeTitle)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Text("Select a workspace")
+                    .font(.headline)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Text("Choose a workspace from the sidebar to see its agents and notes.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
     }
 

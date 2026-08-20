@@ -50,8 +50,11 @@ concurrent_simulators(false)
 
 stop_after_first_error(true)
 
-# Factory-fresh simulators every run (slower, but keeps reruns idempotent):
-# a previous demo run persists the last-viewed screen in UserDefaults, which
-# a later --demo-data launch would restore instead of the workspace list,
-# and stale pairing state would skip the pairing screenshot.
-erase_simulator(true)
+# Simulator erase is handled by the `screenshots` lane (see Fastfile →
+# prepare_screenshot_simulators), which erases the devices AND seeds
+# SpringBoard prefs so iPadOS 26 boots in Full Screen Apps mode — the
+# default Windowed Apps mode draws a window-resize grabber arc in the
+# bottom-right corner of every capture. Keeping erase_simulator off here
+# prevents snapshot from wiping those seeded prefs; the lane's erase keeps
+# reruns idempotent (fresh UserDefaults / no stale pairing state).
+erase_simulator(false)
