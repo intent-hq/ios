@@ -420,45 +420,51 @@ struct MessageView: View {
 
 // MARK: - Copy context menu with upright preview
 
-/// "Copy" context menu with an explicit upright preview. Transcript rows sit
-/// inside the flipped inverted-scroll hierarchy (ConversationView's
-/// FlippedUpsideDown), and UIKit's default lift-preview snapshot mishandles
-/// the rotation/scale transforms — the preview renders upside-down and
-/// collapsed into a vertical line. Supplying an explicit preview view avoids
-/// the snapshot entirely, so it stays upright and correctly sized. The copy
-/// action puts `text` on the general pasteboard with light haptic feedback
-/// (matching CodeBlockView's copy affordance). Applies no menu when there is
-/// no text to copy (e.g. image-only rows), like the previous empty-menu
-/// behavior. Long text is capped by line limit and width so the preview
-/// shows a truncated excerpt.
+/// "Copy" context menu that stays upright through every phase of the
+/// press → menu transition. Transcript rows sit inside the flipped
+/// inverted-scroll hierarchy (ConversationView's FlippedUpsideDown), and
+/// UIKit's default lift/highlight snapshot mishandles the rotation/scale
+/// transforms. SwiftUI's `.contextMenu` can only replace the OPEN preview
+/// (which an earlier fix did) — it exposes no hook over the lift snapshot,
+/// so the lift animation still flashed a mirrored/upside-down copy of the
+/// row while the long press was being recognized. The row is therefore
+/// routed through `CopyContextMenuHost`, a UIKit `UIContextMenuInteraction`
+/// wrapper whose delegate supplies an upright `UITargetedPreview` for the
+/// highlight and dismissal phases — the only API that controls those frames.
+/// The copy action puts `text` on the general pasteboard with light haptic
+/// feedback (matching CodeBlockView's copy affordance). Applies no
+/// interaction when there is no text to copy (e.g. image-only rows), like
+/// the previous empty-menu behavior. Long text is capped by line limit and
+/// width so the preview shows a truncated excerpt.
 private struct MessageCopyContextMenu: ViewModifier {
     let text: String
     /// Mirror the user-bubble styling (muted rounded rect) in the preview.
     let userStyled: Bool
     @Environment(\.colorScheme) private var colorScheme
+    /// Re-injected into the hosted row: a nested hosting controller doesn't
+    /// inherit environment objects, and ContentBlockView requires this one.
+    @EnvironmentObject private var coordinator: AppCoordinator
 
     func body(content: Content) -> some View {
         if text.isEmpty {
             content
         } else {
-            content.contextMenu {
-                Button {
-                    HapticManager.impact(.light)
-                    UIPasteboard.general.string = text
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
-            } preview: {
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.foreground(for: colorScheme).opacity(userStyled ? 0.85 : 1))
-                    .lineLimit(25)
-                    .padding(12)
-                    .frame(maxWidth: 320, alignment: .leading)
-                    .background(userStyled ? Theme.muted(for: colorScheme).opacity(0.4) : .clear)
-                    .background(Theme.background(for: colorScheme))
+            CopyContextMenuHost(text: text, preview: preview) {
+                content.environmentObject(coordinator)
             }
         }
+    }
+
+    /// Same appearance as the previous SwiftUI `preview:` closure.
+    private var preview: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(userStyled ? 0.85 : 1))
+            .lineLimit(25)
+            .padding(12)
+            .frame(maxWidth: 320, alignment: .leading)
+            .background(userStyled ? Theme.muted(for: colorScheme).opacity(0.4) : .clear)
+            .background(Theme.background(for: colorScheme))
     }
 }
 
