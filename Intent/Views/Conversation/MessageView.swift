@@ -77,9 +77,10 @@ struct MessageView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.muted(for: colorScheme).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .contextMenu {
-            copyMenuItem(Self.userCopyText(from: blocks, hookWake: hookWake, prWake: prWake))
-        }
+        .modifier(MessageCopyContextMenu(
+            text: Self.userCopyText(from: blocks, hookWake: hookWake, prWake: prWake),
+            userStyled: true
+        ))
     }
 
     /// A user-row text block: wake rows get the daemon's literal
@@ -159,9 +160,7 @@ struct MessageView: View {
 
         }
         .padding(.vertical, 4)
-        .contextMenu {
-            copyMenuItem(Self.assistantCopyText(from: blocks))
-        }
+        .modifier(MessageCopyContextMenu(text: Self.assistantCopyText(from: blocks), userStyled: false))
     }
 
     @ViewBuilder
@@ -180,21 +179,6 @@ struct MessageView: View {
     }
 
     // MARK: - Plain text extraction
-
-    /// "Copy" context-menu item putting `text` on the general pasteboard with
-    /// light haptic feedback (matching CodeBlockView's copy affordance).
-    /// Renders nothing when there is no text to copy (e.g. image-only rows).
-    @ViewBuilder
-    private func copyMenuItem(_ text: String) -> some View {
-        if !text.isEmpty {
-            Button {
-                HapticManager.impact(.light)
-                UIPasteboard.general.string = text
-            } label: {
-                Label("Copy", systemImage: "doc.on.doc")
-            }
-        }
-    }
 
     /// Extract plain text content from content blocks for clipboard copy.
     /// Text and code blocks are joined with blank lines; tool, thinking and
@@ -431,6 +415,50 @@ struct MessageView: View {
         closeCurrentGroup()
 
         return result
+    }
+}
+
+// MARK: - Copy context menu with upright preview
+
+/// "Copy" context menu with an explicit upright preview. Transcript rows sit
+/// inside the flipped inverted-scroll hierarchy (ConversationView's
+/// FlippedUpsideDown), and UIKit's default lift-preview snapshot mishandles
+/// the rotation/scale transforms — the preview renders upside-down and
+/// collapsed into a vertical line. Supplying an explicit preview view avoids
+/// the snapshot entirely, so it stays upright and correctly sized. The copy
+/// action puts `text` on the general pasteboard with light haptic feedback
+/// (matching CodeBlockView's copy affordance). Applies no menu when there is
+/// no text to copy (e.g. image-only rows), like the previous empty-menu
+/// behavior. Long text is capped by line limit and width so the preview
+/// shows a truncated excerpt.
+private struct MessageCopyContextMenu: ViewModifier {
+    let text: String
+    /// Mirror the user-bubble styling (muted rounded rect) in the preview.
+    let userStyled: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if text.isEmpty {
+            content
+        } else {
+            content.contextMenu {
+                Button {
+                    HapticManager.impact(.light)
+                    UIPasteboard.general.string = text
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+            } preview: {
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.foreground(for: colorScheme).opacity(userStyled ? 0.85 : 1))
+                    .lineLimit(25)
+                    .padding(12)
+                    .frame(maxWidth: 320, alignment: .leading)
+                    .background(userStyled ? Theme.muted(for: colorScheme).opacity(0.4) : .clear)
+                    .background(Theme.background(for: colorScheme))
+            }
+        }
     }
 }
 
