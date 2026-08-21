@@ -53,6 +53,12 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
         Coordinator(text: text, preview: preview)
     }
 
+    // Tradeoff: the hosting controller is used view-only — it is never added
+    // as a child view controller (UIViewRepresentable offers no parenting
+    // hook), so it misses UIKit containment callbacks (appearance
+    // transitions, responder-chain edge cases). With `safeAreaRegions = []`
+    // and self-contained row content this works, but keep it in mind if row
+    // content ever grows containment-sensitive behavior.
     func makeUIView(context: Context) -> UIView {
         let coordinator = context.coordinator
         coordinator.contentController.rootView = environmentWrapped(rowContent, context: context)
@@ -92,9 +98,14 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
         let contentController: UIHostingController<AnyView>
         var text: String
         var preview: AnyView
-        /// Keeps the preview's hosting controller alive while UIKit animates
-        /// its (retained) view.
-        private var previewController: UIHostingController<AnyView>?
+        /// Keeps every in-flight preview's hosting controller alive while
+        /// UIKit animates its (retained) view. With no `previewProvider`,
+        /// the highlight preview's view IS the open menu's preview, and the
+        /// dismissal phase creates a second controller while the first is
+        /// still on screen — so all controllers created during one
+        /// interaction are retained and released together only after the
+        /// interaction's end animation completes (`willEndFor`).
+        private var liveControllers: [UIHostingController<AnyView>] = []
 
         init(text: String, preview: AnyView) {
             self.contentController = UIHostingController(rootView: AnyView(EmptyView()))
@@ -134,14 +145,33 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
             uprightPreview(for: interaction)
         }
 
+        func contextMenuInteraction(
+            _ interaction: UIContextMenuInteraction,
+            willEndFor configuration: UIContextMenuConfiguration,
+            animator: UIContextMenuInteractionAnimating?
+        ) {
+            if let animator {
+                animator.addCompletion { [weak self] in
+                    self?.liveControllers.removeAll()
+                }
+            } else {
+                liveControllers.removeAll()
+            }
+        }
+
         /// Renders `preview` into a fresh hosting controller and anchors it
         /// at the row's center with a transform cancelling whatever
         /// flip/rotation the container inherits from the transcript
         /// hierarchy, so the lift and dismissal animations stay upright at
         /// every frame. Used for both the highlight and dismissal phases;
         /// with no `previewProvider`, the open menu displays it too.
+        /// Requires the container to be in a window: `UIPreviewTarget`
+        /// raises otherwise, and in a LazyVStack the row can be detached
+        /// between menu-open and dismissal (fast scroll, row recycled by a
+        /// transcript update) — returning nil falls back to UIKit's default
+        /// dismissal instead of crashing.
         private func uprightPreview(for interaction: UIContextMenuInteraction) -> UITargetedPreview? {
-            guard let container = interaction.view else { return nil }
+            guard let container = interaction.view, container.window != nil else { return nil }
             let controller = UIHostingController(rootView: preview)
             controller.safeAreaRegions = []
             controller.view.backgroundColor = .clear
@@ -149,7 +179,7 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
                 in: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             )
             controller.view.frame = CGRect(origin: .zero, size: size)
-            previewController = controller
+            liveControllers.append(controller)
 
             let parameters = UIPreviewParameters()
             parameters.backgroundColor = .clear
@@ -187,11 +217,14 @@ enum UprightPreviewTransform {
     }
 
     /// Inverse of `accumulated(from:)`, or the identity when that transform
-    /// is degenerate (non-invertible).
+    /// is degenerate. The epsilon is deliberately loose: a nearly-singular
+    /// transform (e.g. an ancestor mid-animation scaling through ~0) would
+    /// invert into an enormous corrective transform for a frame, so it is
+    /// treated as degenerate too. Realistic inputs are flips with |det| = 1.
     static func corrective(from layer: CALayer) -> CGAffineTransform {
         let accumulated = accumulated(from: layer)
         let determinant = accumulated.a * accumulated.d - accumulated.b * accumulated.c
-        guard abs(determinant) > .ulpOfOne else { return .identity }
+        guard abs(determinant) > 1e-6 else { return .identity }
         return accumulated.inverted()
     }
 }

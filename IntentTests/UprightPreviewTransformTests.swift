@@ -85,4 +85,11 @@ struct UprightPreviewTransformTests {
         let layer = leafLayer(under: [CGAffineTransform(scaleX: 0, y: 0)])
         expectEqual(UprightPreviewTransform.corrective(from: layer), .identity)
     }
+
+    @Test func nearlySingularTransformIsTreatedAsDegenerate() {
+        // Mid-animation an ancestor can scale through ~0; inverting such a
+        // transform would produce an enormous correction for one frame.
+        let layer = leafLayer(under: [CGAffineTransform(scaleX: 1e-9, y: 1e-9)])
+        expectEqual(UprightPreviewTransform.corrective(from: layer), .identity)
+    }
 }
