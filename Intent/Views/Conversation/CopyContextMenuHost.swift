@@ -146,7 +146,7 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
             controller.safeAreaRegions = []
             controller.view.backgroundColor = .clear
             let size = controller.sizeThatFits(
-                in: CGSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+                in: CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
             )
             controller.view.frame = CGRect(origin: .zero, size: size)
             previewController = controller
