@@ -87,12 +87,14 @@ struct ConversationViewModelTests {
         #expect(vm.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesFiltersAgentMessage() async {
+    @Test func filteredMessagesKeepsAgentMessage() async {
+        // A2A sends are no longer hidden — MessageView renders them with a
+        // sender attribution header instead.
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .user, text: "[AGENT MESSAGE] from another agent"),
         ]
-        #expect(vm.filteredMessages.isEmpty)
+        #expect(vm.filteredMessages.count == 1)
     }
 
     @Test func filteredMessagesKeepsEventNotificationMetadata() async {
@@ -119,7 +121,7 @@ struct ConversationViewModelTests {
             textMessage(role: .user, text: "[AGENT MESSAGE] z"),
             textMessage(role: .assistant, text: "Done"),
         ]
-        #expect(vm.filteredMessages.count == 4)
+        #expect(vm.filteredMessages.count == 5)
     }
 
     // MARK: - queuedMessages display filter
