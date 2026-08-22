@@ -80,8 +80,21 @@ struct EventWakeAttribution: Equatable {
         case "agent:created":
             return name.map { "Created agent \($0)" } ?? "New agent created"
         default:
-            return categoryLabel(for: event.type) ?? event.type
+            return categoryLabel(for: event.type) ?? humanized(event.type)
         }
+    }
+
+    /// Humanizes an unmapped wire type so machine identifiers never surface
+    /// verbatim in the banner (FE parity: `getActivityLabel` default) —
+    /// `custom:thing` → "Custom thing".
+    private static func humanized(_ type: String) -> String {
+        let words = type
+            .replacingOccurrences(of: ":", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        guard let first = words.first else { return type }
+        return first.uppercased() + words.dropFirst()
     }
 
     /// Ordered mapping of non-agent event-type prefixes to category labels
@@ -136,6 +149,16 @@ extension ConversationMessage {
             if let attribution = EventWakeAttribution.from(block.messageMetadata) {
                 return attribution
             }
+        }
+        // Legacy rows carry no metadata, only the machine-text prefix. Fall
+        // back to an empty attribution so the banner (generic label) replaces
+        // the raw machine text (FE parity: `isEventWakeMessage`).
+        let text = (contentBlocks ?? [])
+            .first { $0.type == .text }?
+            .resolvedText?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if text.hasPrefix("[WORKSPACE EVENTS]") {
+            return EventWakeAttribution(eventCount: 0, eventTypes: [], events: [])
         }
         return nil
     }

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Intent
 
@@ -365,12 +366,32 @@ struct EventWakeAttributionTests {
         #expect(burst?.summaryLabel == "7 events")
     }
 
-    @Test func unknownTypesFallBackToRawType() {
+    @Test func unknownTypesAreHumanized() {
+        // Machine identifiers never surface verbatim in the banner.
         let attribution = EventWakeAttribution.from([
             "type": AnyCodable("event_notification"),
-            "eventTypes": AnyCodable(["custom:thing"]),
+            "eventTypes": AnyCodable(["custom:thing", "agent:status-changed"]),
         ])
-        #expect(attribution?.summaryLabel == "custom:thing")
+        #expect(attribution?.summaryLabel == "Custom thing, Agent status changed")
+    }
+
+    @Test func legacyPrefixRowsFallBackToEmptyAttribution() {
+        // Metadata-less legacy rows still render the banner off the text
+        // prefix (FE parity: isEventWakeMessage) instead of raw machine text.
+        let legacy = ConversationMessage(
+            id: "m4", role: .user,
+            contentBlocks: [ContentBlock(
+                type: .text, text: "[WORKSPACE EVENTS] 1. [agent:idle] Verifier went idle")],
+            timestamp: "2025-01-01T00:00:00Z")
+        #expect(legacy.eventWakeAttribution == EventWakeAttribution(
+            eventCount: 0, eventTypes: [], events: []))
+        #expect(legacy.eventWakeAttribution?.summaryLabel == "Subscription update")
+
+        let ordinary = ConversationMessage(
+            id: "m5", role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "hello")],
+            timestamp: "2025-01-01T00:00:00Z")
+        #expect(ordinary.eventWakeAttribution == nil)
     }
 
     @Test func messageAttributionChecksRowThenBlockMetadata() {
