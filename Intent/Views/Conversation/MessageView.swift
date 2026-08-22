@@ -39,15 +39,20 @@ struct MessageView: View {
         // Wake attribution (PROTOCOL §5.40 / §5.42): hook and PR-monitor wake
         // rows replace the "You" header with an attribution header and get
         // the machine prefix/state note display-stripped from the body.
+        // Agent-to-agent sends (`metadata.type == "agent_message"`) replace
+        // it with a sender attribution header; the body renders unchanged.
         // Absent/malformed metadata falls back to the plain user rendering.
         let hookWake = message.hookWakeAttribution
         let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
+        let agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
 
         VStack(alignment: .leading, spacing: 4) {
             if let hookWake {
                 HookWakeAttributionView(attribution: hookWake)
             } else if let prWake {
                 PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+            } else if let agentMessage {
+                AgentMessageAttributionView(attribution: agentMessage)
             } else {
                 Text("You")
                     .font(.caption.weight(.semibold))
