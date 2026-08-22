@@ -156,3 +156,43 @@ struct MessagePlainTextContentTests {
         #expect(MessageView.assistantCopyText(from: blocks) == "intro\n\nlet x = 1")
     }
 }
+
+/// One-line preview shown in the collapsed agent-to-agent disclosure header:
+/// `MessageView.agentMessagePreview` renders the row's copy text with all
+/// whitespace runs (including newlines) collapsed to single spaces.
+struct AgentMessagePreviewTests {
+    @Test func collapsesNewlinesAndWhitespaceRunsToOneLine() {
+        let blocks = [ContentBlock(
+            type: .text,
+            text: "# Task Title\n\nLong kickoff body   with\tspacing.\n- item one\n- item two")]
+        #expect(MessageView.agentMessagePreview(from: blocks)
+            == "# Task Title Long kickoff body with spacing. - item one - item two")
+    }
+
+    @Test func joinsMultipleTextBlocksWithSingleSpaces() {
+        let blocks = [
+            ContentBlock(type: .text, text: "first block"),
+            ContentBlock(type: .text, text: "second block"),
+        ]
+        #expect(MessageView.agentMessagePreview(from: blocks) == "first block second block")
+    }
+
+    @Test func stripsSupervisorTagsAndReplacesContextTokens() {
+        let blocks = [ContentBlock(
+            type: .text,
+            text: "<supervisor>internal</supervisor>see @context[linear|AU-1|Fix crash] please")]
+        #expect(MessageView.agentMessagePreview(from: blocks) == "see Fix crash please")
+    }
+
+    @Test func nonTextBlocksYieldEmptyPreview() {
+        let blocks = [
+            ContentBlock(type: .image, data: "aGk=", mimeType: "image/png"),
+            ContentBlock(type: .code, text: "let hidden = true"),
+        ]
+        #expect(MessageView.agentMessagePreview(from: blocks).isEmpty)
+    }
+
+    @Test func emptyBlocksYieldEmptyPreview() {
+        #expect(MessageView.agentMessagePreview(from: []).isEmpty)
+    }
+}
