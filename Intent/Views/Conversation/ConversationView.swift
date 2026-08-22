@@ -656,6 +656,10 @@ struct ConversationView: View {
                 workspaceId: viewModel.workspaceId,
                 onNavigateToNote: { noteId, wsId, title in
                     presentedNote = NoteSheetInfo(noteId: noteId, workspaceId: wsId, noteTitle: title)
+                },
+                onNavigateToAgent: { agentId, wsId, name in
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    childAgent = AgentDestination(agentId: agentId, workspaceId: wsId, agentName: name)
                 }
             )
 
