@@ -18,28 +18,13 @@ class ConversationViewModel: ObservableObject {
 
     var messages: [ConversationMessage] { store.messages }
 
-    /// Messages filtered to exclude automated/system-injected user messages.
-    /// Event-notification wakes (`metadata.type == "event_notification"`, and
-    /// the legacy `[WORKSPACE EVENTS]` / `[TASK WAKE]` text forms) are kept —
-    /// MessageView renders metadata-tagged rows as a compact event-wake
-    /// banner (FE parity: ChatPanel.svelte event-notification turn branch).
+    /// All transcript messages — nothing is display-filtered anymore.
+    /// Event-notification wakes render as a compact event-wake banner and
+    /// agent-to-agent sends (`metadata.type == "agent_message"`) render with
+    /// a sender attribution header (FE parity: ChatPanel.svelte /
+    /// ChatMessage.svelte), so MessageView owns all automated-row rendering.
     var filteredMessages: [ConversationMessage] {
-        store.messages.filter { message in
-            // Keep all non-user messages
-            guard message.role == .user else { return true }
-
-            // Get the text content
-            let text = (message.contentBlocks ?? [])
-                .filter { $0.type == .text }
-                .compactMap { $0.resolvedText }
-                .joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Hide automated messages
-            if text.hasPrefix("[AGENT MESSAGE]") { return false }
-
-            return true
-        }
+        store.messages
     }
     var isStreaming: Bool { store.isStreaming }
     var isLoading: Bool { store.isLoading }
