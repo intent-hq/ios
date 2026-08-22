@@ -69,20 +69,22 @@ struct ConversationViewModelTests {
         #expect(vm.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesFiltersWorkspaceEvents() async {
+    @Test func filteredMessagesKeepsWorkspaceEvents() async {
+        // Event wakes render as a banner (or fall back to the user bubble
+        // on legacy text-only rows) — they are no longer hidden.
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .user, text: "[WORKSPACE EVENTS] something happened"),
         ]
-        #expect(vm.filteredMessages.isEmpty)
+        #expect(vm.filteredMessages.count == 1)
     }
 
-    @Test func filteredMessagesFiltersTaskWake() async {
+    @Test func filteredMessagesKeepsTaskWake() async {
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .user, text: "[TASK WAKE] waking up"),
         ]
-        #expect(vm.filteredMessages.isEmpty)
+        #expect(vm.filteredMessages.count == 1)
     }
 
     @Test func filteredMessagesFiltersAgentMessage() async {
@@ -93,13 +95,13 @@ struct ConversationViewModelTests {
         #expect(vm.filteredMessages.isEmpty)
     }
 
-    @Test func filteredMessagesFiltersEventNotificationMetadata() async {
+    @Test func filteredMessagesKeepsEventNotificationMetadata() async {
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .user, text: "event data",
                         metadata: ["type": AnyCodable("event_notification")]),
         ]
-        #expect(vm.filteredMessages.isEmpty)
+        #expect(vm.filteredMessages.count == 1)
     }
 
     @Test func filteredMessagesHandlesEmptyList() async {
@@ -114,10 +116,10 @@ struct ConversationViewModelTests {
             textMessage(role: .user, text: "Hello"),
             textMessage(role: .assistant, text: "Hi"),
             textMessage(role: .user, text: "[WORKSPACE EVENTS] x"),
-            textMessage(role: .user, text: "[TASK WAKE] y"),
+            textMessage(role: .user, text: "[AGENT MESSAGE] z"),
             textMessage(role: .assistant, text: "Done"),
         ]
-        #expect(vm.filteredMessages.count == 3)
+        #expect(vm.filteredMessages.count == 4)
     }
 
     // MARK: - queuedMessages display filter

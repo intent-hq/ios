@@ -19,6 +19,10 @@ class ConversationViewModel: ObservableObject {
     var messages: [ConversationMessage] { store.messages }
 
     /// Messages filtered to exclude automated/system-injected user messages.
+    /// Event-notification wakes (`metadata.type == "event_notification"`, and
+    /// the legacy `[WORKSPACE EVENTS]` / `[TASK WAKE]` text forms) are kept —
+    /// MessageView renders metadata-tagged rows as a compact event-wake
+    /// banner (FE parity: ChatPanel.svelte event-notification turn branch).
     var filteredMessages: [ConversationMessage] {
         store.messages.filter { message in
             // Keep all non-user messages
@@ -32,16 +36,7 @@ class ConversationViewModel: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Hide automated messages
-            if text.hasPrefix("[WORKSPACE EVENTS]") { return false }
-            if text.hasPrefix("[TASK WAKE]") { return false }
             if text.hasPrefix("[AGENT MESSAGE]") { return false }
-
-            // Hide event notifications via metadata
-            if let meta = message.metadata,
-               let type = meta["type"]?.value as? String,
-               type == "event_notification" {
-                return false
-            }
 
             return true
         }
