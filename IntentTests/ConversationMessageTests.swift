@@ -268,6 +268,140 @@ struct AttentionNoticeTests {
     }
 }
 
+// MARK: - ModelChangeNotice Tests (FE `model-change-notice.ts` parity)
+
+struct ModelChangeNoticeTests {
+    private let noticeText = "Model changed from claude-4 to gpt-5."
+
+    private func message(metadata: [String: Any]?, role: String = "system") -> ConversationMessage? {
+        var dict: [String: Any] = [
+            "id": "msg-mc",
+            "role": role,
+            "contentBlocks": [["type": "text", "text": noticeText]],
+        ]
+        if let metadata { dict["metadata"] = metadata }
+        return ConversationMessage.parseMessage(dict)
+    }
+
+    @Test func classifiesModelChangedRow() throws {
+        let msg = message(metadata: [
+            "type": "model_changed",
+            "from": "claude-4", "to": "gpt-5",
+            "fromProvider": "claude-code", "toProvider": "codex",
+        ])
+        let notice = try #require(msg?.modelChangeNotice)
+        #expect(notice == ModelChangeNotice(
+            from: "claude-4", to: "gpt-5",
+            fromProvider: "claude-code", toProvider: "codex"))
+    }
+
+    @Test func nullModelIdsMapToNil() throws {
+        // `from`/`to` are null for "provider default model" (PROTOCOL §5.5).
+        let msg = message(metadata: [
+            "type": "model_changed",
+            "from": NSNull(), "to": "gpt-5",
+            "fromProvider": "claude-code", "toProvider": "codex",
+        ])
+        let notice = try #require(msg?.modelChangeNotice)
+        #expect(notice.from == nil)
+        #expect(notice.to == "gpt-5")
+    }
+
+    @Test func missingMetadataReturnsNil() throws {
+        #expect(message(metadata: nil)?.modelChangeNotice == nil)
+    }
+
+    @Test func otherMetadataTypeReturnsNil() throws {
+        #expect(message(metadata: ["type": "questions_dismissed"])?.modelChangeNotice == nil)
+    }
+
+    @Test func nonStringTypeReturnsNil() throws {
+        #expect(message(metadata: ["type": 42])?.modelChangeNotice == nil)
+    }
+
+    @Test func nonStringFieldsAreDroppedNotCrashing() throws {
+        let msg = message(metadata: [
+            "type": "model_changed",
+            "from": 7, "to": ["x": 1], "fromProvider": true,
+        ])
+        let notice = try #require(msg?.modelChangeNotice)
+        #expect(notice == ModelChangeNotice(from: nil, to: nil, fromProvider: nil, toProvider: nil))
+    }
+
+    @Test func classifiesRegardlessOfRole() throws {
+        // FE parity: discriminates purely on metadata.type, tolerant of the
+        // exact non-user/non-assistant role the daemon persists.
+        let msg = message(metadata: ["type": "model_changed"], role: "model_change")
+        #expect(msg?.modelChangeNotice != nil)
+        #expect(msg?.role == .system)
+    }
+
+    @Test func labelDescribesBothSides() throws {
+        let notice = ModelChangeNotice(
+            from: "claude-4", to: "gpt-5",
+            fromProvider: "claude-code", toProvider: "codex")
+        #expect(notice.label(fallbackText: noticeText)
+            == "Switched from claude-4 (Claude Code) to gpt-5 (Codex)")
+    }
+
+    @Test func labelDescribesProviderDefaultModel() throws {
+        let notice = ModelChangeNotice(
+            from: nil, to: "gpt-5",
+            fromProvider: "claude-code", toProvider: "codex")
+        #expect(notice.label(fallbackText: noticeText)
+            == "Switched from Claude Code default model to gpt-5 (Codex)")
+    }
+
+    @Test func labelWithoutProviderUsesBareModelId() throws {
+        let notice = ModelChangeNotice(
+            from: "claude-4", to: "gpt-5", fromProvider: nil, toProvider: nil)
+        #expect(notice.label(fallbackText: noticeText)
+            == "Switched from claude-4 to gpt-5")
+    }
+
+    @Test func labelFallsBackToRowTextWhenSideUndescribable() throws {
+        let notice = ModelChangeNotice(
+            from: nil, to: "gpt-5", fromProvider: nil, toProvider: "codex")
+        #expect(notice.label(fallbackText: noticeText) == noticeText)
+    }
+
+    @Test func labelFallsBackToGenericWhenRowTextEmpty() throws {
+        let notice = ModelChangeNotice(from: nil, to: nil, fromProvider: nil, toProvider: nil)
+        #expect(notice.label(fallbackText: "  ") == ModelChangeNotice.fallbackLabel)
+    }
+
+    @Test func classifiesAfterCodableRoundTrip() throws {
+        let json = """
+        {"id":"msg-mc-rt","role":"system","timestamp":"2026-08-22T00:00:00Z",
+         "contentBlocks":[{"type":"text","text":"Model changed from a to b."}],
+         "metadata":{"type":"model_changed","from":"a","to":"b",
+                     "fromProvider":"codex","toProvider":"codex"}}
+        """
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        #expect(msg.modelChangeNotice == ModelChangeNotice(
+            from: "a", to: "b", fromProvider: "codex", toProvider: "codex"))
+    }
+
+    @Test func malformedMetadataKeepsAttentionAndBannerPaths() throws {
+        // A system row without model_changed metadata still classifies down
+        // the existing chain: attention notices stay attention notices, and
+        // unclassified rows keep the banner fallback via joinedTextContent.
+        let attention = ConversationMessage.parseMessage([
+            "id": "msg-a", "role": "system",
+            "contentBlocks": [
+                ["type": "text", "text": "Need input", "meta": ["kind": "discussion-request"]]
+            ],
+        ])
+        #expect(attention?.modelChangeNotice == nil)
+        #expect(attention?.attentionNotice?.kind == .discussionRequest)
+
+        let plain = message(metadata: ["type": "model_change"])
+        #expect(plain?.modelChangeNotice == nil)
+        #expect(plain?.attentionNotice == nil)
+        #expect(plain?.joinedTextContent == noticeText)
+    }
+}
+
 // MARK: - QuestionsDismissedNotice Tests (FE `questions-dismissed-notice.ts` parity)
 
 struct QuestionsDismissedNoticeTests {

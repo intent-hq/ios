@@ -28,12 +28,17 @@ struct MessageView: View {
             } else if message.role == .error {
                 errorMessageView
             } else if message.role == .system {
-                // Attention-request / turn-failure rows get a kind-flavored
+                // Model-change rows (`metadata.type = "model_changed"`) are
+                // informational and render as a centered divider chip;
+                // attention-request / turn-failure rows get a kind-flavored
                 // card; every other system row (e.g. `meta.kind =
                 // "interruption"`) falls back to a generic muted banner
                 // instead of rendering nothing (FE parity:
                 // ChatMessage.svelte system branch).
-                if let notice = message.attentionNotice {
+                if let modelChange = message.modelChangeNotice {
+                    ModelChangeNoticeView(
+                        notice: modelChange, fallbackText: message.joinedTextContent)
+                } else if let notice = message.attentionNotice {
                     AttentionNoticeView(notice: notice)
                 } else {
                     SystemNoticeBannerView(message: message.joinedTextContent)
