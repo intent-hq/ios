@@ -440,10 +440,15 @@ struct AgentMessageAttributionTests {
         ]) == nil)
     }
 
-    @Test func nilWhenFromAgentIdMissingOrBlank() {
+    @Test func nilWhenFromAgentIdMissingBlankOrNonString() {
         #expect(AgentMessageAttribution.from(["type": AnyCodable("agent_message")]) == nil)
         #expect(AgentMessageAttribution.from([
             "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("   "),
+        ]) == nil)
+        // Non-string ids are rejected like missing ones (FE parity:
+        // `typeof md.fromAgentId === 'string'`).
+        #expect(AgentMessageAttribution.from([
+            "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable(42),
         ]) == nil)
     }
 

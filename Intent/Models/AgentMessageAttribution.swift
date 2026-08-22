@@ -37,10 +37,11 @@ struct AgentMessageAttribution: Equatable {
 }
 
 extension ConversationMessage {
-    /// Agent-to-agent sender attribution for this row: the daemon tags the
-    /// row's `metadata` AND the persisted text block's `messageMetadata` —
-    /// check both so older rows missing one surface still render the header
-    /// (FE parity: ChatMessage.svelte).
+    /// Agent-to-agent sender attribution for this row: check the row's
+    /// `metadata` first, then the persisted text blocks' `messageMetadata`,
+    /// so rows missing one surface still render the header. The FE checks
+    /// only the row metadata for agent messages — the block fallback follows
+    /// this repo's `hookWakeAttribution` precedent as a harmless superset.
     var agentMessageAttribution: AgentMessageAttribution? {
         if let attribution = AgentMessageAttribution.from(metadata) { return attribution }
         for block in contentBlocks ?? [] where block.type == .text {
