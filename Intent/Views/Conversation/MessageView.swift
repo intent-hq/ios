@@ -16,6 +16,14 @@ struct MessageView: View {
             // `questions_dismissed`; FE parity: ChatMessage.svelte).
             if let dismissedNotice = message.questionsDismissedNotice {
                 QuestionsDismissedNoticeView(notice: dismissedNotice)
+            } else if let modelChange = message.modelChangeNotice {
+                // Model-change rows (`metadata.type = "model_changed"`) are
+                // informational and render as a centered divider chip
+                // regardless of the persisted role (PROTOCOL §5.5
+                // `agent.setModel`; FE parity: ChatMessage.svelte checks
+                // getModelChangeNotice before any role branching).
+                ModelChangeNoticeView(
+                    notice: modelChange, fallbackText: message.joinedTextContent)
             } else if isUser, let eventWake = message.eventWakeAttribution {
                 // Event-notification wake rows render as a compact banner —
                 // the whole body is machine text, so the banner replaces the
@@ -28,17 +36,12 @@ struct MessageView: View {
             } else if message.role == .error {
                 errorMessageView
             } else if message.role == .system {
-                // Model-change rows (`metadata.type = "model_changed"`) are
-                // informational and render as a centered divider chip;
-                // attention-request / turn-failure rows get a kind-flavored
+                // Attention-request / turn-failure rows get a kind-flavored
                 // card; every other system row (e.g. `meta.kind =
                 // "interruption"`) falls back to a generic muted banner
                 // instead of rendering nothing (FE parity:
                 // ChatMessage.svelte system branch).
-                if let modelChange = message.modelChangeNotice {
-                    ModelChangeNoticeView(
-                        notice: modelChange, fallbackText: message.joinedTextContent)
-                } else if let notice = message.attentionNotice {
+                if let notice = message.attentionNotice {
                     AttentionNoticeView(notice: notice)
                 } else {
                     SystemNoticeBannerView(message: message.joinedTextContent)

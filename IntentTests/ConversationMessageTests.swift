@@ -328,6 +328,17 @@ struct ModelChangeNoticeTests {
         #expect(notice == ModelChangeNotice(from: nil, to: nil, fromProvider: nil, toProvider: nil))
     }
 
+    @Test func emptyStringFieldsMapToNil() throws {
+        // FE parity: asString requires value.length > 0.
+        let msg = message(metadata: [
+            "type": "model_changed",
+            "from": "", "to": "gpt-5", "fromProvider": "", "toProvider": "codex",
+        ])
+        let notice = try #require(msg?.modelChangeNotice)
+        #expect(notice == ModelChangeNotice(
+            from: nil, to: "gpt-5", fromProvider: nil, toProvider: "codex"))
+    }
+
     @Test func classifiesRegardlessOfRole() throws {
         // FE parity: discriminates purely on metadata.type, tolerant of the
         // exact non-user/non-assistant role the daemon persists.

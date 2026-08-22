@@ -24,6 +24,10 @@ struct ModelChangeNotice: Equatable {
     /// Display label — "Switched from <side> to <side>" — or `fallbackText`
     /// (the row's text content) when either side of the switch cannot be
     /// described from the metadata (FE parity: formatModelChangeLabel).
+    /// The side format is intentionally simplified vs the FE strings —
+    /// "<modelId> (<provider name>)" instead of the FE's
+    /// "<pretty name> (<providerId> / <modelId>)" — because iOS has no model
+    /// catalog to resolve pretty names from.
     func label(fallbackText: String) -> String {
         guard let fromLabel = Self.describeSide(providerId: fromProvider, model: from),
               let toLabel = Self.describeSide(providerId: toProvider, model: to) else {

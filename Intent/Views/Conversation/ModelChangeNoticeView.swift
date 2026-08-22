@@ -40,6 +40,6 @@ struct ModelChangeNoticeView: View {
         Rectangle()
             .fill(Theme.border(for: colorScheme))
             .frame(height: 1)
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 16, maxWidth: .infinity)
     }
 }
