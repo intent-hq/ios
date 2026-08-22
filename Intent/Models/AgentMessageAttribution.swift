@@ -11,6 +11,10 @@ import Foundation
 struct AgentMessageAttribution: Equatable {
     /// Sender agent id (never empty — extraction fails without it).
     let fromAgentId: String
+    /// Untruncated sender name ("Agent" fallback) — used where the full
+    /// name matters, e.g. titling the pushed sender conversation (the
+    /// `HookWakeAttribution.rawName` precedent).
+    let rawName: String
     /// Display name for the sender ("Agent" fallback, truncated to ~20 chars).
     let displayName: String
 
@@ -26,13 +30,14 @@ struct AgentMessageAttribution: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fromAgentId.isEmpty else { return nil }
 
-        let rawName = (metadata["fromAgentName"]?.stringValue ?? "")
+        let trimmedName = (metadata["fromAgentName"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = rawName.isEmpty ? fallbackName : rawName
-        let displayName = name.count > maxNameLength
-            ? String(name.prefix(maxNameLength - 1)) + "…"
-            : name
-        return AgentMessageAttribution(fromAgentId: fromAgentId, displayName: displayName)
+        let rawName = trimmedName.isEmpty ? fallbackName : trimmedName
+        let displayName = rawName.count > maxNameLength
+            ? String(rawName.prefix(maxNameLength - 1)) + "…"
+            : rawName
+        return AgentMessageAttribution(
+            fromAgentId: fromAgentId, rawName: rawName, displayName: displayName)
     }
 }
 

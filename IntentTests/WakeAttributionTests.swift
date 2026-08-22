@@ -429,7 +429,7 @@ struct AgentMessageAttributionTests {
             "fromAgentName": AnyCodable("Coordinator"),
         ])
         #expect(attribution == AgentMessageAttribution(
-            fromAgentId: "agent-1", displayName: "Coordinator"))
+            fromAgentId: "agent-1", rawName: "Coordinator", displayName: "Coordinator"))
     }
 
     @Test func nilWhenMetadataAbsentOrWrongType() {
@@ -457,11 +457,13 @@ struct AgentMessageAttributionTests {
             "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("agent-1"),
         ])
         #expect(absent?.displayName == "Agent")
+        #expect(absent?.rawName == "Agent")
         let blank = AgentMessageAttribution.from([
             "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("agent-1"),
             "fromAgentName": AnyCodable("   "),
         ])
         #expect(blank?.displayName == "Agent")
+        #expect(blank?.rawName == "Agent")
     }
 
     @Test func trimsAndTruncatesLongNames() {
@@ -472,6 +474,9 @@ struct AgentMessageAttributionTests {
         #expect(attribution?.fromAgentId == "agent-1")
         #expect(attribution?.displayName == "A very long agent n…")
         #expect(attribution?.displayName.count == 20)
+        // The untruncated (trimmed) name survives for surfaces that need it,
+        // e.g. titling the pushed sender conversation.
+        #expect(attribution?.rawName == "A very long agent name that keeps going")
     }
 
     @Test func messageAttributionChecksRowThenBlockMetadata() {

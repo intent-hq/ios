@@ -80,7 +80,7 @@ struct MessageView: View {
                     preview: Self.agentMessagePreview(from: blocks),
                     isExpanded: $isAgentMessageExpanded,
                     onOpenAgent: onNavigateToAgent.map { navigate in
-                        { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.displayName) }
+                        { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
                     }
                 )
             } else {
