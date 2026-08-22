@@ -16,6 +16,14 @@ struct MessageView: View {
             // `questions_dismissed`; FE parity: ChatMessage.svelte).
             if let dismissedNotice = message.questionsDismissedNotice {
                 QuestionsDismissedNoticeView(notice: dismissedNotice)
+            } else if let modelChange = message.modelChangeNotice {
+                // Model-change rows (`metadata.type = "model_changed"`) are
+                // informational and render as a centered divider chip
+                // regardless of the persisted role (PROTOCOL §5.5
+                // `agent.setModel`; FE parity: ChatMessage.svelte checks
+                // getModelChangeNotice before any role branching).
+                ModelChangeNoticeView(
+                    notice: modelChange, fallbackText: message.joinedTextContent)
             } else if isUser, let eventWake = message.eventWakeAttribution {
                 // Event-notification wake rows render as a compact banner —
                 // the whole body is machine text, so the banner replaces the
