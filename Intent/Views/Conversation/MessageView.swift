@@ -16,6 +16,11 @@ struct MessageView: View {
             // `questions_dismissed`; FE parity: ChatMessage.svelte).
             if let dismissedNotice = message.questionsDismissedNotice {
                 QuestionsDismissedNoticeView(notice: dismissedNotice)
+            } else if isUser, let eventWake = message.eventWakeAttribution {
+                // Event-notification wake rows render as a compact banner —
+                // the whole body is machine text, so the banner replaces the
+                // bubble (display-only; FE parity: EventWakeupBanner).
+                EventWakeBannerView(attribution: eventWake)
             } else if isUser {
                 userMessageView
             } else if message.role == .assistant {
