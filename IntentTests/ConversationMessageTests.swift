@@ -196,11 +196,33 @@ struct AttentionNoticeTests {
         #expect(notice?.reason == "Sandbox is broken")
     }
 
+    @Test func classifiesTurnFailure() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": "Model refused the request", "meta": ["kind": "turn-failure"]]
+        ])
+        let notice = msg?.attentionNotice
+        #expect(notice?.kind == .turnFailure)
+        #expect(notice?.reason == "Model refused the request")
+    }
+
     @Test func unknownKindReturnsNil() throws {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Interrupted", "meta": ["kind": "interruption"]]
         ])
         #expect(msg?.attentionNotice == nil)
+    }
+
+    @Test func unknownKindFallsBackToJoinedText() throws {
+        let msg = systemMessage(blocks: [
+            ["type": "text", "text": " Interrupted by restart ", "meta": ["kind": "interruption"]]
+        ])
+        #expect(msg?.attentionNotice == nil)
+        #expect(msg?.joinedTextContent == "Interrupted by restart")
+    }
+
+    @Test func joinedTextContentEmptyForNoTextBlocks() throws {
+        let msg = systemMessage(blocks: [["type": "tool_use", "name": "some_tool"]])
+        #expect(msg?.joinedTextContent == "")
     }
 
     @Test func missingMetaReturnsNil() throws {

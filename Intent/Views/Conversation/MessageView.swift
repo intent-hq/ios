@@ -27,8 +27,17 @@ struct MessageView: View {
                 assistantMessageView
             } else if message.role == .error {
                 errorMessageView
-            } else if message.role == .system, let notice = message.attentionNotice {
-                AttentionNoticeView(notice: notice)
+            } else if message.role == .system {
+                // Attention-request / turn-failure rows get a kind-flavored
+                // card; every other system row (e.g. `meta.kind =
+                // "interruption"`) falls back to a generic muted banner
+                // instead of rendering nothing (FE parity:
+                // ChatMessage.svelte system branch).
+                if let notice = message.attentionNotice {
+                    AttentionNoticeView(notice: notice)
+                } else {
+                    SystemNoticeBannerView(message: message.joinedTextContent)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
