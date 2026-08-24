@@ -11,7 +11,7 @@ import UIKit
 final class WorkspaceFileImageLoader {
     static let shared = WorkspaceFileImageLoader()
 
-    enum LoadError: Error {
+    enum LoadError: Error, Equatable {
         case malformedResponse
         case fileTooLarge
         case notAnImage
@@ -46,11 +46,8 @@ final class WorkspaceFileImageLoader {
             return try await task.value
         }
         let task = Task<UIImage, Error> { [connection, cache] in
-            let data = try await Self.fetchBytes(
+            let image = try await Self.fetchAndDecode(
                 connection: connection, workspaceId: workspaceId, path: path)
-            guard let image = Self.decodeImage(data) else {
-                throw LoadError.notAnImage
-            }
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(image, forKey: key as NSString)
@@ -61,8 +58,22 @@ final class WorkspaceFileImageLoader {
         return try await task.value
     }
 
+    /// Nonisolated async, so chunk assembly, base64 decoding, and image
+    /// decode run on the global executor — only the `file.readChunk` RPC
+    /// hops to the main actor. Keeps large decodes off the UI thread.
+    private nonisolated static func fetchAndDecode(
+        connection: ConnectionManagerRouting, workspaceId: String, path: String
+    ) async throws -> UIImage {
+        let data = try await fetchBytes(
+            connection: connection, workspaceId: workspaceId, path: path)
+        guard let image = decodeImage(data) else {
+            throw LoadError.notAnImage
+        }
+        return image
+    }
+
     /// Assemble the file's raw bytes from sequential `file.readChunk` slices.
-    private static func fetchBytes(
+    private nonisolated static func fetchBytes(
         connection: ConnectionManagerRouting, workspaceId: String, path: String
     ) async throws -> Data {
         var data = Data()
@@ -93,7 +104,7 @@ final class WorkspaceFileImageLoader {
     /// Decode via ImageIO's downsampling thumbnail path, capping the longest
     /// edge at `maxPixelSize` so decoded memory is bounded regardless of the
     /// dimensions the compressed file declares.
-    private static func decodeImage(_ data: Data) -> UIImage? {
+    private nonisolated static func decodeImage(_ data: Data) -> UIImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
             return nil
