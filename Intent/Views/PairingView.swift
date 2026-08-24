@@ -18,7 +18,7 @@ struct PairingView: View {
                     // Header
                     VStack(spacing: 8) {
                         IntentLogo()
-                            .frame(width: 40, height: 34)
+                            .frame(width: 40, height: 40)
                             .foregroundStyle(Theme.primary(for: colorScheme))
 
                         Text("Connect to Intent")
@@ -124,4 +124,3 @@ struct PairingOptionButton: View {
         }
     }
 }
-
