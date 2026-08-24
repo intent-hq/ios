@@ -26,7 +26,7 @@ struct ContentBlockView: View {
                             return .handled
                         }
                         return .systemAction
-                    })
+                    }, workspaceId: workspaceId)
                 }
             }
 
