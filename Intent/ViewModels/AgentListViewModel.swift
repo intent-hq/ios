@@ -11,14 +11,14 @@ class AgentListViewModel: ObservableObject {
                 // Coordinator (spec-writer) first
                 if a.specialist == "spec-writer" && b.specialist != "spec-writer" { return true }
                 if a.specialist != "spec-writer" && b.specialist == "spec-writer" { return false }
-                // Then by creation time (newest first)
-                return (a.createdAt ?? "") > (b.createdAt ?? "")
+                // Then by last activity (most recent first)
+                return Self.byLastActivity(a, b)
             }
     }
 
     func delegatedAgents(for parentId: String) -> [AgentSession] {
         agents.filter { $0.createdByAgentId == parentId }
-            .sorted { ($0.createdAt ?? "") > ($1.createdAt ?? "") }
+            .sorted(by: Self.byLastActivity)
     }
 
     var standaloneBackgroundAgents: [AgentSession] {
@@ -34,7 +34,22 @@ class AgentListViewModel: ObservableObject {
             !delegatedIds.contains($0.id) &&
             ($0.createdByAgentId == nil || !existingAgentIds.contains($0.createdByAgentId!))
         }
-        .sorted { ($0.updatedAt ?? $0.createdAt ?? "") > ($1.updatedAt ?? $1.createdAt ?? "") }
+        .sorted(by: Self.byLastActivity)
+    }
+
+    /// Orders agents by `bestTimestamp` descending (most recent first);
+    /// agents with no timestamp sort last, with id as a stable tiebreak.
+    private static func byLastActivity(_ a: AgentSession, _ b: AgentSession) -> Bool {
+        switch (a.bestTimestamp, b.bestTimestamp) {
+        case let (ta?, tb?) where ta != tb:
+            return ta > tb
+        case (.some, nil):
+            return true
+        case (nil, .some):
+            return false
+        default:
+            return a.id < b.id
+        }
     }
 }
 

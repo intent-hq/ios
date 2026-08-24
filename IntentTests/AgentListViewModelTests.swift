@@ -61,6 +61,39 @@ struct AgentListViewModelTests {
         #expect(ids == ["b", "a"])
     }
 
+    @Test @MainActor func foregroundAgents_coordinatorFirstEvenWhenStale() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "a", name: "Worker", updatedAt: "2026-03-15T12:00:00Z", specialist: "implementor"),
+            makeAgent(id: "b", name: "Coordinator", updatedAt: "2026-03-15T08:00:00Z", specialist: "spec-writer"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["b", "a"])
+    }
+
+    @Test @MainActor func foregroundAgents_sortedByBestTimestampDescending() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "created-only", name: "Created Only", createdAt: "2026-03-15T11:00:00Z"),
+            makeAgent(id: "updated", name: "Updated", createdAt: "2026-03-15T08:00:00Z", updatedAt: "2026-03-15T12:00:00Z"),
+            makeAgent(id: "active", name: "Active", createdAt: "2026-03-15T09:00:00Z", lastActivity: "2026-03-15T10:00:00Z"),
+            makeAgent(id: "no-timestamp", name: "No Timestamp"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["updated", "created-only", "active", "no-timestamp"])
+    }
+
+    @Test @MainActor func foregroundAgents_nilTimestampsLast_tiebreakById() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "nil-b", name: "Nil B"),
+            makeAgent(id: "nil-a", name: "Nil A"),
+            makeAgent(id: "timed", name: "Timed", updatedAt: "2026-03-15T10:00:00Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["timed", "nil-a", "nil-b"])
+    }
+
     // MARK: - Delegated agents
 
     @Test @MainActor func delegatedAgents_nestedUnderParent() {
@@ -75,6 +108,18 @@ struct AgentListViewModelTests {
         #expect(delegates.count == 2)
         // Newest first
         #expect(delegates.first?.id == "child2")
+    }
+
+    @Test @MainActor func delegatedAgents_recentActivityBeatsCreation() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "parent", name: "Parent"),
+            makeAgent(id: "old-but-active", name: "Old but Active", createdAt: "2026-03-15T09:00:00Z", updatedAt: "2026-03-15T12:00:00Z", createdByAgentId: "parent"),
+            makeAgent(id: "new-but-idle", name: "New but Idle", createdAt: "2026-03-15T11:00:00Z", createdByAgentId: "parent"),
+            makeAgent(id: "no-timestamp", name: "No Timestamp", createdByAgentId: "parent"),
+        ]
+        let ids = vm.delegatedAgents(for: "parent").map(\.id)
+        #expect(ids == ["old-but-active", "new-but-idle", "no-timestamp"])
     }
 
     // MARK: - Standalone background agents
@@ -105,6 +150,17 @@ struct AgentListViewModelTests {
         #expect(ids.contains("bg-standalone"))
         #expect(ids.contains("bg-orphaned"))
         #expect(!ids.contains("bg-delegated"))
+    }
+
+    @Test @MainActor func standaloneBackgroundAgents_sortedByBestTimestampDescending() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "bg-created", name: "BG Created", isBackground: true, createdAt: "2026-03-15T11:00:00Z"),
+            makeAgent(id: "bg-active", name: "BG Active", isBackground: true, createdAt: "2026-03-15T08:00:00Z", lastActivity: "2026-03-15T12:00:00Z"),
+            makeAgent(id: "bg-nil", name: "BG Nil", isBackground: true),
+        ]
+        let ids = vm.standaloneBackgroundAgents.map(\.id)
+        #expect(ids == ["bg-active", "bg-created", "bg-nil"])
     }
 
     // MARK: - AgentSession computed properties
