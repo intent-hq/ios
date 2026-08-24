@@ -23,15 +23,24 @@ struct IntentFileImageProvider: ImageProvider {
 struct IntentFileInlineImageProvider: InlineImageProvider {
     let workspaceId: String?
 
+    /// MarkdownUI (2.4.1) wraps a paragraph's whole inline-image task group in
+    /// `try?`, so one thrown error blanks every inline image in the paragraph.
+    /// Never throw for intent-file links — degrade to a placeholder glyph.
+    private static let placeholder = Image(systemName: "photo")
+
     func image(with url: URL, label: String) async throws -> Image {
         guard let link = IntentFileLink.parse(url) else {
             return try await DefaultInlineImageProvider.default.image(with: url, label: label)
         }
         guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
-            throw WorkspaceFileImageLoader.LoadError.notAnImage
+            return Self.placeholder
         }
-        let uiImage = try await WorkspaceFileImageLoader.shared.image(workspaceId: ws, path: link.path)
-        return Image(uiImage: uiImage)
+        do {
+            let uiImage = try await WorkspaceFileImageLoader.shared.image(workspaceId: ws, path: link.path)
+            return Image(uiImage: uiImage)
+        } catch {
+            return Self.placeholder
+        }
     }
 }
 

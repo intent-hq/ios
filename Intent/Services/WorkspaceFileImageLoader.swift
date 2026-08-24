@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 /// Fetches workspace-file images from the daemon via chunked `file.readChunk`
@@ -22,6 +23,10 @@ final class WorkspaceFileImageLoader {
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
     static let maxFileBytes = 32 * 1024 * 1024
+    /// Longest decoded edge in pixels. Decoding goes through ImageIO's
+    /// downsampling thumbnail path, so a small compressed file declaring
+    /// enormous pixel dimensions cannot balloon decode/render memory.
+    static let maxPixelSize = 2048
 
     private let cache = NSCache<NSString, UIImage>()
     private var inFlight: [String: Task<UIImage, Error>] = [:]
@@ -43,7 +48,7 @@ final class WorkspaceFileImageLoader {
         let task = Task<UIImage, Error> { [connection, cache] in
             let data = try await Self.fetchBytes(
                 connection: connection, workspaceId: workspaceId, path: path)
-            guard let image = UIImage(data: data) else {
+            guard let image = Self.decodeImage(data) else {
                 throw LoadError.notAnImage
             }
             // Cache inside the task so an early-cancelled awaiter (view
@@ -83,5 +88,25 @@ final class WorkspaceFileImageLoader {
             if bytesRead == 0 || offset >= size { break }
         }
         return data
+    }
+
+    /// Decode via ImageIO's downsampling thumbnail path, capping the longest
+    /// edge at `maxPixelSize` so decoded memory is bounded regardless of the
+    /// dimensions the compressed file declares.
+    private static func decodeImage(_ data: Data) -> UIImage? {
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ] as CFDictionary
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 }
