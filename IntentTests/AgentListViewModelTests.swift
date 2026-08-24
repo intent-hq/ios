@@ -94,6 +94,16 @@ struct AgentListViewModelTests {
         #expect(ids == ["timed", "nil-a", "nil-b"])
     }
 
+    @Test @MainActor func foregroundAgents_equalTimestamps_tiebreakById() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "tie-b", name: "Tie B", updatedAt: "2026-03-15T10:00:00Z"),
+            makeAgent(id: "tie-a", name: "Tie A", updatedAt: "2026-03-15T10:00:00Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["tie-a", "tie-b"])
+    }
+
     // MARK: - Delegated agents
 
     @Test @MainActor func delegatedAgents_nestedUnderParent() {
