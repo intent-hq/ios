@@ -37,10 +37,15 @@ class AgentListViewModel: ObservableObject {
         .sorted(by: Self.byLastActivity)
     }
 
-    /// Orders agents by `bestTimestamp` descending (most recent first);
-    /// agents with no timestamp sort last, with id as a stable tiebreak.
+    /// Orders agents by `bestTimestamp` descending (most recent first),
+    /// parsing timestamps leniently since the daemon emits both fractional-
+    /// and whole-second RFC-3339 forms (which string comparison misorders).
+    /// Agents with no parseable timestamp sort last, with id as a stable
+    /// tiebreak.
     private static func byLastActivity(_ a: AgentSession, _ b: AgentSession) -> Bool {
-        switch (a.bestTimestamp, b.bestTimestamp) {
+        let dateA = ISO8601DateFormatter.lenientDate(from: a.bestTimestamp)
+        let dateB = ISO8601DateFormatter.lenientDate(from: b.bestTimestamp)
+        switch (dateA, dateB) {
         case let (ta?, tb?) where ta != tb:
             return ta > tb
         case (.some, nil):

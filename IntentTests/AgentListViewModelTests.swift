@@ -104,6 +104,16 @@ struct AgentListViewModelTests {
         #expect(ids == ["tie-a", "tie-b"])
     }
 
+    @Test @MainActor func foregroundAgents_ordersMixedFractionalAndWholeSecondTimestamps() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "whole", name: "Whole Second", updatedAt: "2026-03-15T10:00:00Z"),
+            makeAgent(id: "fractional", name: "Fractional", updatedAt: "2026-03-15T10:00:00.900Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["fractional", "whole"])
+    }
+
     // MARK: - Delegated agents
 
     @Test @MainActor func delegatedAgents_nestedUnderParent() {
