@@ -57,6 +57,32 @@ struct IntentFileLinkTests {
         #expect(parse("intent://local") == nil)
     }
 
+    // MARK: - parse: traversal-shaped paths (desktop parser parity)
+
+    @Test func dotDotAndDotSegmentsAreRejected() {
+        #expect(parse("intent://local/file/../secret.png") == nil)
+        #expect(parse("intent://local/file/a/../b.png") == nil)
+        #expect(parse("intent://local/file/./a.png") == nil)
+        #expect(parse("intent://local/ws-1/file/../a.png") == nil)
+    }
+
+    @Test func percentEncodedTraversalIsRejected() {
+        // %2E%2E = "..", %2F = "/" smuggled into one segment.
+        #expect(parse("intent://local/file/%2E%2E/secret.png") == nil)
+        #expect(parse("intent://local/file/..%2Fsecret.png") == nil)
+        #expect(parse("intent://local/file/a%2F..%2Fb.png") == nil)
+    }
+
+    @Test func emptySegmentsFromDoubledSlashesAreRejected() {
+        #expect(parse("intent://local/file//etc/passwd.png") == nil)
+        #expect(parse("intent://local/file/a//b.png") == nil)
+        #expect(parse("intent://local/file/a.png/") == nil)
+    }
+
+    @Test func backslashSegmentsAreRejected() {
+        #expect(parse("intent://local/file/a%5Cb.png") == nil)
+    }
+
     // MARK: - isImage allowlist
 
     @Test func allowlistedImageExtensionsAreImages() {

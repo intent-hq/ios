@@ -105,6 +105,18 @@ struct WorkspaceFileImageLoaderTests {
         }
     }
 
+    @Test func failedFetchIsNegativelyCachedForTheSession() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["file.readChunk"] = NSError(domain: "test", code: -1)
+        let loader = WorkspaceFileImageLoader(connection: fake)
+
+        _ = try? await loader.image(workspaceId: "ws-1", path: "broken.png")
+        await #expect(throws: LoadError.previouslyFailed) {
+            _ = try await loader.image(workspaceId: "ws-1", path: "broken.png")
+        }
+        #expect(fake.paramsForMethod("file.readChunk").count == 1)
+    }
+
     @Test func secondRequestForSameFileIsServedFromCache() async throws {
         let png = Self.pngBytes()
         let fake = FakeConnectionManager()

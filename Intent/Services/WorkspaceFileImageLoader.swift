@@ -15,6 +15,7 @@ final class WorkspaceFileImageLoader {
         case malformedResponse
         case fileTooLarge
         case notAnImage
+        case previouslyFailed
     }
 
     /// Bytes requested per `file.readChunk` call (well under the daemon's
@@ -27,13 +28,20 @@ final class WorkspaceFileImageLoader {
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     static let maxPixelSize = 2048
+    /// Total decoded-byte budget for the image cache (a 2048×2048 BGRA image
+    /// is ~16 MB, so this holds a handful before NSCache evicts).
+    static let cacheTotalCostLimit = 64 * 1024 * 1024
 
     private let cache = NSCache<NSString, UIImage>()
+    /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
+    /// persistently broken link doesn't refetch on every scroll-into-view.
+    private var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let connection: ConnectionManagerRouting
 
     init(connection: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connection = connection
+        cache.totalCostLimit = Self.cacheTotalCostLimit
     }
 
     /// Cached-or-fetched image for a workspace-relative file path.
@@ -41,6 +49,9 @@ final class WorkspaceFileImageLoader {
         let key = "\(workspaceId)\u{0}\(path)"
         if let cached = cache.object(forKey: key as NSString) {
             return cached
+        }
+        if failedKeys.contains(key) {
+            throw LoadError.previouslyFailed
         }
         if let task = inFlight[key] {
             return try await task.value
@@ -50,12 +61,27 @@ final class WorkspaceFileImageLoader {
                 connection: connection, workspaceId: workspaceId, path: path)
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
-            cache.setObject(image, forKey: key as NSString)
+            cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
             return image
         }
         inFlight[key] = task
         defer { inFlight[key] = nil }
-        return try await task.value
+        do {
+            return try await task.value
+        } catch {
+            // Remember the failure for the session (skip cancellation — the
+            // fetch itself didn't fail) so broken links don't refetch forever.
+            if !(error is CancellationError) {
+                failedKeys.insert(key)
+            }
+            throw error
+        }
+    }
+
+    /// Approximate decoded byte size, used as the NSCache cost.
+    private static func decodedCost(of image: UIImage) -> Int {
+        guard let cgImage = image.cgImage else { return 0 }
+        return cgImage.bytesPerRow * cgImage.height
     }
 
     /// Nonisolated async, so chunk assembly, base64 decoding, and image
