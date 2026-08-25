@@ -2,7 +2,11 @@ import SwiftUI
 
 /// A parsed response group from `<group:Name>...</group>` tags in assistant text.
 struct ResponseGroup: Identifiable {
-    let id = UUID()
+    /// Deterministic id derived by the parser from the group's source
+    /// (opening block id + per-block ordinal + name), so re-parsing identical
+    /// input yields the same identity and streaming deltas don't reset the
+    /// expansion State of an already-rendered group.
+    let id: String
     let name: String
     let children: [ContentBlock]
 
@@ -20,7 +24,7 @@ enum RenderBlock: Identifiable {
     var id: String {
         switch self {
         case .contentBlock(let block): return block.id
-        case .group(let group): return group.id.uuidString
+        case .group(let group): return group.id
         }
     }
 }
