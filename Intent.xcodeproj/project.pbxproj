@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AA000005AAAA000000000005 /* Starscream in Frameworks */ = {isa = PBXBuildFile; productRef = AA000003AAAA000000000003 /* Starscream */; };
-		EBA9EC852F6A8A8D00B8AB08 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* MarkdownUI */; };
+		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,7 +70,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				EBA9EC852F6A8A8D00B8AB08 /* MarkdownUI in Frameworks */,
+				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
 				AA000005AAAA000000000005 /* Starscream in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -132,7 +132,7 @@
 			);
 			name = Intent;
 			packageProductDependencies = (
-				AA000001AAAA000000000001 /* MarkdownUI */,
+				AA000001AAAA000000000001 /* Textual */,
 				AA000003AAAA000000000003 /* Starscream */,
 			);
 			productName = Intent;
@@ -218,7 +218,7 @@
 			mainGroup = EB655EC02F669E6B00176730;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */,
 				AA000004AAAA000000000004 /* XCRemoteSwiftPackageReference "Starscream" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -620,12 +620,12 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+		AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			repositoryURL = "https://github.com/gonzalezreal/textual";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.4.0;
+				kind = exactVersion;
+				version = 0.5.0;
 			};
 		};
 		AA000004AAAA000000000004 /* XCRemoteSwiftPackageReference "Starscream" */ = {
@@ -639,10 +639,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AA000001AAAA000000000001 /* MarkdownUI */ = {
+		AA000001AAAA000000000001 /* Textual */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
-			productName = MarkdownUI;
+			package = AA000002AAAA000000000002 /* XCRemoteSwiftPackageReference "textual" */;
+			productName = Textual;
 		};
 		AA000003AAAA000000000003 /* Starscream */ = {
 			isa = XCSwiftPackageProductDependency;
