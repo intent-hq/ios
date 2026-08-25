@@ -370,7 +370,18 @@ struct MessageView: View {
         }
 
         var result: [RenderBlock] = []
-        var currentGroup: (name: String, children: [ContentBlock])? = nil
+        var currentGroup: (id: String, name: String, children: [ContentBlock])? = nil
+        // Deterministic identities: synthetic segments and groups derive their
+        // ids from the source block they were parsed out of, so re-parsing the
+        // same input yields the same ids and streaming deltas don't tear down
+        // already-rendered views (or reset a group's expansion State).
+        // The `#seg<n>` / `#group<n>:<name>` suffix scheme assumes source
+        // block ids never contain those literal markers (server ids are
+        // UUID-like); revisit if block ids ever become caller-controlled. A
+        // collision would only perturb SwiftUI view identity within this one
+        // message's render pass, never the underlying block data.
+        var segmentCounts: [String: Int] = [:]
+        var groupOrdinals: [String: Int] = [:]
 
         func addBlock(_ block: ContentBlock) {
             if currentGroup != nil {
@@ -380,16 +391,26 @@ struct MessageView: View {
             }
         }
 
-        func addTextIfNonEmpty(_ text: String) {
+        func nextSegmentId(from source: ContentBlock) -> String {
+            let index = segmentCounts[source.id, default: 0]
+            segmentCounts[source.id] = index + 1
+            // The first segment reuses the source block's own id: a block
+            // with no group tags passes through under its raw id, so when a
+            // tag later streams into the block the already-rendered leading
+            // run keeps its identity instead of flipping to a synthetic id.
+            return index == 0 ? source.id : "\(source.id)#seg\(index)"
+        }
+
+        func addTextIfNonEmpty(_ text: String, from source: ContentBlock) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                addBlock(ContentBlock(type: .text, text: trimmed))
+                addBlock(ContentBlock(id: nextSegmentId(from: source), type: .text, text: trimmed))
             }
         }
 
         func closeCurrentGroup() {
             if let group = currentGroup {
-                result.append(.group(ResponseGroup(name: group.name, children: group.children)))
+                result.append(.group(ResponseGroup(id: group.id, name: group.name, children: group.children)))
                 currentGroup = nil
             }
         }
@@ -426,7 +447,7 @@ struct MessageView: View {
                 if processedText == blockText {
                     addBlock(block)
                 } else {
-                    addBlock(ContentBlock(type: .text, text: processedText))
+                    addBlock(ContentBlock(id: nextSegmentId(from: block), type: .text, text: processedText))
                 }
                 continue
             }
@@ -442,17 +463,22 @@ struct MessageView: View {
 
                     // Text before the tag
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)))
+                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)), from: block)
                     }
 
                     // Auto-close previous group if one is open
                     closeCurrentGroup()
 
-                    currentGroup = (name: groupName, children: [])
+                    // Group identity derives from the opening tag's source
+                    // block, its per-block ordinal and its name — stable from
+                    // the moment the group opens, before its close tag streams in.
+                    let ordinal = groupOrdinals[block.id, default: 0]
+                    groupOrdinals[block.id] = ordinal + 1
+                    currentGroup = (id: "\(block.id)#group\(ordinal):\(groupName)", name: groupName, children: [])
                 } else {
                     // Close tag: </group> or </group:Name>
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)))
+                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)), from: block)
                     }
                     closeCurrentGroup()
                 }
@@ -462,7 +488,7 @@ struct MessageView: View {
 
             // Remaining text after last tag
             if lastIndex < nsText.length {
-                addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: nsText.length - lastIndex)))
+                addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: nsText.length - lastIndex)), from: block)
             }
         }
 
