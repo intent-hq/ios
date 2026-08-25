@@ -1,17 +1,31 @@
 import SwiftUI
 
 /// Finalizes a successful pairing over the just-established connection: names the
-/// connection after the daemon hostname (best-effort via `host.status`, falling
-/// back to host:port), saves it (upsert), and marks it active.
+/// connection after the daemon hostname (best-effort via `host.status`, preferring
+/// the user-facing `prettyHostname` over the raw `hostname`, falling back to
+/// host:port), saves it (upsert), and marks it active.
 enum ConnectionPairing {
+    /// Picks the connection display name from a `host.status` result:
+    /// `prettyHostname` (user-facing, e.g. "Clement's Mac Studio") when present
+    /// and non-blank, else `hostname`, else nil (caller falls back to host:port).
+    /// Values are trimmed so whitespace-only names never win. Older daemons
+    /// don't report `prettyHostname`.
+    static func displayName(fromHostStatus result: Any) -> String? {
+        guard let status = result as? [String: Any] else { return nil }
+        for key in ["prettyHostname", "hostname"] {
+            if let raw = status[key] as? String {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
     @discardableResult
     static func finalize(server: PairedServer, token: String) async -> StoredConnection {
         var displayName: String?
-        if let result = try? await ConnectionManager.shared.request("host.status"),
-           let status = result as? [String: Any],
-           let hostname = status["hostname"] as? String,
-           !hostname.isEmpty {
-            displayName = hostname
+        if let result = try? await ConnectionManager.shared.request("host.status") {
+            displayName = Self.displayName(fromHostStatus: result)
         }
         let stored = PersistenceManager.shared.upsertConnection(
             StoredConnection(

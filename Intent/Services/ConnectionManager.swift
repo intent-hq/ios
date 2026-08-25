@@ -372,6 +372,10 @@ class ConnectionManager: ObservableObject {
         guard connectionState == .connected, let token = token, let port = port else { return }
         let myGeneration = connectionGeneration
 
+        // Refresh the stored display name first: it must run even when the
+        // localIps flow below bails out (older daemon, transport hiccup).
+        await refreshStoredDisplayName(token: token, port: port)
+
         guard let result = try? await request("system.status") else {
             print("[ConnectionManager] Host route refresh: system.status failed (skipping)")
             return
@@ -409,6 +413,31 @@ class ConnectionManager: ObservableObject {
             if stored.server.hosts != persistedHosts {
                 PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: persistedHosts)
             }
+        }
+    }
+
+    /// Refreshes the active stored connection's display name from `host.status`
+    /// (prettyHostname → hostname → keep existing), so connections saved before
+    /// the daemon reported a pretty name heal on the next successful connect.
+    /// Same record-matching rules as the host persistence in
+    /// `refreshHostRoutes()`: the active connection, verified against the live
+    /// token + port. Failures are non-fatal: older daemons and transport errors
+    /// are skipped silently and the existing name is kept.
+    private func refreshStoredDisplayName(token: String, port: Int) async {
+        let myGeneration = connectionGeneration
+        guard let result = try? await request("host.status"),
+              let name = ConnectionPairing.displayName(fromHostStatus: result) else {
+            return
+        }
+
+        // A newer connect() may have superseded us while the RPC was in flight.
+        guard connectionGeneration == myGeneration else { return }
+
+        if let stored = PersistenceManager.shared.activeConnection(),
+            stored.token == token, stored.server.port == port,
+            stored.displayName != name {
+            print("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
+            PersistenceManager.shared.updateConnectionDisplayName(id: stored.id, displayName: name)
         }
     }
 
