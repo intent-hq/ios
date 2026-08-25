@@ -375,6 +375,11 @@ struct MessageView: View {
         // ids from the source block they were parsed out of, so re-parsing the
         // same input yields the same ids and streaming deltas don't tear down
         // already-rendered views (or reset a group's expansion State).
+        // The `#seg<n>` / `#group<n>:<name>` suffix scheme assumes source
+        // block ids never contain those literal markers (server ids are
+        // UUID-like); revisit if block ids ever become caller-controlled. A
+        // collision would only perturb SwiftUI view identity within this one
+        // message's render pass, never the underlying block data.
         var segmentCounts: [String: Int] = [:]
         var groupOrdinals: [String: Int] = [:]
 
