@@ -77,8 +77,36 @@ struct IntentFileFailureAttachment: Attachment {
         ImageDecodeFailureView()
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
-        CGSize(width: 64, height: 18)
+    func sizeThatFits(_ proposal: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
+        // Match ImageDecodeFailureView's intrinsic size (SF Symbol + caption
+        // label in a 4pt-spaced HStack) at the current Dynamic Type size.
+        let traits = UITraitCollection(
+            preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize))
+        let font = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits)
+        let label = ("Image" as NSString).size(withAttributes: [.font: font])
+        return CGSize(
+            width: (label.width + font.lineHeight + 4).rounded(.up),
+            height: font.lineHeight.rounded(.up))
+    }
+}
+
+extension UIContentSizeCategory {
+    fileprivate init(_ size: DynamicTypeSize) {
+        switch size {
+        case .xSmall: self = .extraSmall
+        case .small: self = .small
+        case .medium: self = .medium
+        case .large: self = .large
+        case .xLarge: self = .extraLarge
+        case .xxLarge: self = .extraExtraLarge
+        case .xxxLarge: self = .extraExtraExtraLarge
+        case .accessibility1: self = .accessibilityMedium
+        case .accessibility2: self = .accessibilityLarge
+        case .accessibility3: self = .accessibilityExtraLarge
+        case .accessibility4: self = .accessibilityExtraExtraLarge
+        case .accessibility5: self = .accessibilityExtraExtraExtraLarge
+        @unknown default: self = .large
+        }
     }
 }
 

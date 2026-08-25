@@ -8,8 +8,20 @@ struct CompactMarkdownStyle: StructuredText.Style {
     /// `em` in the old theme are computed against this size.
     static let baseFontSize: CGFloat = 15
 
+    /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
+    static let codeForeground = DynamicColor(
+        light: Color(red: 0.77, green: 0.1, blue: 0.3),
+        dark: Color(red: 0.9, green: 0.55, blue: 0.65))
+    static let codeBackground = DynamicColor(
+        light: Color.black.opacity(0.05),
+        dark: Color.white.opacity(0.1))
+
     let inlineStyle = InlineStyle()
-        .code(.monospaced, .fontScale(0.94))
+        .code(
+            .monospaced, .fontScale(0.85),
+            .foregroundColor(CompactMarkdownStyle.codeForeground),
+            .backgroundColor(CompactMarkdownStyle.codeBackground))
+        .link(.foregroundColor(.blue))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
     let blockQuoteStyle = CompactBlockQuoteStyle()
@@ -65,17 +77,23 @@ struct CompactBlockQuoteStyle: StructuredText.BlockQuoteStyle {
     }
 }
 
+/// The old `.markdownBlockStyle(\.codeBlock)` override: 12pt padding, muted
+/// rounded box, monospaced 0.85em, no horizontal scroller.
 struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
+    private static let background = DynamicColor(
+        light: Theme.muted(for: .light).opacity(0.5),
+        dark: Theme.muted(for: .dark).opacity(0.5))
+
     func makeBody(configuration: Configuration) -> some View {
-        Overflow {
-            configuration.label
-                .textual.lineSpacing(.fontScaled(0.15))
-                .textual.fontScale(0.94)
-                .fixedSize(horizontal: false, vertical: true)
-                .monospaced()
-                .padding(.leading, CompactMarkdownStyle.baseFontSize)
-        }
-        .textual.blockSpacing(.init(top: 0, bottom: CompactMarkdownStyle.baseFontSize))
+        configuration.label
+            .textual.lineSpacing(.fontScaled(0.15))
+            .textual.fontScale(0.85)
+            .fixedSize(horizontal: false, vertical: true)
+            .monospaced()
+            .padding(12)
+            .background(Self.background)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .textual.blockSpacing(.init(top: 0, bottom: CompactMarkdownStyle.baseFontSize))
     }
 }
 
