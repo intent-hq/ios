@@ -110,6 +110,20 @@ class PersistenceManager {
         }
     }
 
+    /// Replaces the stored display name of the connection with the given id,
+    /// preserving the record identity. Used by the post-connect refresh so
+    /// records saved before the daemon reported a pretty hostname heal on the
+    /// next successful connect. No-op when the id is unknown.
+    func updateConnectionDisplayName(id: UUID, displayName: String) {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            var connections = loadConnectionsLocked()
+            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+            connections[index].displayName = displayName
+            saveConnectionsLocked(connections)
+        }
+    }
+
     func deleteConnection(id: UUID) {
         syncQueue.sync {
             migrateLegacyPairingIfNeeded()

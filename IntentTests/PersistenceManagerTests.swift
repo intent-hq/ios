@@ -407,6 +407,37 @@ struct ConnectionPersistenceTests {
         #expect(loaded.first?.server.hosts == stored.server.hosts)
     }
 
+    // MARK: - updateConnectionDisplayName
+
+    @Test func updateConnectionDisplayNameReplacesNamePreservingRecord() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(), token: "tok", displayName: "ugly.local-domain"))
+        pm.updateConnectionDisplayName(id: stored.id, displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.id == stored.id)
+        #expect(loaded.first?.displayName == "Pretty Studio")
+        // Everything else on the record is preserved.
+        #expect(loaded.first?.token == "tok")
+        #expect(loaded.first?.server == stored.server)
+    }
+
+    @Test func updateConnectionDisplayNameUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionDisplayName(id: UUID(), displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.displayName == stored.displayName)
+    }
+
     @Test func updateConnectionHostsDoesNotAffectOtherRecords() {
         resetConnectionState()
         defer { resetConnectionState() }
