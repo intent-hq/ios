@@ -17,24 +17,29 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         text: String,
         environment: ColorEnvironmentValues
     ) async throws -> AnyAttachment {
-        // The `as any Attachment` casts pin AnyAttachment's existential
-        // initializer: newer compilers (Xcode 26.x) treat the `some`/`any`
-        // overload pair as ambiguous for concrete arguments.
+        // The `as any Textual.Attachment` casts pin AnyAttachment's
+        // existential initializer: newer compilers (Xcode 26.x) treat the
+        // `some`/`any` overload pair as ambiguous for concrete arguments.
+        // Module-qualified because inside this type `Attachment` resolves to
+        // the AttachmentLoader associated type (AnyAttachment), not the
+        // protocol.
         guard let link = IntentFileLink.parse(url) else {
             return AnyAttachment(
                 try await fallback.attachment(for: url, text: text, environment: environment)
-                    as any Attachment)
+                    as any Textual.Attachment)
         }
         guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
-            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Attachment)
+            return AnyAttachment(
+                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
         }
         do {
             let image = try await WorkspaceFileImageLoader.shared.image(
                 workspaceId: ws, path: link.path)
             return AnyAttachment(
-                IntentFileImageAttachment(image: image, altText: text) as any Attachment)
+                IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
         } catch {
-            return AnyAttachment(IntentFileFailureAttachment(altText: text) as any Attachment)
+            return AnyAttachment(
+                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
         }
     }
 }
