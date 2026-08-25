@@ -121,7 +121,8 @@ struct MessageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .modifier(MessageCopyContextMenu(
             text: Self.userCopyText(from: blocks, hookWake: hookWake, prWake: prWake),
-            userStyled: true
+            userStyled: true,
+            isStreaming: false
         ))
     }
 
@@ -202,7 +203,11 @@ struct MessageView: View {
 
         }
         .padding(.vertical, 4)
-        .modifier(MessageCopyContextMenu(text: Self.assistantCopyText(from: blocks), userStyled: false))
+        .modifier(MessageCopyContextMenu(
+            text: Self.assistantCopyText(from: blocks),
+            userStyled: false,
+            isStreaming: message.isStreaming == true
+        ))
     }
 
     @ViewBuilder
@@ -515,24 +520,40 @@ struct MessageView: View {
 /// The copy action puts `text` on the general pasteboard with light haptic
 /// feedback (matching CodeBlockView's copy affordance). Applies no
 /// interaction when there is no text to copy (e.g. image-only rows), like
-/// the previous empty-menu behavior. Long text is capped by line limit and
-/// width so the preview shows a truncated excerpt.
-private struct MessageCopyContextMenu: ViewModifier {
+/// the previous empty-menu behavior, or while the message is still
+/// streaming — routing a live row through the nested hosting controller
+/// froze it at the height it had when the first text delta arrived (the
+/// host's size invalidation fires during the layout pass and is dropped),
+/// so streamed content laid out invisibly. The host attaches once the turn
+/// settles, preserving the upright lift preview on settled rows. Long text
+/// is capped by line limit and width so the preview shows a truncated
+/// excerpt.
+struct MessageCopyContextMenu: ViewModifier {
     let text: String
     /// Mirror the user-bubble styling (muted rounded rect) in the preview.
     let userStyled: Bool
+    /// Whether the message is still streaming; live rows stay on the plain
+    /// SwiftUI branch (user rows never stream and always pass false).
+    let isStreaming: Bool
     @Environment(\.colorScheme) private var colorScheme
     /// Re-injected into the hosted row: a nested hosting controller doesn't
     /// inherit environment objects, and ContentBlockView requires this one.
     @EnvironmentObject private var coordinator: AppCoordinator
 
+    /// Whether a row should be routed through `CopyContextMenuHost`: only
+    /// when there is text to copy AND the message has settled. Kept as a
+    /// pure helper so the branch decision is unit-testable.
+    static func shouldHostCopyMenu(text: String, isStreaming: Bool) -> Bool {
+        !text.isEmpty && !isStreaming
+    }
+
     func body(content: Content) -> some View {
-        if text.isEmpty {
-            content
-        } else {
+        if Self.shouldHostCopyMenu(text: text, isStreaming: isStreaming) {
             CopyContextMenuHost(text: text, preview: preview) {
                 content.environmentObject(coordinator)
             }
+        } else {
+            content
         }
     }
 
