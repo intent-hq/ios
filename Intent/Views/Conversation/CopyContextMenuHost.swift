@@ -24,7 +24,11 @@ struct CopyContextMenuHost<RowContent: View, Preview: View>: View {
     let preview: Preview
     @ViewBuilder let content: () -> RowContent
     /// Bumped whenever the hosted content changes size on its own so the
-    /// representable re-runs `sizeThatFits`.
+    /// representable re-runs `sizeThatFits`. The bump is deferred to the
+    /// next main-actor turn: the geometry-change action fires while the
+    /// nested hosting controller is being laid out from within the outer
+    /// view update, and SwiftUI drops re-entrant state writes made during
+    /// that pass — the dropped write left the row frozen at a stale height.
     @State private var sizeRevision = 0
 
     var body: some View {
@@ -36,7 +40,9 @@ struct CopyContextMenuHost<RowContent: View, Preview: View>: View {
                 content().onGeometryChange(for: CGSize.self) { proxy in
                     proxy.size
                 } action: { _ in
-                    sizeRevision &+= 1
+                    Task { @MainActor in
+                        sizeRevision &+= 1
+                    }
                 }
             )
         )
