@@ -37,6 +37,16 @@ struct ConnectionPairingTests {
         #expect(ConnectionPairing.displayName(fromHostStatus: "not a dict") == nil)
     }
 
+    @Test func fallsBackToHostnameWhenPrettyHostnameWhitespaceOnly() {
+        let status: [String: Any] = ["prettyHostname": "  \n", "hostname": "studio.local"]
+        #expect(ConnectionPairing.displayName(fromHostStatus: status) == "studio.local")
+    }
+
+    @Test func trimsSurroundingWhitespace() {
+        let status: [String: Any] = ["prettyHostname": " Clement's Mac Studio \n"]
+        #expect(ConnectionPairing.displayName(fromHostStatus: status) == "Clement's Mac Studio")
+    }
+
     @Test func nilSelectionFallsBackToHostPortInStoredConnection() {
         let server = PairedServer(
             hosts: ["10.0.0.1"], port: 4242, name: "Intent", pairedAt: Date())

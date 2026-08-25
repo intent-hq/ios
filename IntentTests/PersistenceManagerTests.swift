@@ -438,6 +438,21 @@ struct ConnectionPersistenceTests {
         #expect(loaded.first?.displayName == stored.displayName)
     }
 
+    @Test func updateConnectionDisplayNameDoesNotAffectOtherRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
+        let b = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
+        pm.updateConnectionDisplayName(id: a.id, displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.first { $0.id == a.id }?.displayName == "Pretty Studio")
+        #expect(loaded.first { $0.id == b.id }?.displayName == b.displayName)
+    }
+
     @Test func updateConnectionHostsDoesNotAffectOtherRecords() {
         resetConnectionState()
         defer { resetConnectionState() }

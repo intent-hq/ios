@@ -7,15 +7,16 @@ import SwiftUI
 enum ConnectionPairing {
     /// Picks the connection display name from a `host.status` result:
     /// `prettyHostname` (user-facing, e.g. "Clement's Mac Studio") when present
-    /// and non-empty, else `hostname`, else nil (caller falls back to host:port).
-    /// Older daemons don't report `prettyHostname`.
+    /// and non-blank, else `hostname`, else nil (caller falls back to host:port).
+    /// Values are trimmed so whitespace-only names never win. Older daemons
+    /// don't report `prettyHostname`.
     static func displayName(fromHostStatus result: Any) -> String? {
         guard let status = result as? [String: Any] else { return nil }
-        if let pretty = status["prettyHostname"] as? String, !pretty.isEmpty {
-            return pretty
-        }
-        if let hostname = status["hostname"] as? String, !hostname.isEmpty {
-            return hostname
+        for key in ["prettyHostname", "hostname"] {
+            if let raw = status[key] as? String {
+                let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
         }
         return nil
     }
