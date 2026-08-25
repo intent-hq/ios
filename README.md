@@ -47,7 +47,7 @@ Intent/
 ```
 
 
-The app uses **Starscream** for WebSocket transport and **MarkdownUI** for rendering notes and conversation messages.
+The app uses **Starscream** for WebSocket transport and **Textual** for rendering notes and conversation messages.
 
 ## Pairing
 
@@ -100,7 +100,7 @@ intentd serve --listen tcp
 Managed via Swift Package Manager (integrated in Xcode):
 
 - **[Starscream](https://github.com/daltoniam/Starscream)** `^4.0.8` — WebSocket client for WSS/TLS transport
-- **[swift-markdown-ui](https://github.com/gonzalezreal/swift-markdown-ui)** `^2.4.0` — Markdown rendering for notes and messages
+- **[textual](https://github.com/gonzalezreal/textual)** `0.5.0` (exact) — Markdown rendering for notes and messages
 
 ## Development
 

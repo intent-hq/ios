@@ -1,8 +1,7 @@
 name: CI
 # No push-to-main trigger: the repo ruleset requires PR branches to be up to
 # date with main before merging, so the squash commit that lands on main has
-# the identical tree the PR CI just tested. A post-merge re-run adds no signal
-# and would occupy the single shared m1mac runner slot for up to 45 min.
+# the identical tree the PR CI just tested. A post-merge re-run adds no signal.
 on:
   pull_request:
 
@@ -19,14 +18,10 @@ concurrency:
 jobs:
   build-and-test:
     name: iOS Build & Test
-    # Self-hosted M1 Mac (Xcode 16.2 at /Applications/Xcode.app, iOS 18.3
-    # simulator runtime). m1mac is a single runner slot shared with intentd's
-    # release-sitter macOS builds, so jobs serialize behind whatever else is
-    # queued there; the workflow-level concurrency group above keeps stacked
-    # PR pushes from piling onto the queue.
-    # Revert: switch runs-on back to macos-15 (GitHub-hosted) and restore the
-    # actions/cache step for build/SourcePackages in place of SPM_CACHE_DIR.
-    runs-on: [self-hosted, macOS, ARM64, m1mac]
+    # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
+    # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
+    # on the 3-core M-series VM.
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
@@ -34,15 +29,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Prefer Xcode 16.4 when its versioned bundle exists, else the newest
-      # Xcode*.app bundle (m1mac: /Applications/Xcode.app, 16.2), else the
-      # default toolchain. DEVELOPER_DIR needs no sudo.
+      # Select the newest Xcode*.app bundle on the image: the Textual
+      # dependency needs a recent toolchain (its own CI builds iOS on
+      # Xcode 26.5), so older bundles hit a Swift 6.0 concurrency
+      # false-positive compiling Table.swift. List every bundle first for
+      # diagnostics. DEVELOPER_DIR needs no sudo.
       - name: Select Xcode
         run: |
-          xcode=/Applications/Xcode_16.4.app
-          if [ ! -d "$xcode" ]; then
-            xcode=$(find /Applications -maxdepth 1 -type d -name 'Xcode*.app' 2>/dev/null | sort -V | tail -n 1 || true)
-          fi
+          echo "Available Xcode bundles:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
           if [ -n "$xcode" ] && [ -d "$xcode" ]; then
             echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
             echo "Selected $xcode"
@@ -51,11 +47,6 @@ jobs:
             echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
             xcodebuild -version
           fi
-
-      # Persistent host: a crashed earlier run can leave simulators booted
-      # and holding memory. Start from a clean slate before picking a device.
-      - name: Shut down leftover simulators
-        run: xcrun simctl shutdown all 2>/dev/null || true
 
       # Prefer the iPhone 16 simulator, else any available iPhone on this
       # runner; fail early with a clear message if there is none. Select by
@@ -79,27 +70,6 @@ jobs:
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           echo "Selected simulator: $name ($udid)"
 
-      # Xcode's SDK-to-runtime match policy can point at a simulator runtime
-      # build that isn't installed (Xcode 16.2 defaults iphoneos18.2 to
-      # 22C146 / iOS 18.2 while m1mac only has 22D8075 / iOS 18.3.1), which
-      # makes xcodebuild reject every simulator destination with "iOS 18.2
-      # is not installed" even though simctl lists available devices. Pin the
-      # match to the newest installed iOS runtime when the default choice is
-      # missing. User-level override; persists on the host and is a no-op
-      # once satisfied.
-      - name: Match iOS SDK to installed simulator runtime
-        run: |
-          sdk="iphoneos$(xcrun --sdk iphoneos --show-sdk-version)"
-          chosen=$(xcrun simctl runtime match list | awk -v k="$sdk:" 'index($0, k) == 1 {f=1} f && /Chosen Runtime:/ {print $3; exit}')
-          builds=$(xcrun simctl runtime list | sed -nE 's/^iOS [0-9.]+ \(([0-9A-Za-z]+)\).*\(Ready\).*/\1/p')
-          latest=$(echo "$builds" | tail -n 1)
-          echo "SDK $sdk chosen runtime: ${chosen:-none}; installed iOS runtimes: $(echo "$builds" | tr '\n' ' ')"
-          if [ -n "$latest" ] && ! echo "$builds" | grep -qx "$chosen"; then
-            echo "Chosen runtime $chosen is not installed; overriding $sdk -> $latest"
-            xcrun simctl runtime match set "$sdk" "$latest"
-            xcrun simctl runtime match list
-          fi
-
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
       # Run in the background: simctl boot can block for minutes waiting for
@@ -108,25 +78,23 @@ jobs:
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
-      # Persistent runner: keep SPM checkouts in a host-local cache dir
-      # instead of actions/cache (no tarball download/upload per run). m1mac
-      # is a single runner slot, so there are no concurrent writers. Derived
-      # data stays at build/DerivedData inside the workspace, which checkout's
-      # default clean wipes each run — no state leaks between runs and
-      # ~/Library/Developer doesn't grow unbounded.
-      - name: Set up SPM cache dir
-        run: |
-          spm_cache="$HOME/Library/Caches/intent-ios-ci/SourcePackages"
-          mkdir -p "$spm_cache"
-          echo "SPM_CACHE_DIR=$spm_cache" >> "$GITHUB_ENV"
+      # Ephemeral runner: cache SPM checkouts across runs. The xcodebuild
+      # invocations pin -clonedSourcePackagesDirPath to the cached path so
+      # the cache key actually covers what gets written.
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
       - name: Resolve SPM packages
         run: >
           xcodebuild -resolvePackageDependencies
           -project Intent.xcodeproj
           -scheme Intent
-          -clonedSourcePackagesDirPath "$SPM_CACHE_DIR"
-          -derivedDataPath build/DerivedData
+          -clonedSourcePackagesDirPath build/SourcePackages
 
       - name: Build for testing
         run: >
@@ -134,8 +102,7 @@ jobs:
           -project Intent.xcodeproj
           -scheme Intent
           -destination "platform=iOS Simulator,id=$SIM_UDID"
-          -clonedSourcePackagesDirPath "$SPM_CACHE_DIR"
-          -derivedDataPath build/DerivedData
+          -clonedSourcePackagesDirPath build/SourcePackages
           CODE_SIGN_IDENTITY=""
           CODE_SIGNING_REQUIRED=NO
           CODE_SIGNING_ALLOWED=NO
@@ -149,8 +116,7 @@ jobs:
             -project Intent.xcodeproj \
             -scheme Intent \
             -destination "platform=iOS Simulator,id=$SIM_UDID" \
-            -clonedSourcePackagesDirPath "$SPM_CACHE_DIR" \
-            -derivedDataPath build/DerivedData \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults
 
@@ -160,11 +126,6 @@ jobs:
         with:
           name: ios-test-results
           path: TestResults
-
-      # Leave the persistent host clean even when a step above failed.
-      - name: Shut down simulators
-        if: always()
-        run: xcrun simctl shutdown all 2>/dev/null || true
 
   pr-title:
     runs-on: ubuntu-latest
