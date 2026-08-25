@@ -23,6 +23,19 @@ enum AgentAvatarDesign: String, CaseIterable {
         .fallbackCrownMouth, .fallbackCode, .fallbackDots,
     ]
 
+    /// The named built-in designs a specialist `icon` may reference —
+    /// everything except the seeded fallbacks (mirrors
+    /// `builtinAgentAvatarDesigns` in avatar-design.ts).
+    static let builtinDesigns: [AgentAvatarDesign] =
+        allCases.filter { !fallbackDesigns.contains($0) }
+
+    /// Whether a specialist `icon` value names one of the built-in designs
+    /// (mirrors `isBuiltinAgentAvatarDesign` in avatar-design.ts).
+    static func isBuiltinDesign(_ value: String) -> Bool {
+        guard let design = AgentAvatarDesign(rawValue: value) else { return false }
+        return builtinDesigns.contains(design)
+    }
+
     /// Mirrors `builtinSpecialistAvatarDesigns` in avatar-design.ts.
     static let builtinSpecialistDesigns: [String: AgentAvatarDesign] = [
         "coordinator": .coordinator,
@@ -36,7 +49,14 @@ enum AgentAvatarDesign: String, CaseIterable {
         "ralph": .ralph,
     ]
 
-    static func design(agentId: String, specialist: String?) -> AgentAvatarDesign {
+    /// Resolve the avatar design for an agent. Precedence: a valid specialist
+    /// `icon` (PROTOCOL §5.11) → the hard-coded specialist-id map → the
+    /// seeded fallback (mirrors `getAgentAvatarDesign` in avatar-design.ts).
+    /// Unknown/absent icons degrade to the pre-icon behavior.
+    static func design(agentId: String, specialist: String?, icon: String? = nil) -> AgentAvatarDesign {
+        if let icon, isBuiltinDesign(icon), let design = AgentAvatarDesign(rawValue: icon) {
+            return design
+        }
         if let specialist, let builtin = builtinSpecialistDesigns[specialist] {
             return builtin
         }

@@ -111,12 +111,13 @@ struct SpecialistPickerView: View {
             }
         }
         .task {
-            specialists = await agentStore.fetchSpecialists().pickable
+            specialists = await agentStore.fetchSpecialists().modalPickable
             isLoadingSpecialists = false
-            // Default to Coordinator specialist, falling back to the first
-            // pickable specialist (matches CreateWorkspaceView)
+            // Default to the resolved orchestrator (PROTOCOL §5.11 role
+            // metadata), falling back to the first pickable specialist
+            // (matches CreateWorkspaceView)
             if selectedSpecialist == nil,
-               let defaultSpecialist = specialists.first(where: { $0.id == "spec-writer" }) ?? specialists.first {
+               let defaultSpecialist = specialists.orchestrator ?? specialists.first {
                 selectedSpecialist = defaultSpecialist
                 isSettingNameFromSpecialist = true
                 agentName = defaultSpecialist.name
@@ -387,7 +388,7 @@ struct SpecialistPickerView: View {
     @ViewBuilder
     private func specialistRow(_ specialist: SpecialistInfo) -> some View {
         HStack(spacing: 12) {
-            AgentAvatarView(agentId: specialist.id, size: 28, specialist: specialist.id)
+            AgentAvatarView(agentId: specialist.id, size: 28, specialist: specialist.id, icon: specialist.icon)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(specialist.name)

@@ -30,6 +30,38 @@ struct AgentAvatarDesignTests {
                 == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor"))
     }
 
+    // MARK: - Icon resolution (PROTOCOL §5.11)
+
+    @Test func iconResolvesAheadOfSpecialistMapAndFallback() {
+        for icon in AgentAvatarDesign.builtinDesigns {
+            #expect(AgentAvatarDesign.design(
+                agentId: "agent-a", specialist: "implementor", icon: icon.rawValue) == icon)
+            #expect(AgentAvatarDesign.design(
+                agentId: "agent-a", specialist: "custom-specialist", icon: icon.rawValue) == icon)
+            #expect(AgentAvatarDesign.design(
+                agentId: "agent-a", specialist: nil, icon: icon.rawValue) == icon)
+        }
+    }
+
+    @Test func unknownOrAbsentIconsDegradeToIdMapThenFallback() {
+        for icon in [nil, "", "not-a-design", "fallback-glasses"] {
+            #expect(AgentAvatarDesign.design(
+                agentId: "agent-a", specialist: "implementor", icon: icon) == .implementor)
+            #expect(AgentAvatarDesign.design(
+                agentId: "agent-a", specialist: "custom-specialist", icon: icon)
+                == AgentAvatarDesign.fallbackDesign(agentId: "agent-a"))
+        }
+    }
+
+    @Test func iconValidationAcceptsBuiltinDesignsOnly() {
+        for design in AgentAvatarDesign.builtinDesigns {
+            #expect(AgentAvatarDesign.isBuiltinDesign(design.rawValue))
+        }
+        for value in ["", "not-a-design", "fallback-glasses", "spec-writer"] {
+            #expect(!AgentAvatarDesign.isBuiltinDesign(value))
+        }
+    }
+
     // MARK: - Fallback selection
 
     @Test func unknownSpecialistUsesFallbackDesign() {
