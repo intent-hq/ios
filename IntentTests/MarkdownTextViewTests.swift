@@ -23,7 +23,32 @@ struct MarkdownTextViewTests {
 
     @Test func indentedItemsKeepIndentation() {
         #expect(replaced("  - [ ] nested") == "  - ☐ nested")
-        #expect(replaced("\t- [x] tabbed") == "\t- ☑ tabbed")
+    }
+
+    @Test func orderedTaskItemsAreConverted() {
+        #expect(replaced("1. [ ] ordered") == "1. ☐ ordered")
+        #expect(replaced("12) [x] ordered") == "12) ☑ ordered")
+    }
+
+    @Test func blockquotedTaskItemsAreConverted() {
+        #expect(replaced("> - [x] quoted") == "> - ☑ quoted")
+        #expect(replaced("> > - [ ] nested quote") == "> > - ☐ nested quote")
+    }
+
+    @Test func nestedTasksInsideListsAreConverted() {
+        let text = "- [ ] parent\n    - [x] child\n\t- [ ] tabbed child"
+        #expect(replaced(text) == "- ☐ parent\n    - ☑ child\n\t- ☐ tabbed child")
+    }
+
+    @Test func indentedCodeBlocksAreSkipped() {
+        let text = "some prose\n\n    - [ ] example"
+        #expect(replaced(text) == text)
+        #expect(replaced("\t- [x] tab code") == "\t- [x] tab code")
+    }
+
+    @Test func indentedBackticksAreNotFences() {
+        let text = "some prose\n\n    ```\n- [ ] real task"
+        #expect(replaced(text) == "some prose\n\n    ```\n- ☐ real task")
     }
 
     @Test func nonTaskListLinesAreUntouched() {
@@ -48,6 +73,11 @@ struct MarkdownTextViewTests {
             - ☑ after fence
             """
         #expect(replaced(text) == expected)
+    }
+
+    @Test func mismatchedFenceMarkersDoNotClose() {
+        let text = "```\n~~~\n- [ ] still fenced\n```\n- [x] out"
+        #expect(replaced(text) == "```\n~~~\n- [ ] still fenced\n```\n- ☑ out")
     }
 
     @Test func tildeFencesAreSkipped() {
