@@ -86,7 +86,19 @@ struct RenderBlockIdentityTests {
         let first = ids(blocks, isStreaming: true)
         let second = ids(blocks, isStreaming: true)
         #expect(first == second)
-        #expect(first.count == 1)
-        #expect(first[0] != "b1")  // synthetic: text was rewritten, id derives from source
+        // The first segment reuses the source block's id, so completing the
+        // tag later doesn't re-identify the already-rendered leading run.
+        #expect(first == ["b1"])
+    }
+
+    @Test func groupTagAppendedAfterPlainTextKeepsPrefixIdentity() {
+        // A block with no group tags passes through under its raw id; when a
+        // tag then streams into the same block, the leading text run must
+        // keep that identity instead of flipping to a synthetic segment id.
+        let before = ids([textBlock("b1", "intro text")], isStreaming: true)
+        let after = ids([textBlock("b1", "intro text\n<group:Setup>\nworking")], isStreaming: true)
+        #expect(before == ["b1"])
+        #expect(Array(after.prefix(1)) == ["b1"])
+        #expect(after.count == 2)
     }
 }

@@ -389,7 +389,11 @@ struct MessageView: View {
         func nextSegmentId(from source: ContentBlock) -> String {
             let index = segmentCounts[source.id, default: 0]
             segmentCounts[source.id] = index + 1
-            return "\(source.id)#seg\(index)"
+            // The first segment reuses the source block's own id: a block
+            // with no group tags passes through under its raw id, so when a
+            // tag later streams into the block the already-rendered leading
+            // run keeps its identity instead of flipping to a synthetic id.
+            return index == 0 ? source.id : "\(source.id)#seg\(index)"
         }
 
         func addTextIfNonEmpty(_ text: String, from source: ContentBlock) {
