@@ -11,10 +11,14 @@ import XCTest
 /// The app is launched with `--demo-data` (see DemoFixtures.swift), which
 /// skips pairing and serves polished fixture data with no daemon, so every
 /// screen shows realistic marketing-safe content.
-final class AppStoreScreenshotTests: XCTestCase {
+nonisolated final class AppStoreScreenshotTests: XCTestCase {
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    @MainActor
+    private func configureOrientation() {
         // App Store iPad screenshots are captured in landscape (the split
         // view shows sidebar + detail side by side); iPhone stays portrait.
         // Must be set before app.launch() so the app renders at the right
@@ -28,6 +32,7 @@ final class AppStoreScreenshotTests: XCTestCase {
     /// note with tasks, all against `--demo-data` fixture content.
     @MainActor
     func testCaptureDemoModeScreenshots() throws {
+        configureOrientation()
         let app = XCUIApplication()
         setupSnapshot(app)
         app.launchArguments += ["--demo-data"]
@@ -87,6 +92,7 @@ final class AppStoreScreenshotTests: XCTestCase {
     /// no camera or QR scanner is opened, only the option list is shown.
     @MainActor
     func testCapturePairingScreenshot() throws {
+        configureOrientation()
         let app = XCUIApplication()
         setupSnapshot(app)
         app.launch()

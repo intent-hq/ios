@@ -153,27 +153,28 @@ struct PersistenceManagerTests {
 
     // MARK: - Concurrency regression test
 
-    @Test func concurrentSavesDoNotCorruptSharedDictionary() {
+    @Test func concurrentSavesDoNotCorruptSharedDictionary() async {
         let prefix = "test-ws-concurrent-\(UUID().uuidString)"
         let iterations = 100
-        var workspaceIds: [String] = []
-        for i in 0..<iterations {
-            workspaceIds.append("\(prefix)-\(i)")
-        }
+        let workspaceIds = (0..<iterations).map { "\(prefix)-\($0)" }
         defer { cleanup(workspaceIds: workspaceIds) }
 
-        // Interleave saves across many workspace IDs concurrently
-        DispatchQueue.concurrentPerform(iterations: iterations) { i in
-            let wsId = workspaceIds[i]
-            let screen = PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "agent-\(i)",
-                agentName: "Agent\(i)",
-                noteId: nil,
-                noteTitle: nil
-            )
-            PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
+        // Submit many saves as independent tasks; the MainActor contract serializes mutations.
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<iterations {
+                group.addTask { @MainActor in
+                    let wsId = workspaceIds[i]
+                    let screen = PersistenceManager.SavedScreen(
+                        screen: "conversation",
+                        workspaceId: wsId,
+                        agentId: "agent-\(i)",
+                        agentName: "Agent\(i)",
+                        noteId: nil,
+                        noteTitle: nil
+                    )
+                    PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
+                }
+            }
         }
 
         // Assert ALL entries are present and decodable (no lost updates)
@@ -186,10 +187,14 @@ struct PersistenceManagerTests {
             #expect(loaded?.agentName == "Agent\(i)")
         }
 
-        // Also exercise workspaceTabs concurrency
-        DispatchQueue.concurrentPerform(iterations: iterations) { i in
-            let wsId = workspaceIds[i]
-            PersistenceManager.shared.saveWorkspaceTab(workspaceId: wsId, tab: i % 3)
+        // Also exercise workspaceTabs with the same multi-task scheduling.
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<iterations {
+                group.addTask { @MainActor in
+                    let wsId = workspaceIds[i]
+                    PersistenceManager.shared.saveWorkspaceTab(workspaceId: wsId, tab: i % 3)
+                }
+            }
         }
 
         // Verify all tabs persisted correctly
