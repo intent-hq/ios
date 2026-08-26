@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Observation
 
 /// Live background-hook list for one workspace (PROTOCOL §5.40, §6.5).
 ///

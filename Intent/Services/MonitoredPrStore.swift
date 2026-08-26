@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Observation
 
 /// Live PR-monitor list for one workspace (PROTOCOL §5.42, §6.5).
 ///
