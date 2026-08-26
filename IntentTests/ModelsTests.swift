@@ -212,6 +212,35 @@ struct ModelsTests {
         #expect(SpecialistInfo(wire: ["id": "x", "name": "X"]) == nil)
     }
 
+    @Test func specialistInfoWireDecodesPickerMetadata() async throws {
+        // role/teamAgents/icon picker metadata (PROTOCOL §5.11), mirroring
+        // the bundled spec-writer frontmatter.
+        let info = SpecialistInfo(wire: [
+            "id": "spec-writer",
+            "name": "Coordinator",
+            "description": "Plans work",
+            "role": "orchestrator",
+            "teamAgents": ["implementor", "verifier"],
+            "icon": "coordinator",
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.role == "orchestrator")
+        #expect(specialist.teamAgents == ["implementor", "verifier"])
+        #expect(specialist.icon == "coordinator")
+    }
+
+    @Test func specialistInfoWireDecodesOmittedPickerMetadataAsNil() async throws {
+        let info = SpecialistInfo(wire: [
+            "id": "ui-designer",
+            "name": "UI Designer",
+            "description": "Designs UIs",
+        ])
+        let specialist = try #require(info)
+        #expect(specialist.role == nil)
+        #expect(specialist.teamAgents == nil)
+        #expect(specialist.icon == nil)
+    }
+
     @Test func pickableDropsHiddenSpecialists() async throws {
         let specialists = [
             SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
@@ -227,6 +256,40 @@ struct ModelsTests {
             SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements"),
         ]
         #expect(specialists.pickable.map(\.id) == ["spec-writer", "implementor"])
+    }
+
+    @Test func modalPickableDropsHiddenAndInternalSpecialists() async throws {
+        // Internal specialists stay out of the New Agent picker only —
+        // they remain in the unfiltered list for by-id lookups (mirrors
+        // the FE's filterModalPickableSpecialists).
+        let specialists = [
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", role: "orchestrator"),
+            SpecialistInfo(id: "chief-of-staff", name: "Chief of Staff", description: "Chief", hidden: true),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", role: "internal"),
+            SpecialistInfo(id: "verifier", name: "Verifier", description: "Verifies", role: "internal"),
+            SpecialistInfo(id: "ui-designer", name: "UI Designer", description: "Designs"),
+        ]
+        #expect(specialists.modalPickable.map(\.id) == ["spec-writer", "ui-designer"])
+    }
+
+    @Test func orchestratorResolvesFirstOrchestratorByIdOrder() async throws {
+        // First role: "orchestrator" by id order regardless of list sort
+        // (mirrors the FE's selectOrchestratorSpecialist).
+        let specialists = [
+            SpecialistInfo(id: "z-orchestrator", name: "Z", description: "Z", role: "orchestrator"),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", role: "internal"),
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans", role: "orchestrator"),
+        ]
+        #expect(specialists.orchestrator?.id == "spec-writer")
+    }
+
+    @Test func orchestratorIsNilWithoutOrchestratorRole() async throws {
+        let specialists = [
+            SpecialistInfo(id: "spec-writer", name: "Coordinator", description: "Plans"),
+            SpecialistInfo(id: "implementor", name: "Implementor", description: "Implements", role: "internal"),
+        ]
+        #expect(specialists.orchestrator == nil)
+        #expect([SpecialistInfo]().orchestrator == nil)
     }
 
     // MARK: - TaskDisplayStatus (PROTOCOL §5.4 task-status vocabulary)

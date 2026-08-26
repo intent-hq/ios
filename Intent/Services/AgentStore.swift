@@ -9,6 +9,9 @@ struct SpecialistInfo: Identifiable {
     var resolvedModel: String?     // Daemon-resolved default model preview (PROTOCOL §5.11)
     var resolvedProvider: String?  // Provider context the preview was resolved for
     var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
+    var role: String? = nil        // Picker metadata: "orchestrator" | "internal" (PROTOCOL §5.11)
+    var teamAgents: [String]? = nil  // Orchestrator's advisory team roster (render-only, PROTOCOL §5.11)
+    var icon: String? = nil        // Built-in avatar design name; unknown/absent falls back (PROTOCOL §5.11)
 }
 
 extension Array where Element == SpecialistInfo {
@@ -17,6 +20,21 @@ extension Array where Element == SpecialistInfo {
     /// should keep using the unfiltered list.
     var pickable: [SpecialistInfo] {
         filter { !$0.hidden }
+    }
+
+    /// Specialists eligible for the New Agent picker — the pickable set minus
+    /// `role: "internal"` specialists (mirrors the FE's
+    /// `filterModalPickableSpecialists`). Internal specialists stay in the
+    /// unfiltered list for by-id lookups and non-picker surfaces.
+    var modalPickable: [SpecialistInfo] {
+        pickable.filter { $0.role != "internal" }
+    }
+
+    /// The resolved orchestrator: the first `role: "orchestrator"` specialist
+    /// by id order (mirrors the FE's `selectOrchestratorSpecialist`), or nil
+    /// when no orchestrator exists.
+    var orchestrator: SpecialistInfo? {
+        filter { $0.role == "orchestrator" }.min { $0.id < $1.id }
     }
 }
 
@@ -47,7 +65,10 @@ extension SpecialistInfo {
             description: description,
             resolvedModel: item["resolvedModel"] as? String,
             resolvedProvider: item["resolvedProvider"] as? String,
-            hidden: item["hidden"] as? Bool ?? false
+            hidden: item["hidden"] as? Bool ?? false,
+            role: item["role"] as? String,
+            teamAgents: item["teamAgents"] as? [String],
+            icon: item["icon"] as? String
         )
     }
 }
