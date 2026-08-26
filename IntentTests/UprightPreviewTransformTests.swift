@@ -3,10 +3,10 @@ import UIKit
 @testable import Intent
 
 /// Corrective-transform math for the upright context-menu previews
-/// (CopyContextMenuHost): the preview target must cancel whatever flip the
-/// transcript hierarchy applies to the row container's layer chain, and must
-/// stay out of the way (identity) when the per-row un-flip already cancels
-/// the scroll view's flip.
+/// (CopyContextMenuOverlay): the preview target must cancel whatever flip the
+/// transcript hierarchy applies to the overlay container's layer chain, and
+/// must stay out of the way (identity) when the per-row un-flip already
+/// cancels the scroll view's flip.
 struct UprightPreviewTransformTests {
     /// The FlippedUpsideDown transform: rotation π followed by an x-mirror
     /// (net vertical flip).
