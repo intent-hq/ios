@@ -83,6 +83,16 @@ import SwiftUI
     /// so a later slim refetch / chat snapshot re-merge never reverts a block
     /// the user already expanded back to its truncated preview.
     @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
+    /// Insertion order of `hydratedBlocks` keys (oldest first) for eviction.
+    @ObservationIgnored private var hydratedBlockOrder: [String] = []
+    /// Cap on cached hydrated blocks (FE parity: MAX_HYDRATED_BLOCKS in
+    /// chat-state-types.ts). Hydrated bodies are exactly the multi-MB payloads
+    /// the slim projection keeps out of memory, so the cache is bounded with
+    /// oldest-first eviction. Eviction is safe: `remergeHydratedBlocks()`
+    /// already substituted the full block into `messages`, so the cache only
+    /// needs to survive until the next transcript re-seed. In-flight fetches
+    /// live in `hydratingBlockKeys`, not here, so every entry is settled.
+    private static let maxHydratedBlocks = 30
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -348,6 +358,10 @@ import SwiftUI
                     "blockId": blockId,
                 ]
             )
+            // A reset()/agent switch while the fetch was in flight cleared the
+            // cache for this transcript — drop the stale block instead of
+            // re-inserting the old agent's body past the reset.
+            guard self.agentId == agentId else { return }
             guard let dict = result as? [String: Any],
                   let blockDict = dict["block"] as? [String: Any],
                   let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
@@ -357,10 +371,22 @@ import SwiftUI
                     "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
                 return
             }
-            hydratedBlocks[key] = block
+            storeHydratedBlock(block, forKey: key)
             remergeHydratedBlocks()
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to hydrate block \(key): \(error)")
+        }
+    }
+
+    /// Cache a hydrated block, evicting the oldest entries beyond the cap.
+    private func storeHydratedBlock(_ block: ContentBlock, forKey key: String) {
+        if hydratedBlocks[key] == nil {
+            hydratedBlockOrder.append(key)
+        }
+        hydratedBlocks[key] = block
+        while hydratedBlockOrder.count > Self.maxHydratedBlocks {
+            let evicted = hydratedBlockOrder.removeFirst()
+            hydratedBlocks.removeValue(forKey: evicted)
         }
     }
 
@@ -625,7 +651,11 @@ import SwiftUI
         }
 
         // A delta re-upsert of a slim block must not revert a block the user
-        // already hydrated (no-op unless something was hydrated).
+        // already hydrated (no-op unless something was hydrated). Note this
+        // pins the cached hydrated copy over ANY later delta for that block
+        // id — correct while persisted truncated blocks are immutable; if the
+        // daemon ever re-serves a changed body for an existing block id, the
+        // stale hydrated copy wins until the next reset().
         remergeHydratedBlocks()
 
         if sawTerminal {
@@ -1545,6 +1575,7 @@ import SwiftUI
         lastFailedSend = nil
         hydratingBlockKeys = []
         hydratedBlocks = [:]
+        hydratedBlockOrder = []
         attentionRequest = nil
         agentNotFound = false
         dismissedQuestionsMessageId = nil

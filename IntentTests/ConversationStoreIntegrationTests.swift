@@ -629,4 +629,123 @@ struct ConversationStoreIntegrationTests {
         #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
         #expect(store.hydratingBlockKeys.isEmpty)
     }
+
+    @Test func hydratedBlockSurvivesDeltaReupsert() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        let slimBlock: [String: Any] = [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+            "output": "preview…", "outputTruncated": true,
+        ]
+        let slimMessage: [String: Any] = [
+            "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [slimBlock],
+        ]
+        fake.responseMap["agent.getConversation"] = ["messages": [slimMessage]]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        await store.subscribeLiveChat(agentId: "agent-1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        // Seed the live channel (seq 0) so the following delta applies in order.
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1", kind: .snapshot, seq: 0,
+            snapshot: [slimMessage], delta: nil))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
+
+        // A live delta re-upserting the slim (truncated) version of the
+        // already-hydrated block must not revert it (third re-merge point:
+        // applyChatDelta).
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1", kind: .delta, seq: 1, snapshot: nil,
+            delta: SubscriptionPush.DeltaPayload(
+                added: [],
+                updated: [[
+                    "agentId": "agent-1", "messageId": "msg-1", "role": "assistant",
+                    "block": slimBlock,
+                ]],
+                removedIds: [])))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let block = store.messages.first?.contentBlocks?.first
+        #expect((block?.output?.value as? String) == "full")
+        #expect(block?.outputTruncated == nil)
+    }
+
+    @Test func hydratedBlockCacheEvictsOldestBeyondCap() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        // 31 slim-truncated blocks in one message (cap is 30, FE parity).
+        let blocks: [[String: Any]] = (0..<31).map { i in
+            ["type": "tool_result", "id": "b-\(i)", "toolUseId": "tc-\(i)",
+             "output": "p", "outputTruncated": true]
+        }
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": blocks,
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        for i in 0..<31 {
+            fake.responseMap["agent.getMessageBlock"] = ["block": [
+                "type": "tool_result", "id": "b-\(i)", "toolUseId": "tc-\(i)",
+                "output": "full-\(i)",
+            ] as [String: Any]]
+            await store.hydrateBlock(messageId: "msg-1", blockId: "b-\(i)")
+        }
+
+        // The oldest entry was evicted; the rest remain cached.
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-0"))
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-30"))
+        // Eviction lost nothing visible: the full block was already merged
+        // into the transcript.
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full-0")
+        // An evicted block can be re-hydrated (new wire fetch).
+        #expect(fake.paramsForMethod("agent.getMessageBlock").count == 31)
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-0", "toolUseId": "tc-0", "output": "full-0",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-0")
+        #expect(fake.paramsForMethod("agent.getMessageBlock").count == 32)
+    }
+
+    @Test func hydrateBlockResumedAfterResetDropsStaleBlock() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                     "output": "p", "outputTruncated": true],
+                ],
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        // Hold the fetch in flight, reset (agent switch) mid-flight, then let
+        // it resume: the stale block must NOT be inserted into the fresh cache.
+        fake.pendingMethods.insert("agent.getMessageBlock")
+        let hydration = Task { await store.hydrateBlock(messageId: "msg-1", blockId: "b-1") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        store.reset()
+        fake.resolvePending("agent.getMessageBlock", with: ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]])
+        await hydration.value
+
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.hydratingBlockKeys.isEmpty)
+    }
 }

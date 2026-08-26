@@ -15,6 +15,9 @@ struct ContentBlockView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
     @State private var lightboxPresented = false
+    /// Set when a thumbnail tap started hydration: the lightbox then opens
+    /// automatically once the full block merges in (dataTruncated clears).
+    @State private var lightboxPendingHydration = false
 
     var body: some View {
         switch block.type {
@@ -119,6 +122,7 @@ struct ContentBlockView: View {
             // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
             Button {
                 if imageNeedsHydration {
+                    lightboxPendingHydration = true
                     onHydrateBlock?(block.id)
                 } else {
                     lightboxPresented = true
@@ -134,6 +138,21 @@ struct ContentBlockView: View {
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage)
+            }
+            .onChange(of: block.dataTruncated) { _, truncated in
+                // Hydration merged the full block in (the truncation flag
+                // cleared): open the lightbox the tap asked for.
+                if truncated != true && lightboxPendingHydration {
+                    lightboxPendingHydration = false
+                    lightboxPresented = true
+                }
+            }
+            .onChange(of: isHydratingImage) { _, hydrating in
+                // Fetch settled without clearing the flag (failure): drop the
+                // pending open so a later unrelated merge can't surprise-open.
+                if !hydrating && block.dataTruncated == true {
+                    lightboxPendingHydration = false
+                }
             }
         } else if block.dataTruncated == true {
             // Slim row with no persisted thumbnail (legacy rows, failed
