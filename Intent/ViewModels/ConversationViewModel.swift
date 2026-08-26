@@ -54,13 +54,6 @@ import SwiftUI
     var activeAgentMonitors: [MonitoredPr] {
         monitoredPrStore.activeMonitors.filter { $0.agentId == agentId }
     }
-    /// `<owner>/<repo>` of this conversation's workspace, or nil when unknown
-    /// (chip labels then fall back to the bare `#<n>` form).
-    var workspaceRepo: String? {
-        guard let ws = WorkspaceStore.shared.workspaces.first(where: { $0.id == workspaceId }),
-              let owner = ws.repositoryOwner, let name = ws.repositoryName else { return nil }
-        return "\(owner)/\(name)"
-    }
 
     /// Id of the message the "New messages" divider renders after, or nil
     /// when hidden. Applies the latched per-session anchor against the

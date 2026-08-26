@@ -72,20 +72,12 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        ConversationViewContent(
-            viewModel: viewModel,
-            store: viewModel.store,
-            hookStore: viewModel.hookStore,
-            monitoredPrStore: viewModel.monitoredPrStore
-        )
+        ConversationViewContent(viewModel: viewModel)
     }
 }
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
-    private let store: ConversationStore
-    private let hookStore: BackgroundHookStore
-    private let monitoredPrStore: MonitoredPrStore
     @StateObject private var scrollMomentumProxy = ScrollViewMomentumProxy()
     @EnvironmentObject private var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
@@ -116,18 +108,6 @@ private struct ConversationViewContent: View {
     @State private var conversationHeight: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-
-    init(
-        viewModel: ConversationViewModel,
-        store: ConversationStore,
-        hookStore: BackgroundHookStore,
-        monitoredPrStore: MonitoredPrStore
-    ) {
-        self.viewModel = viewModel
-        self.store = store
-        self.hookStore = hookStore
-        self.monitoredPrStore = monitoredPrStore
-    }
 
     // `body` is decomposed into layered `some View` properties
     // (intent-hq/monorepo#2352): the Xcode Cloud Release build could not
@@ -249,7 +229,7 @@ private struct ConversationViewContent: View {
             questionWizardCollapsed = false
         }
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
-        .animation(.easeInOut(duration: 0.25), value: store.isWaitingForAgents)
+        .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentMonitors.map(\.monitorId))
     }
@@ -382,7 +362,7 @@ private struct ConversationViewContent: View {
         Divider()
 
         // Agent waiting indicator (above queued messages)
-        if store.isWaitingForAgents {
+        if viewModel.store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(
                     viewModel: viewModel,
@@ -425,7 +405,7 @@ private struct ConversationViewContent: View {
 
         // Queued messages (above input)
         if !viewModel.queuedMessages.isEmpty {
-            QueuedMessagesView(viewModel: viewModel, store: viewModel.store)
+            QueuedMessagesView(viewModel: viewModel)
             Divider()
         }
 
@@ -577,7 +557,7 @@ private struct ConversationViewContent: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: store.streamingUpdateCount) { _, _ in
+            .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
                 if hasInitiallyScrolled && !userIsScrolledAway {
                     scrollToBottom(proxy: proxy)
                 }
@@ -587,7 +567,7 @@ private struct ConversationViewContent: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: store.isWaitingForAgents) { _, _ in
+            .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
                 if hasInitiallyScrolled && !userIsScrolledAway {
                     scrollToBottom(proxy: proxy)
                 }
