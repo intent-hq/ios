@@ -41,11 +41,16 @@ struct ResponseGroupView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
 
-    init(group: ResponseGroup, isLast: Bool, workspaceId: String, onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil) {
+    init(group: ResponseGroup, isLast: Bool, workspaceId: String,
+         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
+         hydratingBlockIds: Set<String> = [],
+         onHydrateBlock: ((_ blockId: String) -> Void)? = nil) {
         self.group = group
         self.isLast = isLast
         self.workspaceId = workspaceId
         self.onNavigateToNote = onNavigateToNote
+        self.hydratingBlockIds = hydratingBlockIds
+        self.onHydrateBlock = onHydrateBlock
         self._isExpanded = State(initialValue: isLast)
     }
 
