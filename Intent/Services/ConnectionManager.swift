@@ -713,7 +713,7 @@ class ConnectionManager: ObservableObject {
                 let paramsDict = params as? [String: Any] ?? [:]
                 let subscriptionId = paramsDict["subscriptionId"] as? String ?? "nil"
                 let keys = paramsDict.keys.sorted().joined(separator: ", ")
-                AppLog.connection.debug("[ConnectionManager] Warning: Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
+                AppLog.connection.warning("[ConnectionManager] Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
                 return
             }
 
@@ -829,7 +829,7 @@ class ConnectionManager: ObservableObject {
                 ])
                 AppLog.connection.debug("[ConnectionManager] Subscribed to all events")
             } catch {
-                AppLog.connection.debug("[ConnectionManager] Failed to subscribe to events: \(error)")
+                AppLog.connection.error("[ConnectionManager] Failed to subscribe to events: \(error)")
             }
         }
     }
@@ -907,9 +907,9 @@ nonisolated final class CertFingerprintPinner: CertificatePinning {
         if fingerprint.lowercased() == pinnedFingerprint.lowercased() {
             completion(.success)
         } else {
-            AppLog.connection.debug("[CertPinning] Fingerprint mismatch!")
-            AppLog.connection.debug("[CertPinning] Expected: \(pinnedFingerprint)")
-            AppLog.connection.debug("[CertPinning] Got:      \(fingerprint)")
+            AppLog.connection.error("[CertPinning] Fingerprint mismatch!")
+            AppLog.connection.error("[CertPinning] Expected: \(pinnedFingerprint)")
+            AppLog.connection.error("[CertPinning] Got:      \(fingerprint)")
             mismatchFingerprint.withLock { $0 = fingerprint }
             completion(.failed(nil))
         }
