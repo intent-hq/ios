@@ -1,21 +1,17 @@
 import Foundation
 import OSLog
 
-/// Debug-only structured logging. Intent emits no production logs; Release
-/// builds do not create loggers or evaluate message autoclosures.
+/// Structured logging with debug-only lower levels. Release builds compile out
+/// debug through warning, while error and fault remain active with private messages.
 nonisolated enum AppLog {
     nonisolated struct Category: Sendable {
-        #if DEBUG
         private let logger: Logger
-        #endif
 
         fileprivate init(_ name: String) {
-            #if DEBUG
             logger = Logger(
                 subsystem: Bundle.main.bundleIdentifier ?? "Intent",
                 category: name
             )
-            #endif
         }
 
         func debug(_ message: @autoclosure () -> String) {
@@ -47,16 +43,20 @@ nonisolated enum AppLog {
         }
 
         func error(_ message: @autoclosure () -> String) {
-            #if DEBUG
             let renderedMessage = message()
+            #if DEBUG
             logger.error("\(renderedMessage, privacy: .public)")
+            #else
+            logger.error("\(renderedMessage, privacy: .private)")
             #endif
         }
 
         func fault(_ message: @autoclosure () -> String) {
-            #if DEBUG
             let renderedMessage = message()
+            #if DEBUG
             logger.fault("\(renderedMessage, privacy: .public)")
+            #else
+            logger.fault("\(renderedMessage, privacy: .private)")
             #endif
         }
     }
