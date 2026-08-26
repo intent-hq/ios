@@ -178,8 +178,10 @@ enum SuggestedPrompts {
 
     /// Strips `Label|` and `delay:N|` prefixes, mirroring the desktop's
     /// `parseSuggestedPromptLine`; empty or over-long results are dropped.
+    /// `[0-9]` (not `\d`) keeps digit matching ASCII-only like the desktop's
+    /// non-Unicode JS regex; ICU `\d` would also match e.g. Arabic-Indic digits.
     private static func parsePromptLine(_ line: String) -> String? {
-        let delayPattern = "^delay:\\d+\\|"
+        let delayPattern = "^delay:[0-9]+\\|"
         if let delayRange = line.range(
             of: delayPattern, options: [.regularExpression, .caseInsensitive]
         ) {

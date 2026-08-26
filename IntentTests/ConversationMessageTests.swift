@@ -747,6 +747,21 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == ["Valid prompt"])
     }
 
+    @Test func lengthLimitAppliesAfterPrefixStripping() {
+        // A raw line over 200 UTF-16 units whose prompt fits after `Label|`
+        // stripping is kept: the length check runs post-strip, like desktop.
+        let label = String(repeating: "L", count: SuggestedPrompts.maxPromptLength)
+        let text = "<!-- suggested-prompts\n\(label)|Short prompt\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Short prompt"])
+    }
+
+    @Test func doesNotStripNonAsciiDigitDelayPrefix() {
+        // ICU `\d` would match Unicode digits; the desktop's regex is
+        // ASCII-only, so a non-ASCII delay prefix stays part of the prompt.
+        let text = "<!-- suggested-prompts\nLabel|delay:٦٠|Check build\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["delay:٦٠|Check build"])
+    }
+
     @Test func trimsWhitespaceAndSkipsBlankLines() {
         let text = "<!-- suggested-prompts\n  Spaced prompt  \n\n\nSecond\n-->"
         #expect(SuggestedPrompts.parse(text) == ["Spaced prompt", "Second"])
