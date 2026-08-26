@@ -382,7 +382,7 @@ class AppCoordinator: ObservableObject {
                 _ = try await connection.request(
                     "workspace.markSeen", params: ["workspaceId": workspaceId])
             } catch {
-                print("[AppCoordinator] workspace.markSeen failed: \(error)")
+                AppLog.app.error("[AppCoordinator] workspace.markSeen failed: \(error)")
             }
         }
     }
@@ -479,19 +479,19 @@ class AppCoordinator: ObservableObject {
                 "agent.get",
                 params: ["agentId": agentId, "workspaceId": workspaceId]
             )
-            // If result is nil or doesn't contain agent data, the agent is gone
-            if result == nil || (result as? [String: Any]) == nil {
+            // A missing or malformed result is not a valid agent payload.
+            if (result as? [String: Any]) == nil {
                 handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
             }
         } catch {
-            print("[AppCoordinator] Agent validation failed: \(error)")
+            AppLog.app.error("[AppCoordinator] Agent validation failed: \(error)")
             // Only a definitive not-found (-32602 with data.code == "not-found",
             // PROTOCOL §3.3/§9) reads as deletion.
             let nsError = error as NSError
             if nsError.isEntityNotFound {
                 handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
             } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
-                print(
+                AppLog.app.warning(
                     "[AppCoordinator] UNEXPECTED -32602 without data.code == \"not-found\" for "
                         + "agent \(agentId) (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
                         + "NOT treating as deletion: \(nsError.localizedDescription)")
