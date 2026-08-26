@@ -2,17 +2,17 @@ import Foundation
 import Combine
 
 @MainActor
-class NoteStore: ObservableObject {
-    @Published var notes: [Note] = []
-    @Published var isLoading = false
+@Observable class NoteStore {
+    var notes: [Note] = []
+    var isLoading = false
 
     private var workspaceId: String?
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var eventHandlerId: UUID?
     private let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking (subscription.push)
     private var noteLive = false
-    private var noteSubscriptionId: String?
+    @ObservationIgnored private var noteSubscriptionId: String?
     private var noteReconciler: DeltaReconciler<Note>?
     private var resnapshotInProgress = false
     private var connectionObserver: AnyCancellable?
@@ -139,7 +139,7 @@ class NoteStore: ObservableObject {
                 notes = items.compactMap { Note.parseNote($0) }
             }
         } catch {
-            print("[NoteStore] Failed to fetch notes: \(error)")
+            AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
         isLoading = false
         // Note: live-state subscription is owned by onConnected() lifecycle.
@@ -176,13 +176,13 @@ class NoteStore: ObservableObject {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
             // client params bug doesn't silently masquerade as deletion.
-            print(
+            AppLog.notes.error(
                 "[NoteStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "note \(noteId) (data.code: \(error.intentErrorDataCode ?? "absent")) — "
                     + "NOT treating as deletion: \(error.localizedDescription)")
             return .transientError
         } catch {
-            print("[NoteStore] Failed to fetch note: \(error)")
+            AppLog.notes.error("[NoteStore] Failed to fetch note: \(error)")
             return .transientError
         }
     }
@@ -223,7 +223,7 @@ class NoteStore: ObservableObject {
             return true
         } catch {
             if let original { rollback(original) }
-            print("[NoteStore] task.update failed: \(error)")
+            AppLog.notes.error("[NoteStore] task.update failed: \(error)")
             return false
         }
     }
@@ -247,7 +247,7 @@ class NoteStore: ObservableObject {
             return true
         } catch {
             if let original { rollback(original) }
-            print("[NoteStore] task.updateNoteStatus failed: \(error)")
+            AppLog.notes.error("[NoteStore] task.updateNoteStatus failed: \(error)")
             return false
         }
     }
@@ -279,7 +279,7 @@ class NoteStore: ObservableObject {
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
-                print("[NoteStore] Subscribed to note.subscribe: \(subId)")
+                AppLog.notes.info("[NoteStore] Subscribed to note.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 noteReconciler = nil
@@ -291,7 +291,7 @@ class NoteStore: ObservableObject {
             noteReconciler = nil
             noteSubscriptionId = nil
             noteLive = false
-            print("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
+            AppLog.notes.warning("[NoteStore] note.subscribe failed: \(error), falling back to legacy")
         }
     }
 
@@ -368,18 +368,18 @@ class NoteStore: ObservableObject {
             noteLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             notes = reconciler.values()
-            print("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
+            AppLog.notes.debug("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 notes = reconciler.values()
-                print("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+                AppLog.notes.debug("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotInProgress {
                     resnapshotInProgress = true
-                    print("[NoteStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                    AppLog.notes.warning("[NoteStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
             }
@@ -401,7 +401,7 @@ class NoteStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[NoteStore] note.unsubscribe failed: \(error)")
+                AppLog.notes.error("[NoteStore] note.unsubscribe failed: \(error)")
             }
         }
 

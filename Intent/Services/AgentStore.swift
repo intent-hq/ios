@@ -73,13 +73,13 @@ extension SpecialistInfo {
 }
 
 @MainActor
-class AgentStore: ObservableObject {
-    @Published var agents: [AgentSession] = []
-    @Published var isLoading = false
+@Observable class AgentStore {
+    var agents: [AgentSession] = []
+    var isLoading = false
 
     private let connectionManager: ConnectionManagerRouting
     private var workspaceId: String?
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
@@ -89,10 +89,12 @@ class AgentStore: ObservableObject {
     deinit {
         // deinit is nonisolated: capture the handler id and manager, then hop
         // to the main actor so the handler entry doesn't outlive the store.
-        guard let handlerId = eventHandlerId else { return }
+        let handlerId = eventHandlerId
         let connectionManager = self.connectionManager
         Task { @MainActor in
-            connectionManager.removeEventHandler(id: handlerId)
+            if let handlerId = handlerId {
+                connectionManager.removeEventHandler(id: handlerId)
+            }
         }
     }
 
@@ -138,7 +140,7 @@ class AgentStore: ObservableObject {
                 agents = items.compactMap { AgentSession.parseAgent($0) }
             }
         } catch {
-            print("[AgentStore] Failed to fetch agents: \(error)")
+            AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
         }
         isLoading = false
     }
@@ -163,7 +165,7 @@ class AgentStore: ObservableObject {
                 return items.compactMap { SpecialistInfo(wire: $0) }
             }
         } catch {
-            print("[AgentStore] Failed to fetch specialists: \(error)")
+            AppLog.agents.error("[AgentStore] Failed to fetch specialists: \(error)")
         }
         return []
     }
@@ -181,7 +183,7 @@ class AgentStore: ObservableObject {
                 }
             }
         } catch {
-            print("[AgentStore] Failed to fetch providers: \(error)")
+            AppLog.agents.error("[AgentStore] Failed to fetch providers: \(error)")
         }
         return []
     }
@@ -207,7 +209,7 @@ class AgentStore: ObservableObject {
                 }
             }
         } catch {
-            print("[AgentStore] Failed to fetch models for provider \(providerId): \(error)")
+            AppLog.agents.error("[AgentStore] Failed to fetch models for provider \(providerId): \(error)")
         }
         return []
     }

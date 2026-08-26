@@ -3,7 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     @EnvironmentObject var coordinator: AppCoordinator
-    @StateObject private var agentStore = AgentStore()
+    @State private var agentStore = AgentStore()
     @StateObject private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
@@ -13,7 +13,7 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
-    @StateObject private var noteStore = NoteStore()
+    @State private var noteStore = NoteStore()
     @ObservedObject private var workspaceStore = WorkspaceStore.shared
 
     private var workspace: Workspace? {
@@ -194,7 +194,7 @@ struct WorkspaceDetailView: View {
                         coordinator.onBackToWorkspaceList()
                         await WorkspaceStore.shared.fetchAll()
                     } catch {
-                        print("[WorkspaceDetail] Delete failed: \(error)")
+                        AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
                     }
                 }
             }
@@ -210,7 +210,7 @@ struct WorkspaceDetailView: View {
                         coordinator.onBackToWorkspaceList()
                         await WorkspaceStore.shared.fetchAll()
                     } catch {
-                        print("[WorkspaceDetail] Archive failed: \(error)")
+                        AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
                     }
                 }
             }

@@ -7,8 +7,8 @@ struct NoteDetailView: View {
     /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
     /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
-    @StateObject private var noteStore = NoteStore()
-    @StateObject private var agentStore = AgentStore()
+    @State private var noteStore = NoteStore()
+    @State private var agentStore = AgentStore()
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var note: Note?
