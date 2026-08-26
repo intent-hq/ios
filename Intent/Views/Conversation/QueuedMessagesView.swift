@@ -2,16 +2,10 @@ import SwiftUI
 
 struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
-    private let store: ConversationStore
     @Environment(\.colorScheme) var colorScheme
 
     @State private var editingId: String?
     @State private var editText = ""
-
-    init(viewModel: ConversationViewModel, store: ConversationStore) {
-        self.viewModel = viewModel
-        self.store = store
-    }
 
     var body: some View {
         VStack(spacing: 0) {
