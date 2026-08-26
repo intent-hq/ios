@@ -175,7 +175,7 @@ struct WorkspaceRowView: View {
 
     /// Legacy `workspace.prStatus` fallback: only the four known wire strings
     /// render a pill (unknown values hide it, exactly as before).
-    static func legacyPillStatus(_ raw: String) -> WorkspacePrPill.Status? {
+    nonisolated static func legacyPillStatus(_ raw: String) -> WorkspacePrPill.Status? {
         switch raw {
         case "Merged": return .merged
         case "Open": return .open
