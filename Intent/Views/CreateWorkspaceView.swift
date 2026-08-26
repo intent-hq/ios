@@ -473,20 +473,20 @@ struct CreateWorkspaceView: View {
     private func fetchSpecialists() async {
         isLoadingSpecialists = true
         let agentStore = AgentStore()
-        var fetched = await agentStore.fetchSpecialists().pickable
-        // Sort so Coordinator (spec-writer) is first
+        var fetched = await agentStore.fetchSpecialists().modalPickable
+        // Sort so the resolved orchestrator (PROTOCOL §5.11 role metadata)
+        // is first
+        let orchestratorId = fetched.orchestrator?.id
         fetched.sort { a, b in
-            let aIsCoordinator = a.id == "spec-writer"
-            let bIsCoordinator = b.id == "spec-writer"
-            if aIsCoordinator != bIsCoordinator { return aIsCoordinator }
+            let aIsOrchestrator = a.id == orchestratorId
+            let bIsOrchestrator = b.id == orchestratorId
+            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
             return a.name < b.name
         }
         specialists = fetched
-        // Default to Coordinator specialist
+        // Default to the orchestrator specialist
         if selectedSpecialist == nil {
-            selectedSpecialist = specialists.first(where: {
-                $0.id == "spec-writer" || $0.name.lowercased().contains("coordinator")
-            }) ?? specialists.first
+            selectedSpecialist = specialists.orchestrator ?? specialists.first
         }
         isLoadingSpecialists = false
     }

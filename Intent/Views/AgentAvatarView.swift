@@ -8,13 +8,14 @@ struct AgentAvatarView: View {
     let agentId: String
     var size: CGFloat = 20
     var specialist: String? = nil
+    var icon: String? = nil  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var isPulsing = false
 
     private var design: AgentAvatarDesign {
-        AgentAvatarDesign.design(agentId: agentId, specialist: specialist)
+        AgentAvatarDesign.design(agentId: agentId, specialist: specialist, icon: icon)
     }
 
     // Desktop geometry ratios (avatar-size.ts "standard": surface 20,
