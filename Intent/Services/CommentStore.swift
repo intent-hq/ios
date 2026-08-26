@@ -150,7 +150,7 @@ class CommentStore: ObservableObject {
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
-                print("[CommentStore] Subscribed to comment.subscribe for note \(noteId): \(subId)")
+                AppLog.comments.debug("[CommentStore] Subscribed to comment.subscribe for note \(noteId): \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 commentReconciler = nil
@@ -162,7 +162,7 @@ class CommentStore: ObservableObject {
             commentReconciler = nil
             commentSubscriptionId = nil
             commentLive = false
-            print("[CommentStore] comment.subscribe failed: \(error), falling back to legacy")
+            AppLog.comments.error("[CommentStore] comment.subscribe failed: \(error), falling back to legacy")
         }
     }
     
@@ -171,9 +171,9 @@ class CommentStore: ObservableObject {
             let _ = try await connectionManager.request("comment.unsubscribe", params: [
                 "subscriptionId": subscriptionId
             ])
-            print("[CommentStore] Unsubscribed: \(subscriptionId)")
+            AppLog.comments.debug("[CommentStore] Unsubscribed: \(subscriptionId)")
         } catch {
-            print("[CommentStore] comment.unsubscribe failed: \(error)")
+            AppLog.comments.error("[CommentStore] comment.unsubscribe failed: \(error)")
         }
     }
     
@@ -210,18 +210,18 @@ class CommentStore: ObservableObject {
             commentLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             threads = reconciler.values()
-            print("[CommentStore] Applied snapshot with \(rawItems.count) threads, seq=\(push.seq)")
+            AppLog.comments.debug("[CommentStore] Applied snapshot with \(rawItems.count) threads, seq=\(push.seq)")
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 threads = reconciler.values()
-                print("[CommentStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+                AppLog.comments.debug("[CommentStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotInProgress {
                     resnapshotInProgress = true
-                    print("[CommentStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                    AppLog.comments.warning("[CommentStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
             }

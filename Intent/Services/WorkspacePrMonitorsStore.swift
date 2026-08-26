@@ -100,7 +100,7 @@ class WorkspacePrMonitorsStore: ObservableObject {
                 subscriptionId = subId
             }
         } catch {
-            print("[WorkspacePrMonitorsStore] events.subscribe (prMonitor:*) failed: \(error)")
+            AppLog.prs.error("[WorkspacePrMonitorsStore] events.subscribe (prMonitor:*) failed: \(error)")
         }
     }
 
@@ -170,7 +170,7 @@ class WorkspacePrMonitorsStore: ObservableObject {
                 }
             }
         } catch {
-            print("[WorkspacePrMonitorsStore] prMonitor.list failed: \(error)")
+            AppLog.prs.error("[WorkspacePrMonitorsStore] prMonitor.list failed: \(error)")
         }
         refetchInFlight.remove(workspaceId)
         if refetchQueued.remove(workspaceId) != nil {

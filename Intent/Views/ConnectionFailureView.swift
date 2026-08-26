@@ -202,7 +202,7 @@ struct ConnectionFailureView: View {
                     return
                 } catch {
                     // Continue retrying
-                    print("[ConnectionFailureView] Retry \(attempt) failed: \(error)")
+                    AppLog.connection.warning("[ConnectionFailureView] Retry \(attempt) failed: \(error)")
                 }
             }
         }

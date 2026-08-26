@@ -84,7 +84,7 @@ class TaskStore: ObservableObject {
                 lastUpdated = Date()
             }
         } catch {
-            print("[TaskStore] Failed to fetch tasks: \(error)")
+            AppLog.tasks.error("[TaskStore] Failed to fetch tasks: \(error)")
         }
         isLoading = false
     }
@@ -129,7 +129,7 @@ class TaskStore: ObservableObject {
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
-                print("[TaskStore] Subscribed to task.subscribe: \(subId)")
+                AppLog.tasks.debug("[TaskStore] Subscribed to task.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy
                 taskReconciler = nil
@@ -139,7 +139,7 @@ class TaskStore: ObservableObject {
             // Subscribe failed - clean up reconciler and fall back to legacy
             taskReconciler = nil
             taskSubscriptionId = nil
-            print("[TaskStore] task.subscribe failed: \(error), falling back to legacy")
+            AppLog.tasks.error("[TaskStore] task.subscribe failed: \(error), falling back to legacy")
         }
     }
 
@@ -192,19 +192,19 @@ class TaskStore: ObservableObject {
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             tasks = reconciler.values()
             lastUpdated = Date()
-            print("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
+            AppLog.tasks.debug("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 tasks = reconciler.values()
                 lastUpdated = Date()
-                print("[TaskStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+                AppLog.tasks.debug("[TaskStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotInProgress {
                     resnapshotInProgress = true
-                    print("[TaskStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                    AppLog.tasks.warning("[TaskStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
             }
@@ -226,7 +226,7 @@ class TaskStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[TaskStore] task.unsubscribe failed: \(error)")
+                AppLog.tasks.error("[TaskStore] task.unsubscribe failed: \(error)")
             }
         }
 
