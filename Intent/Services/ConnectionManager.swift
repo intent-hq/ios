@@ -1,6 +1,7 @@
 import Combine
 import CryptoKit
 import Foundation
+import os
 import Starscream
 
 enum ConnectionState: Equatable {
@@ -112,17 +113,17 @@ class ConnectionManager: ObservableObject {
         connectionState = .connecting
 
         let raceStart = CFAbsoluteTimeGetCurrent()
-        print("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
         let winningSocket = try await raceHosts(hosts, port: port, token: token, certFingerprint: certFingerprint)
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
-        print("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
-        print("[ConnectionManager] Race won by \(winningSocket.request.url?.host ?? "?"), generation=\(myGeneration)")
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
+        AppLog.connection.debug("[ConnectionManager] Race won by \(winningSocket.request.url?.host ?? "?"), generation=\(myGeneration)")
 
         // Check if we've been superseded by a newer connect() call
         guard connectionGeneration == myGeneration else {
-            print("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
+            AppLog.connection.debug("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
             winningSocket.disconnect(closeCode: CloseCode.normal.rawValue)
             throw CancellationError()
         }
@@ -132,7 +133,7 @@ class ConnectionManager: ObservableObject {
         configureSocketEventHandler()
 
         let setupEnd = CFAbsoluteTimeGetCurrent()
-        print("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * 1000))ms (at +\(Int((setupEnd - connectStart) * 1000))ms)")
+        AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * 1000))ms (at +\(Int((setupEnd - connectStart) * 1000))ms)")
 
         connectionState = .connected
         subscribeToAllEvents()
@@ -140,7 +141,7 @@ class ConnectionManager: ObservableObject {
         scheduleHostRoutesRefresh()
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
-        print("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
+        AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
     }
 
     func disconnect() {
@@ -166,7 +167,7 @@ class ConnectionManager: ObservableObject {
     private func clearSubscriptionHandlers() {
         guard !subscriptionHandlers.isEmpty || !unroutedPushBuffer.isEmpty
             || !recentlyUnregisteredIds.isEmpty else { return }
-        print("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s), \(unroutedPushBuffer.count) buffered push(es) on disconnect")
+        AppLog.connection.debug("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s), \(unroutedPushBuffer.count) buffered push(es) on disconnect")
         subscriptionHandlers.removeAll()
         unroutedPushBuffer.removeAll()
         recentlyUnregisteredIds.removeAll()
@@ -207,11 +208,11 @@ class ConnectionManager: ObservableObject {
         let str = String(data: data, encoding: .utf8)!
 
         return try await awaitResponse(id: id, timeout: timeout) { [weak self] in
-            print("[ConnectionManager] Writing request id=\(id) method=\(method), socket=\(self?.socket != nil ? "exists" : "nil")")
+            AppLog.connection.debug("[ConnectionManager] Writing request id=\(id) method=\(method), socket=\(self?.socket != nil ? "exists" : "nil")")
             self?.socket?.write(string: str, completion: {
-                print("[ConnectionManager] Write completed for request id=\(id) method=\(method)")
+                AppLog.connection.debug("[ConnectionManager] Write completed for request id=\(id) method=\(method)")
             })
-            print("[ConnectionManager] Queued write for request id=\(id) method=\(method)")
+            AppLog.connection.debug("[ConnectionManager] Queued write for request id=\(id) method=\(method)")
         }
     }
 
@@ -268,7 +269,7 @@ class ConnectionManager: ObservableObject {
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
         subscriptionHandlers[id] = handler
         recentlyUnregisteredIds.removeValue(forKey: id)
-        print("[ConnectionManager] Registered subscription handler for id=\(id)")
+        AppLog.connection.debug("[ConnectionManager] Registered subscription handler for id=\(id)")
         replayBufferedPushes(for: id, to: handler)
     }
 
@@ -295,7 +296,7 @@ class ConnectionManager: ObservableObject {
         pruneExpiredBufferedPushes()
         unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
         recentlyUnregisteredIds[id] = Date()
-        print("[ConnectionManager] Unregistered subscription handler for id=\(id)")
+        AppLog.connection.debug("[ConnectionManager] Unregistered subscription handler for id=\(id)")
     }
 
     /// Buffer an unrouted subscription.push so it can be replayed when a handler is
@@ -310,7 +311,7 @@ class ConnectionManager: ObservableObject {
             if push.kind == .snapshot && push.seq == 0 {
                 recentlyUnregisteredIds.removeValue(forKey: push.subscriptionId)
             } else {
-                print("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
+                AppLog.connection.debug("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
                 return
             }
         }
@@ -318,7 +319,7 @@ class ConnectionManager: ObservableObject {
         if unroutedPushBuffer.count > Self.unroutedPushBufferLimit {
             unroutedPushBuffer.removeFirst(unroutedPushBuffer.count - Self.unroutedPushBufferLimit)
         }
-        print("[ConnectionManager] Buffered unrouted subscription.push for id=\(push.subscriptionId) seq=\(push.seq) (no handler registered yet, buffered=\(unroutedPushBuffer.count))")
+        AppLog.connection.debug("[ConnectionManager] Buffered unrouted subscription.push for id=\(push.subscriptionId) seq=\(push.seq) (no handler registered yet, buffered=\(unroutedPushBuffer.count))")
     }
 
     /// Replay buffered pushes for the given subscriptionId, in arrival order, to the
@@ -329,7 +330,7 @@ class ConnectionManager: ObservableObject {
         let matching = unroutedPushBuffer.filter { $0.push.subscriptionId == id }
         guard !matching.isEmpty else { return }
         unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
-        print("[ConnectionManager] Replaying \(matching.count) buffered push(es) for id=\(id)")
+        AppLog.connection.debug("[ConnectionManager] Replaying \(matching.count) buffered push(es) for id=\(id)")
         for entry in matching {
             handler(entry.push)
         }
@@ -377,11 +378,11 @@ class ConnectionManager: ObservableObject {
         await refreshStoredDisplayName(token: token, port: port)
 
         guard let result = try? await request("system.status") else {
-            print("[ConnectionManager] Host route refresh: system.status failed (skipping)")
+            AppLog.connection.debug("[ConnectionManager] Host route refresh: system.status failed (skipping)")
             return
         }
         guard let reported = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
-            print("[ConnectionManager] Host route refresh: no localIps reported (skipping)")
+            AppLog.connection.debug("[ConnectionManager] Host route refresh: no localIps reported (skipping)")
             return
         }
 
@@ -390,7 +391,7 @@ class ConnectionManager: ObservableObject {
 
         let merged = Self.mergeHosts(existing: hosts, reported: reported)
         if merged != hosts {
-            print("[ConnectionManager] Host route refresh: hosts \(hosts) -> \(merged)")
+            AppLog.connection.debug("[ConnectionManager] Host route refresh: hosts \(hosts) -> \(merged)")
             hosts = merged
         }
 
@@ -436,7 +437,7 @@ class ConnectionManager: ObservableObject {
         if let stored = PersistenceManager.shared.activeConnection(),
             stored.token == token, stored.server.port == port,
             stored.displayName != name {
-            print("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
+            AppLog.connection.debug("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
             PersistenceManager.shared.updateConnectionDisplayName(id: stored.id, displayName: name)
         }
     }
@@ -470,8 +471,7 @@ class ConnectionManager: ObservableObject {
         let scheme = certFingerprint != nil ? "wss" : "ws"
 
         // Track all racing sockets for cleanup
-        let racingSockets = NSMutableArray()
-        let socketsLock = NSLock()
+        let racingSockets = OSAllocatedUnfairLock(initialState: [WebSocket]())
 
         return try await withThrowingTaskGroup(of: WebSocket.self) { group in
             for host in hosts {
@@ -497,12 +497,10 @@ class ConnectionManager: ObservableObject {
                     ws.callbackQueue = DispatchQueue(label: "com.intent.ws.race.\(host)")
 
                     // Track this socket for cleanup
-                    socketsLock.lock()
-                    racingSockets.add(ws)
-                    socketsLock.unlock()
+                    racingSockets.withLock { $0.append(ws) }
 
                     let hostStart = CFAbsoluteTimeGetCurrent()
-                    print("[ConnectionManager] Racing host \(host):\(port)")
+                    AppLog.connection.debug("[ConnectionManager] Racing host \(host):\(port)")
 
                     // Declare resumeOnce, lock, resumed, and timeoutWork outside
                     // withTaskCancellationHandler so onCancel can access them.
@@ -541,7 +539,7 @@ class ConnectionManager: ObservableObject {
                             // Timeout (cancellable)
                             let timeoutWork = DispatchWorkItem {
                                 let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                                print("[ConnectionManager] Host \(host) timed out in \(elapsed)ms")
+                                AppLog.connection.debug("[ConnectionManager] Host \(host) timed out in \(elapsed)ms")
                                 ws.disconnect()
                                 resumeOnce(.failure(NSError(domain: "WebSocket", code: -2,
                                     userInfo: [NSLocalizedDescriptionKey: "Connection to \(host) timed out"])))
@@ -553,24 +551,24 @@ class ConnectionManager: ObservableObject {
                                 switch event {
                                 case .connected:
                                     let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                                    print("[ConnectionManager] Host \(host) connected in \(elapsed)ms")
+                                    AppLog.connection.debug("[ConnectionManager] Host \(host) connected in \(elapsed)ms")
                                     timeoutWork.cancel()
                                     resumeOnce(.success(ws))
                                 case .error(let error):
                                     let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                                    print("[ConnectionManager] Host \(host) failed in \(elapsed)ms: \(String(describing: error))")
+                                    AppLog.connection.debug("[ConnectionManager] Host \(host) failed in \(elapsed)ms: \(String(describing: error))")
                                     timeoutWork.cancel()
                                     resumeOnce(.failure(error ?? NSError(domain: "WebSocket", code: -1,
                                         userInfo: [NSLocalizedDescriptionKey: "Connection to \(host) failed"])))
                                 case .disconnected(let reason, _):
                                     let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                                    print("[ConnectionManager] Host \(host) disconnected in \(elapsed)ms: \(reason)")
+                                    AppLog.connection.debug("[ConnectionManager] Host \(host) disconnected in \(elapsed)ms: \(reason)")
                                     timeoutWork.cancel()
                                     resumeOnce(.failure(NSError(domain: "WebSocket", code: -1,
                                         userInfo: [NSLocalizedDescriptionKey: "Disconnected from \(host): \(reason)"])))
                                 case .cancelled:
                                     let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                                    print("[ConnectionManager] Host \(host) cancelled in \(elapsed)ms")
+                                    AppLog.connection.debug("[ConnectionManager] Host \(host) cancelled in \(elapsed)ms")
                                     timeoutWork.cancel()
                                     resumeOnce(.failure(NSError(domain: "WebSocket", code: -1,
                                         userInfo: [NSLocalizedDescriptionKey: "Connection to \(host) cancelled"])))
@@ -593,16 +591,14 @@ class ConnectionManager: ObservableObject {
                 case .success(let ws):
                     group.cancelAll()
                     // Disconnect all losing sockets
-                    socketsLock.lock()
-                    let allSockets = racingSockets.compactMap { $0 as? WebSocket }
-                    socketsLock.unlock()
+                    let allSockets = racingSockets.withLock { $0 }
                     for s in allSockets where s !== ws {
                         s.disconnect()
                     }
                     return ws
                 case .failure(let error):
                     lastError = error
-                    print("[ConnectionManager] Host racing: \(error.localizedDescription)")
+                    AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
                     continue
                 }
             }
@@ -616,44 +612,44 @@ class ConnectionManager: ObservableObject {
         socket?.onEvent = { [weak self] event in
             guard let self = self else { return }
             guard self.socket === currentSocket else {
-                print("[ConnectionManager] Ignoring event from stale socket")
+                AppLog.connection.debug("[ConnectionManager] Ignoring event from stale socket")
                 return
             }
             switch event {
             case .text(let text):
                 let preview = String(text.prefix(100))
-                print("[ConnectionManager] Received text: \(preview)...")
+                AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
                 Task { @MainActor in self.handleTextMessage(text) }
             case .connected(let headers):
-                print("[ConnectionManager] Socket connected, headers: \(headers)")
+                AppLog.connection.debug("[ConnectionManager] Socket connected, headers: \(headers)")
             case .disconnected(let reason, let code):
-                print("[ConnectionManager] Socket disconnected: reason=\(reason), code=\(code)")
+                AppLog.connection.debug("[ConnectionManager] Socket disconnected: reason=\(reason), code=\(code)")
                 Task { @MainActor in self.handleDisconnection() }
             case .cancelled:
-                print("[ConnectionManager] Socket cancelled")
+                AppLog.connection.debug("[ConnectionManager] Socket cancelled")
                 Task { @MainActor in self.handleDisconnection() }
             case .error(let error):
-                print("[ConnectionManager] Socket error: \(String(describing: error))")
+                AppLog.connection.debug("[ConnectionManager] Socket error: \(String(describing: error))")
                 Task { @MainActor in self.handleDisconnection() }
             case .binary(let data):
-                print("[ConnectionManager] Received binary: \(data.count) bytes")
+                AppLog.connection.debug("[ConnectionManager] Received binary: \(data.count) bytes")
             case .pong(_):
-                print("[ConnectionManager] Received pong")
+                AppLog.connection.debug("[ConnectionManager] Received pong")
                 Task { @MainActor in self.lastPongReceived = Date() }
             case .ping(_):
-                print("[ConnectionManager] Received ping")
+                AppLog.connection.debug("[ConnectionManager] Received ping")
             case .viabilityChanged(let viable):
-                print("[ConnectionManager] Viability changed: \(viable)")
+                AppLog.connection.debug("[ConnectionManager] Viability changed: \(viable)")
                 if !viable {
                     Task { @MainActor in self.handleDisconnection() }
                 }
             case .reconnectSuggested(let suggested):
-                print("[ConnectionManager] Reconnect suggested: \(suggested)")
+                AppLog.connection.debug("[ConnectionManager] Reconnect suggested: \(suggested)")
                 if suggested {
                     Task { @MainActor in self.handleDisconnection() }
                 }
             case .peerClosed:
-                print("[ConnectionManager] Peer closed")
+                AppLog.connection.debug("[ConnectionManager] Peer closed")
                 Task { @MainActor in self.handleDisconnection() }
             }
         }
@@ -717,7 +713,7 @@ class ConnectionManager: ObservableObject {
                 let paramsDict = params as? [String: Any] ?? [:]
                 let subscriptionId = paramsDict["subscriptionId"] as? String ?? "nil"
                 let keys = paramsDict.keys.sorted().joined(separator: ", ")
-                print("[ConnectionManager] Warning: Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
+                AppLog.connection.debug("[ConnectionManager] Warning: Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
                 return
             }
 
@@ -730,9 +726,9 @@ class ConnectionManager: ObservableObject {
 
     private func handleDisconnection() {
         let disconnectTime = CFAbsoluteTimeGetCurrent()
-        print("[ConnectionManager] handleDisconnection called, current state=\(connectionState)")
+        AppLog.connection.debug("[ConnectionManager] handleDisconnection called, current state=\(connectionState)")
         guard connectionState != .disconnected else {
-            print("[ConnectionManager] Already disconnected, ignoring")
+            AppLog.connection.debug("[ConnectionManager] Already disconnected, ignoring")
             return
         }
         stopPingTimer()
@@ -758,7 +754,7 @@ class ConnectionManager: ObservableObject {
                 }
 
                 let attemptStart = CFAbsoluteTimeGetCurrent()
-                print("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * 1000))ms")
+                AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * 1000))ms")
 
                 // Batch read: check generation + set state + read all connection params in one MainActor call
                 let (currentGen, hostsToTry, currentPort, currentToken, currentCertFingerprint) = await MainActor.run {
@@ -773,12 +769,12 @@ class ConnectionManager: ObservableObject {
 
                 do {
                     let raceStart = CFAbsoluteTimeGetCurrent()
-                    print("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
+                    AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
 
                     let winningSocket = try await self?.raceHosts(hostsToTry, port: currentPort, token: currentToken, certFingerprint: currentCertFingerprint)
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
-                    print("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
+                    AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
 
                     guard let winningSocket = winningSocket else { continue }
 
@@ -800,7 +796,7 @@ class ConnectionManager: ObservableObject {
                     }
 
                     let elapsed = (CFAbsoluteTimeGetCurrent() - reconnectStart) * 1000
-                    print("[ConnectionManager] Reconnect complete in \(Int(elapsed))ms")
+                    AppLog.connection.debug("[ConnectionManager] Reconnect complete in \(Int(elapsed))ms")
                     return
                 } catch {
                     // Check if cert mismatch — all hosts failed with cert errors
@@ -810,14 +806,14 @@ class ConnectionManager: ObservableObject {
                        currentCertFingerprint != nil,
                        nsError.localizedDescription.contains("failed") {
                         // Check if this looks like a cert pinning failure
-                        print("[ConnectionManager] Possible certificate mismatch detected, stopping reconnection")
+                        AppLog.connection.debug("[ConnectionManager] Possible certificate mismatch detected, stopping reconnection")
                         await MainActor.run {
                             self?.certMismatchDetected = true
                             self?.connectionState = .disconnected
                         }
                         return
                     }
-                    print("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")
+                    AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")
                 }
                 attempt += 1
             }
@@ -831,9 +827,9 @@ class ConnectionManager: ObservableObject {
                     "eventTypes": ["workspace:*", "note:*", "agent:*"],
                     "replaceGroup": "global"
                 ])
-                print("[ConnectionManager] Subscribed to all events")
+                AppLog.connection.debug("[ConnectionManager] Subscribed to all events")
             } catch {
-                print("[ConnectionManager] Failed to subscribe to events: \(error)")
+                AppLog.connection.debug("[ConnectionManager] Failed to subscribe to events: \(error)")
             }
         }
     }
@@ -844,7 +840,7 @@ class ConnectionManager: ObservableObject {
         stopPingTimer()
         lastPongReceived = Date()
         pingTimer = Timer.scheduledTimer(withTimeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.sendPingAndCheckHealth()
             }
         }
@@ -861,7 +857,7 @@ class ConnectionManager: ObservableObject {
         // Check if we've timed out
         let timeSinceLastPong = Date().timeIntervalSince(lastPongReceived)
         if timeSinceLastPong > Self.pongTimeout {
-            print("[ConnectionManager] Ping timeout — no pong received in \(Int(timeSinceLastPong))s, triggering reconnection")
+            AppLog.connection.debug("[ConnectionManager] Ping timeout — no pong received in \(Int(timeSinceLastPong))s, triggering reconnection")
             stopPingTimer()
             handleDisconnection()
             return
@@ -884,9 +880,13 @@ class ConnectionManager: ObservableObject {
 
 // MARK: - Certificate Pinning (Starscream)
 
-class CertFingerprintPinner: CertificatePinning {
+nonisolated final class CertFingerprintPinner: CertificatePinning {
     let pinnedFingerprint: String
-    var lastMismatchFingerprint: String?
+    private let mismatchFingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+    var lastMismatchFingerprint: String? {
+        mismatchFingerprint.withLock { $0 }
+    }
 
     init(pinnedFingerprint: String) {
         self.pinnedFingerprint = pinnedFingerprint
@@ -894,7 +894,8 @@ class CertFingerprintPinner: CertificatePinning {
 
     func evaluateTrust(trust: SecTrust, domain: String?, completion: ((PinningState) -> ())) {
         guard SecTrustGetCertificateCount(trust) > 0,
-              let cert = SecTrustGetCertificateAtIndex(trust, 0) else {
+              let certChain = SecTrustCopyCertificateChain(trust) as? [SecCertificate],
+              let cert = certChain.first else {
             completion(.failed(nil))
             return
         }
@@ -906,10 +907,10 @@ class CertFingerprintPinner: CertificatePinning {
         if fingerprint.lowercased() == pinnedFingerprint.lowercased() {
             completion(.success)
         } else {
-            print("[CertPinning] Fingerprint mismatch!")
-            print("[CertPinning] Expected: \(pinnedFingerprint)")
-            print("[CertPinning] Got:      \(fingerprint)")
-            lastMismatchFingerprint = fingerprint
+            AppLog.connection.debug("[CertPinning] Fingerprint mismatch!")
+            AppLog.connection.debug("[CertPinning] Expected: \(pinnedFingerprint)")
+            AppLog.connection.debug("[CertPinning] Got:      \(fingerprint)")
+            mismatchFingerprint.withLock { $0 = fingerprint }
             completion(.failed(nil))
         }
     }
