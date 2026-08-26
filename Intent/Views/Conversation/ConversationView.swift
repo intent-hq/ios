@@ -675,6 +675,11 @@ private struct ConversationViewContent: View {
                 onNavigateToAgent: { agentId, wsId, name in
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     childAgent = AgentDestination(agentId: agentId, workspaceId: wsId, agentName: name)
+                },
+                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id),
+                onHydrateBlock: { blockId in
+                    let messageId = message.id
+                    Task { await viewModel.store.hydrateBlock(messageId: messageId, blockId: blockId) }
                 }
             )
 

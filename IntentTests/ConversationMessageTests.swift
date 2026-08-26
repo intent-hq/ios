@@ -119,6 +119,51 @@ struct ContentBlockTests {
         #expect(block.mimeType == "image/png")
     }
 
+    // MARK: Slim projection flags (PROTOCOL §5.5)
+
+    @Test func decodeSlimTruncatedToolUseBlock() throws {
+        let json = #"{"type":"tool_use","name":"write_file","input":{"path":"foo.txt"},"inputTruncated":true,"inputBytes":900000}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.inputTruncated == true)
+        #expect(block.inputBytes == 900_000)
+        #expect(block.isSlimTruncated)
+    }
+
+    @Test func decodeSlimTruncatedToolResultBlock() throws {
+        let json = #"{"type":"tool_result","toolUseId":"tc-1","output":"preview…","outputTruncated":true,"outputBytes":1200000}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.outputTruncated == true)
+        #expect(block.outputBytes == 1_200_000)
+        #expect(block.isSlimTruncated)
+    }
+
+    @Test func decodeSlimThumbnailImageBlock() throws {
+        let json = #"{"type":"image","data":"thumbB64","mimeType":"image/webp","dataTruncated":true,"dataIsThumbnail":true,"dataBytes":4000000}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.dataTruncated == true)
+        #expect(block.dataIsThumbnail == true)
+        #expect(block.dataBytes == 4_000_000)
+        #expect(block.data == "thumbB64")
+        #expect(block.isSlimTruncated)
+    }
+
+    @Test func decodeSlimTruncatedImageWithoutThumbnail() throws {
+        // Legacy rows / failed thumbnail generation: data omitted entirely.
+        let json = #"{"type":"image","mimeType":"image/png","dataTruncated":true,"dataBytes":4000000}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.data == nil)
+        #expect(block.dataTruncated == true)
+        #expect(block.dataIsThumbnail == nil)
+        #expect(block.isSlimTruncated)
+    }
+
+    @Test func untruncatedBlockIsNotSlimTruncated() throws {
+        let json = #"{"type":"tool_use","name":"read_file","input":{"path":"foo.txt"}}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.inputTruncated == nil)
+        #expect(!block.isSlimTruncated)
+    }
+
     @Test func legacyContentFallback() throws {
         let json = #"{"type":"text","content":"legacy text"}"#
         let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)

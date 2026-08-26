@@ -5,6 +5,11 @@ struct MessageView: View {
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)? = nil
+    /// Block ids of this message with a slim-projection hydration fetch in
+    /// flight (agent.getMessageBlock, PROTOCOL §5.5).
+    var hydratingBlockIds: Set<String> = []
+    /// Fetch the full body of a slim-truncated block of this message by id.
+    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     /// Agent-to-agent rows render as a collapsed disclosure card; the body
     /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
@@ -190,13 +195,21 @@ struct MessageView: View {
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
-                    ContentBlockView(block: block, allBlocks: blocks, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
+                    ContentBlockView(
+                        block: block, allBlocks: blocks, workspaceId: workspaceId,
+                        onNavigateToNote: onNavigateToNote,
+                        hydratingBlockIds: hydratingBlockIds,
+                        onHydrateBlock: onHydrateBlock)
                 case .group(let group):
                     let isLastGroup = !renderBlocks.suffix(from: index + 1).contains(where: {
                         if case .group = $0 { return true }
                         return false
                     })
-                    ResponseGroupView(group: group, isLast: isLastGroup, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
+                    ResponseGroupView(
+                        group: group, isLast: isLastGroup, workspaceId: workspaceId,
+                        onNavigateToNote: onNavigateToNote,
+                        hydratingBlockIds: hydratingBlockIds,
+                        onHydrateBlock: onHydrateBlock)
                 }
             }
 

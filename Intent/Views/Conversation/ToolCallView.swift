@@ -3,11 +3,23 @@ import SwiftUI
 struct ToolCallView: View {
     let block: ContentBlock
     let toolResult: ContentBlock?
+    /// True while a slim-truncated body (input or output) is being hydrated
+    /// via agent.getMessageBlock (PROTOCOL §5.5).
+    var isHydrating: Bool = false
+    /// Fetch the full bodies of this row's slim-truncated blocks; absent →
+    /// no hydration (the bounded preview stays).
+    var onHydrate: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
 
     private var toolName: String {
         block.resolvedName ?? "tool"
+    }
+
+    /// A slim-served row: the input and/or output is a bounded preview
+    /// (PROTOCOL §5.5); expanding triggers the on-demand full fetch.
+    private var isTruncated: Bool {
+        block.inputTruncated == true || toolResult?.outputTruncated == true
     }
 
     private var hasError: Bool {
@@ -32,7 +44,14 @@ struct ToolCallView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Compact single-line header
-            Button { withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() } } label: {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                // Expanding a slim-truncated row triggers the on-demand full
+                // fetch (no-op for under-budget rows).
+                if isExpanded && isTruncated {
+                    onHydrate?()
+                }
+            } label: {
                 HStack(spacing: 4) {
                     Text(classified.icon)
                         .font(.caption2)
@@ -75,6 +94,29 @@ struct ToolCallView: View {
     @ViewBuilder
     private var expandedContent: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // While the full block is hydrating (PROTOCOL §5.5), the slim
+            // preview below stays visible with a loading hint on top; once
+            // the full block merges in, the truncation flags disappear and
+            // this hint retires. A tap retries a failed fetch.
+            if isTruncated {
+                Button { onHydrate?() } label: {
+                    HStack(spacing: 4) {
+                        if isHydrating {
+                            ProgressView()
+                                .controlSize(.mini)
+                            Text("Loading full content…")
+                        } else {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.caption2)
+                            Text(onHydrate != nil ? "Preview — tap to load full content" : "Preview")
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+                .buttonStyle(.plain)
+                .disabled(isHydrating || onHydrate == nil)
+            }
             if let input = block.input, !input.isEmpty {
                 Text("Input")
                     .font(.caption.weight(.semibold))
