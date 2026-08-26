@@ -45,7 +45,7 @@ struct MonitoredPr: Identifiable, Equatable {
         let approvals: Approvals
         let threads: Threads
 
-        static func parse(_ dict: [String: Any]) -> Snapshot? {
+        nonisolated static func parse(_ dict: [String: Any]) -> Snapshot? {
             guard let state = dict["state"] as? String,
                   let isDraft = dict["isDraft"] as? Bool,
                   let hasConflicts = dict["hasConflicts"] as? Bool,

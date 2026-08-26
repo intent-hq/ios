@@ -74,7 +74,8 @@ private class CertProbeDelegate: NSObject, URLSessionDelegate {
         }
 
         if SecTrustGetCertificateCount(serverTrust) > 0,
-           let serverCert = SecTrustGetCertificateAtIndex(serverTrust, 0) {
+           let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+           let serverCert = certChain.first {
             let certData = SecCertificateCopyData(serverCert) as Data
             let hash = SHA256.hash(data: certData)
             capturedFingerprint = hash.map { String(format: "%02x", $0) }.joined(separator: ":")
