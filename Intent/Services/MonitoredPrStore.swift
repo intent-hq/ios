@@ -10,14 +10,14 @@ import Combine
 /// category expansion, so the store owns its own `events.subscribe` with a
 /// `prMonitor:*` prefix filter.
 @MainActor
-class MonitoredPrStore: ObservableObject {
-    @Published var monitors: [MonitoredPr] = []
-    @Published var isLoading = false
+@Observable class MonitoredPrStore {
+    var monitors: [MonitoredPr] = []
+    var isLoading = false
 
     private var workspaceId: String?
     private var agentId: String?
-    private var subscriptionId: String?
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var subscriptionId: String?
+    @ObservationIgnored private var eventHandlerId: UUID?
     private var cancellables = Set<AnyCancellable>()
     private let connectionManager: ConnectionManagerRouting
 
@@ -50,12 +50,21 @@ class MonitoredPrStore: ObservableObject {
     }
 
     deinit {
-        // deinit is nonisolated: capture the handler id and manager, then hop
-        // to the main actor so the handler entry doesn't outlive the store.
-        guard let handlerId = eventHandlerId else { return }
+        // deinit is nonisolated: capture the handler id, subscription id and
+        // manager, then hop to the main actor so the entries don't outlive the store.
+        let handlerId = eventHandlerId
+        let subscriptionId = subscriptionId
+        guard handlerId != nil || subscriptionId != nil else { return }
         let connectionManager = self.connectionManager
         Task { @MainActor in
-            connectionManager.removeEventHandler(id: handlerId)
+            if let handlerId {
+                connectionManager.removeEventHandler(id: handlerId)
+            }
+            if let subscriptionId {
+                let _ = try? await connectionManager.request("events.unsubscribe", params: [
+                    "subscriptionId": subscriptionId
+                ])
+            }
         }
     }
 
@@ -98,7 +107,7 @@ class MonitoredPrStore: ObservableObject {
                 subscriptionId = subId
             }
         } catch {
-            print("[MonitoredPrStore] events.subscribe (prMonitor:*) failed: \(error)")
+            AppLog.prs.error("[MonitoredPrStore] events.subscribe (prMonitor:*) failed: \(error)")
         }
         // Without a subscription still serve the one-shot snapshot
         await refetch()
@@ -116,7 +125,7 @@ class MonitoredPrStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[MonitoredPrStore] events.unsubscribe failed: \(error)")
+                AppLog.prs.error("[MonitoredPrStore] events.unsubscribe failed: \(error)")
             }
         }
         workspaceId = nil
@@ -142,7 +151,7 @@ class MonitoredPrStore: ObservableObject {
         do {
             let _ = try await connectionManager.request("prMonitor.flush", params: params)
         } catch {
-            print("[MonitoredPrStore] prMonitor.flush failed: \(error)")
+            AppLog.prs.error("[MonitoredPrStore] prMonitor.flush failed: \(error)")
         }
     }
 
@@ -156,7 +165,7 @@ class MonitoredPrStore: ObservableObject {
                 "monitorId": monitorId
             ])
         } catch {
-            print("[MonitoredPrStore] prMonitor.cancel failed: \(error)")
+            AppLog.prs.error("[MonitoredPrStore] prMonitor.cancel failed: \(error)")
         }
     }
 
@@ -309,7 +318,7 @@ class MonitoredPrStore: ObservableObject {
                 monitors = monitorsArray.compactMap { MonitoredPr.parseMonitor($0) }
             }
         } catch {
-            print("[MonitoredPrStore] prMonitor.list failed: \(error)")
+            AppLog.prs.error("[MonitoredPrStore] prMonitor.list failed: \(error)")
         }
         isLoading = false
         refetchInFlight = false

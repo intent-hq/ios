@@ -12,9 +12,17 @@ import SwiftUI
 /// Cancel monitor actions. The parent hides the row entirely when the agent
 /// has no active monitors.
 struct MonitoredPrsRow: View {
-    @ObservedObject var viewModel: ConversationViewModel
+    let viewModel: ConversationViewModel
+    private let monitoredPrStore: MonitoredPrStore
+    @ObservedObject private var workspaceStore: WorkspaceStore
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
+
+    init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
+        self.viewModel = viewModel
+        self.monitoredPrStore = monitoredPrStore
+        _workspaceStore = ObservedObject(wrappedValue: WorkspaceStore.shared)
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -27,7 +35,7 @@ struct MonitoredPrsRow: View {
                     .fontWeight(.medium)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
-                ForEach(viewModel.activeAgentMonitors) { monitor in
+                ForEach(monitoredPrStore.activeMonitors.filter { $0.agentId == viewModel.agentId }) { monitor in
                     monitorChip(monitor)
                 }
             }
@@ -52,7 +60,7 @@ struct MonitoredPrsRow: View {
             Divider()
             Button {
                 Task {
-                    await viewModel.monitoredPrStore.flush(
+                    await monitoredPrStore.flush(
                         monitorId: monitor.monitorId, check: true)
                 }
             } label: {
@@ -66,7 +74,7 @@ struct MonitoredPrsRow: View {
                 Label("Open PR", systemImage: "arrow.up.right.square")
             }
             Button(role: .destructive) {
-                Task { await viewModel.monitoredPrStore.cancel(monitorId: monitor.monitorId) }
+                Task { await monitoredPrStore.cancel(monitorId: monitor.monitorId) }
             } label: {
                 Label("Cancel monitor", systemImage: "xmark")
             }
@@ -79,7 +87,7 @@ struct MonitoredPrsRow: View {
     @ViewBuilder
     private func chipLabel(_ monitor: MonitoredPr) -> some View {
         HStack(spacing: 4) {
-            Text(Self.chipLabel(monitor, workspaceRepo: viewModel.workspaceRepo))
+            Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
                 .font(.caption2)
                 .lineLimit(1)
             if monitor.hasPendingChanges {
@@ -97,6 +105,13 @@ struct MonitoredPrsRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .strokeBorder(Theme.border(for: colorScheme).opacity(0.4), lineWidth: 1)
         )
+    }
+
+    private var workspaceRepo: String? {
+        guard let workspace = workspaceStore.workspaces.first(where: { $0.id == viewModel.workspaceId }),
+              let owner = workspace.repositoryOwner,
+              let name = workspace.repositoryName else { return nil }
+        return "\(owner)/\(name)"
     }
 
     // MARK: - Display helpers (pure, unit-tested)
