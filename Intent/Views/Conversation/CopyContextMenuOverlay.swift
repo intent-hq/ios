@@ -46,6 +46,13 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
         coordinator.text = text
         coordinator.preview = preview
         uiView.setInteractionEnabled(isEnabled, delegate: coordinator)
+        if !isEnabled {
+            // Removing the interaction can tear a live menu down without
+            // its `willEndFor` completion ever running; release the
+            // retained preview controllers here so the retention story
+            // doesn't depend on UIKit's callback ordering.
+            coordinator.releaseRetainedPreviews()
+        }
     }
 
     /// Transparent view carrying the `UIContextMenuInteraction`. Unlike the
@@ -75,16 +82,38 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
         }
 
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            // Re-entrancy guard: the probe below re-runs hit-testing with
+            // this view disabled, and whether UIKit's disabled-view skip
+            // happens parent-side or receiver-side is undocumented — this
+            // check makes the probe terminate by construction.
+            guard isUserInteractionEnabled else { return nil }
             guard interaction != nil, self.point(inside: point, with: event) else { return nil }
-            guard let superview else { return self }
-            // Re-run the superview's hit-test with this overlay excluded to
-            // find the view the touch would reach if the overlay weren't
-            // there (standard pass-through probe; the flag flip is invisible
-            // outside this call).
-            isUserInteractionEnabled = false
-            defer { isUserInteractionEnabled = true }
-            let below = superview.hitTest(convert(point, to: superview), with: event)
-            if let below, !isDescendant(of: below) { return nil }
+            guard let window else { return self }
+
+            // Probe: find the view the touch would reach if this overlay
+            // weren't there. The probe runs from the window, not the
+            // immediate superview: in production that superview is SwiftUI's
+            // per-representable wrapper, sized to the overlay with the
+            // overlay as its only subview, so a probe from there could never
+            // see the row's real UIKit siblings. The exclusive single-child
+            // wrapper chain is disabled alongside the overlay so a positive
+            // hit on a wrapper can't mask what's beneath; the walk stops at
+            // the first ancestor with other subviews (a real container).
+            var excluded: [UIView] = [self]
+            var ancestor = superview
+            while let wrapper = ancestor, wrapper !== window, wrapper.subviews.count == 1 {
+                excluded.append(wrapper)
+                ancestor = wrapper.superview
+            }
+            let toRestore = excluded.filter(\.isUserInteractionEnabled)
+            for view in toRestore { view.isUserInteractionEnabled = false }
+            defer { for view in toRestore { view.isUserInteractionEnabled = true } }
+
+            let below = window.hitTest(convert(point, to: window), with: event)
+            // Pass-through: return the probed view rather than nil, so the
+            // touch reaches it even when an intermediate wrapper would
+            // otherwise hit-test positively for this region and claim it.
+            if let below, !isDescendant(of: below) { return below }
             return self
         }
     }
@@ -148,6 +177,13 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             } else {
                 liveControllers.removeAll()
             }
+        }
+
+        /// Releases every retained preview controller immediately. Called
+        /// when the interaction is removed while a menu may still be open,
+        /// where `willEndFor`'s completion is not guaranteed to run.
+        func releaseRetainedPreviews() {
+            liveControllers.removeAll()
         }
 
         /// Renders `preview` into a fresh hosting controller and anchors it

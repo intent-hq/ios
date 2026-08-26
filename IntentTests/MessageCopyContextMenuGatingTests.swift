@@ -64,58 +64,90 @@ struct MessageCopyContextMenuGatingTests {
 /// is its ancestor — the hosting view — whose gesture recognizers still see
 /// the touch), pass touches through to UIKit-backed sibling subtrees
 /// (in-row scroll views), and be completely inert while the interaction is
-/// disabled.
+/// disabled. The probe runs from the window, so every fixture is rooted in
+/// a real `UIWindow`.
 @MainActor
 struct CopyContextMenuOverlayHitTestTests {
-    private func makeOverlay(enabled: Bool) -> CopyContextMenuOverlay.OverlayView {
+    /// Holds the fixture's strong references: `UIContextMenuInteraction`
+    /// keeps its delegate weakly, so the coordinator must outlive the
+    /// assertions for the fixture to stay realistic.
+    private struct Fixture {
+        let window: UIWindow
+        let host: UIView
+        let overlay: CopyContextMenuOverlay.OverlayView
+        let coordinator: CopyContextMenuOverlay.Coordinator
+    }
+
+    /// Builds `window > host > [siblings..., overlay]`. With `wrapped: true`
+    /// the overlay sits inside an intermediate wrapper sized exactly to it,
+    /// mimicking SwiftUI's per-representable wrapper in production.
+    private func makeFixture(enabled: Bool, wrapped: Bool = false) -> Fixture {
+        let frame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let window = UIWindow(frame: frame)
+        window.isHidden = false
+        let host = UIView(frame: frame)
+        window.addSubview(host)
         let overlay = CopyContextMenuOverlay.OverlayView()
         let coordinator = CopyContextMenuOverlay.Coordinator(
             text: "copy me", preview: AnyView(EmptyView())
         )
         overlay.setInteractionEnabled(enabled, delegate: coordinator)
-        return overlay
+        if wrapped {
+            let wrapper = UIView(frame: host.bounds)
+            overlay.frame = wrapper.bounds
+            wrapper.addSubview(overlay)
+            host.addSubview(wrapper)
+        } else {
+            overlay.frame = host.bounds
+            host.addSubview(overlay)
+        }
+        return Fixture(window: window, host: host, overlay: overlay, coordinator: coordinator)
     }
 
     @Test func disabledOverlayIsInvisibleToHitTesting() {
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
-        let overlay = makeOverlay(enabled: false)
-        overlay.frame = host.bounds
-        host.addSubview(overlay)
-        let hit = host.hitTest(CGPoint(x: 50, y: 50), with: nil)
-        #expect(hit === host)
+        let fixture = makeFixture(enabled: false)
+        let hit = fixture.host.hitTest(CGPoint(x: 50, y: 50), with: nil)
+        #expect(hit === fixture.host)
     }
 
     @Test func overlayClaimsTouchesOverPlainContent() {
         // No UIKit-backed sibling below: the probe finds the host (an
         // ancestor), so the overlay claims the touch for its interaction.
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
-        let overlay = makeOverlay(enabled: true)
-        overlay.frame = host.bounds
-        host.addSubview(overlay)
-        let hit = host.hitTest(CGPoint(x: 50, y: 50), with: nil)
-        #expect(hit === overlay)
+        let fixture = makeFixture(enabled: true)
+        let hit = fixture.host.hitTest(CGPoint(x: 50, y: 50), with: nil)
+        #expect(hit === fixture.overlay)
     }
 
     @Test func overlayPassesThroughToUIKitBackedSiblings() {
         // A scroll view beneath the overlay (e.g. a code block) must keep
         // receiving its touches; the overlay yields over that sub-region
         // and still claims the rest of the row.
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        let fixture = makeFixture(enabled: true)
         let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 50, height: 100))
-        host.addSubview(scrollView)
-        let overlay = makeOverlay(enabled: true)
-        overlay.frame = host.bounds
-        host.addSubview(overlay)
-        #expect(host.hitTest(CGPoint(x: 25, y: 50), with: nil) === scrollView)
-        #expect(host.hitTest(CGPoint(x: 75, y: 50), with: nil) === overlay)
+        fixture.host.insertSubview(scrollView, belowSubview: fixture.overlay)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === scrollView)
+        #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
     }
 
-    @Test func hitTestProbeRestoresUserInteraction() {
-        let host = UIView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
-        let overlay = makeOverlay(enabled: true)
-        overlay.frame = host.bounds
-        host.addSubview(overlay)
-        _ = host.hitTest(CGPoint(x: 50, y: 50), with: nil)
-        #expect(overlay.isUserInteractionEnabled)
+    @Test func probeSeesSiblingsThroughSizedWrapper() throws {
+        // Production shape: the overlay's immediate superview is SwiftUI's
+        // per-representable wrapper, sized exactly to the overlay with the
+        // overlay as its only subview. A probe from that superview could
+        // only ever find the wrapper; the window-rooted probe must disable
+        // the wrapper chain and still find the scroll view beneath.
+        let fixture = makeFixture(enabled: true, wrapped: true)
+        let wrapper = try #require(fixture.overlay.superview)
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+        fixture.host.insertSubview(scrollView, belowSubview: wrapper)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === scrollView)
+        #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
+    }
+
+    @Test func hitTestProbeRestoresUserInteraction() throws {
+        let fixture = makeFixture(enabled: true, wrapped: true)
+        let wrapper = try #require(fixture.overlay.superview)
+        _ = fixture.host.hitTest(CGPoint(x: 50, y: 50), with: nil)
+        #expect(fixture.overlay.isUserInteractionEnabled)
+        #expect(wrapper.isUserInteractionEnabled)
     }
 }
