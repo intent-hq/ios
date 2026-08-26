@@ -2,7 +2,8 @@ import PhotosUI
 import SwiftUI
 
 struct MessageInputView: View {
-    @ObservedObject var viewModel: ConversationViewModel
+    @Bindable var viewModel: ConversationViewModel
+    private let store: ConversationStore
     @Environment(\.colorScheme) var colorScheme
 
     @State private var isFocused: Bool = false
@@ -10,8 +11,13 @@ struct MessageInputView: View {
 
     // Local text state to decouple TextField from viewModel updates.
     // This prevents typing lag when the viewModel is rapidly updating
-    // during streaming (every @Published change triggers a re-render).
+    // during streaming (every legacy-store publication triggers a re-render).
     @State private var localText: String = ""
+
+    init(viewModel: ConversationViewModel, store: ConversationStore) {
+        self.viewModel = viewModel
+        self.store = store
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,7 +29,7 @@ struct MessageInputView: View {
             // Input row
             HStack(alignment: .center, spacing: 8) {
                 // Left button: photo picker or stop button
-                if viewModel.isStreaming {
+                if store.isStreaming {
                     // Stop button replaces photo picker during streaming
                     Button {
                         HapticManager.impact(.light)
@@ -82,7 +88,7 @@ struct MessageInputView: View {
                     let hasText = !localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                         || !viewModel.pendingImages.isEmpty
 
-                    if !viewModel.isStreaming || hasText {
+                    if !store.isStreaming || hasText {
                         Button {
                             sendCurrentMessage()
                         } label: {
