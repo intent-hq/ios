@@ -4,7 +4,7 @@ import Foundation
 /// (`sidebar-changes-utils.ts`: `toPRDisplayStatus`, `monitorDisplayStatus`,
 /// `mergeMonitoredPRs`, `selectPrimaryPr`, `countOtherMonitors`) so iOS picks
 /// the identical primary PR and "+N" count. No networking or view concerns.
-enum WorkspacePrPill {
+nonisolated enum WorkspacePrPill {
 
     /// FE `PRDisplayStatus` — the four pill buckets.
     enum Status: String, Equatable {
@@ -161,7 +161,7 @@ enum WorkspacePrPill {
 /// FE `toPRDisplayStatus`: raw wire `PullRequestStatus` variant name → pill
 /// bucket; unknown future variants bucket as `closed`, matching the FE.
 extension WorkspacePrPill.Status {
-    init(wire: String) {
+    nonisolated init(wire: String) {
         switch wire {
         case "Open": self = .open
         case "Merged": self = .merged

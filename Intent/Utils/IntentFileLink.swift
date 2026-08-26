@@ -8,7 +8,7 @@ import Foundation
 ///
 /// The path may contain slashes; everything after the `file` segment is the
 /// workspace-relative path. Segments are percent-decoded on parse.
-struct IntentFileLink: Equatable {
+nonisolated struct IntentFileLink: Equatable {
     /// Explicit workspace ID from the long form, nil for the short form.
     let workspaceId: String?
     /// Workspace-relative file path (percent-decoded).

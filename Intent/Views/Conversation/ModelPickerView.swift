@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ModelPickerView: View {
-    @ObservedObject var viewModel: ConversationViewModel
+    let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 

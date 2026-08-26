@@ -158,7 +158,7 @@ enum SuggestedPrompts {
         return result
     }
 
-    private static func looksLikeBodyText(_ line: String) -> Bool {
+    nonisolated private static func looksLikeBodyText(_ line: String) -> Bool {
         if line.hasPrefix("|") || line.hasPrefix("<!--") { return true }
         if line.range(of: "^#{1,6}(\\s|$)", options: .regularExpression) != nil { return true }
         if line.range(of: "^(`{3,}|~{3,})", options: .regularExpression) != nil { return true }

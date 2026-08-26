@@ -23,11 +23,11 @@ final class WorkspaceFileImageLoader {
     static let chunkLength = 4 * 1024 * 1024
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
-    static let maxFileBytes = 32 * 1024 * 1024
+    nonisolated static let maxFileBytes = 32 * 1024 * 1024
     /// Longest decoded edge in pixels. Decoding goes through ImageIO's
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
-    static let maxPixelSize = 2048
+    nonisolated static let maxPixelSize = 2048
     /// Total decoded-byte budget for the image cache (a 2048×2048 BGRA image
     /// is ~16 MB, so this holds a handful before NSCache evicts).
     static let cacheTotalCostLimit = 64 * 1024 * 1024

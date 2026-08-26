@@ -43,7 +43,7 @@ class GitHubRepoStore: ObservableObject {
             isConfigured = configured
             return configured
         } catch {
-            print("[GitHubRepoStore] github.authStatus failed: \(error)")
+            AppLog.github.error("[GitHubRepoStore] github.authStatus failed: \(error)")
             isConfigured = false
             return false
         }
@@ -63,7 +63,7 @@ class GitHubRepoStore: ObservableObject {
             guard let items = (result as? [String: Any])?["repos"] as? [[String: Any]] else { return }
             recentRepos = items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
-            print("[GitHubRepoStore] repo.list failed: \(error)")
+            AppLog.github.error("[GitHubRepoStore] repo.list failed: \(error)")
         }
     }
 
@@ -80,7 +80,7 @@ class GitHubRepoStore: ObservableObject {
             let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
             ownRepos = items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
-            print("[GitHubRepoStore] github.repos.list failed: \(error)")
+            AppLog.github.error("[GitHubRepoStore] github.repos.list failed: \(error)")
             lastError = error.localizedDescription
         }
         isLoading = false
@@ -107,7 +107,7 @@ class GitHubRepoStore: ObservableObject {
             let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
             return items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
-            print("[GitHubRepoStore] github.repos.search failed: \(error)")
+            AppLog.github.error("[GitHubRepoStore] github.repos.search failed: \(error)")
             lastError = error.localizedDescription
             return nil
         }
@@ -125,7 +125,7 @@ class GitHubRepoStore: ObservableObject {
             let repoDict = (result as? [String: Any])?["repo"] as? [String: Any]
             return repoDict?["defaultBranch"] as? String
         } catch {
-            print("[GitHubRepoStore] github.repos.get failed: \(error)")
+            AppLog.github.error("[GitHubRepoStore] github.repos.get failed: \(error)")
             return nil
         }
     }

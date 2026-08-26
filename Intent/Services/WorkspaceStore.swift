@@ -80,7 +80,7 @@ class WorkspaceStore: ObservableObject {
             applyHighWaterMarks(to: &parsed)
             publishFetchedWorkspaces(parsed)
         } catch {
-            print("[WorkspaceStore] Failed to fetch workspaces: \(error)")
+            AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
         isLoading = false
     }
@@ -190,10 +190,10 @@ class WorkspaceStore: ObservableObject {
                 ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
-                print("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
+                AppLog.workspace.info("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
             }
         } catch {
-            print("[WorkspaceStore] workspace.subscribe failed: \(error), falling back to legacy")
+            AppLog.workspace.warning("[WorkspaceStore] workspace.subscribe failed: \(error), falling back to legacy")
         }
     }
 
@@ -217,7 +217,7 @@ class WorkspaceStore: ObservableObject {
 
         guard let eventType = event["type"] as? String else { return }
 
-        print("[WorkspaceStore] Received event: \(eventType)")
+        AppLog.workspace.debug("[WorkspaceStore] Received event: \(eventType)")
 
         let eventTimestamp = event["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
         let eventWorkspaceId = event["workspaceId"] as? String
@@ -265,7 +265,7 @@ class WorkspaceStore: ObservableObject {
 
         case let t where t.hasPrefix("agent:"):
             // Unknown agent event — log and ignore (all known types handled above)
-            print("[WorkspaceStore] Ignoring unknown agent event: \(t)")
+            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(t)")
 
         default:
             break
@@ -292,7 +292,7 @@ class WorkspaceStore: ObservableObject {
             var parsed = reconciler.values()
             applyHighWaterMarks(to: &parsed)
             publishFetchedWorkspaces(parsed)
-            print("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
+            AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
 
         case .delta:
             guard let delta = push.delta else { return }
@@ -300,12 +300,12 @@ class WorkspaceStore: ObservableObject {
                 var parsed = reconciler.values()
                 applyHighWaterMarks(to: &parsed)
                 publishFetchedWorkspaces(parsed)
-                print("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
+                AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
                 if !resnapshotInProgress {
                     resnapshotInProgress = true
-                    print("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
+                    AppLog.workspace.warning("[WorkspaceStore] Sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshot() }
                 }
             }
@@ -327,7 +327,7 @@ class WorkspaceStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[WorkspaceStore] workspace.unsubscribe failed: \(error)")
+                AppLog.workspace.error("[WorkspaceStore] workspace.unsubscribe failed: \(error)")
             }
         }
 
@@ -473,10 +473,10 @@ class WorkspaceStore: ObservableObject {
         let agentSummary = dict["agentSummary"] as? [String: Any]
 
         // DEBUG: Log agent summary data
-        print("[WorkspaceStore] Parsing workspace '\(title)': agentSummary=\(agentSummary != nil ? "present" : "nil"), count=\(agentSummary?["count"] ?? "nil"), agents=\((agentSummary?["agents"] as? [[String: Any]])?.count ?? 0)")
+        AppLog.workspace.debug("[WorkspaceStore] Parsing workspace '\(title)': agentSummary=\(agentSummary != nil ? "present" : "nil"), count=\(agentSummary?["count"] ?? "nil"), agents=\((agentSummary?["agents"] as? [[String: Any]])?.count ?? 0)")
         if let agents = agentSummary?["agents"] as? [[String: Any]] {
             for agent in agents {
-                print("[WorkspaceStore]   Agent: id=\(agent["id"] ?? "?"), name=\(agent["name"] ?? "?"), status=\(agent["status"] ?? "?")")
+                AppLog.workspace.debug("[WorkspaceStore]   Agent: id=\(agent["id"] ?? "?"), name=\(agent["name"] ?? "?"), status=\(agent["status"] ?? "?")")
             }
         }
         // END DEBUG

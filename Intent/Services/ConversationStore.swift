@@ -3,40 +3,46 @@ import Foundation
 import SwiftUI
 
 @MainActor
-class ConversationStore: ObservableObject {
-    @Published var messages: [ConversationMessage] = []
-    @Published var isStreaming = false
-    @Published var isLoading = false
-    @Published var queuedMessages: [QueuedMessage] = []
-    @Published var streamingUpdateCount: Int = 0
-    @Published var watchedAgentIds: [String] = []
-    @Published var delegationGroupStatus: (completed: Int, total: Int)?
-    @Published var isWaitingForAgents = false
-    @Published var watchedAgents: [AgentSession] = []
-    @Published var isTruncated: Bool = false
-    @Published var totalMessageCount: Int = 0
+@Observable class ConversationStore {
+    var messages: [ConversationMessage] = []
+    @ObservationIgnored var onStreamingChanged: ((Bool) -> Void)?
+    var isStreaming = false {
+        didSet {
+            guard oldValue != isStreaming else { return }
+            onStreamingChanged?(isStreaming)
+        }
+    }
+    var isLoading = false
+    var queuedMessages: [QueuedMessage] = []
+    var streamingUpdateCount: Int = 0
+    var watchedAgentIds: [String] = []
+    var delegationGroupStatus: (completed: Int, total: Int)?
+    var isWaitingForAgents = false
+    var watchedAgents: [AgentSession] = []
+    var isTruncated: Bool = false
+    var totalMessageCount: Int = 0
     /// Pending attention request for OUR agent (PROTOCOL §5.5), refreshed from
     /// `agent.get`. The daemon clears the underlying fields when the agent next
     /// receives a message, so this retires via the same refresh.
-    @Published var attentionRequest: PendingAttentionRequest?
+    var attentionRequest: PendingAttentionRequest?
     /// True when the daemon has definitively told us our agent does not exist —
     /// a `-32602` with `data.code == "not-found"` on
     /// `agent.getConversation`/`agent.get`, or an `agent:deleted` event for the
     /// open agent. Transient transport errors never raise this. The view
     /// observes it to fall back to the agent list.
-    @Published var agentNotFound = false
+    var agentNotFound = false
     /// The question-dismissal marker (PROTOCOL §5.5): id of the question-bearing
     /// assistant message the user dismissed via `agent.dismissQuestions`.
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
     /// `agent.get` and updated push-style by `agent:updated`. The wizard gate
     /// retires a pending set whose message id matches it.
-    @Published var dismissedQuestionsMessageId: String?
+    var dismissedQuestionsMessageId: String?
     /// The per-conversation seen marker (PROTOCOL §5.5, v4.5): id of the newest
     /// transcript message the user has seen, advanced via `agent.markSeen`.
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
     /// `agent.get` and updated push-style by `agent:updated` so marker moves
     /// from other clients converge here too.
-    @Published var lastSeenMessageId: String?
+    var lastSeenMessageId: String?
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -45,10 +51,10 @@ class ConversationStore: ObservableObject {
     private var connectionObserver: AnyCancellable?
     private var currentStreamId: String?
     private var isSubscribing = false
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var eventHandlerId: UUID?
     /// Live-state tracking for chat.subscribe
     private var chatLive = false
-    private var chatSubscriptionId: String?
+    @ObservationIgnored private var chatSubscriptionId: String?
     /// True while a chat.subscribe channel is (being) established; gates push processing.
     private var chatChannelActive = false
     /// True once the seq-0 snapshot has been applied; deltas before it are a gap.
@@ -178,7 +184,7 @@ class ConversationStore: ObservableObject {
             }
         } catch {
             raiseAgentNotFoundIfDefinitive(error)
-            print("[ConversationStore] Failed to fetch agent streaming state: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
         }
     }
 
@@ -191,12 +197,12 @@ class ConversationStore: ObservableObject {
     private func raiseAgentNotFoundIfDefinitive(_ error: Error) {
         let nsError = error as NSError
         if nsError.isEntityNotFound {
-            print(
+            AppLog.conversation.warning(
                 "[ConversationStore] not-found for agent \(agentId ?? "?") — "
                     + "treating as deleted: \(nsError.localizedDescription)")
             agentNotFound = true
         } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
-            print(
+            AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "agent \(agentId ?? "?") (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
                     + "NOT treating as deletion: \(nsError.localizedDescription)")
@@ -276,7 +282,7 @@ class ConversationStore: ObservableObject {
             }
         } catch {
             raiseAgentNotFoundIfDefinitive(error)
-            print("[ConversationStore] Failed to fetch conversation: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to fetch conversation: \(error)")
         }
         if isInitialLoad {
             replayBufferedStreamEvents()
@@ -368,9 +374,9 @@ class ConversationStore: ObservableObject {
                let subId = dict["subscriptionId"] as? String {
                 subscriptionId = subId
             }
-            print("[ConversationStore] Subscribed to streaming events")
+            AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
         } catch {
-            print("[ConversationStore] Failed to subscribe: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
         }
     }
 
@@ -399,7 +405,7 @@ class ConversationStore: ObservableObject {
                 connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleChatSubscriptionPush(push)
                 }
-                print("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
+                AppLog.conversation.info("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
             } else {
                 // Response missing subscriptionId - clean up and fall back to legacy.
                 // Clear chatLive too so firehose events are not gated by a stale flag.
@@ -413,7 +419,7 @@ class ConversationStore: ObservableObject {
             chatChannelActive = false
             chatLive = false
             chatSubscriptionId = nil
-            print("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
+            AppLog.conversation.warning("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
         }
     }
 
@@ -451,7 +457,7 @@ class ConversationStore: ObservableObject {
                 // resnapshot (guard against storm)
                 if !resnapshotChatInProgress {
                     resnapshotChatInProgress = true
-                    print("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
+                    AppLog.conversation.warning("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
                     Task { await resnapshotChat() }
                 }
             }
@@ -483,7 +489,7 @@ class ConversationStore: ObservableObject {
         let isResponding = meta?["isResponding"] as? Bool ?? false
         let turnInFlight = meta?["turnInFlight"] as? Bool ?? false
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
-        print("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
+        AppLog.conversation.debug("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
     }
 
     /// Reduce one block-granularity delta onto the transcript (PROTOCOL §7.1).
@@ -525,9 +531,7 @@ class ConversationStore: ObservableObject {
             isStreaming = true
             streamingUpdateCount += 1
         }
-        #if DEBUG
-        print("[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
-        #endif
+        AppLog.conversation.debug("[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
     }
 
     /// Upsert one delta entity's full block into its owning message.
@@ -630,7 +634,7 @@ class ConversationStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[ConversationStore] chat.unsubscribe failed: \(error)")
+                AppLog.conversation.error("[ConversationStore] chat.unsubscribe failed: \(error)")
             }
         }
 
@@ -652,9 +656,9 @@ class ConversationStore: ObservableObject {
                 "events.unsubscribe",
                 params: ["subscriptionId": subId]
             )
-            print("[ConversationStore] Unsubscribed previous subscription: \(subId)")
+            AppLog.conversation.debug("[ConversationStore] Unsubscribed previous subscription: \(subId)")
         } catch {
-            print("[ConversationStore] Failed to unsubscribe: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to unsubscribe: \(error)")
         }
     }
 
@@ -1106,7 +1110,7 @@ class ConversationStore: ObservableObject {
             if lastMarkSeenSentId == messageId {
                 lastMarkSeenSentId = nil
             }
-            print("[ConversationStore] agent.markSeen failed: \(error)")
+            AppLog.conversation.error("[ConversationStore] agent.markSeen failed: \(error)")
         }
     }
 
@@ -1145,7 +1149,7 @@ class ConversationStore: ObservableObject {
                 params: ["agentId": agentId]
             )
         } catch {
-            print("[ConversationStore] Failed to stop streaming: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to stop streaming: \(error)")
         }
     }
 
@@ -1163,7 +1167,7 @@ class ConversationStore: ObservableObject {
                 queuedMessages = (try? JSONDecoder().decode([QueuedMessage].self, from: data)) ?? []
             }
         } catch {
-            print("[ConversationStore] Failed to fetch queue: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
         }
     }
 
@@ -1205,7 +1209,7 @@ class ConversationStore: ObservableObject {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and propagate without
             // classifying as a missing queued message.
-            print(
+            AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "queued message \(messageId) (data.code: \(error.intentErrorDataCode ?? "absent")): "
                     + error.localizedDescription)
@@ -1312,7 +1316,7 @@ class ConversationStore: ObservableObject {
                 delegationGroupStatus = nil
             }
         } catch {
-            print("[ConversationStore] Failed to fetch subscriptions: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to fetch subscriptions: \(error)")
         }
     }
 
@@ -1327,7 +1331,7 @@ class ConversationStore: ObservableObject {
             delegationGroupStatus = nil
             watchedAgents = []
         } catch {
-            print("[ConversationStore] Failed to cancel subscriptions: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to cancel subscriptions: \(error)")
         }
     }
 
@@ -1359,9 +1363,9 @@ class ConversationStore: ObservableObject {
                         self.watchedAgents.append(updated)
                     }
                 }
-                print("[ConversationStore] Updated watched agent: \(updated.name): \(updated.displayMessage ?? "nil")")
+                AppLog.conversation.debug("[ConversationStore] Updated watched agent: \(updated.name): \(updated.displayMessage ?? "nil")")
             } catch {
-                print("[ConversationStore] Failed to fetch watched agent \(agentId): \(error)")
+                AppLog.conversation.error("[ConversationStore] Failed to fetch watched agent \(agentId): \(error)")
             }
         }
     }
@@ -1382,12 +1386,12 @@ class ConversationStore: ObservableObject {
             let watchedSet = Set(watchedAgentIds)
             let agents = agentDicts.compactMap { AgentSession.parseAgent($0) }
                 .filter { watchedSet.contains($0.id) }
-            print("[ConversationStore] Fetched \(agents.count) watched agents: \(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })")
+            AppLog.conversation.debug("[ConversationStore] Fetched \(agents.count) watched agents: \(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })")
             await MainActor.run {
                 self.watchedAgents = agents
             }
         } catch {
-            print("[ConversationStore] Failed to fetch watched agent details: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to fetch watched agent details: \(error)")
         }
     }
 
@@ -1399,7 +1403,7 @@ class ConversationStore: ObservableObject {
             let _ = try await connectionManager.request(
                 "agent.stop", params: ["agentId": parentAgentId])
         } catch {
-            print("[ConversationStore] Failed to stop parent agent: \(error)")
+            AppLog.conversation.error("[ConversationStore] Failed to stop parent agent: \(error)")
         }
         // Stop all watched agents
         for id in agentIds {
@@ -1407,7 +1411,7 @@ class ConversationStore: ObservableObject {
                 let _ = try await connectionManager.request(
                     "agent.stop", params: ["agentId": id])
             } catch {
-                print("[ConversationStore] Failed to stop agent \(id): \(error)")
+                AppLog.conversation.error("[ConversationStore] Failed to stop agent \(id): \(error)")
             }
         }
     }

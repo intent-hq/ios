@@ -1,12 +1,23 @@
 import SwiftUI
 
 struct AgentWaitingView: View {
-    @ObservedObject var viewModel: ConversationViewModel
-    var onNavigateToAgent: ((String, String, String) -> Void)?
+    let viewModel: ConversationViewModel
+    private let store: ConversationStore
+    let onNavigateToAgent: ((String, String, String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
+    init(
+        viewModel: ConversationViewModel,
+        store: ConversationStore,
+        onNavigateToAgent: ((String, String, String) -> Void)? = nil
+    ) {
+        self.viewModel = viewModel
+        self.store = store
+        self.onNavigateToAgent = onNavigateToAgent
+    }
+
     var body: some View {
-        if viewModel.store.isWaitingForAgents {
+        if store.isWaitingForAgents {
             VStack(spacing: 0) {
                 // Header
                 HStack(spacing: 8) {
@@ -23,13 +34,13 @@ struct AgentWaitingView: View {
                 .padding(.vertical, 8)
 
                 // Agent rows
-                if !viewModel.store.watchedAgents.isEmpty {
+                if !store.watchedAgents.isEmpty {
                     Divider()
                         .padding(.horizontal, 16)
 
                     ScrollView {
                         VStack(spacing: 0) {
-                            ForEach(viewModel.store.watchedAgents) { agent in
+                            ForEach(store.watchedAgents) { agent in
                                 if let onNavigateToAgent {
                                     Button {
                                         onNavigateToAgent(agent.id, viewModel.workspaceId, agent.name)
@@ -49,12 +60,12 @@ struct AgentWaitingView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: min(CGFloat(viewModel.store.watchedAgents.count) * 44, 132))
-                } else if !viewModel.store.watchedAgentIds.isEmpty {
+                    .frame(maxHeight: min(CGFloat(store.watchedAgents.count) * 44, 132))
+                } else if !store.watchedAgentIds.isEmpty {
                     // Fallback: show agent IDs if details haven't loaded yet
                     ScrollView {
                         VStack(spacing: 0) {
-                            ForEach(viewModel.store.watchedAgentIds, id: \.self) { agentId in
+                            ForEach(store.watchedAgentIds, id: \.self) { agentId in
                                 HStack(spacing: 10) {
                                     ProgressView()
                                         .scaleEffect(0.6)
@@ -68,7 +79,7 @@ struct AgentWaitingView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: min(CGFloat(viewModel.store.watchedAgentIds.count) * 40, 120))
+                    .frame(maxHeight: min(CGFloat(store.watchedAgentIds.count) * 40, 120))
                 }
             }
             .background(Theme.card(for: colorScheme))
@@ -164,8 +175,8 @@ struct AgentWaitingView: View {
     }
 
     private var headerText: String {
-        let count = viewModel.store.watchedAgentIds.count
-        if let status = viewModel.store.delegationGroupStatus {
+        let count = store.watchedAgentIds.count
+        if let status = store.delegationGroupStatus {
             return "Waiting for all (\(status.completed)/\(status.total))"
         }
         return "Waiting for \(count) agent\(count == 1 ? "" : "s")"

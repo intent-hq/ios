@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct QueuedMessagesView: View {
-    @ObservedObject var viewModel: ConversationViewModel
+    let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
 
     @State private var editingId: String?

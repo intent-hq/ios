@@ -146,7 +146,7 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
 
         func contextMenuInteraction(
             _ interaction: UIContextMenuInteraction,
-            previewForDismissingContextMenuWithConfiguration configuration: UIContextMenuConfiguration
+            previewForDismissingMenuWithConfiguration configuration: UIContextMenuConfiguration
         ) -> UITargetedPreview? {
             uprightPreview(for: interaction)
         }
