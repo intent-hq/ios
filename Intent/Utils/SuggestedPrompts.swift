@@ -10,13 +10,13 @@ import Foundation
 /// is body-text-shaped (heading, fence, table row, Mermaid edge), so response
 /// body text can never render as chips.
 ///
-/// Mirrors `findSuggestedPromptsBlocks` / `parseSuggestedPrompts` in the desktop
-/// app's `messageParser.ts`, except that prompt lines are kept verbatim (iOS has
-/// no `Label|` / `delay:N|` stripping) and a body line starting with `<!--` also
-/// disqualifies the block.
+/// Mirrors `scanSuggestedPrompts` / `parseSuggestedPrompts` in the desktop
+/// app's `messageParser.ts`, including `Label|` / `delay:N|` stripping, the
+/// four-chip cap, and dropping individually invalid lines.
 enum SuggestedPrompts {
-    /// Maximum number of chips a block can contribute.
-    static let maxPrompts = 6
+    /// Maximum number of chips a block can contribute (matches the desktop
+    /// cap and the harness's "write 2–4 prompts" instruction).
+    static let maxPrompts = 4
     /// Maximum length of a single prompt; longer lines are dropped.
     static let maxPromptLength = 200
 
@@ -169,10 +169,37 @@ enum SuggestedPrompts {
     private static func prompts(from lines: [String]) -> [String] {
         var result: [String] = []
         for line in lines {
-            if line.utf16.count > maxPromptLength { continue }
-            result.append(line)
+            guard let prompt = parsePromptLine(line) else { continue }
+            result.append(prompt)
             if result.count == maxPrompts { break }
         }
         return result
+    }
+
+    /// Strips `Label|` and `delay:N|` prefixes, mirroring the desktop's
+    /// `parseSuggestedPromptLine`; empty or over-long results are dropped.
+    /// `[0-9]` (not `\d`) keeps digit matching ASCII-only like the desktop's
+    /// non-Unicode JS regex; ICU `\d` would also match e.g. Arabic-Indic digits.
+    private static func parsePromptLine(_ line: String) -> String? {
+        let delayPattern = "^delay:[0-9]+\\|"
+        if let delayRange = line.range(
+            of: delayPattern, options: [.regularExpression, .caseInsensitive]
+        ) {
+            let text = String(line[delayRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty || text.utf16.count > maxPromptLength ? nil : text
+        }
+        var promptPart = line
+        if let pipeIndex = line.firstIndex(of: "|") {
+            promptPart = String(line[line.index(after: pipeIndex)...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let delayRange = promptPart.range(
+            of: delayPattern, options: [.regularExpression, .caseInsensitive]
+        ) {
+            promptPart = String(promptPart[delayRange.upperBound...])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return promptPart.isEmpty || promptPart.utf16.count > maxPromptLength ? nil : promptPart
     }
 }

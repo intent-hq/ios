@@ -773,14 +773,38 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == ["Run the tests", "Ship it"])
     }
 
-    @Test func parsesLabelAndDelayLinesVerbatim() {
-        // iOS renders the raw line (no label/delay stripping); the gate must
-        // not reject pipe-bearing or delay-prefixed prompts.
-        let text = "<!-- suggested-prompts\nShort label|Full prompt text\ndelay:60|Check deployment\n-->"
+    @Test func stripsLabelAndDelayPrefixes() {
+        // Mirrors the desktop's `Label|` / `delay:N|` stripping so both
+        // clients surface identical chip text.
+        let text = "<!-- suggested-prompts\nShort label|Full prompt text\ndelay:60|Check deployment\nLabel|delay:30|Check build\nDELAY:120|Check CI\n-->"
         #expect(SuggestedPrompts.parse(text) == [
-            "Short label|Full prompt text",
-            "delay:60|Check deployment",
+            "Full prompt text",
+            "Check deployment",
+            "Check build",
+            "Check CI",
         ])
+    }
+
+    @Test func dropsPromptEmptyAfterPrefixStripping() {
+        // `delay:60|` with no remainder is an invalid line: dropped, the
+        // valid siblings survive.
+        let text = "<!-- suggested-prompts\ndelay:60|\nValid prompt\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Valid prompt"])
+    }
+
+    @Test func lengthLimitAppliesAfterPrefixStripping() {
+        // A raw line over 200 UTF-16 units whose prompt fits after `Label|`
+        // stripping is kept: the length check runs post-strip, like desktop.
+        let label = String(repeating: "L", count: SuggestedPrompts.maxPromptLength)
+        let text = "<!-- suggested-prompts\n\(label)|Short prompt\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["Short prompt"])
+    }
+
+    @Test func doesNotStripNonAsciiDigitDelayPrefix() {
+        // ICU `\d` would match Unicode digits; the desktop's regex is
+        // ASCII-only, so a non-ASCII delay prefix stays part of the prompt.
+        let text = "<!-- suggested-prompts\nLabel|delay:٦٠|Check build\n-->"
+        #expect(SuggestedPrompts.parse(text) == ["delay:٦٠|Check build"])
     }
 
     @Test func trimsWhitespaceAndSkipsBlankLines() {
@@ -996,12 +1020,18 @@ struct SuggestedPromptsTests {
 
     // MARK: - Caps
 
-    @Test func capsAtSixPrompts() {
+    @Test func capsAtFourPrompts() {
         let lines = (1...10).map { "Prompt \($0)" }.joined(separator: "\n")
         let prompts = SuggestedPrompts.parse("<!-- suggested-prompts\n\(lines)\n-->")
         #expect(prompts.count == SuggestedPrompts.maxPrompts)
-        #expect(prompts.first == "Prompt 1")
-        #expect(prompts.last == "Prompt 6")
+        #expect(prompts == ["Prompt 1", "Prompt 2", "Prompt 3", "Prompt 4"])
+    }
+
+    @Test func allInvalidLinesYieldNoPromptsButBlockStillStrips() {
+        let long = String(repeating: "x", count: SuggestedPrompts.maxPromptLength + 1)
+        let text = "Done!\n<!-- suggested-prompts\n\(long)\n-->"
+        #expect(SuggestedPrompts.parse(text).isEmpty)
+        #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
     }
 
     @Test func dropsOverlongPrompts() {
