@@ -228,10 +228,10 @@ struct RootView: View {
         .onAppear {
             syncNavigationState()
         }
-        .onChange(of: coordinator.currentScreenDescription) { _ in
+        .onChange(of: coordinator.currentScreenDescription) {
             syncNavigationState()
         }
-        .onChange(of: showingWorkspaceDetail) { newValue in
+        .onChange(of: showingWorkspaceDetail) { _, newValue in
             if newValue {
                 if pendingConversationPush {
                     DispatchQueue.main.async {
@@ -256,12 +256,12 @@ struct RootView: View {
                 coordinator.onBackToWorkspaceList()
             }
         }
-        .onChange(of: showingConversation) { newValue in
+        .onChange(of: showingConversation) { _, newValue in
             if !newValue, case .agentConversation = coordinator.currentScreen {
                 coordinator.onBackToWorkspaceDetail()
             }
         }
-        .onChange(of: showingNoteDetail) { newValue in
+        .onChange(of: showingNoteDetail) { _, newValue in
             if !newValue, case .noteDetail = coordinator.currentScreen {
                 coordinator.onBackFromNote()
             }
@@ -332,10 +332,10 @@ struct RootView: View {
             .onAppear {
                 syncNavigationState()
             }
-            .onChange(of: coordinator.currentScreenDescription) { _ in
+            .onChange(of: coordinator.currentScreenDescription) {
                 syncNavigationState()
             }
-            .onChange(of: showingWorkspaceDetail) { newValue in
+            .onChange(of: showingWorkspaceDetail) { _, newValue in
                 if newValue {
                     if pendingConversationPush {
                         DispatchQueue.main.async {
@@ -345,7 +345,7 @@ struct RootView: View {
                     }
                 }
             }
-            .onChange(of: showingConversation) { newValue in
+            .onChange(of: showingConversation) { _, newValue in
                 // When user taps the back button, sync coordinator. Skip when the
                 // dismissal is the programmatic iPad tear-down/re-push, which is
                 // not a user-initiated back navigation. Consume the flag here so
@@ -359,7 +359,7 @@ struct RootView: View {
                     coordinator.onBackToWorkspaceDetail()
                 }
             }
-            .onChange(of: noteStack) { newStack in
+            .onChange(of: noteStack) { _, newStack in
                 if newStack.isEmpty, case .noteDetail = coordinator.currentScreen {
                     coordinator.onBackFromNote()
                 }

@@ -10,13 +10,13 @@ class ScrollViewMomentumProxy: ObservableObject {
 
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
-        print("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
+        AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
         guard let sv = scrollView else {
-            print("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
+            AppLog.ui.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
             return
         }
         sv.setContentOffset(sv.contentOffset, animated: false)
-        print("[SCROLL] Momentum stopped at offset \(sv.contentOffset)")
+        AppLog.ui.debug("[SCROLL] Momentum stopped at offset \(sv.contentOffset)")
     }
 }
 
@@ -31,9 +31,9 @@ struct ScrollViewFinder: UIViewRepresentable {
         DispatchQueue.main.async {
             if let scrollView = Self.findScrollView(from: view) {
                 proxy.scrollView = scrollView
-                print("[SCROLL] Found UIScrollView: \(scrollView)")
+                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             } else {
-                print("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
+                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
             }
         }
         return view
@@ -61,7 +61,31 @@ struct NoteSheetInfo: Identifiable {
 }
 
 struct ConversationView: View {
-    @StateObject private var viewModel: ConversationViewModel
+    @State private var viewModel: ConversationViewModel
+
+    init(agentId: String, workspaceId: String, agentName: String) {
+        _viewModel = State(initialValue: ConversationViewModel(
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName
+        ))
+    }
+
+    var body: some View {
+        ConversationViewContent(
+            viewModel: viewModel,
+            store: viewModel.store,
+            hookStore: viewModel.hookStore,
+            monitoredPrStore: viewModel.monitoredPrStore
+        )
+    }
+}
+
+private struct ConversationViewContent: View {
+    let viewModel: ConversationViewModel
+    private let store: ConversationStore
+    private let hookStore: BackgroundHookStore
+    private let monitoredPrStore: MonitoredPrStore
     @StateObject private var scrollMomentumProxy = ScrollViewMomentumProxy()
     @EnvironmentObject private var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
@@ -93,12 +117,16 @@ struct ConversationView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
-    init(agentId: String, workspaceId: String, agentName: String) {
-        _viewModel = StateObject(wrappedValue: ConversationViewModel(
-            agentId: agentId,
-            workspaceId: workspaceId,
-            agentName: agentName
-        ))
+    init(
+        viewModel: ConversationViewModel,
+        store: ConversationStore,
+        hookStore: BackgroundHookStore,
+        monitoredPrStore: MonitoredPrStore
+    ) {
+        self.viewModel = viewModel
+        self.store = store
+        self.hookStore = hookStore
+        self.monitoredPrStore = monitoredPrStore
     }
 
     // `body` is decomposed into layered `some View` properties
@@ -221,7 +249,7 @@ struct ConversationView: View {
             questionWizardCollapsed = false
         }
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
-        .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
+        .animation(.easeInOut(duration: 0.25), value: store.isWaitingForAgents)
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
         .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentMonitors.map(\.monitorId))
     }
@@ -301,7 +329,7 @@ struct ConversationView: View {
                 dismiss()
             } catch {
                 selfInitiatedDelete = false
-                print("[ConversationView] Failed to delete agent: \(error)")
+                AppLog.ui.error("[ConversationView] Failed to delete agent: \(error)")
             }
         }
     }
@@ -314,7 +342,7 @@ struct ConversationView: View {
             do {
                 try await viewModel.renameAgent(newName)
             } catch {
-                print("[ConversationView] Failed to rename agent: \(error)")
+                AppLog.ui.error("[ConversationView] Failed to rename agent: \(error)")
             }
         }
     }
@@ -354,10 +382,11 @@ struct ConversationView: View {
         Divider()
 
         // Agent waiting indicator (above queued messages)
-        if viewModel.store.isWaitingForAgents {
+        if store.isWaitingForAgents {
             VStack(spacing: 0) {
                 AgentWaitingView(
                     viewModel: viewModel,
+                    store: viewModel.store,
                     onNavigateToAgent: { agentId, wsId, name in
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                         childAgent = AgentDestination(agentId: agentId, workspaceId: wsId, agentName: name)
@@ -372,7 +401,10 @@ struct ConversationView: View {
         // FE's ordering)
         if !viewModel.activeAgentMonitors.isEmpty {
             VStack(spacing: 0) {
-                MonitoredPrsRow(viewModel: viewModel)
+                MonitoredPrsRow(
+                    viewModel: viewModel,
+                    monitoredPrStore: viewModel.monitoredPrStore
+                )
                 Divider()
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -382,7 +414,10 @@ struct ConversationView: View {
         // the FE's above-the-input placement)
         if !viewModel.activeAgentHooks.isEmpty {
             VStack(spacing: 0) {
-                BackgroundHooksRow(viewModel: viewModel)
+                BackgroundHooksRow(
+                    viewModel: viewModel,
+                    hookStore: viewModel.hookStore
+                )
                 Divider()
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -390,7 +425,7 @@ struct ConversationView: View {
 
         // Queued messages (above input)
         if !viewModel.queuedMessages.isEmpty {
-            QueuedMessagesView(viewModel: viewModel)
+            QueuedMessagesView(viewModel: viewModel, store: viewModel.store)
             Divider()
         }
 
@@ -432,7 +467,7 @@ struct ConversationView: View {
         // Message input (not rendered while the wizard is expanded —
         // Q&A replaces chat; the Ignore-collapsed banner restores it)
         if viewModel.pendingQuestions == nil || questionWizardCollapsed {
-            MessageInputView(viewModel: viewModel)
+            MessageInputView(viewModel: viewModel, store: viewModel.store)
         }
     }
 
@@ -542,7 +577,7 @@ struct ConversationView: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
+            .onChange(of: store.streamingUpdateCount) { _, _ in
                 if hasInitiallyScrolled && !userIsScrolledAway {
                     scrollToBottom(proxy: proxy)
                 }
@@ -552,7 +587,7 @@ struct ConversationView: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
+            .onChange(of: store.isWaitingForAgents) { _, _ in
                 if hasInitiallyScrolled && !userIsScrolledAway {
                     scrollToBottom(proxy: proxy)
                 }
@@ -604,10 +639,10 @@ struct ConversationView: View {
         .onScrollGeometryChange(for: Bool.self) { geometry in
             // In the flipped view, "at bottom" means native scroll is at top (contentOffset.y ≈ 0)
             let atBottom = geometry.contentOffset.y <= 50
-            print("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(atBottom)")
+            AppLog.ui.debug("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(atBottom)")
             return !atBottom
         } action: { _, isScrolledAway in
-            print("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
+            AppLog.ui.debug("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
             if hasInitiallyScrolled && !isScrollingToBottom {
                 userIsScrolledAway = isScrolledAway
             }

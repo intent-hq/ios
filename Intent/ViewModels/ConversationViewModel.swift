@@ -3,18 +3,21 @@ import PhotosUI
 import SwiftUI
 
 @MainActor
-class ConversationViewModel: ObservableObject {
-    @Published var store = ConversationStore() {
-        didSet { observeStreaming() }
+@Observable class ConversationViewModel {
+    var store = ConversationStore() {
+        didSet {
+            oldValue.onStreamingChanged = nil
+            observeStreaming()
+        }
     }
     /// Live background hooks for this conversation's workspace (PROTOCOL §5.40).
-    @Published var hookStore = BackgroundHookStore()
+    var hookStore = BackgroundHookStore()
     /// Live PR monitors for this conversation's workspace (PROTOCOL §5.42).
-    @Published var monitoredPrStore = MonitoredPrStore()
+    var monitoredPrStore = MonitoredPrStore()
 
     let agentId: String
     let workspaceId: String
-    @Published var agentName: String
+    var agentName: String
 
     var messages: [ConversationMessage] { store.messages }
 
@@ -80,26 +83,24 @@ class ConversationViewModel: ObservableObject {
     private var hasLatchedNewMessagesDividerAnchor = false
 
     // Message input
-    @Published var messageText = ""
+    var messageText = "" {
+        didSet { draftTextSubject.send(messageText) }
+    }
 
     // Model selection
-    @Published var availableModels: [ModelInfo] = []
-    @Published var currentModelId: String?
+    var availableModels: [ModelInfo] = []
+    var currentModelId: String?
 
     // Specialist info (for empty state display)
-    @Published var specialistName: String?
-    @Published var specialistDescription: String?
+    var specialistName: String?
+    var specialistDescription: String?
 
     // Image attachments
-    @Published var pendingImages: [UIImage] = []
-    @Published var selectedPhotoItems: [PhotosPickerItem] = []
+    var pendingImages: [UIImage] = []
+    var selectedPhotoItems: [PhotosPickerItem] = []
 
-    private var cancellable: AnyCancellable?
-    private var hookStoreCancellable: AnyCancellable?
-    private var monitoredPrStoreCancellable: AnyCancellable?
-    private var workspaceStoreCancellable: AnyCancellable?
-    private var draftSaveCancellable: AnyCancellable?
-    private var streamingCancellable: AnyCancellable?
+    @ObservationIgnored private let draftTextSubject = PassthroughSubject<String, Never>()
+    @ObservationIgnored private var draftSaveCancellable: AnyCancellable?
 
     init(agentId: String, workspaceId: String, agentName: String) {
         self.agentId = agentId
@@ -110,32 +111,8 @@ class ConversationViewModel: ObservableObject {
         self.messageText = PersistenceManager.shared.loadDraft(
             workspaceId: workspaceId, agentId: agentId)
 
-        // Forward store changes
-        cancellable = store.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-        hookStoreCancellable = hookStore.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-        monitoredPrStoreCancellable = monitoredPrStore.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-        // `workspaceRepo` reads WorkspaceStore.shared on the fly — forward its
-        // changes so chip labels pick up the repo once the workspace list loads.
-        workspaceStoreCancellable = WorkspaceStore.shared.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-
         // Debounced draft saving (0.5s)
-        draftSaveCancellable = $messageText
+        draftSaveCancellable = draftTextSubject
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] text in
                 guard let self = self else { return }
@@ -144,11 +121,6 @@ class ConversationViewModel: ObservableObject {
             }
 
         observeStreaming()
-    }
-
-    deinit {
-        draftSaveCancellable?.cancel()
-        markSeenDebounceTask?.cancel()
     }
 
     func load() async {
@@ -214,26 +186,25 @@ class ConversationViewModel: ObservableObject {
     var markSeenDebounceNanos: UInt64 = 1_000_000_000
 
     /// True while the conversation view is on screen (appear/disappear).
-    private var isOnScreen = false
+    @ObservationIgnored private var isOnScreen = false
     /// True while the app scene is active (`scenePhase == .active`).
-    private var isAppActive = true
-    private var previousIsStreaming = false
-    private var markSeenDebounceTask: Task<Void, Never>?
+    @ObservationIgnored private var isAppActive = true
+    @ObservationIgnored private var previousIsStreaming = false
+    @ObservationIgnored private var markSeenDebounceTask: Task<Void, Never>?
 
     /// Re-subscribes the turn-finish trigger to the current store's
     /// `isStreaming` (called from init and whenever `store` is replaced).
     private func observeStreaming() {
-        previousIsStreaming = store.isStreaming
-        streamingCancellable = store.$isStreaming
-            .removeDuplicates()
-            .sink { [weak self] streaming in
-                guard let self = self else { return }
-                let wasStreaming = self.previousIsStreaming
-                self.previousIsStreaming = streaming
-                if wasStreaming && !streaming {
-                    self.turnFinished()
-                }
+        let observedStore = store
+        previousIsStreaming = observedStore.isStreaming
+        observedStore.onStreamingChanged = { [weak self, weak observedStore] streaming in
+            guard let self, let observedStore, self.store === observedStore else { return }
+            let wasStreaming = self.previousIsStreaming
+            self.previousIsStreaming = streaming
+            if wasStreaming && !streaming {
+                self.turnFinished()
             }
+        }
     }
 
     /// Turn finish (`isStreaming` true→false): schedule the debounced
@@ -306,7 +277,7 @@ class ConversationViewModel: ObservableObject {
             let _ = try await ConnectionManager.shared.request(
                 "agent.stop", params: ["agentId": agentId])
         } catch {
-            print("[ConversationViewModel] Failed to stop agent: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Failed to stop agent: \(error)")
         }
     }
 
@@ -335,7 +306,7 @@ class ConversationViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("[ConversationViewModel] Fetch current model failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Fetch current model failed: \(error)")
         }
     }
 
@@ -351,7 +322,7 @@ class ConversationViewModel: ObservableObject {
                 }
             }
         } catch {
-            print("[ConversationViewModel] Fetch specialist info failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Fetch specialist info failed: \(error)")
         }
     }
 
@@ -370,7 +341,7 @@ class ConversationViewModel: ObservableObject {
             // send action's success path).
             scheduleDebouncedMarkSeen()
         } catch {
-            print("[ConversationViewModel] Send failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Send failed: \(error)")
         }
     }
 
@@ -382,7 +353,7 @@ class ConversationViewModel: ObservableObject {
         do {
             try await store.sendMessage(agentId: agentId, content: prompt, workspaceId: workspaceId)
         } catch {
-            print("[ConversationViewModel] Send suggested prompt failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Send suggested prompt failed: \(error)")
         }
     }
 
@@ -392,7 +363,7 @@ class ConversationViewModel: ObservableObject {
             try await store.queueMessage(agentId: agentId, content: content, imageBlocks: imageBlocks)
             pendingImages.removeAll()
         } catch {
-            print("[ConversationViewModel] Queue failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Queue failed: \(error)")
         }
     }
 
@@ -406,7 +377,7 @@ class ConversationViewModel: ObservableObject {
         do {
             try await store.editQueuedMessage(agentId: agentId, messageId: messageId, content: content)
         } catch {
-            print("[ConversationViewModel] Edit queued message failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Edit queued message failed: \(error)")
         }
     }
 
@@ -414,7 +385,7 @@ class ConversationViewModel: ObservableObject {
         do {
             try await store.removeQueuedMessage(agentId: agentId, messageId: messageId)
         } catch {
-            print("[ConversationViewModel] Remove queued message failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Remove queued message failed: \(error)")
         }
     }
 
@@ -422,7 +393,7 @@ class ConversationViewModel: ObservableObject {
         do {
             try await store.sendQueuedMessageNow(agentId: agentId, messageId: messageId, workspaceId: workspaceId)
         } catch {
-            print("[ConversationViewModel] Send now failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Send now failed: \(error)")
         }
     }
 
@@ -439,7 +410,7 @@ class ConversationViewModel: ObservableObject {
                 return ModelInfo(id: id, name: name, provider: provider)
             }
         } catch {
-            print("[ConversationViewModel] Fetch models failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Fetch models failed: \(error)")
         }
     }
 
@@ -448,7 +419,7 @@ class ConversationViewModel: ObservableObject {
             try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
             currentModelId = modelId
         } catch {
-            print("[ConversationViewModel] Set model failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Set model failed: \(error)")
         }
     }
 
@@ -544,7 +515,7 @@ class ConversationViewModel: ObservableObject {
                     "answeredQuestionsMessageId": answeredQuestionsMessageId,
                 ])
         } catch {
-            print("[ConversationViewModel] Submit question answers failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
             store.rollbackFailedSend()
         }
     }
@@ -552,7 +523,7 @@ class ConversationViewModel: ObservableObject {
     /// User-facing message for a failed `agent.dismissQuestions`
     /// (intent-hq/monorepo#1800) — the view presents it as a non-destructive
     /// alert. Nil when there is nothing to surface.
-    @Published var dismissQuestionsError: String?
+    var dismissQuestionsError: String?
 
     /// Dismiss the pending question set WITHOUT answering
     /// (`agent.dismissQuestions`). Persistent — unlike Ignore's transient
@@ -568,7 +539,7 @@ class ConversationViewModel: ObservableObject {
             try await store.dismissQuestions(
                 agentId: agentId, messageId: messageId, workspaceId: workspaceId)
         } catch {
-            print("[ConversationViewModel] Dismiss questions failed: \(error)")
+            AppLog.conversation.error("[ConversationViewModel] Dismiss questions failed: \(error)")
             dismissQuestionsError = error.localizedDescription
         }
     }
