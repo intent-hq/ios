@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SpecialistPickerView: View {
     let workspaceId: String
-    @ObservedObject var agentStore: AgentStore
+    var agentStore: AgentStore
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -434,7 +434,7 @@ struct SpecialistPickerView: View {
                     coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
                 }
             } catch {
-                print("[SpecialistPicker] Failed to create agent: \(error)")
+                AppLog.agents.error("[SpecialistPicker] Failed to create agent: \(error)")
                 errorMessage = error.localizedDescription
                 showError = true
             }

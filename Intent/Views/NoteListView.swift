@@ -3,7 +3,7 @@ import SwiftUI
 struct NoteListView: View {
     let workspaceId: String
     @EnvironmentObject var coordinator: AppCoordinator
-    @ObservedObject var noteStore: NoteStore
+    var noteStore: NoteStore
     @Environment(\.colorScheme) var colorScheme
     @State private var collapsedIds: Set<String> = []
 
