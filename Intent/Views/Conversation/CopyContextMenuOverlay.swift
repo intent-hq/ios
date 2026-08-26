@@ -11,97 +11,86 @@ import UIKit
 /// `UITargetedPreview` for the highlight AND dismissal phases, so no frame of
 /// the press → menu transition ever shows the default (flipped) snapshot.
 ///
-/// The row content is hosted in a `UIHostingController` so the interaction's
-/// view both receives the long press and anchors the preview;
-/// `sizeThatFits` keeps the row self-sizing inside the transcript's
-/// LazyVStack, and an `onGeometryChange` revision bump re-queries it when
-/// the hosted content resizes itself (e.g. a response group collapsing),
-/// which SwiftUI cannot observe across the hosting boundary.
-struct CopyContextMenuHost<RowContent: View, Preview: View>: View {
+/// The interaction is attached via this transparent overlay so the row
+/// content stays in the plain SwiftUI hierarchy. The previous implementation
+/// (`CopyContextMenuHost`, ios#140) instead nested the row content inside a
+/// `UIHostingController` so the interaction's view was an ancestor of the
+/// content — but that hosting boundary required `sizeThatFits` self-sizing
+/// whose deferred invalidation drew a garbled first frame on conversation
+/// load, and gating the host on stream settle structurally flipped the row
+/// subtree, discarding its local state (intent-hq/monorepo#3441). The
+/// overlay renders nothing and lays out at the row's size, so removing or
+/// adding the interaction never touches the row's identity or layout.
+struct CopyContextMenuOverlay: UIViewRepresentable {
     /// Pasteboard payload of the single "Copy" menu action.
     let text: String
+    /// Whether the interaction is attached (see
+    /// `MessageCopyContextMenu.shouldEnableCopyInteraction`); while false the
+    /// overlay is inert and invisible to hit-testing.
+    let isEnabled: Bool
     /// Upright preview shown during the lift, open, and dismissal phases.
-    let preview: Preview
-    @ViewBuilder let content: () -> RowContent
-    /// Bumped whenever the hosted content changes size on its own so the
-    /// representable re-runs `sizeThatFits`. The bump is deferred to the
-    /// next main-actor turn: the geometry-change action fires while the
-    /// nested hosting controller is being laid out from within the outer
-    /// view update, and SwiftUI drops re-entrant state writes made during
-    /// that pass — the dropped write left the row frozen at a stale height.
-    @State private var sizeRevision = 0
-
-    var body: some View {
-        CopyContextMenuRepresentable(
-            text: text,
-            preview: AnyView(preview),
-            sizeRevision: sizeRevision,
-            rowContent: AnyView(
-                content().onGeometryChange(for: CGSize.self) { proxy in
-                    proxy.size
-                } action: { _ in
-                    Task { @MainActor in
-                        sizeRevision &+= 1
-                    }
-                }
-            )
-        )
-    }
-}
-
-private struct CopyContextMenuRepresentable: UIViewRepresentable {
-    let text: String
     let preview: AnyView
-    let sizeRevision: Int
-    let rowContent: AnyView
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: text, preview: preview)
     }
 
-    // Tradeoff: the hosting controller is used view-only — it is never added
-    // as a child view controller (UIViewRepresentable offers no parenting
-    // hook), so it misses UIKit containment callbacks (appearance
-    // transitions, responder-chain edge cases). With `safeAreaRegions = []`
-    // and self-contained row content this works, but keep it in mind if row
-    // content ever grows containment-sensitive behavior.
-    func makeUIView(context: Context) -> UIView {
-        let coordinator = context.coordinator
-        coordinator.contentController.rootView = environmentWrapped(rowContent, context: context)
-        let view: UIView = coordinator.contentController.view
+    func makeUIView(context: Context) -> OverlayView {
+        let view = OverlayView()
         view.backgroundColor = .clear
-        view.addInteraction(UIContextMenuInteraction(delegate: coordinator))
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {
+    func updateUIView(_ uiView: OverlayView, context: Context) {
         let coordinator = context.coordinator
         coordinator.text = text
         coordinator.preview = preview
-        coordinator.contentController.rootView = environmentWrapped(rowContent, context: context)
+        uiView.setInteractionEnabled(isEnabled, delegate: coordinator)
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIView, context: Context) -> CGSize? {
-        _ = sizeRevision
-        return context.coordinator.contentController.sizeThatFits(
-            in: CGSize(
-                width: proposal.width ?? .greatestFiniteMagnitude,
-                height: proposal.height ?? .greatestFiniteMagnitude
-            )
-        )
-    }
+    /// Transparent view carrying the `UIContextMenuInteraction`. Unlike the
+    /// old host it is a sibling ABOVE the row content, not an ancestor, so
+    /// UIKit would deliver every touch it claims to its own recognizers and
+    /// its ancestors' only. Hit-testing is therefore selective: the overlay
+    /// claims a touch only when the view that would receive it otherwise is
+    /// one of the overlay's own ancestors (the shared hosting view — plain
+    /// SwiftUI row content, whose gestures live on that ancestor and keep
+    /// working), and passes through when a UIKit-backed sibling subtree
+    /// (code-block/tool-call `UIScrollView`s) would claim it, so in-row
+    /// scrolling keeps working there at the cost of no copy long-press over
+    /// those sub-regions.
+    final class OverlayView: UIView {
+        private var interaction: UIContextMenuInteraction?
 
-    /// A nested hosting controller doesn't inherit the SwiftUI environment
-    /// from the outer hierarchy, so forward the representable context's
-    /// environment wholesale (row descendants read `@Environment` values
-    /// injected above the transcript).
-    private func environmentWrapped(_ view: AnyView, context: Context) -> AnyView {
-        AnyView(view.environment(\.self, context.environment))
+        func setInteractionEnabled(_ enabled: Bool, delegate: UIContextMenuInteractionDelegate) {
+            if enabled {
+                guard interaction == nil else { return }
+                let interaction = UIContextMenuInteraction(delegate: delegate)
+                addInteraction(interaction)
+                self.interaction = interaction
+            } else if let interaction {
+                removeInteraction(interaction)
+                self.interaction = nil
+            }
+        }
+
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            guard interaction != nil, self.point(inside: point, with: event) else { return nil }
+            guard let superview else { return self }
+            // Re-run the superview's hit-test with this overlay excluded to
+            // find the view the touch would reach if the overlay weren't
+            // there (standard pass-through probe; the flag flip is invisible
+            // outside this call).
+            isUserInteractionEnabled = false
+            defer { isUserInteractionEnabled = true }
+            let below = superview.hitTest(convert(point, to: superview), with: event)
+            if let below, !isDescendant(of: below) { return nil }
+            return self
+        }
     }
 
     @MainActor
     final class Coordinator: NSObject, UIContextMenuInteractionDelegate {
-        let contentController: UIHostingController<AnyView>
         var text: String
         var preview: AnyView
         /// Keeps every in-flight preview's hosting controller alive while
@@ -114,12 +103,8 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
         private var liveControllers: [UIHostingController<AnyView>] = []
 
         init(text: String, preview: AnyView) {
-            self.contentController = UIHostingController(rootView: AnyView(EmptyView()))
             self.text = text
             self.preview = preview
-            super.init()
-            contentController.safeAreaRegions = []
-            contentController.view.backgroundColor = .clear
         }
 
         func contextMenuInteraction(
@@ -166,7 +151,7 @@ private struct CopyContextMenuRepresentable: UIViewRepresentable {
         }
 
         /// Renders `preview` into a fresh hosting controller and anchors it
-        /// at the row's center with a transform cancelling whatever
+        /// at the overlay's center with a transform cancelling whatever
         /// flip/rotation the container inherits from the transcript
         /// hierarchy, so the lift and dismissal animations stay upright at
         /// every frame. Used for both the highlight and dismissal phases;

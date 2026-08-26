@@ -526,47 +526,45 @@ struct MessageView: View {
 /// transforms. SwiftUI's `.contextMenu` can only replace the OPEN preview
 /// (which an earlier fix did) — it exposes no hook over the lift snapshot,
 /// so the lift animation still flashed a mirrored/upside-down copy of the
-/// row while the long press was being recognized. The row is therefore
-/// routed through `CopyContextMenuHost`, a UIKit `UIContextMenuInteraction`
-/// wrapper whose delegate supplies an upright `UITargetedPreview` for the
-/// highlight and dismissal phases — the only API that controls those frames.
-/// The copy action puts `text` on the general pasteboard with light haptic
-/// feedback (matching CodeBlockView's copy affordance). Applies no
-/// interaction when there is no text to copy (e.g. image-only rows), like
-/// the previous empty-menu behavior, or while the message is still
-/// streaming — routing a live row through the nested hosting controller
-/// froze it at the height it had when the first text delta arrived (the
-/// host's size invalidation fires during the layout pass and is dropped),
-/// so streamed content laid out invisibly. The host attaches once the turn
-/// settles, preserving the upright lift preview on settled rows. Long text
-/// is capped by line limit and width so the preview shows a truncated
-/// excerpt.
+/// row while the long press was being recognized. The row therefore gets a
+/// `CopyContextMenuOverlay`, a transparent UIKit view carrying a
+/// `UIContextMenuInteraction` whose delegate supplies an upright
+/// `UITargetedPreview` for the highlight and dismissal phases — the only
+/// API that controls those frames. The row content itself stays in the
+/// plain SwiftUI hierarchy: the overlay is applied unconditionally, so
+/// enabling/disabling the interaction never changes the row's structural
+/// identity (a previous host-based version flipped the subtree into a
+/// nested `UIHostingController` at turn settle, resetting row state —
+/// intent-hq/monorepo#3441 — and its self-sizing drew a garbled first
+/// frame on conversation load). The copy action puts `text` on the general
+/// pasteboard with light haptic feedback (matching CodeBlockView's copy
+/// affordance). No interaction is attached when there is no text to copy
+/// (e.g. image-only rows) or while the message is still streaming; it
+/// attaches once the turn settles. Long text is capped by line limit and
+/// width so the preview shows a truncated excerpt.
 struct MessageCopyContextMenu: ViewModifier {
     let text: String
     /// Mirror the user-bubble styling (muted rounded rect) in the preview.
     let userStyled: Bool
-    /// Whether the message is still streaming; live rows stay on the plain
-    /// SwiftUI branch (user rows never stream and always pass false).
+    /// Whether the message is still streaming; live rows carry no copy
+    /// interaction (user rows never stream and always pass false).
     let isStreaming: Bool
     @Environment(\.colorScheme) private var colorScheme
-    /// Re-injected into the hosted row: a nested hosting controller doesn't
-    /// inherit environment objects, and ContentBlockView requires this one.
-    @EnvironmentObject private var coordinator: AppCoordinator
 
-    /// Whether a row should be routed through `CopyContextMenuHost`: only
-    /// when there is text to copy AND the message has settled. Kept as a
-    /// pure helper so the branch decision is unit-testable.
-    static func shouldHostCopyMenu(text: String, isStreaming: Bool) -> Bool {
+    /// Whether the overlay should attach the copy interaction: only when
+    /// there is text to copy AND the message has settled. Kept as a pure
+    /// helper so the availability decision is unit-testable.
+    static func shouldEnableCopyInteraction(text: String, isStreaming: Bool) -> Bool {
         !text.isEmpty && !isStreaming
     }
 
     func body(content: Content) -> some View {
-        if Self.shouldHostCopyMenu(text: text, isStreaming: isStreaming) {
-            CopyContextMenuHost(text: text, preview: preview) {
-                content.environmentObject(coordinator)
-            }
-        } else {
-            content
+        content.overlay {
+            CopyContextMenuOverlay(
+                text: text,
+                isEnabled: Self.shouldEnableCopyInteraction(text: text, isStreaming: isStreaming),
+                preview: AnyView(preview)
+            )
         }
     }
 
