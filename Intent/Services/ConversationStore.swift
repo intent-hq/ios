@@ -75,6 +75,15 @@ import SwiftUI
     /// (preventing duplicate messages on the server).
     var lastFailedSend: (messageId: String, content: String)?
 
+    /// Block keys (`{messageId}|{blockId}`) with an `agent.getMessageBlock`
+    /// hydration fetch in flight (slim projection, PROTOCOL §5.5). Observed so
+    /// the transcript can show a per-block loading affordance.
+    var hydratingBlockKeys: Set<String> = []
+    /// Full blocks fetched on demand, keyed by `{messageId}|{blockId}`. Cached
+    /// so a later slim refetch / chat snapshot re-merge never reverts a block
+    /// the user already expanded back to its truncated preview.
+    @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
+
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
         observeConnection()
@@ -225,6 +234,11 @@ import SwiftUI
             if let wsId = workspaceId ?? self.workspaceId {
                 params["workspaceId"] = wsId
             }
+            // Opt into the slim conversation projection (PROTOCOL §5.5):
+            // oversized tool/image bodies are served as bounded previews /
+            // thumbnails with additive *Truncated flags; full bodies hydrate
+            // on demand via agent.getMessageBlock.
+            params["projection"] = "slim"
             let result = try await connectionManager.request(
                 "agent.getConversation",
                 params: params
@@ -275,6 +289,10 @@ import SwiftUI
                     }
                 }
 
+                // A slim refetch must not revert blocks the user already
+                // hydrated back to their truncated previews.
+                remergeHydratedBlocks()
+
                 // Detect if the agent is already streaming from the fetched snapshot
                 if let lastMsg = messages.last, lastMsg.role == .assistant, lastMsg.isStreaming == true {
                     isStreaming = true
@@ -287,6 +305,84 @@ import SwiftUI
         if isInitialLoad {
             replayBufferedStreamEvents()
             isLoading = false
+        }
+    }
+
+    // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
+
+    /// Cache key for a hydrated block: owning message id + block id.
+    static func hydratedBlockKey(messageId: String, blockId: String) -> String {
+        "\(messageId)|\(blockId)"
+    }
+
+    /// True when this block's full body is already hydrated (cached).
+    func isBlockHydrated(messageId: String, blockId: String) -> Bool {
+        hydratedBlocks[Self.hydratedBlockKey(messageId: messageId, blockId: blockId)] != nil
+    }
+
+    /// Block ids of `messageId` with a hydration fetch in flight (for the
+    /// per-block loading affordance in the transcript).
+    func hydratingBlockIds(forMessage messageId: String) -> Set<String> {
+        let prefix = "\(messageId)|"
+        return Set(hydratingBlockKeys.filter { $0.hasPrefix(prefix) }
+            .map { String($0.dropFirst(prefix.count)) })
+    }
+
+    /// Fetch the FULL body of a slim-truncated block on demand via
+    /// `agent.getMessageBlock` (result: `{ block }`) and merge it back into
+    /// the transcript. Single-flight per block key; a hydrated block is never
+    /// refetched.
+    func hydrateBlock(messageId: String, blockId: String) async {
+        guard let agentId = agentId else { return }
+        let key = Self.hydratedBlockKey(messageId: messageId, blockId: blockId)
+        if hydratedBlocks[key] != nil || hydratingBlockKeys.contains(key) { return }
+        hydratingBlockKeys.insert(key)
+        defer { hydratingBlockKeys.remove(key) }
+
+        do {
+            let result = try await connectionManager.request(
+                "agent.getMessageBlock",
+                params: [
+                    "agentId": agentId,
+                    "messageId": messageId,
+                    "blockId": blockId,
+                ]
+            )
+            guard let dict = result as? [String: Any],
+                  let blockDict = dict["block"] as? [String: Any],
+                  let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
+                  let block = try? chatBlockDecoder.decode(ContentBlock.self, from: blockData)
+            else {
+                AppLog.conversation.error(
+                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
+                return
+            }
+            hydratedBlocks[key] = block
+            remergeHydratedBlocks()
+        } catch {
+            AppLog.conversation.error("[ConversationStore] Failed to hydrate block \(key): \(error)")
+        }
+    }
+
+    /// Substitute cached full blocks back into the transcript by
+    /// `{messageId}|{blockId}` so a slim refetch / chat snapshot re-apply
+    /// never reverts an already-expanded block to its truncated preview.
+    private func remergeHydratedBlocks() {
+        guard !hydratedBlocks.isEmpty else { return }
+        for msgIndex in messages.indices {
+            guard var blocks = messages[msgIndex].contentBlocks, !blocks.isEmpty else { continue }
+            var changed = false
+            for blockIndex in blocks.indices {
+                let key = Self.hydratedBlockKey(
+                    messageId: messages[msgIndex].id, blockId: blocks[blockIndex].id)
+                if let full = hydratedBlocks[key] {
+                    blocks[blockIndex] = full
+                    changed = true
+                }
+            }
+            if changed {
+                messages[msgIndex].contentBlocks = blocks
+            }
         }
     }
 
@@ -388,9 +484,12 @@ import SwiftUI
         chatSeeded = false
 
         do {
+            // Slim projection here too (PROTOCOL §7.1): the seq-0 snapshot is
+            // bounded identically to the slim agent.getConversation read.
             let result = try await connectionManager.request("chat.subscribe", params: [
                 "agentId": agentId,
-                "replaceGroup": "ios-chat-\(agentId)"
+                "replaceGroup": "ios-chat-\(agentId)",
+                "projection": "slim"
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
@@ -474,6 +573,9 @@ import SwiftUI
         chatExpectedSeq = push.seq + 1
 
         messages = rawItems.compactMap { ConversationMessage.parseMessage($0) }
+        // A slim (re)snapshot must not revert blocks the user already
+        // hydrated back to their truncated previews.
+        remergeHydratedBlocks()
 
         // The snapshot is authoritative: absent meta keys reset to their defaults
         // (not truncated, total = page size) rather than retaining stale values.
@@ -521,6 +623,10 @@ import SwiftUI
                 messages[index].contentBlocks = blocks
             }
         }
+
+        // A delta re-upsert of a slim block must not revert a block the user
+        // already hydrated (no-op unless something was hydrated).
+        remergeHydratedBlocks()
 
         if sawTerminal {
             // Terminal frame: the turn is done
@@ -1437,6 +1543,8 @@ import SwiftUI
         isSubscribing = false
         streamEventBuffer.removeAll()
         lastFailedSend = nil
+        hydratingBlockKeys = []
+        hydratedBlocks = [:]
         attentionRequest = nil
         agentNotFound = false
         dismissedQuestionsMessageId = nil

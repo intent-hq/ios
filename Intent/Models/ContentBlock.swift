@@ -70,11 +70,25 @@ struct ContentBlock: Identifiable, Codable {
     /// §5.5, e.g. the `questions_dismissed` dismissal notice tag).
     var messageMetadata: [String: AnyCodable]?
 
+    // Slim projection truncation flags (PROTOCOL §5.5, opt-in via
+    // `projection: "slim"`). A served block whose oversized body was replaced
+    // by a bounded preview / thumbnail carries the additive flags below; the
+    // full body is fetched on demand via `agent.getMessageBlock`.
+    var inputTruncated: Bool?      // tool_use.input replaced by a bounded preview
+    var inputBytes: Int?           // serialized byte size of the full input
+    var outputTruncated: Bool?     // tool_result.output replaced by a bounded preview
+    var outputBytes: Int?          // serialized byte size of the full output
+    var dataTruncated: Bool?       // image.data replaced by a thumbnail (or omitted)
+    var dataIsThumbnail: Bool?     // present with dataTruncated when data carries the thumbnail
+    var dataBytes: Int?            // byte size of the full image data
+
     enum CodingKeys: String, CodingKey {
         case id, type, text, content, language, name, toolName
         case input, toolCallId, toolUseId, tool_use_id
         case output, isError, is_error
         case data, mimeType, fileName, resource, metadata, meta, messageMetadata
+        case inputTruncated, inputBytes, outputTruncated, outputBytes
+        case dataTruncated, dataIsThumbnail, dataBytes
     }
 
     init(from decoder: Decoder) throws {
@@ -114,6 +128,14 @@ struct ContentBlock: Identifiable, Codable {
         metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
         meta = try? container.decode([String: AnyCodable].self, forKey: .meta)
         messageMetadata = try? container.decode([String: AnyCodable].self, forKey: .messageMetadata)
+
+        inputTruncated = try? container.decode(Bool.self, forKey: .inputTruncated)
+        inputBytes = try? container.decode(Int.self, forKey: .inputBytes)
+        outputTruncated = try? container.decode(Bool.self, forKey: .outputTruncated)
+        outputBytes = try? container.decode(Int.self, forKey: .outputBytes)
+        dataTruncated = try? container.decode(Bool.self, forKey: .dataTruncated)
+        dataIsThumbnail = try? container.decode(Bool.self, forKey: .dataIsThumbnail)
+        dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
     }
 
     /// Resolved text content, falling back to legacy `content` field.
@@ -142,6 +164,14 @@ struct ContentBlock: Identifiable, Codable {
         metadata ?? meta
     }
 
+    /// True when the daemon served this block slim-truncated (PROTOCOL §5.5):
+    /// a `tool_use`/`tool_result` body reduced to a bounded preview, or an
+    /// `image` reduced to a thumbnail/placeholder. Such a block can be
+    /// hydrated to its full body on demand via `agent.getMessageBlock`.
+    var isSlimTruncated: Bool {
+        inputTruncated == true || outputTruncated == true || dataTruncated == true
+    }
+
     // MARK: - Convenience initializer for programmatic creation
 
     init(
@@ -159,7 +189,14 @@ struct ContentBlock: Identifiable, Codable {
         fileName: String? = nil,
         resource: ResourceContents? = nil,
         metadata: [String: AnyCodable]? = nil,
-        messageMetadata: [String: AnyCodable]? = nil
+        messageMetadata: [String: AnyCodable]? = nil,
+        inputTruncated: Bool? = nil,
+        inputBytes: Int? = nil,
+        outputTruncated: Bool? = nil,
+        outputBytes: Int? = nil,
+        dataTruncated: Bool? = nil,
+        dataIsThumbnail: Bool? = nil,
+        dataBytes: Int? = nil
     ) {
         self.id = id
         self.type = type
@@ -182,6 +219,13 @@ struct ContentBlock: Identifiable, Codable {
         self.metadata = metadata
         self.meta = nil
         self.messageMetadata = messageMetadata
+        self.inputTruncated = inputTruncated
+        self.inputBytes = inputBytes
+        self.outputTruncated = outputTruncated
+        self.outputBytes = outputBytes
+        self.dataTruncated = dataTruncated
+        self.dataIsThumbnail = dataIsThumbnail
+        self.dataBytes = dataBytes
     }
 }
 

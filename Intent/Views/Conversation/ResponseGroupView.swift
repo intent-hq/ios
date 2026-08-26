@@ -34,6 +34,10 @@ struct ResponseGroupView: View {
     let isLast: Bool
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    /// Slim-projection hydration passthrough (PROTOCOL §5.5): in-flight block
+    /// ids and the on-demand full-block fetch, forwarded to ContentBlockView.
+    var hydratingBlockIds: Set<String> = []
+    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
 
@@ -133,7 +137,11 @@ struct ResponseGroupView: View {
     private var groupChildrenView: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(group.children) { block in
-                ContentBlockView(block: block, allBlocks: group.children, workspaceId: workspaceId, onNavigateToNote: onNavigateToNote)
+                ContentBlockView(
+                    block: block, allBlocks: group.children, workspaceId: workspaceId,
+                    onNavigateToNote: onNavigateToNote,
+                    hydratingBlockIds: hydratingBlockIds,
+                    onHydrateBlock: onHydrateBlock)
             }
         }
     }

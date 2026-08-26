@@ -441,4 +441,192 @@ struct ConversationStoreIntegrationTests {
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
     }
+
+    // MARK: - Slim projection (PROTOCOL §5.5) + block hydration
+
+    @Test func fetchConversationRequestsSlimProjection() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        let params = fake.paramsForMethod("agent.getConversation")
+        #expect(params.count == 1)
+        #expect(params.first?["projection"] as? String == "slim")
+    }
+
+    @Test func subscribeLiveChatRequestsSlimProjection() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+
+        let params = fake.paramsForMethod("chat.subscribe")
+        #expect(params.count == 1)
+        #expect(params.first?["projection"] as? String == "slim")
+    }
+
+    @Test func hydrateBlockMergesFullBlockIntoTranscript() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        // Seed a transcript with a slim-truncated tool_result block.
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_use", "id": "b-1", "name": "read_file", "toolCallId": "tc-1"],
+                    ["type": "tool_result", "id": "b-2", "toolUseId": "tc-1",
+                     "output": "preview…", "outputTruncated": true, "outputBytes": 900_000],
+                ],
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        #expect(store.messages.first?.contentBlocks?[1].outputTruncated == true)
+
+        // Hydrate: the daemon returns the FULL block (no truncation flags).
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-2", "toolUseId": "tc-1",
+            "output": "the full output",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-2")
+
+        let params = fake.paramsForMethod("agent.getMessageBlock")
+        #expect(params.count == 1)
+        #expect(params.first?["agentId"] as? String == "agent-1")
+        #expect(params.first?["messageId"] as? String == "msg-1")
+        #expect(params.first?["blockId"] as? String == "b-2")
+
+        let hydrated = store.messages.first?.contentBlocks?[1]
+        #expect(hydrated?.outputTruncated == nil)
+        #expect((hydrated?.output?.value as? String) == "the full output")
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-2"))
+        #expect(store.hydratingBlockKeys.isEmpty)
+    }
+
+    @Test func hydrateBlockIsSingleFlightAndCached() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                     "output": "preview…", "outputTruncated": true],
+                ],
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]]
+        // Two concurrent + one repeat hydration: only ONE wire fetch.
+        async let first: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        async let second: () = store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        _ = await (first, second)
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+
+        #expect(fake.paramsForMethod("agent.getMessageBlock").count == 1)
+    }
+
+    @Test func hydratedBlockSurvivesSlimRefetchAndSnapshot() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        let slimMessage: [String: Any] = [
+            "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [
+                ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                 "output": "preview…", "outputTruncated": true],
+            ],
+        ]
+        fake.responseMap["agent.getConversation"] = ["messages": [slimMessage]]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
+
+        // A slim refetch serves the truncated preview again — the hydrated
+        // full block must survive the merge.
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
+        #expect(store.messages.first?.contentBlocks?.first?.outputTruncated == nil)
+
+        // Same for a chat.subscribe (re)snapshot that re-seeds the transcript.
+        await store.subscribeLiveChat(agentId: "agent-1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1", kind: .snapshot, seq: 0,
+            snapshot: [slimMessage], delta: nil))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
+    }
+
+    @Test func hydrateBlockFailureClearsInFlightState() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                     "output": "preview…", "outputTruncated": true],
+                ],
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+
+        fake.errorMap["agent.getMessageBlock"] = NSError(
+            domain: "WebSocket", code: -32603,
+            userInfo: [NSLocalizedDescriptionKey: "internal error"])
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+
+        // Failure leaves the preview in place and the in-flight set empty so
+        // the user can retry.
+        #expect(store.hydratingBlockKeys.isEmpty)
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.messages.first?.contentBlocks?.first?.outputTruncated == true)
+
+        // Retry after the error succeeds.
+        fake.errorMap.removeValue(forKey: "agent.getMessageBlock")
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
+    }
+
+    @Test func resetClearsHydrationState() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+
+        fake.responseMap["agent.getConversation"] = ["messages": [
+            [
+                "id": "msg-1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "contentBlocks": [
+                    ["type": "tool_result", "id": "b-1", "toolUseId": "tc-1",
+                     "output": "p", "outputTruncated": true],
+                ],
+            ]
+        ]]
+        await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        fake.responseMap["agent.getMessageBlock"] = ["block": [
+            "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
+        ] as [String: Any]]
+        await store.hydrateBlock(messageId: "msg-1", blockId: "b-1")
+        #expect(store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+
+        store.reset()
+        #expect(!store.isBlockHydrated(messageId: "msg-1", blockId: "b-1"))
+        #expect(store.hydratingBlockKeys.isEmpty)
+    }
 }

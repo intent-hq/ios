@@ -5,6 +5,12 @@ struct ContentBlockView: View {
     let allBlocks: [ContentBlock]
     let workspaceId: String
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    /// Block ids of this message with an agent.getMessageBlock hydration
+    /// fetch in flight (slim projection, PROTOCOL §5.5).
+    var hydratingBlockIds: Set<String> = []
+    /// Fetch the full body of a slim-truncated block by id; absent → no
+    /// hydration (bounded previews stay).
+    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
@@ -38,7 +44,20 @@ struct ContentBlockView: View {
 
         case .toolUse:
             let result = findToolResult(for: block)
-            ToolCallView(block: block, toolResult: result)
+            ToolCallView(
+                block: block,
+                toolResult: result,
+                isHydrating: hydratingBlockIds.contains(block.id)
+                    || (result.map { hydratingBlockIds.contains($0.id) } ?? false),
+                onHydrate: onHydrateBlock.map { hydrate in
+                    {
+                        // Hydrate whichever side of the row was truncated
+                        // (input and output are separate persisted blocks).
+                        if block.inputTruncated == true { hydrate(block.id) }
+                        if let result, result.outputTruncated == true { hydrate(result.id) }
+                    }
+                }
+            )
 
         case .toolResult:
             // Rendered as part of ToolCallView via pairing; skip standalone
@@ -82,20 +101,61 @@ struct ContentBlockView: View {
         .tint(Theme.mutedForeground(for: colorScheme))
     }
 
+    /// A slim-truncated image asks for the original on tap (PROTOCOL §5.5);
+    /// the lightbox opens once hydration swaps the full block in (the
+    /// truncation flag then disappears from the merged block).
+    private var imageNeedsHydration: Bool {
+        block.dataTruncated == true && onHydrateBlock != nil
+    }
+
+    private var isHydratingImage: Bool {
+        hydratingBlockIds.contains(block.id)
+    }
+
     @ViewBuilder
     private var imageView: some View {
         if let uiImage = Self.decodeImage(block) {
-            Button { lightboxPresented = true } label: {
+            // Full image, or the write-time thumbnail served by the slim
+            // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
+            Button {
+                if imageNeedsHydration {
+                    onHydrateBlock?(block.id)
+                } else {
+                    lightboxPresented = true
+                }
+            } label: {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
                     .frame(maxHeight: 300)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .opacity(isHydratingImage ? 0.6 : 1)
             }
             .buttonStyle(.plain)
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage)
             }
+        } else if block.dataTruncated == true {
+            // Slim row with no persisted thumbnail (legacy rows, failed
+            // generation): placeholder chip with the same on-demand fetch.
+            Button {
+                onHydrateBlock?(block.id)
+            } label: {
+                HStack(spacing: 4) {
+                    if isHydratingImage {
+                        ProgressView()
+                            .controlSize(.mini)
+                        Text("Loading image…")
+                    } else {
+                        Image(systemName: "photo")
+                        Text(imageNeedsHydration ? "Tap to load image" : "Image")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .disabled(!imageNeedsHydration || isHydratingImage)
         } else {
             ImageDecodeFailureView()
         }
