@@ -51,14 +51,15 @@ class FakeConnectionManager: ConnectionManagerRouting {
     /// request resolves with — e.g. a stale list captured before a state change —
     /// while later requests for the same method stay suspended.
     var pendingMethods: Set<String> = []
-    private var pendingContinuations: [String: [CheckedContinuation<Any, any Error>]] = [:]
+    private var pendingRequestIds: [String: [UUID]] = [:]
+    private var resolvedPendingResponses: [UUID: Any] = [:]
 
     /// Resolve the oldest suspended request for `method` with `response`.
     func resolvePending(_ method: String, with response: Any) {
-        guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
-        let continuation = queue.removeFirst()
-        pendingContinuations[method] = queue
-        continuation.resume(returning: response)
+        guard var queue = pendingRequestIds[method], !queue.isEmpty else { return }
+        let requestId = queue.removeFirst()
+        pendingRequestIds[method] = queue
+        resolvedPendingResponses[requestId] = response
     }
 
     func request(_ method: String, params: [String: Any] = [:],
@@ -66,9 +67,16 @@ class FakeConnectionManager: ConnectionManagerRouting {
         requestLog.append((method, params, Date()))
 
         if pendingMethods.contains(method) {
-            return try await withCheckedThrowingContinuation { continuation in
-                pendingContinuations[method, default: []].append(continuation)
+            let requestId = UUID()
+            pendingRequestIds[method, default: []].append(requestId)
+            defer {
+                pendingRequestIds[method]?.removeAll { $0 == requestId }
+                resolvedPendingResponses.removeValue(forKey: requestId)
             }
+            while resolvedPendingResponses[requestId] == nil {
+                try await Task.sleep(for: .milliseconds(1))
+            }
+            return resolvedPendingResponses[requestId]!
         }
 
         if let delay = delayMap[method] {

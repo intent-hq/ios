@@ -29,7 +29,7 @@ final class AppCoordinatorTests {
     }
 
     deinit {
-        persistence.defaults.removePersistentDomain(forName: suiteName)
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     }
 
     // MARK: - Helper to check AppScreen cases

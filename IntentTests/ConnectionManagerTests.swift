@@ -1,10 +1,16 @@
+import Combine
 import Foundation
-import Foundation
+import os
 import Testing
 @testable import Intent
 
 @Suite(.serialized)
 struct ConnectionManagerTests {
+    private final class ResponseCapture {
+        var value: Any?
+        var error: (any Error)?
+    }
+
     // MARK: - ConnectionState equality
 
     @Test @MainActor func connectionStateDisconnectedEquality() {
@@ -33,6 +39,42 @@ struct ConnectionManagerTests {
         #expect(ConnectionState.reconnecting(attempt: 1) != ConnectionState.connected)
     }
 
+    @Test @MainActor func observableStateKeepsCombineBridgesInSync() {
+        let manager = ConnectionManager.shared
+        let originalConnectionState = manager.connectionState
+        let originalCertMismatch = manager.certMismatchDetected
+        var receivedConnectionStates: [ConnectionState] = []
+        var receivedCertMismatches: [Bool] = []
+
+        let connectionCancellable = manager.connectionStatePublisher.sink {
+            receivedConnectionStates.append($0)
+        }
+        let certCancellable = manager.certMismatchPublisher.sink {
+            receivedCertMismatches.append($0)
+        }
+
+        manager.connectionState = .connecting
+        manager.certMismatchDetected = true
+
+        #expect(receivedConnectionStates.last == .connecting)
+        #expect(receivedCertMismatches.last == true)
+
+        manager.connectionState = originalConnectionState
+        manager.certMismatchDetected = originalCertMismatch
+        withExtendedLifetime((connectionCancellable, certCancellable)) {}
+    }
+
+    @Test @MainActor func shortLivedConnectionCarriesReconnectBackoffForward() {
+        #expect(ConnectionManager.reconnectStartingAttempt(
+            connectionLifetime: nil, previousAttempt: 4) == 1)
+        #expect(ConnectionManager.reconnectStartingAttempt(
+            connectionLifetime: 10, previousAttempt: 4) == 1)
+        #expect(ConnectionManager.reconnectStartingAttempt(
+            connectionLifetime: 9.9, previousAttempt: 0) == 2)
+        #expect(ConnectionManager.reconnectStartingAttempt(
+            connectionLifetime: 1, previousAttempt: 4) == 5)
+    }
+
     // MARK: - Event handlers
 
     @Test @MainActor func onEventRegistersHandler() async {
@@ -56,7 +98,7 @@ struct ConnectionManagerTests {
         let notification = """
         {"jsonrpc":"2.0","method":"events.event","params":{"type":"workspace:updated","data":{"id":"ws-1"}}}
         """
-        await manager.dispatchMessage(notification)
+        manager.dispatchMessage(notification)
 
         #expect(receivedMethod == "events.event")
         #expect(receivedParams != nil)
@@ -69,44 +111,36 @@ struct ConnectionManagerTests {
     @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async throws {
         let manager = ConnectionManager.shared
 
-        let expectation = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[999] = continuation
-            }
-        }
+        let (expectation, capture) = installPendingResponse(manager, id: 999)
 
         try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
 
         let response = """
         {"jsonrpc":"2.0","id":999,"result":{"workspaces":[]}}
         """
-        await manager.dispatchMessage(response)
+        manager.dispatchMessage(response)
 
-        let result = try await expectation.value
-        #expect(result is [String: Any])
+        await expectation.value
+        #expect(capture.value is [String: Any])
     }
 
     @Test @MainActor func dispatchErrorResponseRejectsContinuation() async {
         let manager = ConnectionManager.shared
 
-        let expectation = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[888] = continuation
-            }
-        }
+        let (expectation, capture) = installPendingResponse(manager, id: 888)
 
         try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":888,"error":{"code":-1,"message":"Something went wrong"}}
         """
-        await manager.dispatchMessage(errorResponse)
+        manager.dispatchMessage(errorResponse)
 
-        do {
-            _ = try await expectation.value
-            Issue.record("Expected error but got success")
-        } catch {
+        await expectation.value
+        if let error = capture.error {
             #expect(error.localizedDescription.contains("Something went wrong"))
+        } else {
+            Issue.record("Expected error but got success")
         }
     }
 
@@ -124,7 +158,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
         do {
-            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05, write: {})
+            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05, write: { nil })
             Issue.record("Expected timeout error but got success")
         } catch {
             #expect(error.localizedDescription.contains("timed out"))
@@ -141,21 +175,26 @@ struct ConnectionManagerTests {
     @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
+        let capture = ResponseCapture()
         let pending = Task { @MainActor in
-            try await manager.awaitResponse(id: 7001, timeout: 0.05, write: {})
+            do {
+                capture.value = try await manager.awaitResponse(id: 7001, timeout: 0.05, write: { nil })
+            } catch {
+                capture.error = error
+            }
         }
         await waitForPendingRequest(manager, id: 7001)
 
         try? await Task.sleep(nanoseconds: 200_000_000) // let the 0.05s timeout fire
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
         """)
 
-        do {
-            _ = try await pending.value
-            Issue.record("Expected timeout error but got success")
-        } catch {
+        await pending.value
+        if let error = capture.error {
             #expect(error.localizedDescription.contains("timed out"))
+        } else {
+            Issue.record("Expected timeout error but got success")
         }
         #expect(ContinuousClock.now - start < .seconds(5))
         // Pending continuation is cleaned up
@@ -167,25 +206,91 @@ struct ConnectionManagerTests {
     /// result wins over the client-side transport timeout).
     @Test @MainActor func perCallTimeoutOverrideHonored() async throws {
         let manager = ConnectionManager.shared
+        let capture = ResponseCapture()
         let pending = Task { @MainActor in
-            try await manager.awaitResponse(id: 7002, timeout: 5.0, write: {})
+            do {
+                capture.value = try await manager.awaitResponse(id: 7002, timeout: 5.0, write: { nil })
+            } catch {
+                capture.error = error
+            }
         }
         await waitForPendingRequest(manager, id: 7002)
 
         try? await Task.sleep(nanoseconds: 100_000_000) // outlast a hypothetical short bound
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7002,"result":{"ok":true}}
         """)
 
-        let result = try await pending.value
-        #expect(result is [String: Any])
+        await pending.value
+        #expect(capture.error == nil)
+        #expect(capture.value is [String: Any])
         #expect(manager.pendingRequests[7002] == nil)
+    }
+
+    @Test @MainActor func cancellingRequestCancelsWriteAndRemovesPendingResponse() async {
+        let manager = ConnectionManager.shared
+        let writeCancelled = OSAllocatedUnfairLock(initialState: false)
+        let capture = ResponseCapture()
+        let pending = Task { @MainActor in
+            do {
+                capture.value = try await manager.awaitResponse(id: 7004, timeout: 5.0) {
+                    Task {
+                        do {
+                            try await Task.sleep(for: .seconds(5))
+                        } catch is CancellationError {
+                            writeCancelled.withLock { $0 = true }
+                        } catch {}
+                    }
+                }
+            } catch {
+                capture.error = error
+            }
+        }
+        await waitForPendingRequest(manager, id: 7004)
+
+        pending.cancel()
+        await pending.value
+        if capture.error is CancellationError {
+        } else if let error = capture.error {
+            Issue.record("Expected CancellationError, got \(error)")
+        } else {
+            Issue.record("Expected cancellation")
+        }
+        let cancellationDeadline = ContinuousClock.now + .seconds(5)
+        while !writeCancelled.withLock({ $0 }) {
+            if ContinuousClock.now >= cancellationDeadline {
+                Issue.record("Timed out waiting for the write task to observe cancellation")
+                break
+            }
+            await Task.yield()
+        }
+
+        #expect(manager.pendingRequests[7004] == nil)
+        #expect(writeCancelled.withLock { $0 })
     }
 
     /// Deterministically wait (bounded) until the continuation-registration Task
     /// has stored its continuation, instead of a fixed sleep (flake-prone under
     /// CI load). The registration Task inherits the main actor, so yielding here
     /// lets it run to the registration point.
+    @MainActor
+    private func installPendingResponse(
+        _ manager: ConnectionManager,
+        id: Int
+    ) -> (Task<Void, Never>, ResponseCapture) {
+        let capture = ResponseCapture()
+        let task = Task { @MainActor in
+            do {
+                capture.value = try await withCheckedThrowingContinuation { continuation in
+                    manager.pendingRequests[id] = continuation
+                }
+            } catch {
+                capture.error = error
+            }
+        }
+        return (task, capture)
+    }
+
     @MainActor
     private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async {
         let deadline = ContinuousClock.now + .seconds(5)
@@ -201,39 +306,31 @@ struct ConnectionManagerTests {
     @Test @MainActor func dispatchErrorResponsePreservesDataCode() async {
         let manager = ConnectionManager.shared
 
-        let expectation = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[889] = continuation
-            }
-        }
+        let (expectation, capture) = installPendingResponse(manager, id: 889)
 
         await waitForPendingRequest(manager, id: 889)
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":889,"error":{"code":-32602,"message":"unknown agent id: gone","data":{"code":"not-found"}}}
         """
-        await manager.dispatchMessage(errorResponse)
+        manager.dispatchMessage(errorResponse)
 
-        do {
-            _ = try await expectation.value
-            Issue.record("Expected error but got success")
-        } catch {
+        await expectation.value
+        if let error = capture.error {
             let nsError = error as NSError
             #expect(nsError.domain == "WebSocket")
             #expect(nsError.code == -32602)
             #expect(nsError.intentErrorDataCode == "not-found")
             #expect(nsError.isEntityNotFound)
+        } else {
+            Issue.record("Expected error but got success")
         }
     }
 
     @Test @MainActor func dispatchErrorResponseWithoutDataOmitsDataCode() async {
         let manager = ConnectionManager.shared
 
-        let expectation = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[890] = continuation
-            }
-        }
+        let (expectation, capture) = installPendingResponse(manager, id: 890)
 
         await waitForPendingRequest(manager, id: 890)
 
@@ -241,16 +338,16 @@ struct ConnectionManagerTests {
         let errorResponse = """
         {"jsonrpc":"2.0","id":890,"error":{"code":-32602,"message":"unknown agent id: gone"}}
         """
-        await manager.dispatchMessage(errorResponse)
+        manager.dispatchMessage(errorResponse)
 
-        do {
-            _ = try await expectation.value
-            Issue.record("Expected error but got success")
-        } catch {
+        await expectation.value
+        if let error = capture.error {
             let nsError = error as NSError
             #expect(nsError.code == -32602)
             #expect(nsError.intentErrorDataCode == nil)
             #expect(!nsError.isEntityNotFound, "a -32602 without data.code must not read as entity-not-found")
+        } else {
+            Issue.record("Expected error but got success")
         }
     }
 
@@ -286,16 +383,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func failAllPendingClearsRequests() async {
         let manager = ConnectionManager.shared
 
-        let task1 = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[100] = continuation
-            }
-        }
-        let task2 = Task<Any, Error> {
-            try await withCheckedThrowingContinuation { continuation in
-                manager.pendingRequests[101] = continuation
-            }
-        }
+        let (task1, capture1) = installPendingResponse(manager, id: 100)
+        let (task2, capture2) = installPendingResponse(manager, id: 101)
 
         try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
 
@@ -303,31 +392,43 @@ struct ConnectionManagerTests {
 
         #expect(manager.pendingRequests.isEmpty)
 
-        do {
-            _ = try await task1.value
-            Issue.record("Expected error")
-        } catch {
+        await task1.value
+        if let error = capture1.error {
             #expect(error.localizedDescription.contains("Connection lost"))
+        } else {
+            Issue.record("Expected error")
         }
-        do {
-            _ = try await task2.value
-            Issue.record("Expected error")
-        } catch {
+        await task2.value
+        if let error = capture2.error {
             #expect(error.localizedDescription.contains("Connection lost"))
+        } else {
+            Issue.record("Expected error")
         }
     }
 
-    // MARK: - certFingerprint API
+    @Test @MainActor func webSocketRequestUsesBearerAuthAndNoOriginHeader() throws {
+        let request = try WebSocketConnection.makeRequest(
+            host: "daemon.local", port: 4242, token: "test-token", certFingerprint: nil)
 
-    // Test that ConnectionManager stores certFingerprint
-    @Test @MainActor func connectionManagerStoresCertFingerprint() {
-        // This tests the connect() method signature accepts certFingerprint
-        // We can't easily test the actual WSS connection without a server,
-        // but we can verify the API accepts the parameter
-        // Just verify the method exists with the right signature
-        let manager = ConnectionManager.shared
-        // The connect method should accept certFingerprint parameter
-        // This is a compile-time check — if it compiles, the API is correct
+        #expect(request.url?.absoluteString == "ws://daemon.local:4242/ws")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
+        #expect(request.value(forHTTPHeaderField: "Origin") == nil)
+        #expect(request.timeoutInterval == 4)
+    }
+
+    @Test @MainActor func pinnedWebSocketRequestUsesSecureScheme() throws {
+        let request = try WebSocketConnection.makeRequest(
+            host: "daemon.local", port: 4242, token: "test-token", certFingerprint: "aa:bb")
+
+        #expect(request.url?.absoluteString == "wss://daemon.local:4242/ws")
+    }
+
+    @Test @MainActor func certificateMismatchErrorIncludesReceivedFingerprint() {
+        let error = WebSocketTransportError.certificateMismatch(
+            host: "daemon.local", fingerprint: "de:ad:be:ef")
+
+        #expect(error.isCertificateMismatch)
+        #expect(error.localizedDescription.contains("de:ad:be:ef"))
     }
 
     // MARK: - Synced-registry credential adoption
@@ -347,9 +448,9 @@ struct ConnectionManagerTests {
 
     @Test @MainActor func dispatchInvalidJsonDoesNotCrash() async {
         let manager = ConnectionManager.shared
-        await manager.dispatchMessage("not valid json")
-        await manager.dispatchMessage("")
-        await manager.dispatchMessage("{}")
+        manager.dispatchMessage("not valid json")
+        manager.dispatchMessage("")
+        manager.dispatchMessage("{}")
     }
 
     // MARK: - Subscription Push Routing
@@ -366,7 +467,7 @@ struct ConnectionManagerTests {
         let pushMessage = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-1","kind":"snapshot","seq":0,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
 
         #expect(receivedPush != nil)
         #expect(receivedPush?.subscriptionId == "test-sub-1")
@@ -384,7 +485,7 @@ struct ConnectionManagerTests {
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"unknown-sub","kind":"snapshot","seq":0,"snapshot":[]}}
         """
         // Should not crash, just drop and log
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
     }
 
     @Test @MainActor func unregisterRemovesHandler() async {
@@ -400,14 +501,14 @@ struct ConnectionManagerTests {
         """
 
         // First push should be received
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
         #expect(receivedCount == 1)
 
         // Unregister
         manager.unregisterSubscriptionHandler(id: "test-sub-2")
 
         // Second push should be dropped
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
         #expect(receivedCount == 1) // Still 1, not incremented
     }
 
@@ -426,7 +527,7 @@ struct ConnectionManagerTests {
 
         // Seed per-connection buffer + tombstone state: an unrouted push for an
         // unregistered id gets buffered, and unregistering lays a tombstone.
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-buffered","kind":"snapshot","seq":0,"snapshot":[]}}
         """)
         manager.unregisterSubscriptionHandler(id: "disc-sub-tombstoned")
@@ -439,7 +540,7 @@ struct ConnectionManagerTests {
         #expect(manager.recentlyUnregisteredIds.isEmpty)
 
         // A push for the cleared id no longer reaches the handler
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-1","kind":"snapshot","seq":0,"snapshot":[]}}
         """)
         #expect(receivedCount == 0)
@@ -465,7 +566,7 @@ struct ConnectionManagerTests {
         let pushA = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-a","kind":"snapshot","seq":1,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushA)
+        manager.dispatchMessage(pushA)
 
         #expect(receivedPush1?.subscriptionId == "test-sub-a")
         #expect(receivedPush1?.seq == 1)
@@ -478,7 +579,7 @@ struct ConnectionManagerTests {
         let pushB = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-b","kind":"snapshot","seq":2,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushB)
+        manager.dispatchMessage(pushB)
 
         #expect(receivedPush1 == nil) // Handler A should not receive B's push
         #expect(receivedPush2?.subscriptionId == "test-sub-b")
@@ -506,7 +607,7 @@ struct ConnectionManagerTests {
         let pushMessage = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-3","kind":"snapshot","seq":0,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
 
         #expect(!firstHandlerCalled) // Old handler should not be called
         #expect(secondHandlerCalled) // New handler should be called
@@ -534,7 +635,7 @@ struct ConnectionManagerTests {
         let pushMessage = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-4","kind":"snapshot","seq":0,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
 
         // Router is the SINGLE source of subscription.push dispatch.
         // Legacy eventHandlers must NOT receive subscription.push.
@@ -565,7 +666,7 @@ struct ConnectionManagerTests {
         let malformedPushMessage = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-5"}}
         """
-        await manager.dispatchMessage(malformedPushMessage)
+        manager.dispatchMessage(malformedPushMessage)
 
         // Malformed push should be dropped entirely: no router dispatch, no legacy broadcast
         #expect(!routerHandlerCalled)
@@ -590,7 +691,7 @@ struct ConnectionManagerTests {
         let pushMessage = """
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"test-sub-6","kind":"snapshot","seq":0,"snapshot":[]}}
         """
-        await manager.dispatchMessage(pushMessage)
+        manager.dispatchMessage(pushMessage)
 
         // Unregistered push should not be dispatched to legacy handlers (it is buffered
         // for potential replay, never broadcast)
@@ -608,13 +709,13 @@ struct ConnectionManagerTests {
         var received: [(kind: SubscriptionPush.Kind, seq: Int)] = []
 
         // Snapshot + deltas arrive BEFORE any handler is registered (the race)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
         """)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-1","kind":"delta","seq":2,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
 
@@ -641,7 +742,7 @@ struct ConnectionManagerTests {
         let limit = ConnectionManager.unroutedPushBufferLimit
         let total = limit + 6
         for seq in 0..<total {
-            await manager.dispatchMessage("""
+            manager.dispatchMessage("""
             {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-evict","kind":"delta","seq":\(seq),"delta":{"added":[],"updated":[],"removedIds":[]}}}
             """)
         }
@@ -663,7 +764,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
 
         // Fresh push arrives unrouted → buffered
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-ttl","kind":"delta","seq":2,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
         // Seed a push that exceeded the TTL
@@ -691,7 +792,7 @@ struct ConnectionManagerTests {
         var receivedSeqs: [Int] = []
 
         // seq 0 arrives pre-registration → buffered
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-mid","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
         """)
 
@@ -702,7 +803,7 @@ struct ConnectionManagerTests {
         #expect(receivedSeqs == [0])
 
         // seq 1 arrives post-registration → routed live, never buffered
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-mid","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
         #expect(receivedSeqs == [0, 1])
@@ -716,7 +817,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
 
         // Push buffered for a subscription that then gets unregistered (e.g. resnapshot)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-unreg","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
         """)
         manager.unregisterSubscriptionHandler(id: "buf-sub-unreg")
@@ -741,13 +842,13 @@ struct ConnectionManagerTests {
         // Straggler pushes for the dead id (unsubscribe still in flight on the daemon)
         // must be dropped, not buffered — they can never replay and would only add
         // eviction pressure on the shared buffer
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-dead","kind":"delta","seq":7,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
         #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-dead" })
 
         // A brand-new subscriptionId is unaffected by the tombstone
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-fresh","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
         """)
         var receivedSeqs: [Int] = []
@@ -769,10 +870,10 @@ struct ConnectionManagerTests {
         // A seq-0 snapshot for the tombstoned id means the daemon reused it for a
         // brand-new subscription (ids reset on daemon restart) — it must be buffered
         // and replayed, not dropped
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"snapshot","seq":0,"snapshot":{"agentId":"a1","messages":[]}}}
         """)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-reused","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
 
@@ -794,10 +895,10 @@ struct ConnectionManagerTests {
         manager.registerSubscriptionHandler(id: "col-sub-1") { push in
             received.append((push.kind, push.seq, push.snapshot?.count ?? 0))
         }
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-1","kind":"snapshot","seq":0,"snapshot":[{"id":"note-1"},{"id":"note-2"}]}}
         """)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-1","kind":"delta","seq":1,"delta":{"added":[],"updated":[{"id":"note-1"}],"removedIds":[]}}}
         """)
         #expect(received.count == 2)
@@ -806,7 +907,7 @@ struct ConnectionManagerTests {
         #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "col-sub-1" })
 
         // Array-shaped (collection) snapshot arriving pre-registration replays intact
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"col-sub-2","kind":"snapshot","seq":0,"snapshot":[{"id":"task-1"}]}}
         """)
         var replayedSnapshot: [[String: Any]]?
@@ -828,10 +929,10 @@ struct ConnectionManagerTests {
 
         // Snapshot + first delta arrive BEFORE the store registers its handler
         // (the seq-0 race this fix addresses)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"snapshot","seq":0,"snapshot":{"agentId":"agent-1","messages":[{"id":"msg-1","role":"user","contentBlocks":[{"type":"text","id":"msg-1:0","text":"Hello"}],"timestamp":"2026-07-21T01:00:00.000Z"}]}}}
         """)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":1,"delta":{"added":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working"}}],"updated":[],"removedIds":[]}}}
         """)
 
@@ -849,7 +950,7 @@ struct ConnectionManagerTests {
 
         // The channel is seeded correctly: the next live delta continues the
         // sequence without a gap (no resnapshot wiped the seeded state)
-        await manager.dispatchMessage("""
+        manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":2,"delta":{"added":[],"updated":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working on it."}}],"removedIds":[]}}}
         """)
         #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Working on it.")

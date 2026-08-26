@@ -138,7 +138,7 @@ class AppCoordinator: ObservableObject {
 
 
     private func startObservingCertMismatch() {
-        certMismatchObserver = ConnectionManager.shared.$certMismatchDetected
+        certMismatchObserver = ConnectionManager.shared.certMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
                 guard let self = self, mismatch else { return }
