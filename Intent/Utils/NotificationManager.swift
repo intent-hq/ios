@@ -37,7 +37,7 @@ class NotificationManager: ObservableObject {
     }
 
     private func registerEventHandler() {
-        print("[NotificationManager] Registering event handler")
+        AppLog.notifications.debug("[NotificationManager] Registering event handler")
         ConnectionManager.shared.onEvent { [weak self] method, params in
             Task { @MainActor in
                 self?.handleEvent(params)
@@ -47,44 +47,44 @@ class NotificationManager: ObservableObject {
 
     private func handleEvent(_ params: Any) {
         // Debug: log raw params type and keys
-        print("[NotificationManager] handleEvent called, params type=\(type(of: params))")
+        AppLog.notifications.debug("[NotificationManager] handleEvent called, params type=\(type(of: params))")
         guard let dict = params as? [String: Any] else {
-            print("[NotificationManager] ⚠️ params is not [String: Any], skipping")
+            AppLog.notifications.warning("[NotificationManager] ⚠️ params is not [String: Any], skipping")
             return
         }
-        print("[NotificationManager] dict keys: \(dict.keys.sorted())")
+        AppLog.notifications.debug("[NotificationManager] dict keys: \(dict.keys.sorted())")
 
         // Unwrap event from subscription wrapper
         let event: [String: Any]
         if let innerEvent = dict["event"] as? [String: Any] {
             event = innerEvent
-            print("[NotificationManager] Unwrapped inner event, keys: \(event.keys.sorted())")
+            AppLog.notifications.debug("[NotificationManager] Unwrapped inner event, keys: \(event.keys.sorted())")
         } else {
             event = dict
-            print("[NotificationManager] No inner event wrapper, using dict directly")
+            AppLog.notifications.debug("[NotificationManager] No inner event wrapper, using dict directly")
         }
 
         let eventType = event["type"] as? String
-        print("[NotificationManager] Event type: \(eventType ?? "nil")")
+        AppLog.notifications.debug("[NotificationManager] Event type: \(eventType ?? "nil")")
 
         guard eventType == "agent:idle" else { return }
 
         guard let data = event["data"] as? [String: Any] else {
-            print("[NotificationManager] ⚠️ agent:idle missing 'data' dict. Event keys: \(event.keys.sorted())")
+            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'data' dict. Event keys: \(event.keys.sorted())")
             return
         }
         guard let agentId = data["agentId"] as? String else {
-            print("[NotificationManager] ⚠️ agent:idle data missing 'agentId'. Data keys: \(data.keys.sorted())")
+            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle data missing 'agentId'. Data keys: \(data.keys.sorted())")
             return
         }
         guard let workspaceId = event["workspaceId"] as? String else {
-            print("[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())")
+            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())")
             return
         }
 
         // Emit-time fast paths: background agents and agents the payload
         // already marks as waiting on sub-agents never alert.
-        print("[NotificationManager] agent:idle — agentId=\(agentId), currentAgentId=\(currentAgentId ?? "nil")")
+        AppLog.notifications.debug("[NotificationManager] agent:idle — agentId=\(agentId), currentAgentId=\(currentAgentId ?? "nil")")
         if Self.shouldSkipIdleEventFastPath(data) { return }
 
         let agentName = data["agentName"] as? String
@@ -98,7 +98,7 @@ class NotificationManager: ObservableObject {
             let agents = await self?.fetchWorkspaceAgents(workspaceId: workspaceId)
             guard let self else { return }
             if Self.shouldSuppressIdleAlert(idleAgentId: agentId, agents: agents) {
-                print("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
+                AppLog.notifications.debug("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
                 return
             }
             self.presentIdleAlert(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
@@ -152,7 +152,7 @@ class NotificationManager: ObservableObject {
             }
             return nil
         } catch {
-            print("[NotificationManager] agent.list failed, falling back to alert: \(error)")
+            AppLog.notifications.warning("[NotificationManager] agent.list failed, falling back to alert: \(error)")
             return nil
         }
     }
