@@ -184,8 +184,8 @@ struct StatusDerivationTests {
 
     @Test func sortOrderOrdering() async throws {
         let ordered: [WorkspaceDisplayStatus] = [
-            .failed, .blocked, .needsAttention, .idle, .inProgress,
-            .prReady, .prOpen, .notStarted, .complete, .prMerged, .unknown,
+            .failed, .blocked, .needsAttention, .idle, .notStarted,
+            .inProgress, .complete, .prOpen, .prReady, .prMerged, .unknown,
         ]
         for i in 0..<ordered.count - 1 {
             #expect(ordered[i].sortOrder < ordered[i + 1].sortOrder)

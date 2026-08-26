@@ -135,11 +135,11 @@ struct WorkspaceListViewModelTests {
 
         let groups = vm.groupedByStatus
         #expect(groups.count == 4)
-        // Sorted by sortOrder: idle(1), inProgress(2), prOpen(4), notStarted(5)
+        // Sorted by sortOrder: idle(3), notStarted(4), inProgress(5), prOpen(7)
         #expect(groups[0].0 == "Idle")
-        #expect(groups[1].0 == "In Progress")
-        #expect(groups[2].0 == "PR Open")
-        #expect(groups[3].0 == "No Code Changes")
+        #expect(groups[1].0 == "No Code Changes")
+        #expect(groups[2].0 == "In Progress")
+        #expect(groups[3].0 == "PR Open")
     }
 
     @Test @MainActor func groupedByStatus_putsNeedsAttentionFirst() {
@@ -163,7 +163,7 @@ struct WorkspaceListViewModelTests {
         let ws = [
             // BE says in_progress; local prStatus never overrides it
             makeWorkspace(id: "1", title: "Reopened", displayStatus: "in_progress", prStatus: "Merged"),
-            // BE-only prReady status (sortOrder 2, between inProgress and prOpen)
+            // BE-only prReady status (sortOrder 8, after prOpen)
             makeWorkspace(id: "2", title: "Mergeable", displayStatus: "pr_ready", prStatus: "Open"),
             // No BE value — defaults to notStarted, not derived from prStatus
             makeWorkspace(id: "3", title: "Legacy", prStatus: "Open")
@@ -173,12 +173,12 @@ struct WorkspaceListViewModelTests {
 
         let groups = vm.groupedByStatus
         #expect(groups.count == 3)
-        #expect(groups[0].0 == "In Progress")
-        #expect(groups[0].1.map(\.id) == ["1"])
-        #expect(groups[1].0 == "PR Mergeable")
-        #expect(groups[1].1.map(\.id) == ["2"])
-        #expect(groups[2].0 == "No Code Changes")
-        #expect(groups[2].1.map(\.id) == ["3"])
+        #expect(groups[0].0 == "No Code Changes")
+        #expect(groups[0].1.map(\.id) == ["3"])
+        #expect(groups[1].0 == "In Progress")
+        #expect(groups[1].1.map(\.id) == ["1"])
+        #expect(groups[2].0 == "PR Mergeable")
+        #expect(groups[2].1.map(\.id) == ["2"])
     }
 }
 
