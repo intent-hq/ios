@@ -9,14 +9,14 @@ import Combine
 /// `hook:*` family is not part of the bare-`*` category expansion, so the
 /// store owns its own `events.subscribe` with a `hook:*` prefix filter.
 @MainActor
-class BackgroundHookStore: ObservableObject {
-    @Published var hooks: [BackgroundHook] = []
-    @Published var isLoading = false
+@Observable class BackgroundHookStore {
+    var hooks: [BackgroundHook] = []
+    var isLoading = false
 
     private var workspaceId: String?
     private var agentId: String?
-    private var subscriptionId: String?
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var subscriptionId: String?
+    @ObservationIgnored private var eventHandlerId: UUID?
     private var cancellables = Set<AnyCancellable>()
     private let connectionManager: ConnectionManagerRouting
 
@@ -49,12 +49,21 @@ class BackgroundHookStore: ObservableObject {
     }
 
     deinit {
-        // deinit is nonisolated: capture the handler id and manager, then hop
-        // to the main actor so the handler entry doesn't outlive the store.
-        guard let handlerId = eventHandlerId else { return }
+        // deinit is nonisolated: capture the handler id, subscription id and
+        // manager, then hop to the main actor so the entries don't outlive the store.
+        let handlerId = eventHandlerId
+        let subscriptionId = subscriptionId
+        guard handlerId != nil || subscriptionId != nil else { return }
         let connectionManager = self.connectionManager
         Task { @MainActor in
-            connectionManager.removeEventHandler(id: handlerId)
+            if let handlerId {
+                connectionManager.removeEventHandler(id: handlerId)
+            }
+            if let subscriptionId {
+                let _ = try? await connectionManager.request("events.unsubscribe", params: [
+                    "subscriptionId": subscriptionId
+                ])
+            }
         }
     }
 
@@ -96,7 +105,7 @@ class BackgroundHookStore: ObservableObject {
                 subscriptionId = subId
             }
         } catch {
-            print("[BackgroundHookStore] events.subscribe (hook:*) failed: \(error)")
+            AppLog.hooks.error("[BackgroundHookStore] events.subscribe (hook:*) failed: \(error)")
         }
         // Without a subscription still serve the one-shot snapshot
         await refetch()
@@ -114,7 +123,7 @@ class BackgroundHookStore: ObservableObject {
                     "subscriptionId": subId
                 ])
             } catch {
-                print("[BackgroundHookStore] events.unsubscribe failed: \(error)")
+                AppLog.hooks.error("[BackgroundHookStore] events.unsubscribe failed: \(error)")
             }
         }
         workspaceId = nil
@@ -133,7 +142,7 @@ class BackgroundHookStore: ObservableObject {
                 "hookId": hookId
             ])
         } catch {
-            print("[BackgroundHookStore] hook.runNow failed: \(error)")
+            AppLog.hooks.error("[BackgroundHookStore] hook.runNow failed: \(error)")
         }
     }
 
@@ -146,7 +155,7 @@ class BackgroundHookStore: ObservableObject {
                 "hookId": hookId
             ])
         } catch {
-            print("[BackgroundHookStore] hook.cancel failed: \(error)")
+            AppLog.hooks.error("[BackgroundHookStore] hook.cancel failed: \(error)")
         }
     }
 
@@ -279,7 +288,7 @@ class BackgroundHookStore: ObservableObject {
                 hooks = hooksArray.compactMap { BackgroundHook.parseHook($0) }
             }
         } catch {
-            print("[BackgroundHookStore] hook.list failed: \(error)")
+            AppLog.hooks.error("[BackgroundHookStore] hook.list failed: \(error)")
         }
         isLoading = false
         refetchInFlight = false

@@ -11,12 +11,18 @@ import SwiftUI
 /// hides the row entirely when the agent has no active hooks. No code preview
 /// on iOS (per spec decision).
 struct BackgroundHooksRow: View {
-    @ObservedObject var viewModel: ConversationViewModel
+    let viewModel: ConversationViewModel
+    private let hookStore: BackgroundHookStore
     @Environment(\.colorScheme) var colorScheme
 
     /// Max characters of a hook name shown on a chip (mirrors the FE's
     /// visual max-width truncation).
     private static let nameMaxLength = 24
+
+    init(viewModel: ConversationViewModel, hookStore: BackgroundHookStore) {
+        self.viewModel = viewModel
+        self.hookStore = hookStore
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -29,7 +35,7 @@ struct BackgroundHooksRow: View {
                     .fontWeight(.medium)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
 
-                ForEach(viewModel.activeAgentHooks) { hook in
+                ForEach(hookStore.activeHooks.filter { $0.agentId == viewModel.agentId }) { hook in
                     hookChip(hook)
                 }
             }
@@ -53,13 +59,13 @@ struct BackgroundHooksRow: View {
             }
             Divider()
             Button {
-                Task { await viewModel.hookStore.runNow(hookId: hook.hookId) }
+                Task { await hookStore.runNow(hookId: hook.hookId) }
             } label: {
                 Label("Run now", systemImage: "play")
             }
             .disabled(hook.state == .running)
             Button(role: .destructive) {
-                Task { await viewModel.hookStore.cancel(hookId: hook.hookId) }
+                Task { await hookStore.cancel(hookId: hook.hookId) }
             } label: {
                 Label("Cancel hook", systemImage: "xmark")
             }
