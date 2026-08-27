@@ -185,20 +185,21 @@ struct NoteDetailView: View {
     }
 
     /// Parse an intent:// URL to extract a note/task ID.
-    /// Supports:
+    /// Supports the short forms
     ///   intent://local/task/{id}
     ///   intent://local/note/{id}
+    /// and the canonical workspace-qualified long forms
+    ///   intent://local/{workspaceId}/task/{id}
+    ///   intent://local/{workspaceId}/note/{id}
     static func parseIntentNoteLink(_ url: URL) -> String? {
-        guard url.scheme == "intent" else { return nil }
+        guard url.scheme == "intent", url.host == "local" else { return nil }
         // URL path segments: e.g. intent://local/task/abc-123 → host="local", path="/task/abc-123"
-        let host = url.host
-        guard host == "local" else { return nil }
         let segments = url.pathComponents.filter { $0 != "/" }
-        guard segments.count >= 2 else { return nil }
-        let resourceType = segments[0]
-        let resourceId = segments[1]
-        if resourceType == "task" || resourceType == "note" {
-            return resourceId
+        if segments.count >= 2, segments[0] == "task" || segments[0] == "note" {
+            return segments[1]
+        }
+        if segments.count >= 3, segments[1] == "task" || segments[1] == "note" {
+            return segments[2]
         }
         return nil
     }
