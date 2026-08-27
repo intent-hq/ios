@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Intent
 
@@ -184,7 +185,10 @@ final class AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         persistence.setActiveConnection(id: stored.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        // Empty fake registry: onLoadComplete merges the synced registry, and
+        // the default one would read the host machine's real keychain.
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
         coordinator.onLoadComplete()
 
         if case .connecting = coordinator.currentScreen {
@@ -201,7 +205,8 @@ final class AppCoordinatorTests {
         // A saved connection without an active pointer must not auto-connect.
         persistence.upsertConnection(Self.makeConnection(port: 4242))
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
         coordinator.onLoadComplete()
 
         if case .pairing = coordinator.currentScreen {
@@ -257,6 +262,104 @@ final class AppCoordinatorTests {
         coordinator.pairingShowsSavedConnections = true
         coordinator.onPaired()
         #expect(!coordinator.pairingShowsSavedConnections)
+    }
+
+    // MARK: - Synced backend registry merge
+
+    /// Registry whose keychain returns the given records as raw rows.
+    private static func syncedRegistry(payloads: [String]) -> SyncedBackendRegistry {
+        let rows: [[String: Any]] = payloads.enumerated().map { index, payload in
+            [
+                kSecAttrAccount as String: "row-\(index)",
+                kSecValueData as String: Data(payload.utf8),
+            ]
+        }
+        return SyncedBackendRegistry(
+            keychain: FakeSyncedKeychain(outcome: .rows(rows)),
+            accessGroup: "T.dev.intentapp.backends")
+    }
+
+    private static let syncedLivePayload = #"{"v": 1, "label": "Synced Mac", "#
+        + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+        + #""token": "tok-sync", "updatedAt": 100}"#
+
+    @Test @MainActor func onLoadComplete_mergesRegistryAndOffersSyncedConnections() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+        coordinator.onLoadComplete()
+
+        let loaded = persistence.loadConnections()
+        #expect(loaded.map(\.token) == ["tok-sync"])
+        #expect(coordinator.pairingShowsSavedConnections,
+                "A merged synced connection must be offered on the pairing surface")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onScenePhaseActive_mergesRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+        coordinator.onScenePhaseActive()
+
+        #expect(persistence.loadConnections().count == 1)
+    }
+
+    @Test @MainActor func refreshSyncedBackends_unavailableRegistryIsANoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let registry = SyncedBackendRegistry(
+            keychain: FakeSyncedKeychain(outcome: .failure(errSecNotAvailable)),
+            accessGroup: "T.dev.intentapp.backends")
+        let coordinator = AppCoordinator(persistence: persistence, syncedRegistry: registry)
+
+        #expect(coordinator.refreshSyncedBackends() == nil)
+        #expect(persistence.loadConnections().map(\.id) == [stored.id])
+    }
+
+    @Test @MainActor func refreshSyncedBackends_tombstoneOnActiveRoutesToPairing() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(), certFingerprint: "aa:bb"),
+                token: "tok"))
+        let other = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: doomed.id)
+
+        let tombstone = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+            + #""updatedAt": 200, "deleted": true}"#
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.removedActiveConnection == true)
+        #expect(persistence.loadConnections().map(\.id) == [other.id])
+        #expect(persistence.activeConnection() == nil)
+        #expect(coordinator.pairingShowsSavedConnections,
+                "The remaining saved connection must be offered on the pairing surface")
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
     }
 
     @Test @MainActor func onReconnect_flagsSavedConnections_whenConnectionsExist() {

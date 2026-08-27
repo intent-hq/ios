@@ -396,4 +396,47 @@ struct SyncedBackendRegistryTests {
         }
         #expect(records.map(\.label) == ["A", "B"])
     }
+
+    @Test func listBackendsIncludesWinningTombstones() {
+        let live = #"{"v": 1, "label": "Live", "host": "10.0.0.1", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let tombstone = #"{"v": 1, "label": "Dead", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "bb", "updatedAt": 200, "deleted": true}"#
+        let keychain = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.1:1", payload: live),
+            row(account: "10.0.0.2:2", payload: tombstone),
+        ]))
+        guard case .available(let records) = registry(keychain).listBackends() else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(records.map(\.label) == ["Live", "Dead"])
+        #expect(records.map(\.deleted) == [false, true])
+    }
+
+    @Test func listBackendsCollapsesToWinningTombstonePerKey() {
+        let live = #"{"v": 1, "label": "Live", "host": "10.0.0.1", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let tombstone = #"{"v": 1, "label": "Dead", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "aa", "updatedAt": 200, "deleted": true}"#
+        let keychain = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.1:1", payload: live),
+            row(account: "10.0.0.2:2", payload: tombstone),
+        ]))
+        guard case .available(let records) = registry(keychain).listBackends() else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(records.map(\.label) == ["Dead"])
+    }
+
+    @Test func listBackendsUnavailableMirrorsLiveList() {
+        #expect(
+            registry(FakeSyncedKeychain(), group: nil).listBackends()
+                == .unavailable(.accessGroupUnresolved))
+        let failing = FakeSyncedKeychain(outcome: .failure(errSecNotAvailable))
+        #expect(
+            registry(failing).listBackends()
+                == .unavailable(.keychainError(errSecNotAvailable)))
+    }
 }

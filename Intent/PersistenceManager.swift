@@ -65,7 +65,11 @@ class PersistenceManager {
                     ),
                     token: connection.token,
                     displayName: connection.displayName,
-                    lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt
+                    lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
+                    // The LWW clock survives a re-pair: the record is still the
+                    // registry copy it was last synced from (write-back is the
+                    // push path's job, not upsert's).
+                    syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
                 )
                 connections[index] = stored
             } else {
@@ -157,6 +161,35 @@ class PersistenceManager {
             guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
             connections[index].lastConnectedAt = Date()
             saveConnectionsLocked(connections)
+        }
+    }
+
+    /// Merges the iCloud-synced backend registry's per-key winners (including
+    /// tombstones) into the saved connections — one atomic pass under the
+    /// persistence lock (see `SyncedBackendConnectionMerge` for the rules).
+    /// A tombstone that removes the active connection also clears the active
+    /// pointer; the outcome flags it so the caller can disconnect/route away.
+    @discardableResult
+    func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
+        syncQueue.sync {
+            migrateLegacyPairingIfNeeded()
+            let connections = loadConnectionsLocked()
+            let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
+            var removedActive = false
+            if result.changed {
+                saveConnectionsLocked(result.connections)
+                if let activeId = activeConnectionIdLocked(),
+                    result.removedIds.contains(activeId)
+                {
+                    defaults.removeObject(forKey: activeConnectionIdKey)
+                    removedActive = true
+                }
+            }
+            return SyncedBackendMergeOutcome(
+                addedIds: result.addedIds,
+                updatedIds: result.updatedIds,
+                removedIds: result.removedIds,
+                removedActiveConnection: removedActive)
         }
     }
 

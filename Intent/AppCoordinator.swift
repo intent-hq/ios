@@ -45,13 +45,16 @@ class AppCoordinator: ObservableObject {
     private let workspaceStore: WorkspaceStore
     private let connection: ConnectionManagerRouting
     private let persistence: PersistenceManager
+    private let syncedRegistry: SyncedBackendRegistry
 
     init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
          connection: ConnectionManagerRouting = ConnectionManager.shared,
-         persistence: PersistenceManager = PersistenceManager.shared) {
+         persistence: PersistenceManager = PersistenceManager.shared,
+         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry()) {
         self.workspaceStore = workspaceStore
         self.connection = connection
         self.persistence = persistence
+        self.syncedRegistry = syncedRegistry
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -188,11 +191,44 @@ class AppCoordinator: ObservableObject {
     }
 
     func onLoadComplete() {
+        refreshSyncedBackends()
         if DemoMode.pretendPaired || persistence.activeConnection() != nil {
             currentScreen = .connecting
         } else {
+            // Synced connections merged from the registry (or connections
+            // saved earlier) must be offered on the pairing surface.
+            pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
             currentScreen = .pairing
         }
+    }
+
+    /// Called when the scene becomes active (launch and every return to the
+    /// foreground): re-merges the iCloud-synced backend registry so changes
+    /// made on other devices while the app was backgrounded show up.
+    func onScenePhaseActive() {
+        refreshSyncedBackends()
+    }
+
+    /// Merges the iCloud-synced backend registry into the saved connections
+    /// (see `SyncedBackendConnectionMerge`). An unavailable registry read
+    /// (locked keychain, missing entitlement) is a no-op — existing local
+    /// knowledge is kept. When a tombstone removes the active connection,
+    /// disconnects and routes to the pairing surface like Log Off.
+    @discardableResult
+    func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
+        guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
+        let outcome = persistence.mergeSyncedBackends(records: records)
+        if outcome.removedActiveConnection {
+            hasEverConnected = false
+            isDisconnected = false
+            ConnectionManager.shared.disconnect()
+            resetWorkspaceStore()
+            persistence.clearLastScreen()
+            selectedWorkspaceId = nil
+            pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
+            currentScreen = .pairing
+        }
+        return outcome
     }
 
     func onConnectionSuccess() {

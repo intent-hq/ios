@@ -251,14 +251,14 @@ struct SyncedBackendRegistry {
         ]
     }
 
-    /// The live records in the registry: malformed and newer-version items
-    /// are skipped, records sharing a `registryKey` collapse to a single
+    /// All key-winning records: malformed and newer-version items are
+    /// skipped, and records sharing a `registryKey` collapse to a single
     /// winner (LWW by `updatedAt` with the fe reconcile's deterministic tie
     /// rules — see `wins(over:)` — so a machine whose address changed never
-    /// appears twice and row order never changes the outcome), and
-    /// tombstones — including a tombstone that wins its key — are filtered
-    /// out.
-    func listLiveBackends() -> SyncedBackendRegistryList {
+    /// appears twice and row order never changes the outcome). INCLUDES
+    /// winning tombstones — the merge into saved connections must act on
+    /// them.
+    func listBackends() -> SyncedBackendRegistryList {
         guard let accessGroup else { return .unavailable(.accessGroupUnresolved) }
         switch keychain.list(matching: Self.listQuery(accessGroup: accessGroup)) {
         case .failure(let status):
@@ -281,11 +281,18 @@ struct SyncedBackendRegistry {
                     keyOrder.append(key)
                 }
             }
-            let live = keyOrder.compactMap { key -> SyncedBackendRecord? in
-                guard let record = newestByKey[key], !record.deleted else { return nil }
-                return record
-            }
-            return .available(live)
+            return .available(keyOrder.compactMap { newestByKey[$0] })
+        }
+    }
+
+    /// The live records in the registry: `listBackends()` minus tombstones
+    /// (a tombstone that wins its key hides the older live copies).
+    func listLiveBackends() -> SyncedBackendRegistryList {
+        switch listBackends() {
+        case .unavailable(let reason):
+            return .unavailable(reason)
+        case .available(let records):
+            return .available(records.filter { !$0.deleted })
         }
     }
 }
