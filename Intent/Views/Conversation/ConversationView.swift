@@ -24,19 +24,14 @@ class ScrollViewMomentumProxy: ObservableObject {
 struct ScrollViewFinder: UIViewRepresentable {
     let proxy: ScrollViewMomentumProxy
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
         view.isUserInteractionEnabled = false
         view.frame = .zero
-        let coordinator = context.coordinator
         DispatchQueue.main.async {
             if let scrollView = Self.findScrollView(from: view) {
                 proxy.scrollView = scrollView
-                coordinator.installKeyboardDismissTap(on: scrollView)
+                Self.installKeyboardDismissTap(on: scrollView)
                 AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             } else {
                 AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
@@ -47,11 +42,7 @@ struct ScrollViewFinder: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIView, context: Context) {}
 
-    /// Marker subclass so repeated `makeUIView` calls (row recycling) can
-    /// detect an already-installed recognizer.
-    private final class KeyboardDismissTapGesture: UITapGestureRecognizer {}
-
-    /// Installs the tap-to-dismiss-keyboard recognizer directly on the
+    /// The tap-to-dismiss-keyboard recognizer, installed directly on the
     /// transcript's UIScrollView. A SwiftUI `TapGesture` on the ScrollView
     /// cannot be used for this: SwiftUI guarantees simultaneity only with
     /// other SwiftUI gestures, so the hosting view's recognizer wins the
@@ -61,22 +52,23 @@ struct ScrollViewFinder: UIViewRepresentable {
     /// always loses the race (broken link taps in markdown content).
     /// This recognizer never competes: it doesn't cancel touches and
     /// recognizes simultaneously with everything.
-    @MainActor
-    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
-        func installKeyboardDismissTap(on scrollView: UIScrollView) {
-            let installed = scrollView.gestureRecognizers?.contains {
-                $0 is KeyboardDismissTapGesture
-            }
-            guard installed != true else { return }
-            let tap = KeyboardDismissTapGesture(
-                target: self, action: #selector(dismissKeyboard)
-            )
-            tap.cancelsTouchesInView = false
-            tap.delegate = self
-            scrollView.addGestureRecognizer(tap)
+    ///
+    /// Self-contained on purpose — it is its own target and delegate, so it
+    /// has no external dependency that must outlive the (recyclable) anchor
+    /// row that installs it: `UIGestureRecognizer` does not retain targets
+    /// and holds its delegate weakly, so pointing either at a SwiftUI-owned
+    /// coordinator would leave the recognizer dangling once the row is
+    /// dismantled. The scroll view retains the recognizer; the target/
+    /// delegate self-references create no retain cycle (unretained).
+    private final class KeyboardDismissTapGesture: UITapGestureRecognizer, UIGestureRecognizerDelegate {
+        init() {
+            super.init(target: nil, action: nil)
+            addTarget(self, action: #selector(handleTap))
+            cancelsTouchesInView = false
+            delegate = self
         }
 
-        @objc private func dismissKeyboard() {
+        @objc private func handleTap() {
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
                 to: nil, from: nil, for: nil
@@ -89,6 +81,16 @@ struct ScrollViewFinder: UIViewRepresentable {
         ) -> Bool {
             true
         }
+    }
+
+    /// Idempotent: repeated `makeUIView` calls (row recycling) detect the
+    /// already-installed recognizer by class and skip.
+    private static func installKeyboardDismissTap(on scrollView: UIScrollView) {
+        let installed = scrollView.gestureRecognizers?.contains {
+            $0 is KeyboardDismissTapGesture
+        }
+        guard installed != true else { return }
+        scrollView.addGestureRecognizer(KeyboardDismissTapGesture())
     }
 
     private static func findScrollView(from view: UIView) -> UIScrollView? {
@@ -659,7 +661,7 @@ private struct ConversationViewContent: View {
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         // Keyboard dismissal on tap is handled by a non-competing UIKit
-        // recognizer installed via ScrollViewFinder — see its Coordinator.
+        // recognizer installed via ScrollViewFinder (KeyboardDismissTapGesture).
         // A SwiftUI TapGesture here starves Textual's link-tap recognizer.
         .onScrollGeometryChange(for: Bool.self) { geometry in
             // In the flipped view, "at bottom" means native scroll is at top (contentOffset.y ≈ 0)
