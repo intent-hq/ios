@@ -112,11 +112,11 @@ xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS S
 xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' test
 ```
 
-Tests run **serially** by default — the shared `Intent` scheme pins `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/monorepo#759](https://github.com/intent-hq/monorepo/issues/759)).
+Tests run **serially** by default — the shared `Intent` scheme pins `parallelizable = "NO"`, so no extra flags are needed. Parallel simulator clone runners mass-flake the suite locally (see [intent-hq/intent#759](https://github.com/intent-hq/intent/issues/759)).
 
 **Conventional commits** are required (`feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`); PR titles are validated in CI.
 
 ## Related Repositories
 
-- [intent-hq/monorepo](https://github.com/intent-hq/monorepo) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
+- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
 - [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
