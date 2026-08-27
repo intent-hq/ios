@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 /// Probes a server's TLS certificate fingerprint ahead of pairing, shared by
 /// manual token entry and QR pairing payloads that carry no fingerprint.
@@ -59,8 +60,12 @@ enum CertFingerprintProbe {
 
 // MARK: - Certificate Probe Delegate
 
-private class CertProbeDelegate: NSObject, URLSessionDelegate {
-    var capturedFingerprint: String?
+private nonisolated final class CertProbeDelegate: NSObject, URLSessionDelegate, Sendable {
+    private let fingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
+
+    var capturedFingerprint: String? {
+        fingerprint.withLock { $0 }
+    }
 
     func urlSession(
         _ session: URLSession,
@@ -78,7 +83,8 @@ private class CertProbeDelegate: NSObject, URLSessionDelegate {
            let serverCert = certChain.first {
             let certData = SecCertificateCopyData(serverCert) as Data
             let hash = SHA256.hash(data: certData)
-            capturedFingerprint = hash.map { String(format: "%02x", $0) }.joined(separator: ":")
+            let value = hash.map { String(format: "%02x", $0) }.joined(separator: ":")
+            fingerprint.withLock { $0 = value }
         }
 
         // Accept the self-signed cert for this probe

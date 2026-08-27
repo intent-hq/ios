@@ -773,12 +773,14 @@ extension ConnectionManagerRouting {
                 AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * 1000))ms")
 
                 // Check freshness before mutating observable state, then read the connection parameters.
-                let parameters = await MainActor.run { () -> ([String], Int, String, String?)? in
-                    guard !Task.isCancelled,
-                          let self,
-                          self.connectionGeneration == myGeneration else { return nil }
+                let parameters: ([String], Int, String, String?)?
+                if !Task.isCancelled,
+                   let self,
+                   self.connectionGeneration == myGeneration {
                     self.connectionState = .reconnecting(attempt: attempt)
-                    return (self.hosts, self.port ?? 0, self.token ?? "", self.certFingerprint)
+                    parameters = (self.hosts, self.port ?? 0, self.token ?? "", self.certFingerprint)
+                } else {
+                    parameters = nil
                 }
                 guard let (hostsToTry, currentPort, currentToken, currentCertFingerprint) = parameters else {
                     return
@@ -802,20 +804,23 @@ extension ConnectionManagerRouting {
                         return
                     }
 
-                    // Batch write: check generation + set up socket + transition to connected in one MainActor call
-                    let genOk = await MainActor.run { () -> Bool in
-                        guard !Task.isCancelled,
-                              self?.connectionGeneration == myGeneration else { return false }
-                        self?.socket = winningSocket
-                        self?.host = winningSocket.host
-                        self?.configureSocketMessagePump()
-                        self?.connectionState = .connected
-                        self?.lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
-                        self?.lastReconnectAttempt = attempt
-                        self?.subscribeToAllEvents()
-                        self?.startPingTimer()
-                        self?.scheduleHostRoutesRefresh()
-                        return true
+                    // Batch write: check generation + set up socket + transition to connected synchronously.
+                    let genOk: Bool
+                    if !Task.isCancelled,
+                       let self,
+                       self.connectionGeneration == myGeneration {
+                        self.socket = winningSocket
+                        self.host = winningSocket.host
+                        self.configureSocketMessagePump()
+                        self.connectionState = .connected
+                        self.lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
+                        self.lastReconnectAttempt = attempt
+                        self.subscribeToAllEvents()
+                        self.startPingTimer()
+                        self.scheduleHostRoutesRefresh()
+                        genOk = true
+                    } else {
+                        genOk = false
                     }
                     guard genOk else {
                         await winningSocket.disconnect()
@@ -828,11 +833,11 @@ extension ConnectionManagerRouting {
                 } catch {
                     if let transportError = error as? WebSocketTransportError,
                        transportError.isCertificateMismatch {
+                        guard !Task.isCancelled,
+                              self?.connectionGeneration == myGeneration else { return }
                         AppLog.connection.debug("[ConnectionManager] Certificate mismatch detected, stopping reconnection")
-                        await MainActor.run {
-                            self?.certMismatchDetected = true
-                            self?.connectionState = .disconnected
-                        }
+                        self?.certMismatchDetected = true
+                        self?.connectionState = .disconnected
                         return
                     }
                     AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")

@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import os
 
-enum WebSocketTransportError: LocalizedError, Sendable {
+nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
     case invalidURL(host: String)
     case timedOut(host: String)
     case failed(host: String, message: String)
@@ -234,7 +234,7 @@ actor WebSocketConnection {
     }
 }
 
-private nonisolated final class WebSocketSessionDelegate: NSObject, URLSessionWebSocketDelegate {
+private nonisolated final class WebSocketSessionDelegate: NSObject, URLSessionWebSocketDelegate, Sendable {
     private let host: String
     private let pinnedFingerprint: String?
     private let mismatchFingerprint: OSAllocatedUnfairLock<String?>

@@ -151,9 +151,9 @@ struct PersistenceManagerTests {
         #expect(loaded?.noteId == "n2")
     }
 
-    // MARK: - Concurrency regression test
+    // MARK: - MainActor serialization smoke test
 
-    @Test func concurrentSavesDoNotCorruptSharedDictionary() async {
+    @Test func serializedMainActorSavesMaintainDataIntegrity() async {
         let prefix = "test-ws-concurrent-\(UUID().uuidString)"
         let iterations = 100
         let workspaceIds = (0..<iterations).map { "\(prefix)-\($0)" }

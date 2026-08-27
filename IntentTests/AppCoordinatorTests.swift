@@ -1222,6 +1222,27 @@ final class AppCoordinatorTests {
 
     // MARK: - Reconnect re-validation of the open conversation
 
+    @Test @MainActor func staleOverlayTimeoutDoesNotHideLaterDisconnection() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake, persistence: persistence)
+
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+        fake.simulateDisconnect()
+        await Self.drainMainQueue()
+        fake.simulateConnect()
+        await Self.drainMainQueue()
+        fake.simulateDisconnect()
+        await Self.drainMainQueue()
+
+        #expect(coordinator.isDisconnected)
+        try await Task.sleep(for: .milliseconds(5_200))
+        #expect(coordinator.isDisconnected,
+                "A timeout from the prior reconnect must not hide a later disconnection")
+    }
+
     @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async {
         let wsId = "test-coord-reconnect-gone-\(UUID().uuidString)"
         defer {

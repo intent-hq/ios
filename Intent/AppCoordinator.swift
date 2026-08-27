@@ -41,6 +41,7 @@ class AppCoordinator: ObservableObject {
     private var certMismatchObserver: AnyCancellable?
     private var workspaceValidationObserver: AnyCancellable?
     private var reconnectLoadingObserver: AnyCancellable?
+    private var reconnectOverlayTimeoutTask: Task<Void, Never>?
 
     private let workspaceStore: WorkspaceStore
     private let connection: ConnectionManagerRouting
@@ -67,6 +68,10 @@ class AppCoordinator: ObservableObject {
                 guard let self = self else { return }
                 switch state {
                 case .reconnecting, .disconnected:
+                    self.reconnectLoadingObserver?.cancel()
+                    self.reconnectLoadingObserver = nil
+                    self.reconnectOverlayTimeoutTask?.cancel()
+                    self.reconnectOverlayTimeoutTask = nil
                     if self.hasEverConnected {
                         self.isDisconnected = true
                     }
@@ -105,6 +110,8 @@ class AppCoordinator: ObservableObject {
         // Cancel any previous observer from a prior reconnection attempt
         reconnectLoadingObserver?.cancel()
         reconnectLoadingObserver = nil
+        reconnectOverlayTimeoutTask?.cancel()
+        reconnectOverlayTimeoutTask = nil
 
         // If WorkspaceStore is not currently loading (fetchAll already completed
         // or hasn't started yet), check if data is already available.
@@ -120,14 +127,21 @@ class AppCoordinator: ObservableObject {
             .first()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.reconnectOverlayTimeoutTask?.cancel()
+                self?.reconnectOverlayTimeoutTask = nil
                 self?.reconnectLoadingObserver = nil
                 self?.isDisconnected = false
             }
 
         // Timeout: if the fetch takes too long or fails silently, clear the overlay anyway.
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            guard let self = self else { return }
+        reconnectOverlayTimeoutTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(5))
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.reconnectOverlayTimeoutTask = nil
             if self.isDisconnected {
                 self.reconnectLoadingObserver?.cancel()
                 self.reconnectLoadingObserver = nil
