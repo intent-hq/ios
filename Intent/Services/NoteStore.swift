@@ -207,6 +207,17 @@ import Observation
         notes[idx] = notes[idx].withContent(note.content)
     }
 
+    /// True when the cached row carries a strictly newer `updatedAt` than
+    /// the fetched note. Timestamps are parsed leniently; an unparseable
+    /// side compares as not-newer, preserving the replace behavior.
+    private static func isCachedRowNewer(_ cached: Note, thanFetched fetched: Note) -> Bool {
+        guard cached.updatedAt != fetched.updatedAt,
+              let cachedDate = ISO8601DateFormatter.lenientDate(from: cached.updatedAt),
+              let fetchedDate = ISO8601DateFormatter.lenientDate(from: fetched.updatedAt)
+        else { return false }
+        return cachedDate > fetchedDate
+    }
+
     /// Outcome of a single-note fetch, distinguishing a definitive not-found
     /// (deleted/archived) from transient transport errors.
     enum NoteFetchResult {
@@ -231,11 +242,15 @@ import Observation
                 if note.isArchived { return .notFound }
                 // Upsert the full body over a cached slim list row (§5.2) so
                 // content surfaces and optimistic content edits work off the
-                // cache. Replace-only: never grows the list, and only for the
+                // cache. Replace-only: never grows the list, only for the
                 // workspace the cache belongs to (note ids like "spec" repeat
-                // across workspaces).
+                // across workspaces), and never over a newer cached row — a
+                // delta/re-list may have advanced it while this note.get was
+                // in flight, and a late older body must not clobber it or
+                // clear its stale marker.
                 if self.workspaceId == workspaceId,
-                   let idx = notes.firstIndex(where: { $0.id == note.id }) {
+                   let idx = notes.firstIndex(where: { $0.id == note.id }),
+                   !Self.isCachedRowNewer(notes[idx], thanFetched: note) {
                     notes[idx] = note
                 }
                 return .found(note)

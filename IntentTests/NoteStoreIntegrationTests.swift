@@ -509,6 +509,43 @@ struct NoteStoreIntegrationTests {
         #expect(store.note(byId: "spec")?.content == "workspace A spec")
     }
 
+    @Test func fetchNoteDoesNotClobberNewerCachedRow() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // Cache advanced to a newer revision (delta/re-list) while a
+        // note.get was in flight: the late older response must not replace
+        // the row or clear its stale marker.
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1 (new)", "contentPreview": "newer",
+             "contentLength": 10,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1 (old)", "content": "older body",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+        guard case .found(let fetched) = result else {
+            Issue.record("Expected .found, got \(result)")
+            return
+        }
+        // Caller still gets the fetched note, but the cache keeps the newer row.
+        #expect(fetched.content == "older body")
+        #expect(store.note(byId: "note-1")?.title == "Note 1 (new)")
+        #expect(store.note(byId: "note-1")?.isContentStale == true)
+
+        // A response at the cached revision (or newer) still replaces.
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1 (new)", "content": "current body",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"
+        ]]
+        _ = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.content == "current body")
+        #expect(store.note(byId: "note-1")?.isContentStale == false)
+    }
+
     @Test func upsertFullNoteGraftsBodyOntoStaleSlimRow() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
