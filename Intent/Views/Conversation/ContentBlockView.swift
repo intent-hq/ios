@@ -26,11 +26,12 @@ struct ContentBlockView: View {
                 let cleaned = Self.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
                     MarkdownTextView(text: cleaned, onOpenURL: { url in
-                        if let targetId = NoteDetailView.parseIntentNoteLink(url) {
+                        if let link = NoteDetailView.parseIntentNoteLink(url) {
+                            let targetWorkspaceId = link.workspaceId ?? workspaceId
                             if let onNavigateToNote = onNavigateToNote {
-                                onNavigateToNote(targetId, workspaceId, "Note")
+                                onNavigateToNote(link.id, targetWorkspaceId, "Note")
                             } else {
-                                coordinator.onSelectNote(targetId, workspaceId: workspaceId, noteTitle: "Note")
+                                coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
                             }
                             return .handled
                         }

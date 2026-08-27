@@ -69,8 +69,8 @@ struct NoteDetailView: View {
                                 content: note.content,
                                 resolveNote: { noteStore.note(byId: $0) },
                                 onOpenURL: { url in
-                                    if let targetId = Self.parseIntentNoteLink(url) {
-                                        navigateToNote(targetId)
+                                    if let link = Self.parseIntentNoteLink(url) {
+                                        navigateToNote(link.id, in: link.workspaceId)
                                         return .handled
                                     }
                                     return .systemAction
@@ -150,12 +150,15 @@ struct NoteDetailView: View {
     }
 
     /// Push a note onto the navigation stack (note-to-note navigation).
-    private func navigateToNote(_ targetId: String) {
+    /// A non-nil `targetWorkspaceId` (from a workspace-qualified link) routes
+    /// the navigation to that workspace; nil falls back to the current one.
+    private func navigateToNote(_ targetId: String, in targetWorkspaceId: String? = nil) {
+        let destinationWorkspaceId = targetWorkspaceId ?? workspaceId
         let title = noteStore.note(byId: targetId)?.title ?? "Note"
         if let onNavigateToNote = onNavigateToNote {
-            onNavigateToNote(targetId, workspaceId, title)
+            onNavigateToNote(targetId, destinationWorkspaceId, title)
         } else {
-            coordinator.onSelectNote(targetId, workspaceId: workspaceId, noteTitle: title)
+            coordinator.onSelectNote(targetId, workspaceId: destinationWorkspaceId, noteTitle: title)
         }
     }
 
@@ -185,20 +188,23 @@ struct NoteDetailView: View {
     }
 
     /// Parse an intent:// URL to extract a note/task ID.
-    /// Supports:
+    /// Supports the short forms
     ///   intent://local/task/{id}
     ///   intent://local/note/{id}
-    static func parseIntentNoteLink(_ url: URL) -> String? {
-        guard url.scheme == "intent" else { return nil }
+    /// and the canonical workspace-qualified long forms
+    ///   intent://local/{workspaceId}/task/{id}
+    ///   intent://local/{workspaceId}/note/{id}
+    /// Long forms carry the embedded workspace ID; short forms return nil for it
+    /// (callers fall back to the current workspace).
+    static func parseIntentNoteLink(_ url: URL) -> (workspaceId: String?, id: String)? {
+        guard url.scheme == "intent", url.host == "local" else { return nil }
         // URL path segments: e.g. intent://local/task/abc-123 → host="local", path="/task/abc-123"
-        let host = url.host
-        guard host == "local" else { return nil }
         let segments = url.pathComponents.filter { $0 != "/" }
-        guard segments.count >= 2 else { return nil }
-        let resourceType = segments[0]
-        let resourceId = segments[1]
-        if resourceType == "task" || resourceType == "note" {
-            return resourceId
+        if segments.count >= 2, segments[0] == "task" || segments[0] == "note" {
+            return (workspaceId: nil, id: segments[1])
+        }
+        if segments.count >= 3, segments[1] == "task" || segments[1] == "note" {
+            return (workspaceId: segments[0], id: segments[2])
         }
         return nil
     }
