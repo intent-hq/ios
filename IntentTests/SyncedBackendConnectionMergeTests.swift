@@ -71,11 +71,26 @@ struct SyncedBackendConnectionMergeTests {
 
     @Test func usableHostAcceptsNamesAndAddressesRejectsUrlMetacharacters() {
         for good in ["10.0.0.1", "mac-studio.local", "MAC.Local", "[::1]", "host123"] {
-            #expect(SyncedBackendConnectionMerge.isUsableHost(good), "expected usable: \(good)")
+            #expect(SyncedBackendConnectionMerge.usableHost(good) == good, "expected usable: \(good)")
         }
-        for bad in ["", "  ", "a b", "host/path", "host:1", "user@host", "host?q", "host#f"] {
-            #expect(!SyncedBackendConnectionMerge.isUsableHost(bad), "expected unusable: \(bad)")
+        for bad in [
+            "", "  ", "a b", "host/path", "host:1", "user@host", "host?q", "host#f", "[::1", "[]",
+        ] {
+            #expect(
+                SyncedBackendConnectionMerge.usableHost(bad) == nil, "expected unusable: \(bad)")
         }
+    }
+
+    @Test func rawIPv6LiteralsAreBracketNormalizedNotDropped() {
+        // intentd advertises RAW unbracketed IPv6 strings in pairing/registry
+        // hosts (collect_local_ipv6s emits e.g. "2001:db8::1"); they must be
+        // bracket-normalized for URL embedding, not silently dropped.
+        #expect(SyncedBackendConnectionMerge.usableHost("2001:db8::1") == "[2001:db8::1]")
+        #expect(SyncedBackendConnectionMerge.usableHost("::1") == "[::1]")
+
+        let v6only = record(host: "2001:db8::1", hosts: ["2001:db8::1", "fd00::2"])
+        let result = SyncedBackendConnectionMerge.merge(records: [v6only], into: [])
+        #expect(result.connections.map(\.server.hosts) == [["[2001:db8::1]", "[fd00::2]"]])
     }
 
     @Test func fingerprintlessRecordStillUpdatesExistingFingerprintlessLocal() {
@@ -124,14 +139,37 @@ struct SyncedBackendConnectionMergeTests {
     }
 
     @Test func neverSyncedLocalAdoptsTheRegistryCopy() {
-        // nil clock: a locally paired record matched by fingerprint adopts the
-        // registry copy (gains its token) no matter how small its updatedAt.
+        // nil clock: a locally paired record matched by fingerprint adopts a
+        // registry copy newer than its pairing time (gains its token). The
+        // helper's default pairedAt is the epoch, so even updatedAt: 1 wins.
         let existing = local(syncUpdatedAt: nil)
         let result = SyncedBackendConnectionMerge.merge(
             records: [record(updatedAt: 1)], into: [existing])
         #expect(result.updatedIds == [existing.id])
         #expect(result.connections[0].token == "tok-remote")
         #expect(result.connections[0].syncUpdatedAt == 1)
+    }
+
+    @Test func staleLiveRecordDoesNotClobberFreshLocalRePairing() {
+        // Same race as the stale-tombstone guard, live variant: the user
+        // re-pairs directly (fresh token, nil sync clock) while the Mac's
+        // registry copy lags behind a rotation — the stale copy must not
+        // overwrite the fresh working token.
+        let repaired = Date(timeIntervalSince1970: 1000)
+        let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(token: "tok-stale", updatedAt: 500_000)], into: [existing])
+        #expect(!result.changed)
+        #expect(result.connections[0].token == "tok-local")
+        #expect(result.connections[0].syncUpdatedAt == nil)
+    }
+
+    @Test func liveRecordNewerThanLocalPairingUpdatesNeverSyncedLocal() {
+        let existing = local(syncUpdatedAt: nil, pairedAt: Date(timeIntervalSince1970: 100))
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(updatedAt: 500_000)], into: [existing])
+        #expect(result.updatedIds == [existing.id])
+        #expect(result.connections[0].token == "tok-remote")
     }
 
     // MARK: - Tombstones

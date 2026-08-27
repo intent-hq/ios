@@ -52,10 +52,19 @@ enum SyncedBackendConnectionMerge {
                 result.connections.remove(at: index)
             } else if let index {
                 let existing = result.connections[index]
-                // Only a strictly newer remote copy overwrites; a local
-                // record that never synced (nil clock) adopts the registry
-                // copy, gaining its fingerprint/token.
-                if let applied = existing.syncUpdatedAt, record.updatedAt <= applied { continue }
+                // Only a strictly newer remote copy overwrites. A local that
+                // never synced adopts the registry copy (gaining its
+                // fingerprint/token), but its pairing time stands in as the
+                // clock — same guard as the tombstone path — so a stale
+                // registry copy lagging behind a token rotation cannot
+                // clobber a fresh direct re-pairing.
+                if let applied = existing.syncUpdatedAt {
+                    if record.updatedAt <= applied { continue }
+                } else if record.updatedAt
+                    < existing.server.pairedAt.timeIntervalSince1970 * 1000
+                {
+                    continue
+                }
                 result.connections[index] = apply(record, to: existing)
                 result.updatedIds.append(existing.id)
             } else {
@@ -111,31 +120,41 @@ enum SyncedBackendConnectionMerge {
     }
 
     /// The record's candidate hosts: primary `host` first, then the rest of
-    /// `hosts`, deduped — keeping only hosts usable in a WebSocket URL.
-    /// Registry strings are untrusted input and `ConnectionManager.raceHosts`
-    /// force-unwraps `URL(string:)`, so a malformed host must never survive
-    /// the merge.
+    /// `hosts`, deduped — keeping only hosts usable in a WebSocket URL,
+    /// bracket-normalizing raw IPv6 literals. Registry strings are untrusted
+    /// input and `ConnectionManager.raceHosts` force-unwraps `URL(string:)`,
+    /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
-        PersistenceManager.mergeHostLists(existing: [record.host], incoming: record.hosts)
-            .filter(isUsableHost)
+        PersistenceManager.mergeHostLists(
+            existing: [record.host], incoming: record.hosts
+        ).compactMap(usableHost)
     }
 
-    /// Whether the host string is a plain DNS name / IPv4 address or a
-    /// bracketed IPv6 literal — the only shapes the app ever writes and the
-    /// only ones guaranteed to embed into a `ws://` URL verbatim on every
-    /// Foundation URL-parser version (deterministic allowlist on purpose:
-    /// iOS 17+'s lenient parser would percent-encode junk instead of
-    /// failing, hiding the problem until connect).
-    static func isUsableHost(_ raw: String) -> Bool {
-        guard !raw.isEmpty else { return false }
+    /// The URL-embeddable form of the host string, or nil when it has no
+    /// safe form. Accepts a plain DNS name / IPv4 address or an IPv6
+    /// literal — raw IPv6 strings (intentd's pairing_hosts advertises
+    /// unbracketed `2001:db8::1` forms) are bracket-normalized. Anything
+    /// else is rejected: a deterministic allowlist on purpose, since iOS
+    /// 17+'s lenient URL parser would percent-encode junk instead of
+    /// failing, hiding the problem until connect.
+    static func usableHost(_ raw: String) -> String? {
+        guard !raw.isEmpty else { return nil }
+        let inner: Substring
         if raw.hasPrefix("[") {
-            guard raw.hasSuffix("]"), raw.count > 2 else { return false }
-            return raw.dropFirst().dropLast().allSatisfy { $0.isHexDigit || $0 == ":" }
+            guard raw.hasSuffix("]"), raw.count > 2 else { return nil }
+            inner = raw.dropFirst().dropLast()
+        } else if raw.contains(":") {
+            inner = raw[...]
+        } else {
+            let usable = raw.allSatisfy { char in
+                char.isLetter && char.isASCII || char.isNumber && char.isASCII
+                    || char == "-" || char == "." || char == "_"
+            }
+            return usable ? raw : nil
         }
-        return raw.allSatisfy { char in
-            char.isLetter && char.isASCII || char.isNumber && char.isASCII
-                || char == "-" || char == "." || char == "_"
-        }
+        // IPv6 literal (bare or bracketed): hex digits and colons only.
+        return inner.allSatisfy { $0.isHexDigit && $0.isASCII || $0 == ":" }
+            ? "[\(inner)]" : nil
     }
 
     /// Display name mirroring the desktop convention: the record label
