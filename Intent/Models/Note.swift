@@ -20,6 +20,11 @@ struct Note: Identifiable, Equatable {
     /// Daemon-computed projection of `dependsOn` entries not yet complete.
     let unmetDependsOn: [String]
     let estimatedEffort: String?
+    /// Slim `note.list` projection fields (PROTOCOL §5.2 `projection: "slim"`):
+    /// slim rows omit `content` and carry the first 500 chars plus the total
+    /// char count instead. nil on full rows.
+    let contentPreview: String?
+    let contentLength: Int?
 
     init(
         id: String, title: String, content: String, tags: [String],
@@ -27,7 +32,8 @@ struct Note: Identifiable, Equatable {
         parentId: String?, createdAt: String, updatedAt: String,
         assignedAgentIds: [String] = [], dependsOn: [String] = [],
         conflictsWith: [String] = [], unmetDependsOn: [String] = [],
-        estimatedEffort: String? = nil
+        estimatedEffort: String? = nil,
+        contentPreview: String? = nil, contentLength: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -44,6 +50,17 @@ struct Note: Identifiable, Equatable {
         self.conflictsWith = conflictsWith
         self.unmetDependsOn = unmetDependsOn
         self.estimatedEffort = estimatedEffort
+        self.contentPreview = contentPreview
+        self.contentLength = contentLength
+    }
+
+    /// True when this is a slim-projection row whose full body has not been
+    /// loaded: the daemon reported a non-empty content length but the local
+    /// row carries no content. Full rows (no `contentLength`) and genuinely
+    /// empty notes (`contentLength == 0`) are never stale.
+    var isContentStale: Bool {
+        if let contentLength, contentLength > 0, content.isEmpty { return true }
+        return false
     }
 
     /// Display treatment for `taskStatus`; nil when the note is not a task.
@@ -62,7 +79,8 @@ struct Note: Identifiable, Equatable {
             parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
             assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
             conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
-            estimatedEffort: estimatedEffort
+            estimatedEffort: estimatedEffort,
+            contentPreview: contentPreview, contentLength: contentLength
         )
     }
 
@@ -74,13 +92,17 @@ struct Note: Identifiable, Equatable {
             parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
             assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
             conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
-            estimatedEffort: estimatedEffort
+            estimatedEffort: estimatedEffort,
+            contentPreview: contentPreview, contentLength: contentLength
         )
     }
 
-    /// A short preview of the content for list display
+    /// A short preview of the content for list display. Slim rows carry no
+    /// `content`, so fall back to the daemon's `contentPreview` (first 500
+    /// chars) — plenty for a one-line excerpt.
     var preview: String? {
-        let stripped = content
+        let body = content.isEmpty ? (contentPreview ?? "") : content
+        let stripped = body
             .replacingOccurrences(of: "- [ ] ", with: "")
             .replacingOccurrences(of: "- [x] ", with: "")
             .replacingOccurrences(of: "- [/] ", with: "")
@@ -115,7 +137,9 @@ struct Note: Identifiable, Equatable {
             dependsOn: task?["dependsOn"] as? [String] ?? [],
             conflictsWith: task?["conflictsWith"] as? [String] ?? [],
             unmetDependsOn: task?["unmetDependsOn"] as? [String] ?? [],
-            estimatedEffort: task?["estimatedEffort"] as? String
+            estimatedEffort: task?["estimatedEffort"] as? String,
+            contentPreview: dict["contentPreview"] as? String,
+            contentLength: dict["contentLength"] as? Int
         )
     }
 }

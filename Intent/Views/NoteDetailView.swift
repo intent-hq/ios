@@ -138,8 +138,14 @@ struct NoteDetailView: View {
 
     /// The note to render: the store's cached copy when available (so
     /// optimistic task-status updates show immediately), else the fetched one.
+    /// A cached slim list row (§5.2) carries no content, so graft the fetched
+    /// full body onto it — the cached copy's metadata still wins.
     private var displayNote: Note? {
-        noteStore.note(byId: noteId) ?? note
+        guard let cached = noteStore.note(byId: noteId) else { return note }
+        if cached.isContentStale, let full = note, !full.content.isEmpty {
+            return cached.withContent(full.content)
+        }
+        return cached
     }
 
     /// Whether the task-note metadata header renders: any task note except

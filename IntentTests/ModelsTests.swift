@@ -439,5 +439,68 @@ struct ModelsTests {
         #expect(restatused?.unmetDependsOn == ["dep-a"])
         #expect(restatused?.estimatedEffort == "30m")
     }
+
+    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
+
+    @Test func noteParsesSlimProjectionFields() {
+        let note = Note.parseNote([
+            "id": "n1",
+            "title": "Slim",
+            "contentPreview": "First 500 chars…",
+            "contentLength": 12345,
+        ])
+        #expect(note?.content == "")
+        #expect(note?.contentPreview == "First 500 chars…")
+        #expect(note?.contentLength == 12345)
+        #expect(note?.isContentStale == true)
+    }
+
+    @Test func fullRowsAndEmptyNotesAreNeverContentStale() {
+        // Full row: no contentLength marker.
+        let full = Note.parseNote(["id": "n1", "title": "Full", "content": "body"])
+        #expect(full?.contentPreview == nil)
+        #expect(full?.contentLength == nil)
+        #expect(full?.isContentStale == false)
+
+        // Genuinely empty note on a slim row.
+        let empty = Note.parseNote([
+            "id": "n2", "title": "Empty", "contentPreview": "", "contentLength": 0,
+        ])
+        #expect(empty?.isContentStale == false)
+    }
+
+    @Test func slimRowPreviewFallsBackToContentPreview() {
+        let slim = Note.parseNote([
+            "id": "n1",
+            "title": "Slim",
+            "contentPreview": "# Heading\n- [ ] task line",
+            "contentLength": 400,
+        ])
+        #expect(slim?.preview == "Heading")
+
+        // Full content still wins when present.
+        let full = Note.parseNote([
+            "id": "n2", "title": "Full", "content": "Full body first line",
+        ])
+        #expect(full?.preview == "Full body first line")
+    }
+
+    @Test func noteCopiesPreserveSlimProjectionFields() {
+        let slim = Note.parseNote([
+            "id": "n1",
+            "title": "Slim task",
+            "contentPreview": "preview",
+            "contentLength": 900,
+            "metadata": ["task": ["status": "not_started"] as [String: Any]] as [String: Any],
+        ])
+        let hydrated = slim?.withContent("full body")
+        #expect(hydrated?.contentPreview == "preview")
+        #expect(hydrated?.contentLength == 900)
+        #expect(hydrated?.isContentStale == false)
+
+        let restatused = slim?.withTaskStatus("complete")
+        #expect(restatused?.contentPreview == "preview")
+        #expect(restatused?.contentLength == 900)
+    }
 }
 

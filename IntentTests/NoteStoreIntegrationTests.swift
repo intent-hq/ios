@@ -337,6 +337,178 @@ struct NoteStoreIntegrationTests {
         }
     }
 
+    // MARK: - Slim note.list projection (PROTOCOL §5.2 projection: "slim")
+
+    @Test func fetchNotesRequestsSlimProjection() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "preview",
+             "contentLength": 900,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        let params = fake.paramsForMethod("note.list")
+        #expect(params.count == 1)
+        #expect(params.first?["projection"] as? String == "slim")
+        #expect(store.notes.count == 1)
+        #expect(store.notes.first?.contentPreview == "preview")
+        #expect(store.notes.first?.isContentStale == true)
+    }
+
+    @Test func fetchNotesFallsBackToFullListOn32602() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // Daemon rejecting the projection param (-32602 Invalid params):
+        // fetchNotes must retry once without it.
+        fake.errorQueueMap["note.list"] = [NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "Invalid params",
+                       NSError.intentErrorDataCodeKey: "invalid-params"])]
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "full body",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        let params = fake.paramsForMethod("note.list")
+        #expect(params.count == 2)
+        #expect(params[0]["projection"] as? String == "slim")
+        #expect(params[1]["projection"] == nil)
+        #expect(store.notes.first?.content == "full body")
+    }
+
+    @Test func fetchNotesDoesNotRetryOnOtherErrors() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.errorMap["note.list"] = NSError(
+            domain: "WebSocket", code: -32000,
+            userInfo: [NSLocalizedDescriptionKey: "internal error"])
+
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        #expect(fake.paramsForMethod("note.list").count == 1)
+        #expect(store.notes.isEmpty)
+    }
+
+    @Test func slimReListKeepsLoadedContentAtSameUpdatedAt() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // First list: full row already cached (e.g. hydrated via note.get).
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "full body",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.notes.first?.content == "full body")
+
+        // Re-list serves a slim row at the same updatedAt: the loaded body
+        // must not be clobbered.
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "full bo",
+             "contentLength": 9,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.notes.first?.content == "full body")
+        #expect(store.notes.first?.isContentStale == false)
+    }
+
+    @Test func slimReListDropsStaleContentOnNewerUpdatedAt() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "old body",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        // Slim row with a different updatedAt: the cached body cannot be
+        // proven current, so the stale marker must win.
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "new bo",
+             "contentLength": 8,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.notes.first?.content == "")
+        #expect(store.notes.first?.isContentStale == true)
+    }
+
+    @Test func fetchNotesHydratesStaleSpecRow() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // Slim list with a stale spec row: the spec's content links task
+        // notes (progress ring), so fetchNotes hydrates it via note.get.
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "spec", "title": "Spec", "isDefault": true,
+             "contentPreview": "- [x] done", "contentLength": 40,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"],
+            ["id": "note-1", "title": "Note 1", "contentPreview": "p",
+             "contentLength": 5,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"],
+        ]]
+        fake.responseMap["note.get"] = ["note": [
+            "id": "spec", "title": "Spec", "isDefault": true,
+            "content": "- [x] done\n- [ ] todo item that overflows",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        #expect(fake.didCallMethod("note.get"))
+        #expect(fake.paramsForMethod("note.get").first?["noteId"] as? String == "spec")
+        let spec = store.note(byId: "spec")
+        #expect(spec?.content == "- [x] done\n- [ ] todo item that overflows")
+        // Non-spec rows stay slim.
+        #expect(store.note(byId: "note-1")?.isContentStale == true)
+    }
+
+    @Test func fetchNoteUpsertsFullBodyIntoCachedSlimRow() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "pre",
+             "contentLength": 20,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.isContentStale == true)
+
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1", "content": "hydrated full body",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+        if case .found = result {
+            #expect(store.note(byId: "note-1")?.content == "hydrated full body")
+        } else {
+            Issue.record("Expected .found, got \(result)")
+        }
+    }
+
+    @Test func fetchNoteDoesNotUpsertAcrossWorkspaces() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "spec", "title": "Spec A", "content": "workspace A spec",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-a")
+
+        // A fetch for another workspace's same-id note must not clobber the
+        // cache (note ids like "spec" repeat across workspaces).
+        fake.responseMap["note.get"] = ["note": [
+            "id": "spec", "title": "Spec B", "content": "workspace B spec",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+        _ = await store.fetchNote(noteId: "spec", workspaceId: "ws-b")
+        #expect(store.note(byId: "spec")?.content == "workspace A spec")
+    }
+
     // MARK: - note:deleted event triggers onNoteChanged
 
     @Test func noteDeletedEventTriggersOnNoteChanged() async throws {
