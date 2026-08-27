@@ -637,15 +637,32 @@ struct ConversationViewModelTests {
         // The silent 10 MB skip is gone: an image over the daemon's 30 MiB
         // image-reference cap fails the send with an explicit error.
         let (vm, fake) = makeFakeBackedVM()
-        // A noise image so JPEG can't compress below the cap: render random
-        // data — cheaper: draw a large bitmap of random pixel rows.
-        let oversized = makeIncompressibleImage(side: 9000)
+        // A noise image so JPEG can't compress below the cap — 36 Mpx at
+        // ≳1 byte/pixel lands above 30 MiB without the memory weight of a
+        // larger bitmap.
+        let oversized = makeIncompressibleImage(side: 6000)
 
         await vm.sendMessage("big", images: [oversized])
 
         #expect(fake.requestLog.isEmpty, "no RPC at all for an oversized image")
         #expect(vm.imagePlacementError?.contains("too large") == true)
         #expect(vm.pendingImages.count == 1, "captured image restored")
+    }
+
+    @Test func aggregateOversizedImagesSurfaceErrorBeforeAnyPlacement() async throws {
+        // The daemon enforces the 30 MiB image-reference cap in AGGREGATE
+        // across a message's blocks too (§5.5): two images each under the
+        // per-image cap but over it together fail closed before any RPC.
+        let (vm, fake) = makeFakeBackedVM()
+        // ~25 Mpx noise ≈ 25 MB each as JPEG: under the per-image cap,
+        // over 30 MiB in aggregate.
+        let image = makeIncompressibleImage(side: 5000)
+
+        await vm.sendMessage("big pair", images: [image, image])
+
+        #expect(fake.requestLog.isEmpty, "no RPC at all for an aggregate-oversized send")
+        #expect(vm.imagePlacementError?.contains("too large") == true)
+        #expect(vm.pendingImages.count == 2, "captured images restored")
     }
 
     @Test func queueMessageFailedPlacementKeepsPendingImages() async throws {

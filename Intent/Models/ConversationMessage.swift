@@ -86,9 +86,9 @@ struct ImageBlock: Codable {
     let type: String  // "image"
     let data: String?  // base64 (inline arm; nil for placed references)
     let attachmentId: String?  // attachment-registry reference
-    let mimeType: String
+    let mimeType: String?  // optional on the reference arm (§5.5)
 
-    init(type: String, data: String? = nil, attachmentId: String? = nil, mimeType: String) {
+    init(type: String, data: String? = nil, attachmentId: String? = nil, mimeType: String? = nil) {
         self.type = type
         self.data = data
         self.attachmentId = attachmentId

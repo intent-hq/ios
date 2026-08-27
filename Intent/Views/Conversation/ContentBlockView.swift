@@ -321,11 +321,17 @@ struct AttachmentReferenceImageView: View {
     @State private var failed = false
     /// Bumped on retry taps so the `.task(id:)` re-runs the fetch.
     @State private var attempt = 0
+    /// The workspace|attachment key `image` was loaded for — if view
+    /// identity is ever reused for a different attachment, the mismatch
+    /// resets the latch so the stale image can't survive the guard below.
+    @State private var loadedKey: String?
     @State private var lightboxPresented = false
 
     var body: some View {
         content
             .task(id: "\(workspaceId)|\(attachmentId)|\(attempt)") {
+                let key = "\(workspaceId)|\(attachmentId)"
+                if loadedKey != key { image = nil }
                 guard image == nil else { return }
                 failed = false
                 do {
@@ -333,6 +339,7 @@ struct AttachmentReferenceImageView: View {
                         ? try await loader.image(workspaceId: workspaceId, attachmentId: attachmentId)
                         : try await loader.retryImage(workspaceId: workspaceId, attachmentId: attachmentId)
                     image = loaded
+                    loadedKey = key
                 } catch is CancellationError {
                     // View scrolled away mid-fetch; not a failure.
                 } catch {

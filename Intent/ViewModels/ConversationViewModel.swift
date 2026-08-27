@@ -568,16 +568,27 @@ import UniformTypeIdentifiers
     /// registry — the message is NOT sent (FE parity: fail-closed, images are
     /// never silently dropped or partially sent).
     enum ImagePlacementError: LocalizedError {
-        /// JPEG encoding failed or the encoded payload exceeds the daemon's
-        /// 30 MiB image-reference cap. 1-based index for the user message.
+        /// JPEG encoding produced no data. 1-based index for the user
+        /// message.
+        case encodingFailed(index: Int)
+        /// The encoded payload exceeds the daemon's 30 MiB per-image
+        /// reference cap. 1-based index for the user message.
         case imageTooLarge(index: Int)
+        /// The encoded payloads together exceed the daemon's 30 MiB
+        /// aggregate cap across all image blocks in one message.
+        case imagesTooLarge
+
         /// `file.placeAttachment` / the chunked upload session failed.
         case placementFailed(index: Int, underlying: Error)
 
         var errorDescription: String? {
             switch self {
+            case .encodingFailed(let index):
+                return "Image \(index) could not be encoded for sending."
             case .imageTooLarge(let index):
-                return "Image \(index) is too large to send (over 30 MB as JPEG)."
+                return "Image \(index) is too large to send (over 30 MiB as JPEG)."
+            case .imagesTooLarge:
+                return "The attached images are too large to send together (over 30 MiB total as JPEG)."
             case .placementFailed(let index, let underlying):
                 return "Image \(index) could not be uploaded. \(underlying.localizedDescription)"
             }
@@ -587,16 +598,27 @@ import UniformTypeIdentifiers
     /// Place each image into the workspace's attachment registry and build
     /// `{ type: "image", attachmentId, mimeType }` reference blocks
     /// (PROTOCOL §5.5, monorepo#3338) — inline base64 never rides the send.
+    /// The daemon enforces the 30 MiB cap per image AND in aggregate across
+    /// a message's blocks, so both are checked before any placement.
     /// FAIL-CLOSED: any encoding/placement failure throws
     /// `ImagePlacementError` (FE parity: `toImageReferenceBlocks`).
     func buildImageBlocks(from images: [UIImage]) async throws -> [[String: Any]]? {
         guard !images.isEmpty else { return nil }
-        var blocks: [[String: Any]] = []
+        var payloads: [Data] = []
         for (index, image) in images.enumerated() {
-            guard let data = image.jpegData(compressionQuality: 0.8),
-                  data.count <= Self.maxImageReferenceBytes else {
+            guard let data = image.jpegData(compressionQuality: 0.8) else {
+                throw ImagePlacementError.encodingFailed(index: index + 1)
+            }
+            guard data.count <= Self.maxImageReferenceBytes else {
                 throw ImagePlacementError.imageTooLarge(index: index + 1)
             }
+            payloads.append(data)
+        }
+        guard payloads.reduce(0, { $0 + $1.count }) <= Self.maxImageReferenceBytes else {
+            throw ImagePlacementError.imagesTooLarge
+        }
+        var blocks: [[String: Any]] = []
+        for (index, data) in payloads.enumerated() {
             let placed: AttachmentUploadService.PlacedAttachment
             do {
                 placed = try await uploadService.placeData(
@@ -652,7 +674,7 @@ import UniformTypeIdentifiers
         var errorDescription: String? {
             switch self {
             case .fileTooLarge(let name):
-                return "\"\(name)\" is too large to send (over 1 GB)."
+                return "\"\(name)\" is too large to send (over 1 GiB)."
             case .placementFailed(let name, let underlying):
                 return "\"\(name)\" could not be uploaded. \(underlying.localizedDescription)"
             }

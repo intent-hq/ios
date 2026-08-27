@@ -681,6 +681,21 @@ struct QueuedMessageTests {
         #expect(decoded.data == nil)
     }
 
+    @Test func decodesImageReferenceWithoutMimeType() throws {
+        // The wire reference arm is { type, attachmentId, mimeType? }
+        // (PROTOCOL §5.5) — a spec-legal entry without mimeType (e.g.
+        // authored by another client) must not fail the element decode,
+        // which would blank the whole [QueuedMessage] queue view.
+        let json = """
+        {"id": "q-3", "content": "img", "queuedAt": "2025-01-01T00:00:00Z", "position": 0, \
+        "imageBlocks": [{"type": "image", "attachmentId": "att-9"}]}
+        """
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: Data(json.utf8))
+        #expect(decoded.imageBlocks?.count == 1)
+        #expect(decoded.imageBlocks?.first?.attachmentId == "att-9")
+        #expect(decoded.imageBlocks?.first?.mimeType == nil)
+    }
+
     @Test func decodesWithoutMessageMetadata() throws {
         // Backward compat: wire entries without messageMetadata must decode.
         let json = """

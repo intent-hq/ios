@@ -131,7 +131,17 @@ final class AttachmentUploadService {
             mimeType: mimeType, size: size, sha256: sha256,
             readChunk: { offset, length in
                 try handle.seek(toOffset: UInt64(offset))
-                return try handle.read(upToCount: length) ?? Data()
+                // read(upToCount:) may legally return fewer bytes than
+                // requested before EOF — accumulate until the full chunk
+                // (or EOF) so a short read can't stage fewer bytes than
+                // declared and fail the commit's size check.
+                var chunk = Data(capacity: length)
+                while chunk.count < length,
+                      let piece = try handle.read(upToCount: length - chunk.count),
+                      !piece.isEmpty {
+                    chunk.append(piece)
+                }
+                return chunk
             },
             onProgress: onProgress)
     }
