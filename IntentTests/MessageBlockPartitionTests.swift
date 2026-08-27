@@ -3,7 +3,8 @@ import Testing
 @testable import Intent
 
 /// User-row block partitioning: text renders first, image attachments render
-/// after as a thumbnail row, regardless of block order in the payload.
+/// after as a thumbnail row, file attachments last as chips, regardless of
+/// block order in the payload.
 struct MessageBlockPartitionTests {
     private func textBlock(_ text: String) -> ContentBlock {
         ContentBlock(type: .text, text: text)
@@ -11,6 +12,10 @@ struct MessageBlockPartitionTests {
 
     private func imageBlock(_ data: String = "aGk=") -> ContentBlock {
         ContentBlock(type: .image, data: data, mimeType: "image/png")
+    }
+
+    private func fileBlock(_ name: String = "a.txt") -> ContentBlock {
+        ContentBlock(type: .file, fileName: name, attachmentId: "att-1", size: 3)
     }
 
     @Test func textThenImagesStaysOrdered() {
@@ -40,19 +45,30 @@ struct MessageBlockPartitionTests {
     @Test func otherBlockTypesAreDropped() {
         let blocks = [
             textBlock("hello"),
-            ContentBlock(type: .file, fileName: "a.txt"),
+            fileBlock(),
             ContentBlock(type: .code, text: "let x = 1"),
             imageBlock(),
         ]
         let result = MessageView.partitionUserBlocks(blocks)
         #expect(result.text.count == 1)
         #expect(result.images.count == 1)
+        #expect(result.files.count == 1, "file blocks render as chips, not dropped")
+    }
+
+    @Test func fileBlocksArePartitionedInOrder() {
+        let blocks = [
+            fileBlock("b.pdf"), textBlock("hello"), fileBlock("a.txt"),
+        ]
+        let result = MessageView.partitionUserBlocks(blocks)
+        #expect(result.text.map(\.text) == ["hello"])
+        #expect(result.files.map(\.fileName) == ["b.pdf", "a.txt"])
     }
 
     @Test func emptyBlocksYieldEmptyPartitions() {
         let result = MessageView.partitionUserBlocks([])
         #expect(result.text.isEmpty)
         #expect(result.images.isEmpty)
+        #expect(result.files.isEmpty)
     }
 }
 

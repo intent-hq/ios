@@ -113,7 +113,18 @@ struct MessageView: View {
                         spacing: 6
                     ) {
                         ForEach(partitioned.images) { block in
-                            ImageAttachmentThumbnail(block: block)
+                            ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+
+                // Attached files render last as compact name + size chips
+                // (FE parity: ChatMessage.svelte attachment chips).
+                if !partitioned.files.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(partitioned.files) { block in
+                            fileAttachmentChip(block)
                         }
                     }
                     .padding(.top, 4)
@@ -336,12 +347,38 @@ struct MessageView: View {
 
     // MARK: - User block partitioning
 
-    /// Split a user row's blocks into text blocks (rendered first) and image
-    /// blocks (rendered after, as a thumbnail row), preserving relative order
-    /// within each kind regardless of interleaving in the payload. Other
-    /// block types don't render in user rows.
-    static func partitionUserBlocks(_ blocks: [ContentBlock]) -> (text: [ContentBlock], images: [ContentBlock]) {
-        (blocks.filter { $0.type == .text }, blocks.filter { $0.type == .image })
+    /// Split a user row's blocks into text blocks (rendered first), image
+    /// blocks (rendered after, as a thumbnail row), and file blocks (rendered
+    /// last, as name + size chips), preserving relative order within each
+    /// kind regardless of interleaving in the payload. Other block types
+    /// don't render in user rows.
+    static func partitionUserBlocks(_ blocks: [ContentBlock]) -> (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock]) {
+        (blocks.filter { $0.type == .text },
+         blocks.filter { $0.type == .image },
+         blocks.filter { $0.type == .file })
+    }
+
+    /// A sent file attachment chip on a user row: doc icon, file name, and
+    /// byte size when the persisted block carries one (PROTOCOL §5.5 file
+    /// block: `{ type: "file", attachmentId, fileName, mimeType?, size? }`).
+    private func fileAttachmentChip(_ block: ContentBlock) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "doc.fill")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            Text(block.fileName ?? "Attachment")
+                .font(.caption)
+                .lineLimit(1)
+            if let size = block.size {
+                Text(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Theme.muted(for: colorScheme).opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - User text rows

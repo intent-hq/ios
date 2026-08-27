@@ -78,6 +78,12 @@ final class WorkspaceFileImageLoader {
         }
     }
 
+    /// Drop a key from the session negative cache so a user-initiated retry
+    /// (e.g. tapping a failed attachment placeholder) actually refetches.
+    func forgetFailure(workspaceId: String, path: String) {
+        failedKeys.remove("\(workspaceId)\u{0}\(path)")
+    }
+
     /// Approximate decoded byte size, used as the NSCache cost.
     private static func decodedCost(of image: UIImage) -> Int {
         guard let cgImage = image.cgImage else { return 0 }
