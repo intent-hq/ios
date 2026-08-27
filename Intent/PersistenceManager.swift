@@ -169,6 +169,9 @@ class PersistenceManager {
     /// persistence lock (see `SyncedBackendConnectionMerge` for the rules).
     /// A tombstone that removes the active connection also clears the active
     /// pointer; the outcome flags it so the caller can disconnect/route away.
+    /// A failed keychain write reports a no-op outcome (pointer untouched) so
+    /// the caller never disconnects while the saved list still holds the
+    /// connection; the merge simply retries on the next registry read.
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
         syncQueue.sync {
@@ -177,7 +180,11 @@ class PersistenceManager {
             let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
             var removedActive = false
             if result.changed {
-                saveConnectionsLocked(result.connections)
+                guard saveConnectionsLocked(result.connections) else {
+                    return SyncedBackendMergeOutcome(
+                        addedIds: [], updatedIds: [], removedIds: [],
+                        removedActiveConnection: false)
+                }
                 if let activeId = activeConnectionIdLocked(),
                     result.removedIds.contains(activeId)
                 {

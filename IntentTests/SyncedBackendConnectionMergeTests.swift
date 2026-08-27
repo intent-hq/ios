@@ -57,6 +57,27 @@ struct SyncedBackendConnectionMergeTests {
         }
     }
 
+    @Test func malformedHostsAreDroppedAndHostlessRecordsAreNeverAdded() {
+        // Registry host strings are untrusted; raceHosts force-unwraps
+        // URL(string:), so a malformed host must never survive the merge.
+        let mixed = record(host: "10.0.0.1", hosts: ["10.0.0.1", "bad host", "mac.local"])
+        let result = SyncedBackendConnectionMerge.merge(records: [mixed], into: [])
+        #expect(result.connections.map(\.server.hosts) == [["10.0.0.1", "mac.local"]])
+
+        // A record with NO usable host cannot be connected to: skip it.
+        let hostless = record(host: "spaces in host", hosts: ["also/bad", "with spaces"])
+        #expect(!SyncedBackendConnectionMerge.merge(records: [hostless], into: []).changed)
+    }
+
+    @Test func usableHostAcceptsNamesAndAddressesRejectsUrlMetacharacters() {
+        for good in ["10.0.0.1", "mac-studio.local", "MAC.Local", "[::1]", "host123"] {
+            #expect(SyncedBackendConnectionMerge.isUsableHost(good), "expected usable: \(good)")
+        }
+        for bad in ["", "  ", "a b", "host/path", "host:1", "user@host", "host?q", "host#f"] {
+            #expect(!SyncedBackendConnectionMerge.isUsableHost(bad), "expected unusable: \(bad)")
+        }
+    }
+
     @Test func fingerprintlessRecordStillUpdatesExistingFingerprintlessLocal() {
         // The host:port fallback still applies: a record the user paired on
         // this device (fingerprint-less local) keeps receiving updates.

@@ -65,7 +65,9 @@ enum SyncedBackendConnectionMerge {
                 // host. (Existing fingerprint-less locals were paired by the
                 // user on this device; the host:port fallback above can still
                 // update them.)
-                guard !normalizeFingerprint(record.fingerprint).isEmpty else { continue }
+                guard !normalizeFingerprint(record.fingerprint).isEmpty,
+                    !candidateHosts(of: record).isEmpty
+                else { continue }
                 let added = makeConnection(from: record, now: now)
                 result.connections.append(added)
                 result.addedIds.append(added.id)
@@ -109,9 +111,31 @@ enum SyncedBackendConnectionMerge {
     }
 
     /// The record's candidate hosts: primary `host` first, then the rest of
-    /// `hosts`, deduped.
+    /// `hosts`, deduped — keeping only hosts usable in a WebSocket URL.
+    /// Registry strings are untrusted input and `ConnectionManager.raceHosts`
+    /// force-unwraps `URL(string:)`, so a malformed host must never survive
+    /// the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(existing: [record.host], incoming: record.hosts)
+            .filter(isUsableHost)
+    }
+
+    /// Whether the host string is a plain DNS name / IPv4 address or a
+    /// bracketed IPv6 literal — the only shapes the app ever writes and the
+    /// only ones guaranteed to embed into a `ws://` URL verbatim on every
+    /// Foundation URL-parser version (deterministic allowlist on purpose:
+    /// iOS 17+'s lenient parser would percent-encode junk instead of
+    /// failing, hiding the problem until connect).
+    static func isUsableHost(_ raw: String) -> Bool {
+        guard !raw.isEmpty else { return false }
+        if raw.hasPrefix("[") {
+            guard raw.hasSuffix("]"), raw.count > 2 else { return false }
+            return raw.dropFirst().dropLast().allSatisfy { $0.isHexDigit || $0 == ":" }
+        }
+        return raw.allSatisfy { char in
+            char.isLetter && char.isASCII || char.isNumber && char.isASCII
+                || char == "-" || char == "." || char == "_"
+        }
     }
 
     /// Display name mirroring the desktop convention: the record label
