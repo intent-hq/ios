@@ -1071,6 +1071,7 @@ import SwiftUI
     /// daemon retires the question hold. Plain sends omit the key entirely.
     func sendMessage(agentId: String, content: String, workspaceId: String,
                      imageBlocks: [[String: Any]]? = nil,
+                     fileBlocks: [[String: Any]]? = nil,
                      messageMetadata: [String: Any]? = nil) async throws {
         // Reuse messageId if retrying the same content after a failure
         let messageId: String
@@ -1089,6 +1090,9 @@ import SwiftUI
         ]
         if let imageBlocks = imageBlocks {
             params["imageBlocks"] = imageBlocks
+        }
+        if let fileBlocks = fileBlocks {
+            params["fileBlocks"] = fileBlocks
         }
         if let messageMetadata = messageMetadata {
             params["messageMetadata"] = messageMetadata
@@ -1253,13 +1257,17 @@ import SwiftUI
     // MARK: - Queue message
 
     func queueMessage(agentId: String, content: String,
-                      imageBlocks: [[String: Any]]? = nil) async throws {
+                      imageBlocks: [[String: Any]]? = nil,
+                      fileBlocks: [[String: Any]]? = nil) async throws {
         var params: [String: Any] = [
             "agentId": agentId,
             "content": content,
         ]
         if let imageBlocks = imageBlocks {
             params["imageBlocks"] = imageBlocks
+        }
+        if let fileBlocks = fileBlocks {
+            params["fileBlocks"] = fileBlocks
         }
 
         let result = try await connectionManager.request(
