@@ -589,6 +589,89 @@ struct ConnectionPersistenceTests {
         #expect(pm.loadConnections().isEmpty)
     }
 
+    // MARK: - Synced-registry merge
+
+    private func syncedRecord(
+        host: String = "10.0.0.1", port: Int = 4242, fingerprint: String = "aa:bb",
+        token: String = "tok-sync", updatedAt: Double = 100, deleted: Bool = false
+    ) -> SyncedBackendRecord {
+        SyncedBackendRecord(
+            label: "Synced Mac", host: host, hosts: [host], port: port,
+            fingerprint: fingerprint, hostname: nil, detectHosts: true,
+            token: deleted ? "" : token, updatedAt: updatedAt,
+            deleted: deleted, deletedAt: deleted ? updatedAt : nil)
+    }
+
+    @Test func mergeSyncedBackendsAddsAndPersistsNewRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord()])
+        #expect(outcome.changed)
+        #expect(outcome.addedIds.count == 1)
+        #expect(!outcome.removedActiveConnection)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.token == "tok-sync")
+        #expect(loaded.first?.server.certFingerprint == "aa:bb")
+        #expect(loaded.first?.syncUpdatedAt == 100)
+    }
+
+    @Test func mergeSyncedBackendsTombstoneRemovesActiveAndClearsPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        pm.setActiveConnection(id: stored.id)
+
+        let outcome = pm.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        #expect(outcome.removedIds == [stored.id])
+        #expect(outcome.removedActiveConnection)
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.activeConnection() == nil)
+    }
+
+    @Test func mergeSyncedBackendsTombstoneOnNonActiveKeepsPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = pm.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        let active = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["other.local"], port: 1), token: "o"))
+        pm.setActiveConnection(id: active.id)
+
+        let outcome = pm.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        #expect(outcome.removedIds == [doomed.id])
+        #expect(!outcome.removedActiveConnection)
+        #expect(pm.activeConnection()?.id == active.id)
+    }
+
+    @Test func mergeSyncedBackendsNoChangeWritesNothing() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        let before = pm.loadConnections()
+
+        // Same clock again: no-op.
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        #expect(!outcome.changed)
+        #expect(pm.loadConnections() == before)
+    }
+
     // MARK: - Compatibility shims
 
     @Test func pairingShimsRoundTripOverConnectionsAPI() {

@@ -330,6 +330,19 @@ struct ConnectionManagerTests {
         // This is a compile-time check — if it compiles, the API is correct
     }
 
+    // MARK: - Synced-registry credential adoption
+
+    @Test @MainActor func updateCachedCredentialsReplacesReconnectFields() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["10.0.0.9", "mac.local"], port: 9999,
+            token: "tok-rotated", certFingerprint: "ff:ee")
+        #expect(manager.hosts == ["10.0.0.9", "mac.local"])
+        #expect(manager.port == 9999)
+        #expect(manager.token == "tok-rotated")
+        #expect(manager.certFingerprint == "ff:ee")
+    }
+
     // MARK: - Invalid message handling
 
     @Test @MainActor func dispatchInvalidJsonDoesNotCrash() async {

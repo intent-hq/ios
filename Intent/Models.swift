@@ -24,19 +24,26 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     /// Daemon hostname when known, else first host:port.
     var displayName: String
     var lastConnectedAt: Date?
+    /// `updatedAt` (ms since epoch) of the last iCloud-synced registry record
+    /// applied to this connection — the last-writer-wins clock for
+    /// `SyncedBackendConnectionMerge`. `nil` on connections that predate sync
+    /// or were paired locally and never matched a registry record.
+    var syncUpdatedAt: Double?
 
     init(
         id: UUID = UUID(),
         server: PairedServer,
         token: String,
         displayName: String? = nil,
-        lastConnectedAt: Date? = nil
+        lastConnectedAt: Date? = nil,
+        syncUpdatedAt: Double? = nil
     ) {
         self.id = id
         self.server = server
         self.token = token
         self.displayName = displayName ?? StoredConnection.fallbackDisplayName(for: server)
         self.lastConnectedAt = lastConnectedAt
+        self.syncUpdatedAt = syncUpdatedAt
     }
 
     static func fallbackDisplayName(for server: PairedServer) -> String {

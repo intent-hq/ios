@@ -103,7 +103,12 @@ struct ConnectionsView: View {
                     ? "This is the current connection. Deleting it will disconnect you."
                     : "This removes the saved connection. You'll need to pair again to reconnect.")
             }
-            .onAppear { reload() }
+            .onAppear {
+                // Pull in registry changes synced from other devices while
+                // the sheet was closed, then show the merged list.
+                coordinator.refreshSyncedBackends()
+                reload()
+            }
         }
     }
 
