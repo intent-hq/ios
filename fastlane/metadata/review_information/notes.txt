@@ -7,7 +7,7 @@ NO DEMO ACCOUNT
 Because the app has no account system, no demo account can be provided. Full functionality requires the Intent desktop app running on a computer on the same network as the review device.
 
 HOW TO EXERCISE THE FULL FLOW
-The Intent desktop app for macOS is available for download at https://intentapp.dev. To see the full paired experience: download and install it on a Mac on the same network as the review device, launch it, then open its settings to display the pairing QR code and scan it with this app. The app then connects to the daemon on that Mac and shows the paired experience described below.
+The Intent desktop app for macOS is available for download at https://beta.intentapp.dev. To see the full paired experience: download and install it on a Mac on the same network as the review device, launch it, then open its settings to display the pairing QR code and scan it with this app. The app then connects to the daemon on that Mac and shows the paired experience described below.
 
 WHAT YOU WILL SEE WITHOUT A DAEMON ON YOUR NETWORK
 The following applies if you choose not to install the desktop app.
