@@ -264,6 +264,11 @@ struct MessageInputView: View {
 
         // Defer to next run loop to let dictation finalize (if it was active)
         DispatchQueue.main.async {
+            // The visible send button disables while a send is placing
+            // files, but the text view's submit callback still lands here —
+            // pendingFiles clears only after success, so a second send
+            // would duplicate the uploads.
+            guard !viewModel.isUploadingFiles else { return }
             let text = localText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty || viewModel.hasPendingAttachments else {
                 isFocused = true
