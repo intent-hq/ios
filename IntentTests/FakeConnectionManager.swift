@@ -31,6 +31,12 @@ class FakeConnectionManager: ConnectionManagerRouting {
 
     /// Map of method names to errors. If a method is in this map, request() throws the error.
     var errorMap: [String: Error] = [:]
+
+    /// Per-method FIFO error queues. When non-empty for a method, each request()
+    /// pops and throws the next error — takes precedence over errorMap and the
+    /// response maps. Useful for retry/fallback tests where only the first call
+    /// should fail.
+    var errorQueueMap: [String: [Error]] = [:]
     
     /// Recorded request log: [(method, params, timestamp)]
     var requestLog: [(method: String, params: [String: Any], timestamp: Date)] = []
@@ -67,6 +73,12 @@ class FakeConnectionManager: ConnectionManagerRouting {
 
         if let delay = delayMap[method] {
             try await Task.sleep(nanoseconds: delay)
+        }
+
+        if var errorQueue = errorQueueMap[method], !errorQueue.isEmpty {
+            let error = errorQueue.removeFirst()
+            errorQueueMap[method] = errorQueue
+            throw error
         }
 
         if let error = errorMap[method] {

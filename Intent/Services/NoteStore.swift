@@ -131,13 +131,13 @@ import Observation
             isLoading = true
         }
         do {
-            let result = try await connectionManager.request(
-                "note.list",
-                params: ["workspaceId": workspaceId]
-            )
-            if let dict = result as? [String: Any],
-               let items = dict["notes"] as? [[String: Any]] {
-                notes = items.compactMap { Note.parseNote($0) }
+            let items = try await requestNoteList(workspaceId: workspaceId)
+            notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
+            // The spec is the one structural exception (its content links task
+            // notes for the progress ring), so hydrate it full when its slim
+            // row is stale. Fail-soft: a miss keeps the slim row as-is.
+            if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
+                _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
             }
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
@@ -145,6 +145,77 @@ import Observation
         isLoading = false
         // Note: live-state subscription is owned by onConnected() lifecycle.
         // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
+    }
+
+    /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:
+    /// "slim"`): bounded rows carrying `contentPreview`/`contentLength`
+    /// instead of full `content`, so note-heavy workspaces don't pull multi-MB
+    /// frames. If the daemon rejects the param (-32602 Invalid params —
+    /// defense-in-depth: pre-8.1 daemons ignore unknown params and serve full
+    /// rows instead), fall back once to the plain full list; other failures
+    /// propagate unchanged.
+    private func requestNoteList(workspaceId: String) async throws -> [[String: Any]] {
+        let result: Any
+        do {
+            result = try await connectionManager.request(
+                "note.list",
+                params: ["workspaceId": workspaceId, "projection": "slim"]
+            )
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+            AppLog.notes.warning(
+                "[NoteStore] note.list rejected projection param, retrying full: \(error)")
+            result = try await connectionManager.request(
+                "note.list",
+                params: ["workspaceId": workspaceId]
+            )
+        }
+        guard let dict = result as? [String: Any],
+              let items = dict["notes"] as? [[String: Any]] else { return [] }
+        return items
+    }
+
+    /// Slim-projection merge (§5.2): a slim row carries no content, so when
+    /// the cache already holds the full body at the same `updatedAt`, keep
+    /// it — a re-list must never clobber loaded content. A slim row with a
+    /// different `updatedAt` wins as-is: the stale marker makes content
+    /// surfaces refetch via `note.get`, which is safer than keeping a
+    /// possibly-outdated body.
+    private func mergeSlimRows(_ incoming: [Note]) -> [Note] {
+        guard !notes.isEmpty else { return incoming }
+        let existingById = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return incoming.map { row in
+            guard row.isContentStale,
+                  let existing = existingById[row.id],
+                  !existing.content.isEmpty,
+                  existing.updatedAt == row.updatedAt else { return row }
+            return row.withContent(existing.content)
+        }
+    }
+
+    /// Graft an already-fetched full body onto a cached slim list row (§5.2).
+    /// For detail views that fetched the note before the slim list landed —
+    /// `fetchNote`'s own upsert had no row (and no workspace context) to
+    /// replace then. Same-workspace, same-`updatedAt`, stale-row only: a
+    /// newer slim row keeps its stale marker so content surfaces refetch
+    /// instead of rendering an outdated body.
+    func upsertFullNote(_ note: Note, workspaceId: String) {
+        guard self.workspaceId == workspaceId,
+              !note.content.isEmpty,
+              let idx = notes.firstIndex(where: { $0.id == note.id }),
+              notes[idx].isContentStale,
+              notes[idx].updatedAt == note.updatedAt else { return }
+        notes[idx] = notes[idx].withContent(note.content)
+    }
+
+    /// True when the cached row carries a strictly newer `updatedAt` than
+    /// the fetched note. Timestamps are parsed leniently; an unparseable
+    /// side compares as not-newer, preserving the replace behavior.
+    private static func isCachedRowNewer(_ cached: Note, thanFetched fetched: Note) -> Bool {
+        guard cached.updatedAt != fetched.updatedAt,
+              let cachedDate = ISO8601DateFormatter.lenientDate(from: cached.updatedAt),
+              let fetchedDate = ISO8601DateFormatter.lenientDate(from: fetched.updatedAt)
+        else { return false }
+        return cachedDate > fetchedDate
     }
 
     /// Outcome of a single-note fetch, distinguishing a definitive not-found
@@ -168,7 +239,21 @@ import Observation
             if let dict = result as? [String: Any],
                let noteDict = dict["note"] as? [String: Any],
                let note = Note.parseNote(noteDict) {
-                return note.isArchived ? .notFound : .found(note)
+                if note.isArchived { return .notFound }
+                // Upsert the full body over a cached slim list row (§5.2) so
+                // content surfaces and optimistic content edits work off the
+                // cache. Replace-only: never grows the list, only for the
+                // workspace the cache belongs to (note ids like "spec" repeat
+                // across workspaces), and never over a newer cached row — a
+                // delta/re-list may have advanced it while this note.get was
+                // in flight, and a late older body must not clobber it or
+                // clear its stale marker.
+                if self.workspaceId == workspaceId,
+                   let idx = notes.firstIndex(where: { $0.id == note.id }),
+                   !Self.isCachedRowNewer(notes[idx], thanFetched: note) {
+                    notes[idx] = note
+                }
+                return .found(note)
             }
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {

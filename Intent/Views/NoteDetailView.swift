@@ -114,6 +114,12 @@ struct NoteDetailView: View {
             await loadNote()
             // Also fetch all notes so we can resolve titles for intent:// links
             await noteStore.fetchNotes(workspaceId: workspaceId)
+            // The list landed after loadNote(), so its slim row (§5.2) missed
+            // fetchNote's upsert — graft the fetched body onto it so
+            // optimistic checkbox edits work off the cached content.
+            if let fetched = note {
+                noteStore.upsertFullNote(fetched, workspaceId: workspaceId)
+            }
             // Agents back the metadata header's assignee names; observe events
             // so names stay current while the note is open.
             agentStore.startObservingEvents()
@@ -133,13 +139,31 @@ struct NoteDetailView: View {
             if note != nil && !newNotes.contains(where: { $0.id == noteId }) {
                 Task { await refreshNote() }
             }
+            // A slim row (§5.2) at a different revision than the fetched body
+            // means the note changed between loadNote() and the list request:
+            // refetch so the rendered content catches up (fetchNote's upsert
+            // then clears the stale marker, ending the cycle).
+            if let cached = newNotes.first(where: { $0.id == noteId }),
+               cached.isContentStale, let full = note,
+               cached.updatedAt != full.updatedAt {
+                Task { await refreshNote() }
+            }
         }
     }
 
     /// The note to render: the store's cached copy when available (so
     /// optimistic task-status updates show immediately), else the fetched one.
+    /// A cached slim list row (§5.2) carries no content, so graft the fetched
+    /// full body onto it — the cached copy's metadata still wins. When the
+    /// slim row is newer than the fetched body, this is last-known content:
+    /// the onChange handler has already kicked off a refetch (same policy as
+    /// refreshNote's transient-error path — never blank a rendered note).
     private var displayNote: Note? {
-        noteStore.note(byId: noteId) ?? note
+        guard let cached = noteStore.note(byId: noteId) else { return note }
+        if cached.isContentStale, let full = note, !full.content.isEmpty {
+            return cached.withContent(full.content)
+        }
+        return cached
     }
 
     /// Whether the task-note metadata header renders: any task note except
