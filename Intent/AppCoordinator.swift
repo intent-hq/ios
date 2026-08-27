@@ -213,7 +213,10 @@ class AppCoordinator: ObservableObject {
     /// (see `SyncedBackendConnectionMerge`). An unavailable registry read
     /// (locked keychain, missing entitlement) is a no-op — existing local
     /// knowledge is kept. When a tombstone removes the active connection,
-    /// disconnects and routes to the pairing surface like Log Off.
+    /// disconnects and routes to the pairing surface like Log Off. When the
+    /// merge rewrote the active connection's record (rotated token, new
+    /// routes), the live ConnectionManager cache adopts the new fields so
+    /// the next reconnect uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
         guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
@@ -227,6 +230,19 @@ class AppCoordinator: ObservableObject {
             selectedWorkspaceId = nil
             pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
             currentScreen = .pairing
+        } else if outcome.changed {
+            if let active = persistence.activeConnection(),
+                outcome.updatedIds.contains(active.id)
+            {
+                ConnectionManager.shared.updateCachedCredentials(
+                    hosts: active.server.hosts, port: active.server.port,
+                    token: active.token, certFingerprint: active.server.certFingerprint)
+            }
+            // A merge while the pairing surface is up must (un)offer the
+            // saved connections it added/removed.
+            if case .pairing = currentScreen {
+                pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
+            }
         }
         return outcome
     }

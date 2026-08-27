@@ -21,11 +21,12 @@ struct SyncedBackendConnectionMergeTests {
 
     private func local(
         hosts: [String] = ["10.0.0.1"], port: Int = 8843, fingerprint: String? = "aa:bb",
-        token: String = "tok-local", syncUpdatedAt: Double? = nil
+        token: String = "tok-local", syncUpdatedAt: Double? = nil,
+        pairedAt: Date = Date(timeIntervalSince1970: 0)
     ) -> StoredConnection {
         StoredConnection(
             server: PairedServer(
-                hosts: hosts, port: port, name: "daemon", pairedAt: Date(),
+                hosts: hosts, port: port, name: "daemon", pairedAt: pairedAt,
                 certFingerprint: fingerprint),
             token: token, syncUpdatedAt: syncUpdatedAt)
     }
@@ -43,6 +44,28 @@ struct SyncedBackendConnectionMergeTests {
         #expect(added.server.port == 8843)
         #expect(added.displayName == "Mac Studio")
         #expect(added.syncUpdatedAt == 100)
+    }
+
+    @Test func fingerprintlessNewRecordIsNeverAdded() {
+        // Without a pinned cert the connection would fall back to plain
+        // ws:// and leak the synced token — such records must not be adopted.
+        for fingerprint in ["", "   "] {
+            let result = SyncedBackendConnectionMerge.merge(
+                records: [record(fingerprint: fingerprint)], into: [])
+            #expect(!result.changed)
+            #expect(result.connections.isEmpty)
+        }
+    }
+
+    @Test func fingerprintlessRecordStillUpdatesExistingFingerprintlessLocal() {
+        // The host:port fallback still applies: a record the user paired on
+        // this device (fingerprint-less local) keeps receiving updates.
+        let existing = local(fingerprint: nil)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "", token: "tok-new", updatedAt: 200)],
+            into: [existing])
+        #expect(result.updatedIds == [existing.id])
+        #expect(result.connections[0].token == "tok-new")
     }
 
     @Test func blankLabelFallsBackToHostnameThenHostPort() {
@@ -120,6 +143,44 @@ struct SyncedBackendConnectionMergeTests {
             records: [record(host: "9.9.9.9", fingerprint: "zz", deleted: true)],
             into: [local()])
         #expect(!result.changed)
+    }
+
+    @Test func equalClockTombstoneRemovesSyncedLocal() {
+        // Equal clocks delete — mirrors the fe reconcile's tie rule (an
+        // address change must not dodge a delete).
+        let existing = local(syncUpdatedAt: 200)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(updatedAt: 200, deleted: true)], into: [existing])
+        #expect(result.removedIds == [existing.id])
+    }
+
+    @Test func staleTombstoneLosesToNewerLocalPairing() {
+        // Re-pair race: a tombstone written BEFORE the user re-paired this
+        // machine locally must not delete the fresh never-synced pairing.
+        let repaired = Date(timeIntervalSince1970: 1000)
+        let existing = local(syncUpdatedAt: nil, pairedAt: repaired)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(updatedAt: 500_000, deleted: true)], into: [existing])
+        #expect(!result.changed)
+        #expect(result.connections == [existing])
+    }
+
+    @Test func tombstoneNewerThanLocalPairingRemovesNeverSyncedLocal() {
+        let existing = local(syncUpdatedAt: nil, pairedAt: Date(timeIntervalSince1970: 100))
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(updatedAt: 500_000, deleted: true)], into: [existing])
+        #expect(result.removedIds == [existing.id])
+    }
+
+    @Test func tombstoneWithDifferentFingerprintAtSameAddressDoesNotRemove() {
+        // Another machine reusing the IP was forgotten: the tombstone must
+        // not delete the local record with a different pinned cert.
+        let existing = local(fingerprint: "aa:bb")
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "cc:dd", updatedAt: 500_000, deleted: true)],
+            into: [existing])
+        #expect(!result.changed)
+        #expect(result.connections == [existing])
     }
 
     // MARK: - Absence and matching rules

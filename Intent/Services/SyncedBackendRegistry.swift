@@ -71,6 +71,19 @@ extension SyncedBackendRecord {
         if deleted != other.deleted { return deleted }
         return accountKey > other.accountKey
     }
+
+    /// Tombstone TTL, mirroring the desktop reconcile's `TOMBSTONE_TTL_MS`
+    /// (~30 days): the desktop purges expired tombstones from the keychain,
+    /// so a straggler item the purge has not reached yet must not still act
+    /// as a delete here.
+    static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000
+
+    /// Whether this record is a tombstone past its TTL (`deletedAt`,
+    /// falling back to `updatedAt`, anchors the TTL — same as the fe's
+    /// `isExpiredTombstone`).
+    func isExpiredTombstone(now: Date) -> Bool {
+        deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs <= now.timeIntervalSince1970 * 1000
+    }
 }
 
 /// Parser for the versioned keychain payload, mirroring the desktop
@@ -251,14 +264,15 @@ struct SyncedBackendRegistry {
         ]
     }
 
-    /// All key-winning records: malformed and newer-version items are
-    /// skipped, and records sharing a `registryKey` collapse to a single
-    /// winner (LWW by `updatedAt` with the fe reconcile's deterministic tie
-    /// rules — see `wins(over:)` — so a machine whose address changed never
-    /// appears twice and row order never changes the outcome). INCLUDES
-    /// winning tombstones — the merge into saved connections must act on
+    /// All key-winning records: malformed, newer-version and EXPIRED
+    /// TOMBSTONE items (see `isExpiredTombstone`) are skipped, and records
+    /// sharing a `registryKey` collapse to a single winner (LWW by
+    /// `updatedAt` with the fe reconcile's deterministic tie rules — see
+    /// `wins(over:)` — so a machine whose address changed never appears
+    /// twice and row order never changes the outcome). INCLUDES winning
+    /// unexpired tombstones — the merge into saved connections must act on
     /// them.
-    func listBackends() -> SyncedBackendRegistryList {
+    func listBackends(now: Date = Date()) -> SyncedBackendRegistryList {
         guard let accessGroup else { return .unavailable(.accessGroupUnresolved) }
         switch keychain.list(matching: Self.listQuery(accessGroup: accessGroup)) {
         case .failure(let status):
@@ -271,7 +285,8 @@ struct SyncedBackendRegistry {
             for row in rows {
                 guard let data = row[kSecValueData as String] as? Data,
                     let payload = String(data: data, encoding: .utf8),
-                    case .record(let record) = SyncedBackendPayload.parse(payload)
+                    case .record(let record) = SyncedBackendPayload.parse(payload),
+                    !record.isExpiredTombstone(now: now)
                 else { continue }
                 let key = record.registryKey
                 if let existing = newestByKey[key] {
@@ -287,8 +302,8 @@ struct SyncedBackendRegistry {
 
     /// The live records in the registry: `listBackends()` minus tombstones
     /// (a tombstone that wins its key hides the older live copies).
-    func listLiveBackends() -> SyncedBackendRegistryList {
-        switch listBackends() {
+    func listLiveBackends(now: Date = Date()) -> SyncedBackendRegistryList {
+        switch listBackends(now: now) {
         case .unavailable(let reason):
             return .unavailable(reason)
         case .available(let records):

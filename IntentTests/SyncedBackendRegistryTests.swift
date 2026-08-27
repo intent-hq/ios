@@ -220,6 +220,10 @@ struct SyncedBackendRegistryTests {
         SyncedBackendRegistry(keychain: keychain, accessGroup: group)
     }
 
+    /// A "now" close to the tests' tiny epoch-era clocks so their tombstones
+    /// are within the 30-day TTL (the TTL tests below pin their own clocks).
+    private let now = Date(timeIntervalSince1970: 1)
+
     @Test func listQueryIsGroupScopedAndSynchronizableAny() {
         let query = SyncedBackendRegistry.listQuery(accessGroup: "T.dev.intentapp.backends")
         #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
@@ -276,7 +280,7 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.7:9000", payload: "not json"),
             [kSecAttrAccount as String: "row-without-data"],
         ]))
-        guard case .available(let records) = registry(keychain).listLiveBackends() else {
+        guard case .available(let records) = registry(keychain).listLiveBackends(now: now) else {
             Issue.record("expected .available")
             return
         }
@@ -310,7 +314,7 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.1:1", payload: live),
             row(account: "10.0.0.2:2", payload: tombstone),
         ]))
-        #expect(registry(keychain).listLiveBackends() == .available([]))
+        #expect(registry(keychain).listLiveBackends(now: now) == .available([]))
     }
 
     @Test func newerLiveRecordSurvivesOlderTombstoneForSameFingerprint() {
@@ -322,7 +326,7 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.1:1", payload: tombstone),
             row(account: "10.0.0.2:2", payload: live),
         ]))
-        guard case .available(let records) = registry(keychain).listLiveBackends() else {
+        guard case .available(let records) = registry(keychain).listLiveBackends(now: now) else {
             Issue.record("expected .available")
             return
         }
@@ -343,8 +347,8 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.2:2", payload: tombstone),
             row(account: "10.0.0.1:1", payload: live),
         ]))
-        #expect(registry(liveFirst).listLiveBackends() == .available([]))
-        #expect(registry(tombstoneFirst).listLiveBackends() == .available([]))
+        #expect(registry(liveFirst).listLiveBackends(now: now) == .available([]))
+        #expect(registry(tombstoneFirst).listLiveBackends(now: now) == .available([]))
     }
 
     @Test func equalClockLiveTieBreaksByAccountKeyRegardlessOfRowOrder() {
@@ -406,7 +410,7 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.1:1", payload: live),
             row(account: "10.0.0.2:2", payload: tombstone),
         ]))
-        guard case .available(let records) = registry(keychain).listBackends() else {
+        guard case .available(let records) = registry(keychain).listBackends(now: now) else {
             Issue.record("expected .available")
             return
         }
@@ -423,7 +427,54 @@ struct SyncedBackendRegistryTests {
             row(account: "10.0.0.1:1", payload: live),
             row(account: "10.0.0.2:2", payload: tombstone),
         ]))
-        guard case .available(let records) = registry(keychain).listBackends() else {
+        guard case .available(let records) = registry(keychain).listBackends(now: now) else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(records.map(\.label) == ["Dead"])
+    }
+
+    // MARK: - Tombstone TTL
+
+    @Test func expiredTombstoneIsSkippedAndStopsHidingOlderLiveRecords() {
+        // The desktop purges tombstones after ~30 days; a straggler item the
+        // purge has not reached must not still act as a delete here.
+        let ttl = SyncedBackendRecord.tombstoneTTLMs
+        let live = #"{"v": 1, "label": "Live", "host": "10.0.0.1", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let tombstone = #"{"v": 1, "label": "Dead", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "aa", "updatedAt": 200, "deleted": true}"#
+        let keychain = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.1:1", payload: live),
+            row(account: "10.0.0.2:2", payload: tombstone),
+        ]))
+
+        let beforeExpiry = Date(timeIntervalSince1970: (200 + ttl - 1000) / 1000)
+        guard case .available(let before) = registry(keychain).listBackends(now: beforeExpiry)
+        else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(before.map(\.label) == ["Dead"])
+
+        let pastExpiry = Date(timeIntervalSince1970: (200 + ttl + 1000) / 1000)
+        guard case .available(let after) = registry(keychain).listBackends(now: pastExpiry) else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(after.map(\.label) == ["Live"])
+    }
+
+    @Test func tombstoneTTLAnchorsOnDeletedAtWhenPresent() {
+        let ttl = SyncedBackendRecord.tombstoneTTLMs
+        let tombstone = #"{"v": 1, "label": "Dead", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "aa", "updatedAt": 100, "deleted": true, "deletedAt": 1000000}"#
+        let keychain = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.2:2", payload: tombstone)
+        ]))
+        // Past updatedAt+TTL but within deletedAt+TTL: still honored.
+        let now = Date(timeIntervalSince1970: (500_000 + ttl) / 1000)
+        guard case .available(let records) = registry(keychain).listBackends(now: now) else {
             Issue.record("expected .available")
             return
         }

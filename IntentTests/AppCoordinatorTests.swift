@@ -315,6 +315,24 @@ final class AppCoordinatorTests {
         #expect(persistence.loadConnections().count == 1)
     }
 
+    @Test @MainActor func refreshSyncedBackends_onPairingScreen_offersFreshlyMergedConnections() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // First-run pairing screen, empty registry: nothing offered.
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+        coordinator.currentScreen = .pairing
+        #expect(!coordinator.pairingShowsSavedConnections)
+
+        // A foreground merge that adds a synced connection while the pairing
+        // surface is up must start offering it.
+        coordinator.onScenePhaseActive()
+        #expect(coordinator.pairingShowsSavedConnections,
+                "A merged synced connection must be offered on the already-visible pairing surface")
+    }
+
     @Test @MainActor func refreshSyncedBackends_unavailableRegistryIsANoOp() {
         resetConnectionState()
         defer { resetConnectionState() }
@@ -337,14 +355,17 @@ final class AppCoordinatorTests {
             StoredConnection(
                 server: PairedServer(
                     hosts: ["10.9.9.9"], port: 4242, name: "daemon",
-                    pairedAt: Date(), certFingerprint: "aa:bb"),
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
                 token: "tok"))
         let other = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: doomed.id)
 
+        // Registry reads use the wall clock, so the tombstone must be recent
+        // enough to be within the 30-day TTL and newer than the local pairing.
+        let clock = Date().timeIntervalSince1970 * 1000
         let tombstone = #"{"v": 1, "label": "Synced Mac", "#
             + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
-            + #""updatedAt": 200, "deleted": true}"#
+            + #""updatedAt": \#(clock), "deleted": true}"#
         let coordinator = AppCoordinator(
             persistence: persistence,
             syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
@@ -360,6 +381,34 @@ final class AppCoordinatorTests {
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
+    }
+
+    @Test @MainActor func refreshSyncedBackends_activeUpdateAdoptsCredentialsIntoConnectionManager() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let active = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok-old", syncUpdatedAt: 100))
+        persistence.setActiveConnection(id: active.id)
+
+        let rotated = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.10", "port": 5252, "fingerprint": "aa:bb", "#
+            + #""token": "tok-rotated", "updatedAt": 200}"#
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [rotated]))
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.updatedIds == [active.id])
+        let manager = ConnectionManager.shared
+        #expect(manager.token == "tok-rotated")
+        #expect(manager.port == 5252)
+        #expect(manager.hosts.first == "10.9.9.10")
+        #expect(manager.certFingerprint == "aa:bb")
     }
 
     @Test @MainActor func onReconnect_flagsSavedConnections_whenConnectionsExist() {

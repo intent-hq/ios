@@ -2,8 +2,10 @@ import Foundation
 
 /// Merges the iCloud-synced backend registry (read by
 /// `SyncedBackendRegistry.listBackends()`) into the app's saved connections.
-/// iOS has no opt-out: every live registry record appears as a saved
-/// connection, a newer remote copy overwrites the local fields
+/// iOS has no opt-out: every live registry record WITH a cert fingerprint
+/// appears as a saved connection (fingerprint-less records are never
+/// auto-added — no pinned cert means a plain-`ws://` fallback that would
+/// leak the synced token), a newer remote copy overwrites the local fields
 /// (last-writer-wins on `updatedAt`), and a tombstone removes the matching
 /// local connection — matched by cert fingerprint first, `host:port` as
 /// fallback. Absence is NOT deletion: local-only connections that predate
@@ -36,9 +38,16 @@ enum SyncedBackendConnectionMerge {
             if record.deleted {
                 guard let index else { continue }
                 let existing = result.connections[index]
-                // LWW guard for the cross-key fallback match: a local copy
-                // synced from a live record NEWER than this tombstone wins.
-                if let applied = existing.syncUpdatedAt, applied > record.updatedAt { continue }
+                // LWW guard: the local copy wins when its clock is strictly
+                // newer than the tombstone (equal clocks delete — the fe's
+                // tie rule). A local that never synced has no registry
+                // clock, so its pairing time stands in: a stale tombstone
+                // written before the user re-paired this machine must not
+                // delete the fresh pairing.
+                let localClock =
+                    existing.syncUpdatedAt
+                    ?? existing.server.pairedAt.timeIntervalSince1970 * 1000
+                if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
                 result.connections.remove(at: index)
             } else if let index {
@@ -50,6 +59,13 @@ enum SyncedBackendConnectionMerge {
                 result.connections[index] = apply(record, to: existing)
                 result.updatedIds.append(existing.id)
             } else {
+                // Never auto-add a fingerprint-less record: without a pinned
+                // cert the socket falls back to plain ws://, which would send
+                // the synced bearer token in cleartext to an unauthenticated
+                // host. (Existing fingerprint-less locals were paired by the
+                // user on this device; the host:port fallback above can still
+                // update them.)
+                guard !normalizeFingerprint(record.fingerprint).isEmpty else { continue }
                 let added = makeConnection(from: record, now: now)
                 result.connections.append(added)
                 result.addedIds.append(added.id)

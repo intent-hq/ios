@@ -54,11 +54,11 @@ class ConnectionManager: ObservableObject {
     private var lastPongReceived: Date = Date()
     private static let pingInterval: TimeInterval = 15  // Send ping every 15s
     private static let pongTimeout: TimeInterval = 30   // Dead if no pong in 30s
-    private var hosts: [String] = []
+    private(set) var hosts: [String] = []
     private var host: String?
-    private var port: Int?
-    private var token: String?
-    private var certFingerprint: String?
+    private(set) var port: Int?
+    private(set) var token: String?
+    private(set) var certFingerprint: String?
     var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
     // MARK: - Subscription Push Routing
@@ -142,6 +142,21 @@ class ConnectionManager: ObservableObject {
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
+    }
+
+    /// Adopt registry-merged fields for the ACTIVE connection (called when a
+    /// synced-registry merge rewrote its stored record): refreshes the cached
+    /// hosts/port/token/fingerprint that reconnect racing and ping recovery
+    /// read, so they use the rotated token and current routes instead of the
+    /// stale cache. The live socket is kept — the daemon checks the token at
+    /// the WebSocket upgrade only, so an established connection stays valid.
+    func updateCachedCredentials(
+        hosts: [String], port: Int, token: String, certFingerprint: String?
+    ) {
+        self.hosts = hosts
+        self.port = port
+        self.token = token
+        self.certFingerprint = certFingerprint
     }
 
     func disconnect() {

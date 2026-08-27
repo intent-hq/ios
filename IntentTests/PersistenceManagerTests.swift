@@ -626,7 +626,7 @@ struct ConnectionPersistenceTests {
             StoredConnection(
                 server: PairedServer(
                     hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-                    pairedAt: Date(), certFingerprint: "aa:bb"),
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
                 token: "tok"))
         pm.setActiveConnection(id: stored.id)
 
@@ -646,7 +646,7 @@ struct ConnectionPersistenceTests {
             StoredConnection(
                 server: PairedServer(
                     hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-                    pairedAt: Date(), certFingerprint: "aa:bb"),
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
                 token: "tok"))
         let active = pm.upsertConnection(
             StoredConnection(server: makeServer(hosts: ["other.local"], port: 1), token: "o"))
