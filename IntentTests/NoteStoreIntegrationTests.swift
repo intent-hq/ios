@@ -509,6 +509,67 @@ struct NoteStoreIntegrationTests {
         #expect(store.note(byId: "spec")?.content == "workspace A spec")
     }
 
+    @Test func upsertFullNoteGraftsBodyOntoStaleSlimRow() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // Detail view fetched the note BEFORE the list landed (fetchNote's
+        // inline upsert had no row to replace), then the slim list arrives.
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-1", "title": "Note 1", "content": "full body",
+            "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+        ]]
+        let result = await store.fetchNote(noteId: "note-1", workspaceId: "ws-1")
+        guard case .found(let fetched) = result else {
+            Issue.record("Expected .found, got \(result)")
+            return
+        }
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "full b",
+             "contentLength": 9,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.isContentStale == true)
+
+        store.upsertFullNote(fetched, workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.content == "full body")
+        #expect(store.note(byId: "note-1")?.isContentStale == false)
+    }
+
+    @Test func upsertFullNoteRefusesStaleBodyAndWrongWorkspace() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "contentPreview": "newer",
+             "contentLength": 10,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        // Body fetched at an older revision must not clear the stale marker.
+        let older = Note(
+            id: "note-1", title: "Note 1", content: "older body", tags: [],
+            isDefault: false, isArchived: false, taskStatus: nil,
+            parentId: nil, createdAt: "2024-01-01T00:00:00Z",
+            updatedAt: "2024-01-01T00:00:00Z")
+        store.upsertFullNote(older, workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.content == "")
+        #expect(store.note(byId: "note-1")?.isContentStale == true)
+
+        // Same revision but wrong workspace: refused too.
+        let current = Note(
+            id: "note-1", title: "Note 1", content: "current body", tags: [],
+            isDefault: false, isArchived: false, taskStatus: nil,
+            parentId: nil, createdAt: "2024-01-01T00:00:00Z",
+            updatedAt: "2024-01-02T00:00:00Z")
+        store.upsertFullNote(current, workspaceId: "ws-other")
+        #expect(store.note(byId: "note-1")?.content == "")
+
+        // Same revision, right workspace: grafts.
+        store.upsertFullNote(current, workspaceId: "ws-1")
+        #expect(store.note(byId: "note-1")?.content == "current body")
+    }
+
     // MARK: - note:deleted event triggers onNoteChanged
 
     @Test func noteDeletedEventTriggersOnNoteChanged() async throws {

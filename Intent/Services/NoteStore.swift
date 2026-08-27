@@ -192,6 +192,21 @@ import Observation
         }
     }
 
+    /// Graft an already-fetched full body onto a cached slim list row (§5.2).
+    /// For detail views that fetched the note before the slim list landed —
+    /// `fetchNote`'s own upsert had no row (and no workspace context) to
+    /// replace then. Same-workspace, same-`updatedAt`, stale-row only: a
+    /// newer slim row keeps its stale marker so content surfaces refetch
+    /// instead of rendering an outdated body.
+    func upsertFullNote(_ note: Note, workspaceId: String) {
+        guard self.workspaceId == workspaceId,
+              !note.content.isEmpty,
+              let idx = notes.firstIndex(where: { $0.id == note.id }),
+              notes[idx].isContentStale,
+              notes[idx].updatedAt == note.updatedAt else { return }
+        notes[idx] = notes[idx].withContent(note.content)
+    }
+
     /// Outcome of a single-note fetch, distinguishing a definitive not-found
     /// (deleted/archived) from transient transport errors.
     enum NoteFetchResult {
