@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict/>
+<dict>
+	<!-- App-identifier group FIRST: with keychain-access-groups present, the
+	     first entry becomes the default group for unscoped writes, so the
+	     existing com.intent.companion items keep landing where they always
+	     did. The shared group is the cross-app synced backend registry
+	     written by the Mac app (service com.cloudlands.intent.backends). -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.intentapp.intent</string>
+		<string>$(AppIdentifierPrefix)dev.intentapp.backends</string>
+	</array>
+</dict>
 </plist>

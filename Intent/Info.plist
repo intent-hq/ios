@@ -9,5 +9,10 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Team-ID prefix ("TEAMID.") for building keychain access-group names
+	     at runtime (SyncedBackendRegistry); iOS has no public entitlement
+	     introspection API. -->
+	<key>AppIdentifierPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 </dict>
 </plist>
