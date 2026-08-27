@@ -134,6 +134,22 @@ struct SyncedBackendPayloadTests {
         #expect(SyncedBackendPayload.parse(payload) == .newerVersion)
     }
 
+    @Test func fractionalVersionAboveCurrentIsNewerNotTruncated() {
+        let payload = """
+            {"v": 1.5, "label": "L", "host": "h", "port": 1, "fingerprint": "f", \
+            "updatedAt": 5}
+            """
+        #expect(SyncedBackendPayload.parse(payload) == .newerVersion)
+    }
+
+    @Test func fractionalPortIsInvalidNotTruncated() {
+        let payload = """
+            {"v": 1, "label": "L", "host": "h", "port": 8843.5, "fingerprint": "f", \
+            "updatedAt": 5}
+            """
+        #expect(SyncedBackendPayload.parse(payload) == .invalid)
+    }
+
     @Test(arguments: [
         "not json at all",
         "[1, 2, 3]",

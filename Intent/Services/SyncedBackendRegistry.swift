@@ -68,12 +68,12 @@ enum SyncedBackendPayload {
             let raw = try? JSONSerialization.jsonObject(with: data),
             let object = raw as? [String: Any]
         else { return .invalid }
-        guard let v = number(object["v"])?.intValue else { return .invalid }
-        if v > version { return .newerVersion }
+        guard let v = number(object["v"])?.doubleValue else { return .invalid }
+        if v > Double(version) { return .newerVersion }
         guard let label = object["label"] as? String,
             let host = object["host"] as? String,
             !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            let port = number(object["port"])?.intValue,
+            let port = integer(object["port"]),
             let fingerprint = object["fingerprint"] as? String,
             let updatedAt = number(object["updatedAt"])?.doubleValue
         else { return .invalid }
@@ -100,11 +100,20 @@ enum SyncedBackendPayload {
 
     /// JSON number (never a JSON bool — JSONSerialization bridges both to
     /// NSNumber; the wire contract's `typeof x === "number"` must reject
-    /// booleans).
+    /// booleans). Compared as Double: the fe compares `v` numerically, so
+    /// e.g. `v: 1.5` must count as newer than 1, never truncate to 1.
     private static func number(_ value: Any?) -> NSNumber? {
         guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID()
         else { return nil }
         return value
+    }
+
+    /// JSON number that is exactly an integer. A fractional `port` is
+    /// rejected as invalid rather than silently truncated (the fe would key
+    /// the account by the literal number, so truncation misstates identity).
+    private static func integer(_ value: Any?) -> Int? {
+        guard let value = number(value) else { return nil }
+        return Int(exactly: value.doubleValue)
     }
 
     /// JSON bool (never a JSON number).
