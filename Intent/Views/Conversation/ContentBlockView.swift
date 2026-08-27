@@ -117,7 +117,12 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var imageView: some View {
-        if let uiImage = Self.decodeImage(block) {
+        if block.data == nil, block.dataTruncated != true, let attachmentId = block.attachmentId {
+            // Attachment-reference block (PROTOCOL §5.5): no inline bytes —
+            // resolve the registry row and fetch via file.readChunk.
+            AttachmentReferenceImageView(
+                workspaceId: workspaceId, attachmentId: attachmentId, style: .inline)
+        } else if let uiImage = Self.decodeImage(block) {
             // Full image, or the write-time thumbnail served by the slim
             // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
             Button {
@@ -260,13 +265,19 @@ struct ImageDecodeFailureView: View {
 /// the fullscreen lightbox (FE parity: ChatMessage.svelte attached images).
 struct ImageAttachmentThumbnail: View {
     let block: ContentBlock
+    let workspaceId: String
     @Environment(\.colorScheme) var colorScheme
     @State private var lightboxPresented = false
 
     static let side: CGFloat = 60
 
     var body: some View {
-        if let uiImage = ContentBlockView.decodeImage(block) {
+        if block.data == nil, let attachmentId = block.attachmentId {
+            // Attachment-reference block (PROTOCOL §5.5): fetch the bytes
+            // from the workspace's attachment store.
+            AttachmentReferenceImageView(
+                workspaceId: workspaceId, attachmentId: attachmentId, style: .thumbnail)
+        } else if let uiImage = ContentBlockView.decodeImage(block) {
             Button { lightboxPresented = true } label: {
                 Image(uiImage: uiImage)
                     .resizable()
@@ -286,6 +297,122 @@ struct ImageAttachmentThumbnail: View {
         } else {
             ImageDecodeFailureView()
         }
+    }
+}
+
+/// Renders an attachment-reference image block (`attachmentId`, no inline
+/// `data`): resolves and fetches asynchronously via `AttachmentImageLoader`,
+/// showing a loading placeholder, then the image (tap → lightbox), or a
+/// tap-to-retry placeholder on failure.
+struct AttachmentReferenceImageView: View {
+    enum Style {
+        /// Assistant-row inline rendering: fit within the transcript width.
+        case inline
+        /// User-row attachment grid: fixed square thumbnail.
+        case thumbnail
+    }
+
+    let workspaceId: String
+    let attachmentId: String
+    let style: Style
+    var loader: AttachmentImageLoader = .shared
+    @Environment(\.colorScheme) var colorScheme
+    @State private var image: UIImage?
+    @State private var failed = false
+    /// Bumped on retry taps so the `.task(id:)` re-runs the fetch.
+    @State private var attempt = 0
+    /// The workspace|attachment key `image` was loaded for — if view
+    /// identity is ever reused for a different attachment, the mismatch
+    /// resets the latch so the stale image can't survive the guard below.
+    @State private var loadedKey: String?
+    @State private var lightboxPresented = false
+
+    var body: some View {
+        content
+            .task(id: "\(workspaceId)|\(attachmentId)|\(attempt)") {
+                let key = "\(workspaceId)|\(attachmentId)"
+                if loadedKey != key { image = nil }
+                guard image == nil else { return }
+                failed = false
+                do {
+                    let loaded = attempt == 0
+                        ? try await loader.image(workspaceId: workspaceId, attachmentId: attachmentId)
+                        : try await loader.retryImage(workspaceId: workspaceId, attachmentId: attachmentId)
+                    image = loaded
+                    loadedKey = key
+                } catch is CancellationError {
+                    // View scrolled away mid-fetch; not a failure.
+                } catch {
+                    if !Task.isCancelled { failed = true }
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let image {
+            Button { lightboxPresented = true } label: {
+                switch style {
+                case .inline:
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 300)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                case .thumbnail:
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: ImageAttachmentThumbnail.side, height: ImageAttachmentThumbnail.side)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+                        )
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Attached image")
+            .fullScreenCover(isPresented: $lightboxPresented) {
+                ImageLightboxView(image: image)
+            }
+        } else if failed {
+            Button { attempt += 1 } label: {
+                placeholder {
+                    Image(systemName: "arrow.clockwise")
+                    if style == .inline { Text("Tap to retry") }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Retry loading image")
+        } else {
+            placeholder {
+                ProgressView()
+                    .controlSize(.mini)
+                if style == .inline { Text("Loading image…") }
+            }
+        }
+    }
+
+    /// Placeholder chip sized to match the eventual rendering: a fixed
+    /// square for thumbnails, a compact chip for inline images.
+    private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
+        Group {
+            switch style {
+            case .inline:
+                HStack(spacing: 4) { label() }
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+            case .thumbnail:
+                VStack(spacing: 2) { label() }
+                    .font(.caption)
+                    .frame(width: ImageAttachmentThumbnail.side, height: ImageAttachmentThumbnail.side)
+            }
+        }
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

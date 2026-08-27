@@ -119,6 +119,18 @@ struct ContentBlockTests {
         #expect(block.mimeType == "image/png")
     }
 
+    @Test func decodeAttachmentReferenceImageBlock() throws {
+        // Persisted attachment-reference image block (PROTOCOL §5.5 v7.4):
+        // carries attachmentId + mimeType, no inline data.
+        let json = #"{"type":"image","attachmentId":"att-42","mimeType":"image/jpeg"}"#
+        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        #expect(block.type == .image)
+        #expect(block.attachmentId == "att-42")
+        #expect(block.mimeType == "image/jpeg")
+        #expect(block.data == nil)
+        #expect(!block.isSlimTruncated)
+    }
+
     // MARK: Slim projection flags (PROTOCOL §5.5)
 
     @Test func decodeSlimTruncatedToolUseBlock() throws {
@@ -652,6 +664,36 @@ struct QueuedMessageTests {
         #expect(decoded.imageBlocks?.count == 1)
         #expect(decoded.imageBlocks?.first?.mimeType == "image/jpeg")
         #expect(decoded.imageBlocks?.first?.data == "abc123")
+    }
+
+    @Test func imageBlockReferenceArmOmitsDataKey() throws {
+        // Attachment-registry reference (PROTOCOL §5.5, monorepo#3338):
+        // encodes attachmentId and never emits a "data" key.
+        let img = ImageBlock(type: "image", attachmentId: "att-9", mimeType: "image/jpeg")
+        let encoded = try JSONEncoder().encode(img)
+        let json = try #require(
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(json["attachmentId"] as? String == "att-9")
+        #expect(json["data"] == nil)
+
+        let decoded = try JSONDecoder().decode(ImageBlock.self, from: encoded)
+        #expect(decoded.attachmentId == "att-9")
+        #expect(decoded.data == nil)
+    }
+
+    @Test func decodesImageReferenceWithoutMimeType() throws {
+        // The wire reference arm is { type, attachmentId, mimeType? }
+        // (PROTOCOL §5.5) — a spec-legal entry without mimeType (e.g.
+        // authored by another client) must not fail the element decode,
+        // which would blank the whole [QueuedMessage] queue view.
+        let json = """
+        {"id": "q-3", "content": "img", "queuedAt": "2025-01-01T00:00:00Z", "position": 0, \
+        "imageBlocks": [{"type": "image", "attachmentId": "att-9"}]}
+        """
+        let decoded = try JSONDecoder().decode(QueuedMessage.self, from: Data(json.utf8))
+        #expect(decoded.imageBlocks?.count == 1)
+        #expect(decoded.imageBlocks?.first?.attachmentId == "att-9")
+        #expect(decoded.imageBlocks?.first?.mimeType == nil)
     }
 
     @Test func decodesWithoutMessageMetadata() throws {

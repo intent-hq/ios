@@ -333,8 +333,9 @@ struct ConversationViewModelTests {
         #expect(vm.suggestedPrompts == ["Run tests"])
     }
 
-    /// Wire the view model's store to a FakeConnectionManager so the
-    /// `agent.sendMessage` outcome is controlled per test.
+    /// Wire the view model's store AND upload service to a
+    /// FakeConnectionManager so the `agent.sendMessage` /
+    /// `file.placeAttachment` outcomes are controlled per test.
     private func makeFakeBackedVM(sendError: Error? = nil)
         -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
         let vm = makeVM()
@@ -344,7 +345,13 @@ struct ConversationViewModelTests {
         } else {
             fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
         }
+        fake.responseMap["file.placeAttachment"] = [
+            "attachmentId": "att-1", "fileName": "image.jpg",
+            "path": ".intent/attachments/att-1/image.jpg", "size": 3,
+            "mimeType": "image/jpeg",
+        ] as [String: Any]
         vm.store = ConversationStore(connectionManager: fake)
+        vm.uploadService = AttachmentUploadService(connection: fake)
         return (vm, fake)
     }
 
@@ -583,6 +590,260 @@ struct ConversationViewModelTests {
             workspaceId: vm.workspaceId, agentId: vm.agentId) == "")
     }
 
+    // MARK: - Image placement (attachment references, monorepo#3338)
+
+    @Test func buildImageBlocksPlacesImagesAndBuildsReferenceBlocks() async throws {
+        // Sending an image places it (`file.placeAttachment`) and the wire
+        // block is `{ type: "image", attachmentId, mimeType }` — never
+        // inline base64 (FE parity: toImageReferenceBlocks).
+        let (vm, fake) = makeFakeBackedVM()
+
+        await vm.sendMessage("with image", images: [UIImage(systemName: "star")!])
+
+        let placement = try #require(
+            fake.requestLog.last { $0.method == "file.placeAttachment" })
+        #expect(placement.params["workspaceId"] as? String == "test-ws")
+        #expect(placement.params["mimeType"] as? String == "image/jpeg")
+        #expect((placement.params["fileName"] as? String)?.hasSuffix(".jpg") == true)
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        let blocks = try #require(sent.params["imageBlocks"] as? [[String: Any]])
+        #expect(blocks.count == 1)
+        #expect(blocks[0]["type"] as? String == "image")
+        #expect(blocks[0]["attachmentId"] as? String == "att-1")
+        #expect(blocks[0]["mimeType"] as? String == "image/jpeg")
+        #expect(blocks[0]["data"] == nil, "no inline data key for placed images")
+    }
+
+    @Test func failedPlacementSurfacesErrorAndDoesNotSend() async throws {
+        // FAIL-CLOSED (FE parity): a placement failure aborts the send — no
+        // agent.sendMessage goes out, the error surfaces, and the composer
+        // state (text + captured images) is restored.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["file.placeAttachment"] = NSError(
+            domain: "WebSocket", code: -32000,
+            userInfo: [NSLocalizedDescriptionKey: "registry full"])
+
+        await vm.sendMessage("with image", images: [UIImage(systemName: "star")!])
+
+        #expect(fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
+                "the message is never sent when placement fails")
+        #expect(vm.imagePlacementError != nil)
+        #expect(vm.messageText == "with image", "draft text restored")
+        #expect(vm.pendingImages.count == 1, "captured images restored")
+    }
+
+    @Test func oversizedImageSurfacesErrorInsteadOfSilentSkip() async throws {
+        // The silent 10 MB skip is gone: an image over the daemon's 30 MiB
+        // image-reference cap fails the send with an explicit error.
+        let (vm, fake) = makeFakeBackedVM()
+        // A noise image so JPEG can't compress below the cap — 36 Mpx at
+        // ≳1 byte/pixel lands above 30 MiB without the memory weight of a
+        // larger bitmap.
+        let oversized = makeIncompressibleImage(side: 6000)
+
+        await vm.sendMessage("big", images: [oversized])
+
+        #expect(fake.requestLog.isEmpty, "no RPC at all for an oversized image")
+        #expect(vm.imagePlacementError?.contains("too large") == true)
+        #expect(vm.pendingImages.count == 1, "captured image restored")
+    }
+
+    @Test func aggregateOversizedImagesSurfaceErrorBeforeAnyPlacement() async throws {
+        // The daemon enforces the 30 MiB image-reference cap in AGGREGATE
+        // across a message's blocks too (§5.5): two images each under the
+        // per-image cap but over it together fail closed before any RPC.
+        let (vm, fake) = makeFakeBackedVM()
+        // ~25 Mpx noise ≈ 25 MB each as JPEG: under the per-image cap,
+        // over 30 MiB in aggregate.
+        let image = makeIncompressibleImage(side: 5000)
+
+        await vm.sendMessage("big pair", images: [image, image])
+
+        #expect(fake.requestLog.isEmpty, "no RPC at all for an aggregate-oversized send")
+        #expect(vm.imagePlacementError?.contains("too large") == true)
+        #expect(vm.pendingImages.count == 2, "captured images restored")
+    }
+
+    @Test func queueMessageFailedPlacementKeepsPendingImages() async throws {
+        // The queue path never pre-clears pendingImages; a placement failure
+        // must keep them attached and never reach agent.queueMessage.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["file.placeAttachment"] = NSError(
+            domain: "WebSocket", code: -32000)
+        vm.addImage(UIImage(systemName: "star")!)
+
+        await vm.queueMessage("queued with image")
+
+        #expect(fake.requestLog.allSatisfy { $0.method != "agent.queueMessage" })
+        #expect(vm.imagePlacementError != nil)
+        #expect(vm.pendingImages.count == 1)
+    }
+
+    @Test func queueMessagePlacesImagesAndClearsPending() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.queueMessage"] = [:] as [String: Any]
+        vm.addImage(UIImage(systemName: "star")!)
+
+        await vm.queueMessage("queued with image")
+
+        let queued = try #require(fake.requestLog.last { $0.method == "agent.queueMessage" })
+        let blocks = try #require(queued.params["imageBlocks"] as? [[String: Any]])
+        #expect(blocks[0]["attachmentId"] as? String == "att-1")
+        #expect(blocks[0]["data"] == nil)
+        #expect(vm.pendingImages.isEmpty)
+    }
+
+    @Test func sendMessageWithoutImagesSkipsPlacement() async throws {
+        // Text-only sends never touch the attachment registry.
+        let (vm, fake) = makeFakeBackedVM()
+
+        await vm.sendMessage("plain text")
+
+        #expect(fake.requestLog.allSatisfy { $0.method != "file.placeAttachment" })
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        #expect(sent.params["imageBlocks"] == nil)
+        #expect(sent.params["fileBlocks"] == nil)
+    }
+
+    // MARK: - File placement (send-time uploads)
+
+    @Test func sendMessagePlacesFilesAndBuildsFileBlocks() async throws {
+        // Sending with a pending file places it (`file.placeAttachment`,
+        // single-shot under 25 MB) and the wire block is
+        // `{ type: "file", attachmentId, fileName, mimeType, size }`; the
+        // pending list clears only after the successful send.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["file.placeAttachment"] = [
+            "attachmentId": "att-f1", "fileName": "notes.txt",
+            "path": ".intent/attachments/att-f1/notes.txt", "size": 5,
+            "mimeType": "text/plain",
+        ] as [String: Any]
+        let url = try makeTempFile(named: "notes.txt", contents: "hello")
+        defer { try? FileManager.default.removeItem(at: url) }
+        vm.addFiles([url])
+
+        await vm.sendMessage("with file")
+
+        let placement = try #require(
+            fake.requestLog.last { $0.method == "file.placeAttachment" })
+        #expect(placement.params["workspaceId"] as? String == "test-ws")
+        #expect(placement.params["fileName"] as? String == "notes.txt")
+        #expect(placement.params["mimeType"] as? String == "text/plain")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        let blocks = try #require(sent.params["fileBlocks"] as? [[String: Any]])
+        #expect(blocks.count == 1)
+        #expect(blocks[0]["type"] as? String == "file")
+        #expect(blocks[0]["attachmentId"] as? String == "att-f1")
+        #expect(blocks[0]["fileName"] as? String == "notes.txt")
+        #expect(blocks[0]["mimeType"] as? String == "text/plain")
+        #expect(blocks[0]["size"] as? Int == 5)
+        #expect(vm.pendingFiles.isEmpty, "pending files clear on successful send")
+        #expect(vm.fileUploadProgress.isEmpty, "progress state cleared after send")
+    }
+
+    @Test func failedFilePlacementSurfacesErrorAndDoesNotSend() async throws {
+        // FAIL-CLOSED: a file placement failure aborts the send — no
+        // agent.sendMessage goes out, the error surfaces, the draft text is
+        // restored, and the pending files stay attached.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["file.placeAttachment"] = NSError(
+            domain: "WebSocket", code: -32000,
+            userInfo: [NSLocalizedDescriptionKey: "registry full"])
+        let url = try makeTempFile(named: "notes.txt", contents: "hello")
+        defer { try? FileManager.default.removeItem(at: url) }
+        vm.addFiles([url])
+
+        await vm.sendMessage("with file")
+
+        #expect(fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
+                "the message is never sent when file placement fails")
+        #expect(vm.filePlacementError != nil)
+        #expect(vm.messageText == "with file", "draft text restored")
+        #expect(vm.pendingFiles.count == 1, "pending files stay attached")
+        #expect(vm.fileUploadProgress.isEmpty, "progress state cleared after failure")
+    }
+
+    @Test func oversizedPendingFileFailsWithoutAnyRPC() async throws {
+        // A pending file whose pick-time size exceeds the daemon's 1 GiB cap
+        // fails the send client-side with an explicit error.
+        let (vm, fake) = makeFakeBackedVM()
+        vm.pendingFiles.append(PendingFile(
+            url: URL(fileURLWithPath: "/tmp/huge.bin"),
+            displayName: "huge.bin",
+            size: Int64(AttachmentUploadService.maxAttachmentBytes) + 1))
+
+        await vm.sendMessage("big file")
+
+        #expect(fake.requestLog.isEmpty, "no RPC at all for an oversized file")
+        #expect(vm.filePlacementError?.contains("too large") == true)
+        #expect(vm.pendingFiles.count == 1)
+    }
+
+    @Test func queueMessagePlacesFilesAndClearsPending() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.queueMessage"] = [:] as [String: Any]
+        fake.responseMap["file.placeAttachment"] = [
+            "attachmentId": "att-f1", "fileName": "notes.txt",
+            "path": ".intent/attachments/att-f1/notes.txt", "size": 5,
+        ] as [String: Any]
+        let url = try makeTempFile(named: "notes.txt", contents: "hello")
+        defer { try? FileManager.default.removeItem(at: url) }
+        vm.addFiles([url])
+
+        await vm.queueMessage("queued with file")
+
+        let queued = try #require(fake.requestLog.last { $0.method == "agent.queueMessage" })
+        let blocks = try #require(queued.params["fileBlocks"] as? [[String: Any]])
+        #expect(blocks[0]["attachmentId"] as? String == "att-f1")
+        #expect(blocks[0]["mimeType"] == nil, "mimeType omitted when the daemon returns none")
+        #expect(vm.pendingFiles.isEmpty)
+    }
+
+    @Test func queueMessageFailedFilePlacementKeepsPendingFiles() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.errorMap["file.placeAttachment"] = NSError(
+            domain: "WebSocket", code: -32000)
+        let url = try makeTempFile(named: "notes.txt", contents: "hello")
+        defer { try? FileManager.default.removeItem(at: url) }
+        vm.addFiles([url])
+
+        await vm.queueMessage("queued with file")
+
+        #expect(fake.requestLog.allSatisfy { $0.method != "agent.queueMessage" })
+        #expect(vm.filePlacementError != nil)
+        #expect(vm.pendingFiles.count == 1)
+    }
+
+    /// Write a small temp file and return its URL (caller removes it).
+    private func makeTempFile(named name: String, contents: String) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try contents.data(using: .utf8)!.write(to: url)
+        return url
+    }
+
+    /// A `side`×`side` per-pixel random-noise bitmap: JPEG cannot compress
+    /// noise (≳1 byte/pixel at 0.8 quality), so the encoded payload lands
+    /// well above the 30 MiB reference cap.
+    private func makeIncompressibleImage(side: Int) -> UIImage {
+        var bytes = Data(count: side * side * 4)
+        bytes.withUnsafeMutableBytes { buf in
+            arc4random_buf(buf.baseAddress!, buf.count)
+        }
+        let ctx = CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8,
+            bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+        bytes.withUnsafeBytes { buf in
+            ctx.data!.copyMemory(from: buf.baseAddress!, byteCount: buf.count)
+        }
+        return UIImage(cgImage: ctx.makeImage()!)
+    }
+
     // MARK: - Missing-agent detection at load
 
     /// Configure the fake with every response load() touches, then override
@@ -767,12 +1028,14 @@ struct ConversationViewModelTests {
         // But the captured images should still be available for the send call
         #expect(capturedImages.count == 2)
 
-        // sendMessage with explicit images works even though pendingImages is empty
-        // (will fail the network call since no server, but that's expected)
+        // sendMessage with explicit images works even though pendingImages is
+        // empty. With no server, placement fails — and the FAIL-CLOSED restore
+        // path (surfacePlacementFailure) re-attaches the captured images so
+        // nothing is silently lost.
         await vm.sendMessage("test with images", images: capturedImages)
 
-        // pendingImages should still be empty after the send completes/fails
-        #expect(vm.pendingImages.isEmpty)
+        #expect(vm.imagePlacementError != nil)
+        #expect(vm.pendingImages.count == 2, "captured images restored on failed placement")
     }
 
     // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
@@ -950,6 +1213,105 @@ struct ConversationViewModelTests {
         try? await Task.sleep(nanoseconds: 150_000_000)
         #expect(!fake.didCallMethod("agent.markSeen"),
                 "all triggers funnel through the store's dedupe")
+    }
+
+    // MARK: - Pending files
+
+    /// Writes a real temp file so `addFiles` can resolve name/size via
+    /// `resourceValues`. Plain file URLs are not security-scoped, so
+    /// `startAccessingSecurityScopedResource()` returning false is exercised
+    /// implicitly (no balancing stop is owed).
+    private func makeTempFile(name: String, bytes: Int) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try Data(repeating: 0, count: bytes).write(to: url)
+        return url
+    }
+
+    @Test func addFilesPopulatesDisplayNameAndSize() throws {
+        let vm = makeVM()
+        let url = try makeTempFile(name: "report.pdf", bytes: 1234)
+
+        vm.addFiles([url])
+
+        #expect(vm.pendingFiles.count == 1)
+        #expect(vm.pendingFiles[0].url == url)
+        #expect(vm.pendingFiles[0].displayName == "report.pdf")
+        #expect(vm.pendingFiles[0].size == 1234)
+        #expect(vm.pendingFiles[0].formattedSize?.isEmpty == false)
+    }
+
+    @Test func addFilesFallsBackToLastPathComponentForUnreadableURL() {
+        let vm = makeVM()
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-missing.bin")
+
+        vm.addFiles([missing])
+
+        #expect(vm.pendingFiles.count == 1)
+        #expect(vm.pendingFiles[0].displayName == missing.lastPathComponent)
+        #expect(vm.pendingFiles[0].size == nil)
+        #expect(vm.pendingFiles[0].formattedSize == nil)
+    }
+
+    @Test func addFilesSkipsAlreadyPendingURL() throws {
+        let vm = makeVM()
+        let url = try makeTempFile(name: "dup.txt", bytes: 10)
+
+        vm.addFiles([url])
+        vm.addFiles([url, url])
+
+        #expect(vm.pendingFiles.count == 1)
+    }
+
+    @Test func removePendingFileRemovesCorrectEntry() throws {
+        let vm = makeVM()
+        let first = try makeTempFile(name: "a.txt", bytes: 1)
+        let second = try makeTempFile(name: "b.txt", bytes: 2)
+        vm.addFiles([first, second])
+
+        vm.removePendingFile(at: 0)
+
+        #expect(vm.pendingFiles.map(\.displayName) == ["b.txt"])
+    }
+
+    @Test func removePendingFileIgnoresOutOfBoundsIndex() throws {
+        let vm = makeVM()
+        vm.addFiles([try makeTempFile(name: "a.txt", bytes: 1)])
+
+        vm.removePendingFile(at: 5)
+        vm.removePendingFile(at: -1)
+
+        #expect(vm.pendingFiles.count == 1)
+    }
+
+    @Test func clearPendingFilesEmptiesList() throws {
+        let vm = makeVM()
+        vm.addFiles([
+            try makeTempFile(name: "a.txt", bytes: 1),
+            try makeTempFile(name: "b.txt", bytes: 2),
+        ])
+
+        vm.clearPendingFiles()
+
+        #expect(vm.pendingFiles.isEmpty)
+    }
+
+    @Test func hasPendingAttachmentsCoversImagesAndFiles() throws {
+        let vm = makeVM()
+        #expect(!vm.hasPendingAttachments)
+
+        vm.addFiles([try makeTempFile(name: "a.txt", bytes: 1)])
+        #expect(vm.hasPendingAttachments)
+
+        vm.clearPendingFiles()
+        vm.pendingImages = [UIImage()]
+        #expect(vm.hasPendingAttachments)
+
+        vm.pendingImages = []
+        #expect(!vm.hasPendingAttachments)
     }
 }
 

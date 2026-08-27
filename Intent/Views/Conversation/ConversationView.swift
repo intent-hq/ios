@@ -194,6 +194,31 @@ private struct ConversationViewContent: View {
             } message: { detail in
                 Text("The questions were not dismissed and are still pending. " + detail)
             }
+            // Image placement failure (monorepo#3338): the message was NOT
+            // sent — the draft text and captured images are restored to the
+            // composer; this alert makes the failure explicit (same shape as
+            // the dismiss-failure alert above).
+            .alert(
+                "Couldn't Send Images",
+                isPresented: imagePlacementErrorPresented,
+                presenting: viewModel.imagePlacementError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { detail in
+                Text("The message was not sent. " + detail)
+            }
+            // File placement failure: the message was NOT sent — the draft
+            // text is restored and the pending files stay attached (same
+            // fail-closed shape as the image alert above).
+            .alert(
+                "Couldn't Send Files",
+                isPresented: filePlacementErrorPresented,
+                presenting: viewModel.filePlacementError
+            ) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { detail in
+                Text("The message was not sent. " + detail)
+            }
     }
 
     /// Navigation bar title, background, and toolbar.
@@ -241,6 +266,22 @@ private struct ConversationViewContent: View {
         Binding(
             get: { viewModel.dismissQuestionsError != nil },
             set: { if !$0 { viewModel.dismissQuestionsError = nil } })
+    }
+
+    /// Presented-or-not binding for the image-placement-failure alert, hoisted
+    /// like `dismissQuestionsErrorPresented`.
+    private var imagePlacementErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.imagePlacementError != nil },
+            set: { if !$0 { viewModel.imagePlacementError = nil } })
+    }
+
+    /// Presented-or-not binding for the file-placement-failure alert, hoisted
+    /// like `imagePlacementErrorPresented`.
+    private var filePlacementErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.filePlacementError != nil },
+            set: { if !$0 { viewModel.filePlacementError = nil } })
     }
 
     /// Ellipsis toolbar menu (model info, rename, delete).

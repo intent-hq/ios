@@ -78,11 +78,22 @@ struct ToolResult: Codable {
     var timestamp: String?
 }
 
-/// An image block for queued messages.
+/// An image block for queued messages. Either arm as accepted by the daemon
+/// (PROTOCOL §5.5): inline base64 `data` (legacy) or an attachment-registry
+/// `attachmentId` reference (monorepo#3338). Synthesized Codable omits nil
+/// keys, so placed references never carry a `data` key on the wire.
 struct ImageBlock: Codable {
     let type: String  // "image"
-    let data: String  // base64
-    let mimeType: String
+    let data: String?  // base64 (inline arm; nil for placed references)
+    let attachmentId: String?  // attachment-registry reference
+    let mimeType: String?  // optional on the reference arm (§5.5)
+
+    init(type: String, data: String? = nil, attachmentId: String? = nil, mimeType: String? = nil) {
+        self.type = type
+        self.data = data
+        self.attachmentId = attachmentId
+        self.mimeType = mimeType
+    }
 }
 
 /// A queued message waiting to be sent to an agent.

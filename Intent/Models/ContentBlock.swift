@@ -59,6 +59,11 @@ struct ContentBlock: Identifiable, Codable {
     var data: String?       // base64 encoded
     var mimeType: String?
     var fileName: String?
+    /// Attachment-registry reference for placed attachment blocks (PROTOCOL
+    /// §5.5 v6.12) — persisted file/image references carry no inline `data`.
+    var attachmentId: String?
+    /// Byte length for attachment-reference file blocks.
+    var size: Int?
 
     // Standalone resource block contents (type == .resource)
     var resource: ResourceContents?
@@ -86,7 +91,8 @@ struct ContentBlock: Identifiable, Codable {
         case id, type, text, content, language, name, toolName
         case input, toolCallId, toolUseId, tool_use_id
         case output, isError, is_error
-        case data, mimeType, fileName, resource, metadata, meta, messageMetadata
+        case data, mimeType, fileName, attachmentId, size
+        case resource, metadata, meta, messageMetadata
         case inputTruncated, inputBytes, outputTruncated, outputBytes
         case dataTruncated, dataIsThumbnail, dataBytes
     }
@@ -124,6 +130,8 @@ struct ContentBlock: Identifiable, Codable {
         data = try? container.decode(String.self, forKey: .data)
         mimeType = try? container.decode(String.self, forKey: .mimeType)
         fileName = try? container.decode(String.self, forKey: .fileName)
+        attachmentId = try? container.decode(String.self, forKey: .attachmentId)
+        size = try? container.decode(Int.self, forKey: .size)
         resource = try? container.decode(ResourceContents.self, forKey: .resource)
         metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
         meta = try? container.decode([String: AnyCodable].self, forKey: .meta)
@@ -187,6 +195,8 @@ struct ContentBlock: Identifiable, Codable {
         data: String? = nil,
         mimeType: String? = nil,
         fileName: String? = nil,
+        attachmentId: String? = nil,
+        size: Int? = nil,
         resource: ResourceContents? = nil,
         metadata: [String: AnyCodable]? = nil,
         messageMetadata: [String: AnyCodable]? = nil,
@@ -215,6 +225,8 @@ struct ContentBlock: Identifiable, Codable {
         self.data = data
         self.mimeType = mimeType
         self.fileName = fileName
+        self.attachmentId = attachmentId
+        self.size = size
         self.resource = resource
         self.metadata = metadata
         self.meta = nil
