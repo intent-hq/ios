@@ -14,7 +14,12 @@ import Security
 
 /// One synced backend record — the decoded keychain payload. Tombstones keep
 /// the identity fields but always carry an empty `token`.
-struct SyncedBackendRecord: Codable, Equatable, Sendable {
+///
+/// NOT `Codable` on purpose: the wire contract lives in
+/// `SyncedBackendPayload.parse` (typeof-faithful, versioned, defaulting) —
+/// a synthesized encoder/decoder would emit no `v` and skip every contract
+/// rule, so it must never exist as a tempting round-trip path.
+struct SyncedBackendRecord: Equatable, Sendable {
     var label: String
     /// Primary remote host/IP (identity, with `port`).
     var host: String
@@ -43,8 +48,28 @@ extension SyncedBackendRecord {
     var registryKey: String {
         let fp = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if !fp.isEmpty { return "fp:\(fp)" }
+        return "addr:\(accountKey)"
+    }
+
+    /// Normalized `host:port` account key (host trimmed + lowercased) —
+    /// mirrors the fe's `accountKeyFor`. Used as the deterministic
+    /// live/live tie-breaker, matching reconcile's `account > match.account`.
+    var accountKey: String {
         let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return "addr:\(normalizedHost):\(port)"
+        return "\(normalizedHost):\(port)"
+    }
+
+    /// Whether `self` beats `other` for the same `registryKey`, mirroring
+    /// the fe reconcile's conflict rules so every device converges on the
+    /// same survivor regardless of keychain row order: strictly newer
+    /// `updatedAt` wins; on an equal clock a tombstone beats a live record
+    /// (an address change must not dodge a delete); an equal-clock
+    /// live/live (or tombstone/tombstone) tie breaks by the larger
+    /// normalized account key.
+    func wins(over other: SyncedBackendRecord) -> Bool {
+        if updatedAt != other.updatedAt { return updatedAt > other.updatedAt }
+        if deleted != other.deleted { return deleted }
+        return accountKey > other.accountKey
     }
 }
 
@@ -227,10 +252,12 @@ struct SyncedBackendRegistry {
     }
 
     /// The live records in the registry: malformed and newer-version items
-    /// are skipped, records sharing a `registryKey` collapse to the newest
-    /// `updatedAt` (so a machine whose address changed never appears
-    /// twice), and tombstones — including a tombstone that wins its key —
-    /// are filtered out.
+    /// are skipped, records sharing a `registryKey` collapse to a single
+    /// winner (LWW by `updatedAt` with the fe reconcile's deterministic tie
+    /// rules — see `wins(over:)` — so a machine whose address changed never
+    /// appears twice and row order never changes the outcome), and
+    /// tombstones — including a tombstone that wins its key — are filtered
+    /// out.
     func listLiveBackends() -> SyncedBackendRegistryList {
         guard let accessGroup else { return .unavailable(.accessGroupUnresolved) }
         switch keychain.list(matching: Self.listQuery(accessGroup: accessGroup)) {
@@ -248,7 +275,7 @@ struct SyncedBackendRegistry {
                 else { continue }
                 let key = record.registryKey
                 if let existing = newestByKey[key] {
-                    if record.updatedAt > existing.updatedAt { newestByKey[key] = record }
+                    if record.wins(over: existing) { newestByKey[key] = record }
                 } else {
                     newestByKey[key] = record
                     keyOrder.append(key)

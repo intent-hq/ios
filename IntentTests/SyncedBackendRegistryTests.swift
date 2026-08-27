@@ -330,6 +330,57 @@ struct SyncedBackendRegistryTests {
         #expect(records.first?.label == "Back")
     }
 
+    @Test func equalClockTombstoneWinsRegardlessOfRowOrder() {
+        let live = #"{"v": 1, "label": "Live", "host": "10.0.0.1", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let tombstone = #"{"v": 1, "label": "Dead", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "aa", "updatedAt": 100, "deleted": true}"#
+        let liveFirst = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.1:1", payload: live),
+            row(account: "10.0.0.2:2", payload: tombstone),
+        ]))
+        let tombstoneFirst = FakeSyncedKeychain(outcome: .rows([
+            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.1:1", payload: live),
+        ]))
+        #expect(registry(liveFirst).listLiveBackends() == .available([]))
+        #expect(registry(tombstoneFirst).listLiveBackends() == .available([]))
+    }
+
+    @Test func equalClockLiveTieBreaksByAccountKeyRegardlessOfRowOrder() {
+        let smaller = #"{"v": 1, "label": "Smaller", "host": "10.0.0.1", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let larger = #"{"v": 1, "label": "Larger", "host": "10.0.0.2", "port": 2, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        for rows in [
+            [row(account: "10.0.0.1:1", payload: smaller), row(account: "10.0.0.2:2", payload: larger)],
+            [row(account: "10.0.0.2:2", payload: larger), row(account: "10.0.0.1:1", payload: smaller)],
+        ] {
+            let keychain = FakeSyncedKeychain(outcome: .rows(rows))
+            guard case .available(let records) = registry(keychain).listLiveBackends() else {
+                Issue.record("expected .available")
+                return
+            }
+            #expect(records.map(\.label) == ["Larger"])
+        }
+    }
+
+    @Test func accountTieBreakNormalizesHostCaseAndWhitespace() {
+        let smaller = #"{"v": 1, "label": "Smaller", "host": " MAC-A.local ", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let larger = #"{"v": 1, "label": "Larger", "host": "mac-b.local", "port": 1, "#
+            + #""fingerprint": "aa", "updatedAt": 100}"#
+        let keychain = FakeSyncedKeychain(outcome: .rows([
+            row(account: "mac-b.local:1", payload: larger),
+            row(account: "mac-a.local:1", payload: smaller),
+        ]))
+        guard case .available(let records) = registry(keychain).listLiveBackends() else {
+            Issue.record("expected .available")
+            return
+        }
+        #expect(records.map(\.label) == ["Larger"])
+    }
+
     @Test func blankFingerprintsKeyByHostPort() {
         let a = #"{"v": 1, "label": "A", "host": "10.0.0.1", "port": 1, "#
             + #""fingerprint": "", "updatedAt": 100}"#
