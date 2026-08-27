@@ -44,12 +44,9 @@ class WorkspacePrMonitorsStore: ObservableObject {
             .store(in: &cancellables)
     }
 
-    deinit {
+    isolated deinit {
         guard let handlerId = eventHandlerId else { return }
-        let connectionManager = self.connectionManager
-        Task { @MainActor in
-            connectionManager.removeEventHandler(id: handlerId)
-        }
+        connectionManager.removeEventHandler(id: handlerId)
     }
 
     /// Monitors for one workspace (`[]` until seeded).

@@ -87,15 +87,10 @@ extension SpecialistInfo {
         self.connectionManager = connectionManager
     }
 
-    deinit {
-        // deinit is nonisolated: capture the handler id and manager, then hop
-        // to the main actor so the handler entry doesn't outlive the store.
-        let handlerId = eventHandlerId
-        let connectionManager = self.connectionManager
-        Task { @MainActor in
-            if let handlerId = handlerId {
-                connectionManager.removeEventHandler(id: handlerId)
-            }
+    isolated deinit {
+        // Remove the handler directly while deinit is isolated to MainActor.
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
         }
     }
 

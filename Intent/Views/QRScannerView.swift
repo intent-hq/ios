@@ -1,5 +1,5 @@
 import SwiftUI
-import AVFoundation
+@preconcurrency import AVFoundation
 
 struct QRScannerView: View {
     @EnvironmentObject var coordinator: AppCoordinator

@@ -26,20 +26,14 @@ import Observation
         observeConnection()
     }
 
-    deinit {
-        // deinit is nonisolated: capture the handler id, subscriptionId and manager,
-        // then hop to the main actor so the entries don't outlive the store.
-        let handlerId = eventHandlerId
-        let subscriptionId = noteSubscriptionId
-        guard handlerId != nil || subscriptionId != nil else { return }
-        let connectionManager = self.connectionManager
-        Task { @MainActor in
-            if let handlerId {
-                connectionManager.removeEventHandler(id: handlerId)
-            }
-            if let subscriptionId {
-                connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
-            }
+    isolated deinit {
+        // Remove handlers directly while deinit is isolated to MainActor.
+        guard eventHandlerId != nil || noteSubscriptionId != nil else { return }
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+        if let subscriptionId = noteSubscriptionId {
+            connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
 

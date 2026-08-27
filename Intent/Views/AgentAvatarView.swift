@@ -28,12 +28,12 @@ struct AgentAvatarView: View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(surfaceColor)
 
-            AgentAvatarStrokeShape(design: design)
+            AgentAvatarStrokeShape(glyphPath: design.glyph.strokePath)
                 .stroke(glyphColor, style: StrokeStyle(
                     lineWidth: 1.33 * artSize / 16, lineCap: .round, lineJoin: .round))
                 .frame(width: artSize, height: artSize)
 
-            AgentAvatarFillShape(design: design)
+            AgentAvatarFillShape(glyphPath: design.glyph.fillPath)
                 .fill(glyphColor)
                 .frame(width: artSize, height: artSize)
 
@@ -62,23 +62,23 @@ struct AgentAvatarView: View {
 }
 
 private struct AgentAvatarStrokeShape: Shape {
-    let design: AgentAvatarDesign
+    let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {
-        design.glyph.strokePath.applying(artTransform(for: rect))
+        glyphPath.applying(artTransform(for: rect))
     }
 }
 
 private struct AgentAvatarFillShape: Shape {
-    let design: AgentAvatarDesign
+    let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {
-        design.glyph.fillPath.applying(artTransform(for: rect))
+        glyphPath.applying(artTransform(for: rect))
     }
 }
 
 /// Maps the 16×16 glyph art space onto the shape's rect.
-private func artTransform(for rect: CGRect) -> CGAffineTransform {
+nonisolated private func artTransform(for rect: CGRect) -> CGAffineTransform {
     CGAffineTransform(translationX: rect.minX, y: rect.minY)
         .scaledBy(x: rect.width / 16, y: rect.height / 16)
 }

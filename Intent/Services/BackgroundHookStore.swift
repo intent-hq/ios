@@ -49,18 +49,15 @@ import Observation
             .store(in: &cancellables)
     }
 
-    deinit {
-        // deinit is nonisolated: capture the handler id, subscription id and
-        // manager, then hop to the main actor so the entries don't outlive the store.
-        let handlerId = eventHandlerId
-        let subscriptionId = subscriptionId
-        guard handlerId != nil || subscriptionId != nil else { return }
-        let connectionManager = self.connectionManager
-        Task { @MainActor in
-            if let handlerId {
-                connectionManager.removeEventHandler(id: handlerId)
-            }
-            if let subscriptionId {
+    isolated deinit {
+        // Local handler removal is synchronous; the remote unsubscribe remains async.
+        guard eventHandlerId != nil || subscriptionId != nil else { return }
+        if let handlerId = eventHandlerId {
+            connectionManager.removeEventHandler(id: handlerId)
+        }
+        if let subscriptionId {
+            let connectionManager = self.connectionManager
+            Task { @MainActor in
                 let _ = try? await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subscriptionId
                 ])

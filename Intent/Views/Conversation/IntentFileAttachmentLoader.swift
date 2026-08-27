@@ -101,7 +101,7 @@ struct IntentFileFailureAttachment: Attachment {
 }
 
 extension UIContentSizeCategory {
-    fileprivate init(_ size: DynamicTypeSize) {
+    fileprivate nonisolated init(_ size: DynamicTypeSize) {
         switch size {
         case .xSmall: self = .extraSmall
         case .small: self = .small
