@@ -1028,12 +1028,14 @@ struct ConversationViewModelTests {
         // But the captured images should still be available for the send call
         #expect(capturedImages.count == 2)
 
-        // sendMessage with explicit images works even though pendingImages is empty
-        // (will fail the network call since no server, but that's expected)
+        // sendMessage with explicit images works even though pendingImages is
+        // empty. With no server, placement fails — and the FAIL-CLOSED restore
+        // path (surfacePlacementFailure) re-attaches the captured images so
+        // nothing is silently lost.
         await vm.sendMessage("test with images", images: capturedImages)
 
-        // pendingImages should still be empty after the send completes/fails
-        #expect(vm.pendingImages.isEmpty)
+        #expect(vm.imagePlacementError != nil)
+        #expect(vm.pendingImages.count == 2, "captured images restored on failed placement")
     }
 
     // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
