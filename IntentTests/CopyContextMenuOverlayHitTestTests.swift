@@ -36,6 +36,49 @@ struct CopyContextMenuOverlayHitTestTests {
         #expect(match === textInput)
     }
 
+    /// Coordinate conversion accumulates wrapper frames hop by hop, so a
+    /// non-zero-origin wrapper offsets the point on the way down — a text
+    /// input that compensates (correct absolute position) is still found.
+    @Test func findsTextInputUnderOffsetWrapper() {
+        let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
+        let wrapper = UIView(frame: CGRect(x: 50, y: 25, width: 0, height: 0))
+        let textInput = makeTextInputView(frame: CGRect(x: -50, y: -25, width: 300, height: 100))
+        container.addSubview(wrapper)
+        wrapper.addSubview(textInput)
+        let overlay = UIView(frame: container.bounds)
+        container.addSubview(overlay)
+
+        let match = container.textInputDescendant(
+            containing: CGPoint(x: 150, y: 50), with: nil, excluding: overlay
+        )
+
+        #expect(match === textInput)
+    }
+
+    /// The walk ignores wrapper *bounds* but not wrapper state: a hidden or
+    /// disabled intermediate wrapper prunes its whole subtree.
+    @Test func skipsTextInputUnderHiddenOrDisabledWrapper() {
+        let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
+        let frame = CGRect(x: 0, y: 0, width: 300, height: 100)
+
+        let hiddenWrapper = UIView(frame: frame)
+        hiddenWrapper.isHidden = true
+        hiddenWrapper.addSubview(makeTextInputView(frame: frame))
+        let disabledWrapper = UIView(frame: frame)
+        disabledWrapper.isUserInteractionEnabled = false
+        disabledWrapper.addSubview(makeTextInputView(frame: frame))
+        container.addSubview(hiddenWrapper)
+        container.addSubview(disabledWrapper)
+        let overlay = UIView(frame: container.bounds)
+        container.addSubview(overlay)
+
+        let match = container.textInputDescendant(
+            containing: CGPoint(x: 150, y: 50), with: nil, excluding: overlay
+        )
+
+        #expect(match == nil)
+    }
+
     @Test func returnsNilWhenPointOutsideTextInput() {
         let container = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 100))
         let textInput = makeTextInputView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
