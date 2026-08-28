@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+import Observation
 
 /// GitHub repo data layer for the repo picker (PROTOCOL §5.27).
 ///
@@ -8,13 +8,13 @@ import Combine
 /// connection. All reads are single-page so the pickers render after one
 /// round-trip; server-side search covers anything beyond the first page.
 @MainActor
-class GitHubRepoStore: ObservableObject {
-    @Published var isConfigured = false
-    @Published var recentRepos: [GitHubRepo] = []
-    @Published var ownRepos: [GitHubRepo] = []
-    @Published var searchResults: [GitHubRepo] = []
-    @Published var isLoading = false
-    @Published var lastError: String?
+@Observable class GitHubRepoStore {
+    var isConfigured = false
+    var recentRepos: [GitHubRepo] = []
+    var ownRepos: [GitHubRepo] = []
+    var searchResults: [GitHubRepo] = []
+    var isLoading = false
+    var lastError: String?
 
     /// Page size for `github.repos.search` (§5.27 default 50, max 200).
     static let pageLimit = 100

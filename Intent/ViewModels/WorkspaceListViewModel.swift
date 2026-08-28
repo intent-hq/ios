@@ -1,4 +1,5 @@
 import Combine
+import Observation
 import SwiftUI
 
 enum ViewMode: String, CaseIterable {
@@ -138,23 +139,31 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 }
 
 @MainActor
-class WorkspaceListViewModel: ObservableObject {
-    @Published var viewMode: ViewMode = .recent
-    @Published var searchText = ""
+@Observable class WorkspaceListViewModel {
+    var viewMode: ViewMode = .recent
+    var searchText = ""
 
-    private var cancellable: AnyCancellable?
+    private var storeRevision = 0
+    @ObservationIgnored private var cancellable: AnyCancellable?
 
     init() {
         // Forward WorkspaceStore changes to trigger view updates
         cancellable = WorkspaceStore.shared.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.objectWillChange.send()
+                self?.storeRevision &+= 1
             }
     }
 
-    var workspaces: [Workspace] { WorkspaceStore.shared.workspaces }
-    var isLoading: Bool { WorkspaceStore.shared.isLoading }
+    var workspaces: [Workspace] {
+        _ = storeRevision
+        return WorkspaceStore.shared.workspaces
+    }
+
+    var isLoading: Bool {
+        _ = storeRevision
+        return WorkspaceStore.shared.isLoading
+    }
 
     var filteredWorkspaces: [Workspace] {
         let active = workspaces.filter { ws in

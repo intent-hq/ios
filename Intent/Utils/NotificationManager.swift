@@ -1,5 +1,5 @@
 import SwiftUI
-import Combine
+import Observation
 import AudioToolbox
 
 struct ToastInfo: Equatable {
@@ -19,10 +19,10 @@ struct ToastInfo: Equatable {
 }
 
 @MainActor
-class NotificationManager: ObservableObject {
+@Observable class NotificationManager {
     static let shared = NotificationManager()
 
-    @Published var currentToast: ToastInfo?
+    var currentToast: ToastInfo?
 
     /// The agent ID currently being viewed in ConversationView
     var currentAgentId: String?
@@ -30,7 +30,7 @@ class NotificationManager: ObservableObject {
     /// The workspace ID currently being viewed (workspace detail or conversation)
     var currentWorkspaceId: String?
 
-    private var dismissTask: Task<Void, Never>?
+    @ObservationIgnored private var dismissTask: Task<Void, Never>?
 
     private init() {
         registerEventHandler()

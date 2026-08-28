@@ -9,7 +9,7 @@ struct CreateWorkspaceView: View {
     @State private var navigationPath = NavigationPath()
 
     // Step 1: GitHub repo selection
-    @StateObject private var githubStore = GitHubRepoStore()
+    @State private var githubStore = GitHubRepoStore()
     @State private var selectedRepo: GitHubRepo?
 
     // Step 2: Branch selection
