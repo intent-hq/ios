@@ -631,8 +631,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/intent-hq/textual";
 			requirement = {
-				kind = revision;
-				revision = 7e096c6b6a7a5f2d2f9fd9aa0673cdcbc53eb299;
+				kind = exactVersion;
+				version = "0.5.0-intent.1";
 			};
 		};
 		AA000004AAAA000000000004 /* XCRemoteSwiftPackageReference "Starscream" */ = {
