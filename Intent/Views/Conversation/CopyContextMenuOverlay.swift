@@ -114,6 +114,23 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             // touch reaches it even when an intermediate wrapper would
             // otherwise hit-test positively for this region and claim it.
             if let below, !isDescendant(of: below) { return below }
+            // The probe resolving to an ancestor normally means plain
+            // SwiftUI row content, which this overlay claims. But Textual's
+            // text-interaction view (selection long-press, link taps) is a
+            // UIKit sibling that can be skipped by the recursive hit-test
+            // when an intermediate SwiftUI wrapper reports a stale/zero
+            // frame (observed in the flipped transcript's LazyVStack rows,
+            // where hit-testing never reached it even though selection
+            // worked in plain note views). Its gesture recognizers hang off
+            // the view itself, so an ancestor hit can't serve them — defer
+            // to any text-input descendant that claims the point directly.
+            if let below, isDescendant(of: below),
+                let textInput = below.textInputDescendant(
+                    containing: convert(point, to: below), with: event, excluding: self
+                )
+            {
+                return textInput
+            }
             return self
         }
     }
@@ -217,6 +234,40 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             )
             return UITargetedPreview(view: controller.view, parameters: parameters, target: target)
         }
+    }
+}
+
+extension UIView {
+    /// Depth-first search for a visible `UITextInput`-conforming descendant
+    /// (Textual's text-interaction view in transcript rows) that claims
+    /// `point` via its own `point(inside:with:)`. The walk deliberately
+    /// ignores intermediate views' bounds: a zero-framed SwiftUI wrapper
+    /// between the row container and the interaction view would fail the
+    /// parent-side containment check that regular hit-testing performs,
+    /// hiding a correctly-framed interaction view beneath it. `excluding`
+    /// prunes the caller's own subtree.
+    func textInputDescendant(
+        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView
+    ) -> UIView? {
+        for subview in subviews.reversed() {
+            guard
+                subview !== excluded,
+                subview.isUserInteractionEnabled,
+                !subview.isHidden,
+                subview.alpha >= 0.01
+            else { continue }
+
+            let localPoint = convert(point, to: subview)
+            if subview is UITextInput, subview.point(inside: localPoint, with: event) {
+                return subview
+            }
+            if let match = subview.textInputDescendant(
+                containing: localPoint, with: event, excluding: excluded
+            ) {
+                return match
+            }
+        }
+        return nil
     }
 }
 
