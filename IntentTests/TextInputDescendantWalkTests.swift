@@ -6,9 +6,11 @@ import UIKit
 /// descendant (Textual's text-interaction view) that claims the point, even
 /// when an intermediate SwiftUI wrapper is zero-framed and would make the
 /// regular recursive hit-test skip the subtree. These tests exercise the
-/// `textInputDescendant(containing:with:excluding:)` walk directly.
+/// `textInputDescendant(containing:with:excluding:)` walk directly; the
+/// overlay's `hitTest` override itself is covered end-to-end in
+/// `CopyContextMenuOverlayHitTestTests`.
 @MainActor
-struct CopyContextMenuOverlayHitTestTests {
+struct TextInputDescendantWalkTests {
     /// Minimal `UITextInput` conformance is impractical to stub; the walk
     /// only checks protocol conformance, so a UITextView (which conforms)
     /// stands in for Textual's interaction view.
