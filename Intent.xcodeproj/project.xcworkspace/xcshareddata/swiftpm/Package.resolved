@@ -31,10 +31,9 @@
     {
       "identity" : "textual",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/gonzalezreal/textual",
+      "location" : "https://github.com/intent-hq/textual",
       "state" : {
-        "revision" : "01b51875a5406eefc95f52a058cb059e7bc94dc4",
-        "version" : "0.5.0"
+        "revision" : "7e096c6b6a7a5f2d2f9fd9aa0673cdcbc53eb299"
       }
     }
   ],
