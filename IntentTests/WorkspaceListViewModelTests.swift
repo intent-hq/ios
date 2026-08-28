@@ -1,3 +1,4 @@
+import Observation
 import Testing
 @testable import Intent
 
@@ -32,6 +33,35 @@ struct WorkspaceListViewModelTests {
     @MainActor
     private func tearDown() {
         WorkspaceStore.shared.workspaces = []
+        WorkspaceStore.shared.isLoading = false
+    }
+
+    // MARK: - Observation forwarding
+
+    @Test @MainActor func storeChangesInvalidateObservedProperties() async {
+        let vm = setUp([])
+        defer { tearDown() }
+
+        await withCheckedContinuation { continuation in
+            withObservationTracking {
+                _ = vm.workspaces
+            } onChange: {
+                continuation.resume()
+            }
+            WorkspaceStore.shared.workspaces = [makeWorkspace(id: "updated")]
+        }
+
+        await withCheckedContinuation { continuation in
+            withObservationTracking {
+                _ = vm.isLoading
+            } onChange: {
+                continuation.resume()
+            }
+            WorkspaceStore.shared.isLoading = true
+        }
+
+        #expect(vm.workspaces.map(\.id) == ["updated"])
+        #expect(vm.isLoading)
     }
 
     // MARK: - filteredWorkspaces
