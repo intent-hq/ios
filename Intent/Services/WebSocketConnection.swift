@@ -308,8 +308,11 @@ private nonisolated final class WebSocketSessionDelegate: NSObject, URLSessionWe
             completionHandler(.performDefaultHandling, nil)
             return
         }
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust,
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+        guard let serverTrust = challenge.protectionSpace.serverTrust,
               SecTrustGetCertificateCount(serverTrust) > 0,
               let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
               let serverCert = certChain.first else {
