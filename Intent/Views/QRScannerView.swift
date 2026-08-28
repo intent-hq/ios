@@ -1,5 +1,7 @@
 import SwiftUI
 import AVFoundation
+import Vision
+import VisionKit
 
 struct QRScannerView: View {
     @EnvironmentObject var coordinator: AppCoordinator
@@ -13,13 +15,35 @@ struct QRScannerView: View {
     @State private var pendingPayload: PairingPayload?
     @State private var probedFingerprint: String?
     @State private var showFingerprintConfirmation = false
+    @State private var scannerAvailability: ScannerAvailability = .checking
+    @State private var errorAutoClearID: UUID?
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Camera preview
-                QRCameraPreview { code in
-                    handleScannedCode(code)
+                Group {
+                    switch scannerAvailability {
+                    case .checking:
+                        Color.black
+                            .overlay { ProgressView().tint(.white) }
+                    case .available:
+                        QRCameraPreview(
+                            onCodeScanned: { code in
+                                handleScannedCode(code)
+                            },
+                            onUnavailable: {
+                                scannerAvailability = .unavailable
+                            }
+                        )
+                    case .unavailable:
+                        Color.black
+                            .overlay {
+                                Text("Camera scanning isn't available — use manual token entry instead")
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.center)
+                                    .padding(24)
+                            }
+                    }
                 }
                 .ignoresSafeArea()
 
@@ -78,7 +102,44 @@ struct QRScannerView: View {
             } message: {
                 Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
             }
+            .task {
+                await prepareScanner()
+            }
+            .task(id: errorAutoClearID) {
+                guard errorAutoClearID != nil else { return }
+                do {
+                    try await Task.sleep(for: .seconds(3))
+                } catch {
+                    return
+                }
+                errorMessage = nil
+                errorAutoClearID = nil
+            }
         }
+    }
+
+    private func prepareScanner() async {
+        guard DataScannerViewController.isSupported else {
+            scannerAvailability = .unavailable
+            return
+        }
+
+        let isAuthorized: Bool
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            isAuthorized = true
+        case .notDetermined:
+            isAuthorized = await AVCaptureDevice.requestAccess(for: .video)
+        case .denied, .restricted:
+            isAuthorized = false
+        @unknown default:
+            isAuthorized = false
+        }
+
+        guard !Task.isCancelled else { return }
+        scannerAvailability = isAuthorized && DataScannerViewController.isAvailable
+            ? .available
+            : .unavailable
     }
 
     private func handleScannedCode(_ code: String) {
@@ -88,11 +149,12 @@ struct QRScannerView: View {
         // `certFingerprint=`); see PairingPayload.
         guard let payload = PairingPayload.parse(code) else {
             errorMessage = "Invalid QR code. Make sure you're scanning the code from Intent Settings."
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { errorMessage = nil }
+            errorAutoClearID = UUID()
             return
         }
 
         isValidating = true
+        errorAutoClearID = nil
         errorMessage = nil
 
         if let fingerprint = payload.certFingerprint {
@@ -109,6 +171,7 @@ struct QRScannerView: View {
                     probedFingerprint = fingerprint
                     showFingerprintConfirmation = true
                 case .abort(let message):
+                    errorAutoClearID = nil
                     errorMessage = message
                     isValidating = false
                 }
@@ -132,6 +195,7 @@ struct QRScannerView: View {
                     coordinator.onConnectionSuccess()
                 }
             } catch {
+                errorAutoClearID = nil
                 errorMessage = "Connection failed: \(error.localizedDescription)"
                 isValidating = false
             }
@@ -139,69 +203,102 @@ struct QRScannerView: View {
     }
 }
 
+private enum ScannerAvailability {
+    case checking
+    case available
+    case unavailable
+}
+
 // MARK: - Camera Preview
 
-struct QRCameraPreview: UIViewRepresentable {
+struct QRCameraPreview: UIViewControllerRepresentable {
     let onCodeScanned: (String) -> Void
+    let onUnavailable: () -> Void
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView(frame: .zero)
-        let session = AVCaptureSession()
-
-        guard let device = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: device) else {
-            return view
-        }
-
-        session.addInput(input)
-
-        let output = AVCaptureMetadataOutput()
-        session.addOutput(output)
-        output.setMetadataObjectsDelegate(context.coordinator, queue: .main)
-        output.metadataObjectTypes = [.qr]
-
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.frame = UIScreen.main.bounds
-        view.layer.addSublayer(previewLayer)
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            session.startRunning()
-        }
-
-        context.coordinator.session = session
-
-        return view
+    func makeUIViewController(context: Context) -> DataScannerViewController {
+        let scanner = DataScannerViewController(
+            recognizedDataTypes: [.barcode(symbologies: [.qr])],
+            qualityLevel: .fast,
+            recognizesMultipleItems: false,
+            isHighlightingEnabled: true
+        )
+        scanner.delegate = context.coordinator
+        context.coordinator.startScanning(scanner)
+        return scanner
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIViewController(_ scanner: DataScannerViewController, context: Context) {
+        context.coordinator.onCodeScanned = onCodeScanned
+        context.coordinator.onUnavailable = onUnavailable
+        context.coordinator.startScanning(scanner)
+    }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onCodeScanned: onCodeScanned)
+        Coordinator(onCodeScanned: onCodeScanned, onUnavailable: onUnavailable)
     }
 
-    class Coordinator: NSObject, AVCaptureMetadataOutputObjectsDelegate {
-        let onCodeScanned: (String) -> Void
-        var session: AVCaptureSession?
-        private var lastScannedCode: String?
+    static func dismantleUIViewController(_ scanner: DataScannerViewController, coordinator: Coordinator) {
+        coordinator.deactivate()
+        scanner.stopScanning()
+    }
 
-        init(onCodeScanned: @escaping (String) -> Void) {
+    final class Coordinator: NSObject, DataScannerViewControllerDelegate {
+        var onCodeScanned: (String) -> Void
+        var onUnavailable: () -> Void
+        private var lastScannedCode: String?
+        private var resetTask: Task<Void, Never>?
+        private var isActive = true
+
+        init(onCodeScanned: @escaping (String) -> Void, onUnavailable: @escaping () -> Void) {
             self.onCodeScanned = onCodeScanned
+            self.onUnavailable = onUnavailable
         }
 
-        func metadataOutput(_ output: AVCaptureMetadataOutput,
-                            didOutput metadataObjects: [AVMetadataObject],
-                            from connection: AVCaptureConnection) {
-            guard let object = metadataObjects.first as? AVMetadataMachineReadableCodeObject,
-                  let code = object.stringValue,
+        func startScanning(_ scanner: DataScannerViewController) {
+            guard isActive, !scanner.isScanning else { return }
+            do {
+                try scanner.startScanning()
+            } catch {
+                reportUnavailableIfNeeded(for: scanner)
+            }
+        }
+
+        func dataScanner(_ dataScanner: DataScannerViewController,
+                         didAdd addedItems: [RecognizedItem],
+                         allItems: [RecognizedItem]) {
+            let firstCode = addedItems.lazy.compactMap { item -> String? in
+                guard case .barcode(let barcode) = item else { return nil }
+                return barcode.payloadStringValue
+            }.first
+            guard let code = firstCode,
                   code != lastScannedCode else { return }
             lastScannedCode = code
             onCodeScanned(code)
 
             // Reset after 3 seconds to allow re-scanning
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            resetTask?.cancel()
+            resetTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled, self?.lastScannedCode == code else { return }
                 self?.lastScannedCode = nil
             }
+        }
+
+        func dataScanner(_ dataScanner: DataScannerViewController,
+                         becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {
+            reportUnavailableIfNeeded(for: dataScanner)
+        }
+
+        func deactivate() {
+            isActive = false
+            resetTask?.cancel()
+            resetTask = nil
+        }
+
+        private func reportUnavailableIfNeeded(for scanner: DataScannerViewController) {
+            guard isActive, !scanner.isScanning else { return }
+            isActive = false
+            onUnavailable()
         }
     }
 }
