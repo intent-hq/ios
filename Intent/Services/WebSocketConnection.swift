@@ -97,6 +97,9 @@ actor WebSocketConnection {
         let configuration = URLSessionConfiguration.ephemeral
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: request)
+        // Match the daemon's 40 MiB outbound JSON-RPC cap (docs/protocol §1.3);
+        // the URLSession default is 1 MiB.
+        task.maximumMessageSize = 40 * 1024 * 1024
         let connection = WebSocketConnection(
             host: host, session: session, task: task, didOpen: didOpen)
 
