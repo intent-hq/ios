@@ -1,11 +1,17 @@
-import CryptoKit
 import Foundation
+import Network
 import os
 
 /// Probes a server's TLS certificate fingerprint ahead of pairing, shared by
 /// manual token entry and QR pairing payloads that carry no fingerprint.
 /// Pairing connections must always be pinned: a missing fingerprint aborts
 /// instead of falling back to plain WS.
+///
+/// Built on Network.framework (NWConnection) like WebSocketConnection:
+/// URLSession is deliberately not used because App Transport Security aborts
+/// the TLS handshake to non-local hosts (public IPs, Tailscale) before the
+/// server-trust delegate ever runs, so the fingerprint could never be
+/// captured for remote daemons.
 enum CertFingerprintProbe {
     /// Decision for a completed TLS probe.
     enum Outcome: Equatable {
@@ -23,27 +29,102 @@ enum CertFingerprintProbe {
         return .abort(message: noCertErrorMessage)
     }
 
-    /// Probe the server's TLS certificate fingerprint via an HTTPS health check.
+    /// Per-host probe deadline. Fail fast on unroutable hosts: a multi-host
+    /// QR payload probes hosts sequentially, so a hung host would otherwise
+    /// stall the pairing spinner for minutes. 4s matches the websocket
+    /// timeout ConnectionManager.raceHosts uses per host.
+    static let probeTimeout: Duration = .seconds(4)
+
+    /// Validated NWEndpoint.Port for a user-supplied port number, or nil when
+    /// the value is outside 1...65535 (pure, unit-testable).
+    nonisolated static func endpointPort(_ port: Int) -> NWEndpoint.Port? {
+        guard let raw = UInt16(exactly: port), raw > 0 else { return nil }
+        return NWEndpoint.Port(rawValue: raw)
+    }
+
+    /// Normalized fingerprint of the leaf certificate in a server trust, or
+    /// nil when no certificate is presented (unit-testable — the verify block
+    /// below is only the NW wiring around this).
+    nonisolated static func fingerprint(fromServerTrust serverTrust: SecTrust) -> String? {
+        guard SecTrustGetCertificateCount(serverTrust) > 0,
+              let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+              let serverCert = certChain.first else {
+            return nil
+        }
+        return WebSocketConnection.fingerprint(
+            ofCertificate: SecCertificateCopyData(serverCert) as Data)
+    }
+
+    /// Probe the server's TLS certificate fingerprint via a bare TLS
+    /// handshake — no HTTP request is needed, the handshake alone yields the
+    /// certificate. Returns nil on timeout, unreachable hosts, or plain-TCP
+    /// refusals.
     static func probe(host: String, port: Int) async -> String? {
-        let delegate = CertProbeDelegate()
-        let configuration = URLSessionConfiguration.ephemeral
-        // Fail fast on unroutable hosts (default is 60s): a multi-host QR
-        // payload probes hosts sequentially, so a hung host would otherwise
-        // stall the pairing spinner for minutes. 4s matches the websocket
-        // timeout ConnectionManager.raceHosts uses per host.
-        configuration.timeoutIntervalForRequest = 4
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
+        guard let nwPort = endpointPort(port) else { return nil }
 
-        guard let url = URL(string: "https://\(host):\(port)/health") else { return nil }
+        let captured = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let queue = DispatchQueue(label: "CertFingerprintProbe.\(host)")
+        let (lifecycleEvents, lifecycleContinuation) = AsyncStream<Void>.makeStream()
 
-        do {
-            let _ = try await session.data(from: url)
-        } catch {
-            // Connection may fail (self-signed cert) but we still capture the cert in the delegate
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_verify_block(
+            tlsOptions.securityProtocolOptions,
+            { _, trustRef, complete in
+                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
+                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
+                    captured.withLock { $0 = fingerprint }
+                }
+                // Accept the handshake: trust is informational only for the
+                // probe — the fingerprint is surfaced to the user to confirm
+                // and the connection is closed immediately after capture.
+                complete(true)
+            },
+            queue)
+
+        let connection = NWConnection(
+            host: NWEndpoint.Host(host), port: nwPort, using: NWParameters(tls: tlsOptions))
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .setup, .preparing:
+                break
+            case .ready:
+                AppLog.connection.debug("[CertProbe] \(host): handshake completed")
+                lifecycleContinuation.finish()
+            case .waiting(let error):
+                // NWConnection retries in .waiting on unreachable/refusing
+                // hosts; treat it as terminal so sequential probing moves on.
+                AppLog.connection.debug("[CertProbe] \(host): waiting (\(String(describing: error)))")
+                lifecycleContinuation.finish()
+            case .failed(let error):
+                AppLog.connection.debug("[CertProbe] \(host): failed (\(String(describing: error)))")
+                lifecycleContinuation.finish()
+            case .cancelled:
+                lifecycleContinuation.finish()
+            @unknown default:
+                break
+            }
         }
 
-        return delegate.capturedFingerprint
+        await withTaskCancellationHandler {
+            connection.start(queue: queue)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    // No values are ever yielded; the stream just terminates
+                    // when the handshake settles.
+                    for await _ in lifecycleEvents {}
+                }
+                group.addTask {
+                    try? await Task.sleep(for: probeTimeout)
+                }
+                await group.next()
+                group.cancelAll()
+            }
+        } onCancel: {
+            connection.cancel()
+        }
+        connection.cancel()
+
+        return captured.withLock { $0 }
     }
 
     /// Probe hosts in order and return the first fingerprint found, or nil
@@ -55,39 +136,5 @@ enum CertFingerprintProbe {
             }
         }
         return nil
-    }
-}
-
-// MARK: - Certificate Probe Delegate
-
-private nonisolated final class CertProbeDelegate: NSObject, URLSessionDelegate, Sendable {
-    private let fingerprint = OSAllocatedUnfairLock<String?>(initialState: nil)
-
-    var capturedFingerprint: String? {
-        fingerprint.withLock { $0 }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        didReceive challenge: URLAuthenticationChallenge,
-        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
-    ) {
-        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
-              let serverTrust = challenge.protectionSpace.serverTrust else {
-            completionHandler(.performDefaultHandling, nil)
-            return
-        }
-
-        if SecTrustGetCertificateCount(serverTrust) > 0,
-           let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
-           let serverCert = certChain.first {
-            let certData = SecCertificateCopyData(serverCert) as Data
-            let hash = SHA256.hash(data: certData)
-            let value = hash.map { String(format: "%02x", $0) }.joined(separator: ":")
-            fingerprint.withLock { $0 = value }
-        }
-
-        // Accept the self-signed cert for this probe
-        completionHandler(.useCredential, URLCredential(trust: serverTrust))
     }
 }
