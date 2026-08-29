@@ -140,7 +140,14 @@ struct ContentBlockView: View {
             }
             .buttonStyle(.plain)
             .contextMenu {
-                ImageActionMenuItems(image: uiImage, originalData: imageData)
+                // A slim-truncated block only carries the low-res preview
+                // thumbnail — Save/Copy here would export it as if it were
+                // the full image (and the info rows would describe the
+                // preview). Suppress the menu; tapping hydrates the full
+                // block, whose lightbox ellipsis menu offers the actions.
+                if block.dataTruncated != true {
+                    ImageActionMenuItems(image: uiImage, originalData: imageData)
+                }
             }
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
