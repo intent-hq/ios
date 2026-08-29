@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Security
 import Testing
 @testable import Intent
