@@ -1,9 +1,9 @@
-import Combine
 import Foundation
+import Observation
 
 @MainActor
-class AgentListViewModel: ObservableObject {
-    @Published var agents: [AgentSession] = []
+@Observable class AgentListViewModel {
+    var agents: [AgentSession] = []
 
     var foregroundAgents: [AgentSession] {
         agents.filter { !$0.isBackground && $0.createdByAgentId == nil }
