@@ -115,9 +115,6 @@ struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
 
-    /// Cap matching the previous MarkdownUI rendering.
-    static let maxHeight: CGFloat = 300
-
     var description: String { altText }
 
     var body: some View {
@@ -125,16 +122,15 @@ struct IntentFileImageAttachment: Attachment {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
-        let size = image.size
-        guard size.width > 0, size.height > 0 else { return size }
-        let aspect = size.width / size.height
-        var width = min(proposal.width ?? size.width, size.width)
-        var height = width / aspect
-        if height > Self.maxHeight {
-            height = Self.maxHeight
-            width = height * aspect
-        }
-        return CGSize(width: width, height: height)
+        Self.thumbnailSize(proposedWidth: proposal.width)
+    }
+
+    /// Fixed square transcript thumbnail (FE parity), clamped to the
+    /// proposed width so narrow layouts don't overflow.
+    static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
+        let side = min(SquareImageThumbnail.transcriptSide,
+                       proposedWidth ?? SquareImageThumbnail.transcriptSide)
+        return CGSize(width: side, height: side)
     }
 
     func pngData() -> Data? {
@@ -186,15 +182,27 @@ extension UIContentSizeCategory {
     }
 }
 
-/// Rendering for a loaded attachment image; tap handling lives in
+/// Rendering for a loaded attachment image, cropped to fill the square
+/// frame Textual derives from `sizeThatFits`; tap handling lives in
 /// `MarkdownTextView` via the Textual attachment tap action.
 private struct IntentFileAttachmentImageView: View {
     let image: UIImage
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFit()
+        Color.clear
+            .overlay(
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            )
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+            )
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
     }
 }

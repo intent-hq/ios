@@ -134,4 +134,22 @@ struct IntentFileAttachmentLoaderTests {
         #expect(fallbackCalls == 1)
         #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "from-fallback")
     }
+
+    // MARK: - Thumbnail sizing
+
+    @Test func attachmentSizeIsFixedSquare() {
+        let side = SquareImageThumbnail.transcriptSide
+        #expect(
+            IntentFileImageAttachment.thumbnailSize(proposedWidth: 1000)
+                == CGSize(width: side, height: side))
+        #expect(
+            IntentFileImageAttachment.thumbnailSize(proposedWidth: nil)
+                == CGSize(width: side, height: side))
+    }
+
+    @Test func attachmentSizeClampsToNarrowProposals() {
+        #expect(
+            IntentFileImageAttachment.thumbnailSize(proposedWidth: 100)
+                == CGSize(width: 100, height: 100))
+    }
 }
