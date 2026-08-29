@@ -1,4 +1,6 @@
 import Testing
+import Textual
+import UIKit
 
 @testable import Intent
 
@@ -88,5 +90,18 @@ struct MarkdownTextViewTests {
     @Test func textWithoutBracketsIsReturnedVerbatim() {
         let text = "just some prose\nwith two lines"
         #expect(replaced(text) == text)
+    }
+
+    // MARK: - Attachment tap routing
+
+    @Test func tappedIntentFileImageAttachmentYieldsItsImage() {
+        let image = UIImage()
+        let attachment = AnyAttachment(IntentFileImageAttachment(image: image, altText: "alt"))
+        #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
+    }
+
+    @Test func tappedFailureAttachmentIsIgnored() {
+        let attachment = AnyAttachment(IntentFileFailureAttachment(altText: "alt"))
+        #expect(MarkdownTextView.lightboxImage(for: attachment) == nil)
     }
 }

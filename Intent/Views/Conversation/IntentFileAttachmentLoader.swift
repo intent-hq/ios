@@ -44,7 +44,8 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     }
 }
 
-/// A loaded intent-file image embedded in text; tapping opens the lightbox.
+/// A loaded intent-file image embedded in text; taps are routed by
+/// `MarkdownTextView`'s attachment tap handler to open the lightbox.
 struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
@@ -120,21 +121,15 @@ extension UIContentSizeCategory {
     }
 }
 
-/// Tap-for-lightbox wrapper around a loaded attachment image.
+/// Rendering for a loaded attachment image; tap handling lives in
+/// `MarkdownTextView` via the Textual attachment tap action.
 private struct IntentFileAttachmentImageView: View {
     let image: UIImage
-    @State private var lightboxPresented = false
 
     var body: some View {
-        Button { lightboxPresented = true } label: {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .fullScreenCover(isPresented: $lightboxPresented) {
-            ImageLightboxView(image: image)
-        }
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

@@ -632,7 +632,7 @@
 			repositoryURL = "https://github.com/intent-hq/textual";
 			requirement = {
 				kind = exactVersion;
-				version = "0.5.0-intent.1";
+				version = "0.5.0-intent.2";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
