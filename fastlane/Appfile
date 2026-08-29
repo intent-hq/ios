@@ -6,7 +6,7 @@ app_identifier("dev.intentapp.intent")
 apple_id("todo-user@example.com")
 
 # Apple Developer Portal team (matches DEVELOPMENT_TEAM in Intent.xcodeproj).
-team_id("6947A73B2N")
+team_id("C26QN7DD6G")
 
 # TODO(user): uncomment and set only if the App Store Connect team id differs
 # from the Developer Portal team id (e.g. membership in multiple teams).
