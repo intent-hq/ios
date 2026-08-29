@@ -406,21 +406,110 @@ struct ConnectionManagerTests {
         }
     }
 
-    @Test @MainActor func webSocketRequestUsesBearerAuthAndNoOriginHeader() throws {
-        let request = try WebSocketConnection.makeRequest(
-            host: "daemon.local", port: 4242, token: "test-token", certFingerprint: nil)
+    @Test func webSocketURLUsesPlainSchemeWithoutFingerprint() throws {
+        let url = try WebSocketConnection.makeURL(
+            host: "daemon.local", port: 4242, certFingerprint: nil)
 
-        #expect(request.url?.absoluteString == "ws://daemon.local:4242/ws")
-        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer test-token")
-        #expect(request.value(forHTTPHeaderField: "Origin") == nil)
-        #expect(request.timeoutInterval == 4)
+        #expect(url.absoluteString == "ws://daemon.local:4242/ws")
     }
 
-    @Test @MainActor func pinnedWebSocketRequestUsesSecureScheme() throws {
-        let request = try WebSocketConnection.makeRequest(
-            host: "daemon.local", port: 4242, token: "test-token", certFingerprint: "aa:bb")
+    @Test func pinnedWebSocketURLUsesSecureScheme() throws {
+        let url = try WebSocketConnection.makeURL(
+            host: "daemon.local", port: 4242, certFingerprint: "aa:bb")
 
-        #expect(request.url?.absoluteString == "wss://daemon.local:4242/ws")
+        #expect(url.absoluteString == "wss://daemon.local:4242/ws")
+    }
+
+    @Test func webSocketHeadersCarryBearerAuthOnly() {
+        let headers = WebSocketConnection.additionalHeaders(token: "test-token")
+
+        #expect(headers.count == 1)
+        #expect(headers[0].name == "Authorization")
+        #expect(headers[0].value == "Bearer test-token")
+    }
+
+    @Test func certificateFingerprintIsColonSeparatedLowercaseSha256() {
+        // SHA-256 of the empty input is a fixed, well-known vector.
+        let expected = "e3:b0:c4:42:98:fc:1c:14:9a:fb:f4:c8:99:6f:b9:24:"
+            + "27:ae:41:e4:64:9b:93:4c:a4:95:99:1b:78:52:b8:55"
+
+        #expect(WebSocketConnection.fingerprint(ofCertificate: Data()) == expected)
+    }
+
+    @Test func fingerprintMatchIsCaseInsensitive() {
+        #expect(WebSocketConnection.fingerprintMatches("AA:BB:CC", pinned: "aa:bb:cc"))
+        #expect(WebSocketConnection.fingerprintMatches("aa:bb:cc", pinned: "AA:bb:Cc"))
+        #expect(!WebSocketConnection.fingerprintMatches("aa:bb:cc", pinned: "aa:bb:cd"))
+    }
+
+    // URLSessionWebSocketTask.Message is not Equatable; extract payloads for asserting.
+    private func text(of message: URLSessionWebSocketTask.Message?) -> String? {
+        if case .string(let value)? = message { return value }
+        return nil
+    }
+
+    private func data(of message: URLSessionWebSocketTask.Message?) -> Data? {
+        if case .data(let value)? = message { return value }
+        return nil
+    }
+
+    @Test func assemblerReturnsCompleteTextMessageImmediately() {
+        var assembler = WebSocketConnection.MessageAssembler()
+
+        let message = assembler.consume(
+            kind: .text, data: Data("hello".utf8), isComplete: true)
+
+        #expect(text(of: message) == "hello")
+    }
+
+    @Test func assemblerReassemblesFragmentedTextAcrossContinuations() {
+        var assembler = WebSocketConnection.MessageAssembler()
+        // "héllo" with the two-byte UTF-8 encoding of "é" split across
+        // fragments — decoding must wait for the complete message.
+        let bytes = Array("héllo".utf8)
+
+        #expect(assembler.consume(
+            kind: .text, data: Data(bytes[0..<2]), isComplete: false) == nil)
+        #expect(assembler.consume(
+            kind: .continuation, data: Data(bytes[2..<4]), isComplete: false) == nil)
+        let message = assembler.consume(
+            kind: .continuation, data: Data(bytes[4...]), isComplete: true)
+
+        #expect(text(of: message) == "héllo")
+    }
+
+    @Test func assemblerReassemblesFragmentedBinaryMessages() {
+        var assembler = WebSocketConnection.MessageAssembler()
+
+        #expect(assembler.consume(
+            kind: .binary, data: Data([0x01, 0x02]), isComplete: false) == nil)
+        let message = assembler.consume(
+            kind: .continuation, data: Data([0x03]), isComplete: true)
+
+        #expect(data(of: message) == Data([0x01, 0x02, 0x03]))
+    }
+
+    @Test func assemblerDropsStrayContinuationFrames() {
+        var assembler = WebSocketConnection.MessageAssembler()
+
+        #expect(assembler.consume(
+            kind: .continuation, data: Data([0xff]), isComplete: true) == nil)
+        // A well-formed message afterwards is unaffected.
+        let message = assembler.consume(
+            kind: .text, data: Data("ok".utf8), isComplete: true)
+        #expect(text(of: message) == "ok")
+    }
+
+    @Test func assemblerResetsBetweenMessages() {
+        var assembler = WebSocketConnection.MessageAssembler()
+
+        let first = assembler.consume(
+            kind: .text, data: Data("first".utf8), isComplete: true)
+        let second = assembler.consume(
+            kind: .text, data: Data("second".utf8), isComplete: true)
+
+        #expect(text(of: first) == "first")
+        #expect(text(of: second) == "second")
     }
 
     @Test @MainActor func certificateMismatchErrorIncludesReceivedFingerprint() {
