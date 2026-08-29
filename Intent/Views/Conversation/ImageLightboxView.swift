@@ -3,8 +3,13 @@ import SwiftUI
 /// Fullscreen image viewer with pinch-to-zoom, drag-to-pan while zoomed,
 /// double-tap zoom toggle, and dismissal via the close button, a backdrop
 /// tap, or a swipe-down while unzoomed (FE parity: ImageLightbox.svelte).
+/// An ellipsis menu next to the close button offers Save/Copy plus the
+/// image's dimensions and file size.
 struct ImageLightboxView: View {
     let image: UIImage
+    /// Original encoded bytes when known (base64 image blocks) so the
+    /// info rows show the real file size.
+    var data: Data? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var scale: CGFloat = 1
@@ -34,9 +39,28 @@ struct ImageLightboxView: View {
                     .gesture(dragGesture(in: geo.size))
                     .simultaneousGesture(magnifyGesture(in: geo.size))
             }
-            .overlay(alignment: .topTrailing) { closeButton }
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 8) {
+                    actionsMenu
+                    closeButton
+                }
+                .padding(12)
+            }
         }
         .background(Color.black.ignoresSafeArea())
+    }
+
+    private var actionsMenu: some View {
+        Menu {
+            ImageActionMenuItems(image: image, originalData: data)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(10)
+                .background(.white.opacity(0.15), in: Circle())
+        }
+        .accessibilityLabel("Image actions")
     }
 
     private var closeButton: some View {
@@ -47,7 +71,6 @@ struct ImageLightboxView: View {
                 .padding(10)
                 .background(.white.opacity(0.15), in: Circle())
         }
-        .padding(12)
         .accessibilityLabel("Close")
     }
 
