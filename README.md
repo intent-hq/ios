@@ -120,3 +120,7 @@ Tests run **serially** by default — the shared `Intent` scheme pins `paralleli
 
 - [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
 - [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
