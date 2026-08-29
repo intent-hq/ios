@@ -60,7 +60,7 @@ actor WebSocketConnection {
     }
 
     deinit {
-        Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway))
+        Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
     }
 
     // MARK: - URL / header / pinning helpers (pure, unit-testable)
@@ -224,12 +224,12 @@ actor WebSocketConnection {
                     }
                 }
             } onCancel: {
-                Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway))
+                Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             }
             try Task.checkCancellation()
             return connection
         } catch {
-            Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway))
+            Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             if let fingerprint = mismatchFingerprint.withLock({ $0 }) {
                 throw WebSocketTransportError.certificateMismatch(
                     host: host, fingerprint: fingerprint)
@@ -249,38 +249,81 @@ actor WebSocketConnection {
     /// A received websocket frame, classified off the NWConnection callback so
     /// only Sendable payloads cross back into the actor.
     private enum Frame: Sendable {
-        case text(String)
-        case binary(Data)
+        case fragment(kind: FragmentKind, data: Data, isComplete: Bool)
         case closed(code: Int, reason: String)
         case control
         case ended
     }
 
+    nonisolated enum FragmentKind: Sendable {
+        case text
+        case binary
+        case continuation
+    }
+
+    /// Reassembles fragmented websocket messages: NWConnection.receiveMessage
+    /// may deliver a message in chunks (isComplete false, then .cont frames),
+    /// where URLSessionWebSocketTask.receive() always delivered whole messages.
+    /// Pure and unit-testable; text is UTF-8-decoded only once the message is
+    /// complete so multi-byte characters split across fragments stay intact.
+    nonisolated struct MessageAssembler {
+        private var pendingIsText: Bool?
+        private var buffer = Data()
+
+        mutating func consume(
+            kind: FragmentKind,
+            data: Data,
+            isComplete: Bool
+        ) -> URLSessionWebSocketTask.Message? {
+            switch kind {
+            case .text:
+                pendingIsText = true
+                buffer = data
+            case .binary:
+                pendingIsText = false
+                buffer = data
+            case .continuation:
+                // A continuation with no message in progress is a protocol
+                // violation; drop it rather than fabricate a message.
+                guard pendingIsText != nil else { return nil }
+                buffer.append(data)
+            }
+            guard isComplete, let isText = pendingIsText else { return nil }
+            defer {
+                pendingIsText = nil
+                buffer = Data()
+            }
+            return isText ? .string(String(decoding: buffer, as: UTF8.self)) : .data(buffer)
+        }
+    }
+
     func receive() async throws -> URLSessionWebSocketTask.Message {
         let connection = connection
         let didOpen = didOpen
+        let queue = queue
         let host = host
+        var assembler = MessageAssembler()
         while true {
             let frame: Frame = try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
-                    connection.receiveMessage { content, context, _, error in
+                    connection.receiveMessage { content, context, isComplete, error in
                         if let error {
                             continuation.resume(throwing: WebSocketTransportError.failed(
                                 host: host, message: String(describing: error)))
                             return
                         }
-                        continuation.resume(
-                            returning: Self.classifyFrame(content: content, context: context))
+                        continuation.resume(returning: Self.classifyFrame(
+                            content: content, context: context, isComplete: isComplete))
                     }
                 }
             } onCancel: {
-                Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure))
+                Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
             }
             switch frame {
-            case .text(let text):
-                return .string(text)
-            case .binary(let data):
-                return .data(data)
+            case .fragment(let kind, let data, let isComplete):
+                if let message = assembler.consume(kind: kind, data: data, isComplete: isComplete) {
+                    return message
+                }
             case .closed(let code, let reason):
                 AppLog.connection.debug("[WebSocket] \(host): remote close code=\(code) reason=\(reason)")
                 throw WebSocketTransportError.disconnected(host: host, code: code, reason: reason)
@@ -297,7 +340,8 @@ actor WebSocketConnection {
 
     private nonisolated static func classifyFrame(
         content: Data?,
-        context: NWConnection.ContentContext?
+        context: NWConnection.ContentContext?,
+        isComplete: Bool
     ) -> Frame {
         guard let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
             as? NWProtocolWebSocket.Metadata else {
@@ -305,16 +349,18 @@ actor WebSocketConnection {
         }
         switch metadata.opcode {
         case .text:
-            return .text(String(decoding: content ?? Data(), as: UTF8.self))
+            return .fragment(kind: .text, data: content ?? Data(), isComplete: isComplete)
         case .binary:
-            return .binary(content ?? Data())
+            return .fragment(kind: .binary, data: content ?? Data(), isComplete: isComplete)
+        case .cont:
+            return .fragment(kind: .continuation, data: content ?? Data(), isComplete: isComplete)
         case .close:
             let reason = content
                 .flatMap { String(data: $0, encoding: .utf8) }
                 .flatMap { $0.isEmpty ? nil : $0 }
                 ?? "Connection closed"
             return .closed(code: closeCodeValue(metadata.closeCode), reason: reason)
-        case .cont, .ping, .pong:
+        case .ping, .pong:
             return .control
         @unknown default:
             return .control
@@ -424,7 +470,7 @@ actor WebSocketConnection {
     }
 
     func disconnect() {
-        Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure))
+        Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
     }
 
     /// Sends a websocket close frame (when the socket opened) and cancels the
@@ -434,7 +480,8 @@ actor WebSocketConnection {
     private nonisolated static func close(
         _ connection: NWConnection,
         didOpen: OSAllocatedUnfairLock<Bool>,
-        code: NWProtocolWebSocket.CloseCode
+        code: NWProtocolWebSocket.CloseCode,
+        queue: DispatchQueue
     ) {
         guard didOpen.withLock({ $0 }) else {
             connection.cancel()
@@ -448,6 +495,10 @@ actor WebSocketConnection {
             contentContext: context,
             isComplete: true,
             completion: .contentProcessed { _ in connection.cancel() })
+        // An unresponsive peer or dead path can leave the close-frame send
+        // pending forever; guarantee teardown with a fallback cancel after a
+        // grace period (cancel() is idempotent).
+        queue.asyncAfter(deadline: .now() + 2) { connection.cancel() }
     }
 }
 
