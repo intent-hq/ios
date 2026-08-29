@@ -4,6 +4,13 @@ import Textual
 /// Routing decision for a markdown-image URL: intent-file links are served
 /// from the daemon, remote http(s) URLs from `RemoteImageLoader`, everything
 /// else from the wrapped fallback loader.
+///
+/// Cleartext `http` is claimed deliberately: ATS (`NSAllowsLocalNetworking`
+/// only) permits local-network http — e.g. images served by the daemon at
+/// 127.0.0.1 — which therefore load and get the lightbox. Non-local http
+/// fails ATS inside `RemoteImageLoader` and falls through to the fallback
+/// loader, which shares URLSession's ATS policy and fails the same way, so
+/// routing it here loses nothing.
 nonisolated enum MarkdownImageRoute: Equatable {
     case intentFile(IntentFileLink)
     case remote
