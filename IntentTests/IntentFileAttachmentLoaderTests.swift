@@ -85,13 +85,53 @@ struct IntentFileAttachmentLoaderTests {
         #expect(MarkdownTextView.lightboxImage(for: attachment) === image)
     }
 
-    @Test func remoteFetchFailureFallsThroughToFallback() async {
+    @Test func remoteFetchFailureDelegatesToFallbackLoader() async throws {
         struct FetchFailure: Error {}
         let loader = IntentFileAttachmentLoader(
             workspaceId: nil, fallback: .image(), remoteImage: { _ in throw FetchFailure() })
+        var fallbackCalls = 0
 
-        let attachment = await loader.remoteImageAttachment(for: Self.remoteURL, text: "alt")
+        let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
 
-        #expect(attachment == nil)
+        #expect(fallbackCalls == 1)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "from-fallback")
+    }
+
+    @Test func loadedRemoteImageDoesNotInvokeFallbackLoader() async throws {
+        let image = UIImage()
+        let loader = IntentFileAttachmentLoader(
+            workspaceId: nil, fallback: .image(), remoteImage: { _ in image })
+        var fallbackCalls = 0
+
+        let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(fallbackCalls == 0)
+        #expect((attachment.base as? IntentFileImageAttachment)?.image === image)
+    }
+
+    @Test func nonImageURLDelegatesToFallbackLoader() async throws {
+        let loader = IntentFileAttachmentLoader(
+            workspaceId: nil, fallback: .image(),
+            remoteImage: { _ in
+                Issue.record("remote loader must not be consulted for non-http(s) URLs")
+                return UIImage()
+            })
+        var fallbackCalls = 0
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/note/spec")!, text: "alt"
+        ) {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(fallbackCalls == 1)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "from-fallback")
     }
 }

@@ -31,7 +31,11 @@ final class RemoteImageLoader {
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let fetchData: DataFetcher
 
-    init(fetchData: @escaping DataFetcher = { try await URLSession.shared.data(from: $0) }) {
+    init(
+        fetchData: @escaping DataFetcher = { url in
+            try await RemoteImageLoader.streamCappedBytes(from: url)
+        }
+    ) {
         self.fetchData = fetchData
         cache.totalCostLimit = WorkspaceFileImageLoader.cacheTotalCostLimit
     }
@@ -86,5 +90,25 @@ final class RemoteImageLoader {
             throw LoadError.notAnImage
         }
         return image
+    }
+
+    /// Default fetcher: streams the response body and aborts as soon as it
+    /// exceeds `maxFileBytes`, so a hostile or indefinitely streaming server
+    /// cannot buffer unbounded data before the size guard runs.
+    @concurrent
+    private nonisolated static func streamCappedBytes(
+        from url: URL
+    ) async throws -> (Data, URLResponse) {
+        let (bytes, response) = try await URLSession.shared.bytes(from: url)
+        guard response.expectedContentLength <= Int64(maxFileBytes) else {
+            throw LoadError.fileTooLarge
+        }
+        var data = Data()
+        data.reserveCapacity(min(Int(max(response.expectedContentLength, 0)), maxFileBytes))
+        for try await byte in bytes {
+            guard data.count < maxFileBytes else { throw LoadError.fileTooLarge }
+            data.append(byte)
+        }
+        return (data, response)
     }
 }

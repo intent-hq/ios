@@ -44,12 +44,27 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         text: String,
         environment: ColorEnvironmentValues
     ) async throws -> AnyAttachment {
-        // The `as any Textual.Attachment` casts pin AnyAttachment's
+        // The `as any Textual.Attachment` cast pins AnyAttachment's
         // existential initializer: newer compilers (Xcode 26.x) treat the
         // `some`/`any` overload pair as ambiguous for concrete arguments.
         // Module-qualified because inside this type `Attachment` resolves to
         // the AttachmentLoader associated type (AnyAttachment), not the
         // protocol.
+        try await resolvedAttachment(for: url, text: text) {
+            AnyAttachment(
+                try await fallback.attachment(for: url, text: text, environment: environment)
+                    as any Textual.Attachment)
+        }
+    }
+
+    /// Environment-free core of `attachment(for:)`, testable without a
+    /// `ColorEnvironmentValues` (whose initializer is internal to Textual):
+    /// the fallback loader invocation is passed in as a closure.
+    func resolvedAttachment(
+        for url: URL,
+        text: String,
+        fallback: () async throws -> AnyAttachment
+    ) async throws -> AnyAttachment {
         switch MarkdownImageRoute.route(for: url) {
         case .intentFile(let link):
             guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
@@ -70,13 +85,9 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
             if let attachment = await remoteImageAttachment(for: url, text: text) {
                 return attachment
             }
-            return AnyAttachment(
-                try await fallback.attachment(for: url, text: text, environment: environment)
-                    as any Textual.Attachment)
+            return try await fallback()
         case .fallback:
-            return AnyAttachment(
-                try await fallback.attachment(for: url, text: text, environment: environment)
-                    as any Textual.Attachment)
+            return try await fallback()
         }
     }
 
