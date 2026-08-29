@@ -27,4 +27,24 @@ struct ManualTokenEntryViewTests {
     @Test @MainActor func abortMessageIsUserActionable() {
         #expect(CertFingerprintProbe.noCertErrorMessage.contains("TLS certificate"))
     }
+
+    @Test func endpointPortAcceptsValidRange() {
+        #expect(CertFingerprintProbe.endpointPort(1)?.rawValue == 1)
+        #expect(CertFingerprintProbe.endpointPort(7550)?.rawValue == 7550)
+        #expect(CertFingerprintProbe.endpointPort(65535)?.rawValue == 65535)
+    }
+
+    @Test func endpointPortRejectsOutOfRangeValues() {
+        #expect(CertFingerprintProbe.endpointPort(0) == nil)
+        #expect(CertFingerprintProbe.endpointPort(-1) == nil)
+        #expect(CertFingerprintProbe.endpointPort(65536) == nil)
+    }
+
+    @Test func probeReturnsNilForInvalidPortWithoutConnecting() async {
+        #expect(await CertFingerprintProbe.probe(host: "192.0.2.1", port: 0) == nil)
+    }
+
+    @Test func probeTimeoutMatchesPerHostWebSocketTimeout() {
+        #expect(CertFingerprintProbe.probeTimeout == WebSocketConnection.connectTimeout)
+    }
 }
