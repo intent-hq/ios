@@ -1,0 +1,107 @@
+import Foundation
+import Testing
+import UIKit
+@testable import Intent
+
+/// Covers the remote http(s) fetch path: decode, status/size guards,
+/// caching, and the session negative cache.
+@MainActor
+struct RemoteImageLoaderTests {
+    private typealias LoadError = RemoteImageLoader.LoadError
+
+    private nonisolated static let url = URL(string: "https://example.com/pic.png")!
+
+    /// A tiny valid PNG rendered at test time.
+    private nonisolated static func pngBytes() -> Data {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4))
+        return renderer.pngData { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        }
+    }
+
+    private nonisolated static func response(_ status: Int = 200) -> URLResponse {
+        HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+    }
+
+    /// Lock-guarded fetch counter usable from the `@Sendable` data fetcher.
+    private nonisolated final class FetchCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func increment() {
+            lock.lock()
+            value += 1
+            lock.unlock()
+        }
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+    }
+
+    @Test func fetchDecodesImage() async throws {
+        let png = Self.pngBytes()
+        let loader = RemoteImageLoader(fetchData: { _ in (png, Self.response()) })
+
+        let image = try await loader.image(for: Self.url)
+
+        #expect(image.size.width > 0)
+    }
+
+    @Test func secondLoadReturnsCachedImage() async throws {
+        let png = Self.pngBytes()
+        let counter = FetchCounter()
+        let loader = RemoteImageLoader(fetchData: { _ in
+            counter.increment()
+            return (png, Self.response())
+        })
+
+        let first = try await loader.image(for: Self.url)
+        let second = try await loader.image(for: Self.url)
+
+        #expect(first === second)
+        #expect(counter.count == 1)
+    }
+
+    @Test func non2xxStatusThrowsBadStatus() async {
+        let loader = RemoteImageLoader(fetchData: { _ in (Data(), Self.response(404)) })
+
+        await #expect(throws: LoadError.badStatus(404)) {
+            _ = try await loader.image(for: Self.url)
+        }
+    }
+
+    @Test func undecodableBytesThrowNotAnImage() async {
+        let loader = RemoteImageLoader(fetchData: { _ in (Data([1, 2, 3]), Self.response()) })
+
+        await #expect(throws: LoadError.notAnImage) {
+            _ = try await loader.image(for: Self.url)
+        }
+    }
+
+    @Test func oversizedResponseThrowsFileTooLarge() async {
+        let big = Data(count: RemoteImageLoader.maxFileBytes + 1)
+        let loader = RemoteImageLoader(fetchData: { _ in (big, Self.response()) })
+
+        await #expect(throws: LoadError.fileTooLarge) {
+            _ = try await loader.image(for: Self.url)
+        }
+    }
+
+    @Test func failedURLIsNegativelyCached() async {
+        let counter = FetchCounter()
+        let loader = RemoteImageLoader(fetchData: { _ in
+            counter.increment()
+            return (Data(), Self.response(500))
+        })
+
+        await #expect(throws: LoadError.badStatus(500)) {
+            _ = try await loader.image(for: Self.url)
+        }
+        await #expect(throws: LoadError.previouslyFailed) {
+            _ = try await loader.image(for: Self.url)
+        }
+        #expect(counter.count == 1)
+    }
+}

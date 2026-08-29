@@ -1,16 +1,43 @@
 import SwiftUI
 import Textual
 
+/// Routing decision for a markdown-image URL: intent-file links are served
+/// from the daemon, remote http(s) URLs from `RemoteImageLoader`, everything
+/// else from the wrapped fallback loader.
+nonisolated enum MarkdownImageRoute: Equatable {
+    case intentFile(IntentFileLink)
+    case remote
+    case fallback
+
+    static func route(for url: URL) -> MarkdownImageRoute {
+        if let link = IntentFileLink.parse(url) {
+            return .intentFile(link)
+        }
+        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            return .remote
+        }
+        return .fallback
+    }
+}
+
 /// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images by fetching the file's bytes from the daemon; every other URL falls
-/// through to the wrapped fallback loader (Textual's default network loader).
+/// images by fetching the file's bytes from the daemon and remote http(s)
+/// images via `RemoteImageLoader`, so both open the lightbox on tap; every
+/// other URL falls through to the wrapped fallback loader (Textual's default
+/// network loader).
 ///
 /// Never throws for intent-file links — one failed attachment must not break
 /// the surrounding text, so failures degrade to a placeholder attachment.
+/// Failed remote loads fall through to the fallback loader, preserving its
+/// behavior for broken URLs.
 struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader {
     /// Workspace resolving short-form links (no workspace segment in the URL).
     let workspaceId: String?
     let fallback: Fallback
+    /// Fetches and decodes a remote http(s) image; injectable for tests.
+    var remoteImage: @Sendable (URL) async throws -> UIImage = { url in
+        try await RemoteImageLoader.shared.image(for: url)
+    }
 
     func attachment(
         for url: URL,
@@ -23,29 +50,49 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         // Module-qualified because inside this type `Attachment` resolves to
         // the AttachmentLoader associated type (AnyAttachment), not the
         // protocol.
-        guard let link = IntentFileLink.parse(url) else {
+        switch MarkdownImageRoute.route(for: url) {
+        case .intentFile(let link):
+            guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
+                return AnyAttachment(
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            }
+            do {
+                let image = try await WorkspaceFileImageLoader.shared.image(
+                    workspaceId: ws, path: link.path)
+                return AnyAttachment(
+                    IntentFileImageAttachment(image: image, altText: text)
+                        as any Textual.Attachment)
+            } catch {
+                return AnyAttachment(
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            }
+        case .remote:
+            if let attachment = await remoteImageAttachment(for: url, text: text) {
+                return attachment
+            }
+            return AnyAttachment(
+                try await fallback.attachment(for: url, text: text, environment: environment)
+                    as any Textual.Attachment)
+        case .fallback:
             return AnyAttachment(
                 try await fallback.attachment(for: url, text: text, environment: environment)
                     as any Textual.Attachment)
         }
-        guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
-            return AnyAttachment(
-                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
-        }
-        do {
-            let image = try await WorkspaceFileImageLoader.shared.image(
-                workspaceId: ws, path: link.path)
-            return AnyAttachment(
-                IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
-        } catch {
-            return AnyAttachment(
-                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
-        }
+    }
+
+    /// Loaded remote image wrapped in the lightbox-capable attachment; nil on
+    /// fetch/decode failure so the remote route falls through to the wrapped
+    /// fallback loader.
+    func remoteImageAttachment(for url: URL, text: String) async -> AnyAttachment? {
+        guard let image = try? await remoteImage(url) else { return nil }
+        return AnyAttachment(
+            IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
     }
 }
 
-/// A loaded intent-file image embedded in text; taps are routed by
-/// `MarkdownTextView`'s attachment tap handler to open the lightbox.
+/// A loaded markdown image (intent-file or remote http(s)) embedded in text;
+/// taps are routed by `MarkdownTextView`'s attachment tap handler to open the
+/// lightbox.
 struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
