@@ -42,6 +42,19 @@ enum CertFingerprintProbe {
         return NWEndpoint.Port(rawValue: raw)
     }
 
+    /// Normalized fingerprint of the leaf certificate in a server trust, or
+    /// nil when no certificate is presented (unit-testable — the verify block
+    /// below is only the NW wiring around this).
+    nonisolated static func fingerprint(fromServerTrust serverTrust: SecTrust) -> String? {
+        guard SecTrustGetCertificateCount(serverTrust) > 0,
+              let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
+              let serverCert = certChain.first else {
+            return nil
+        }
+        return WebSocketConnection.fingerprint(
+            ofCertificate: SecCertificateCopyData(serverCert) as Data)
+    }
+
     /// Probe the server's TLS certificate fingerprint via a bare TLS
     /// handshake — no HTTP request is needed, the handshake alone yields the
     /// certificate. Returns nil on timeout, unreachable hosts, or plain-TCP
@@ -58,11 +71,8 @@ enum CertFingerprintProbe {
             tlsOptions.securityProtocolOptions,
             { _, trustRef, complete in
                 let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
-                if SecTrustGetCertificateCount(serverTrust) > 0,
-                   let certChain = SecTrustCopyCertificateChain(serverTrust) as? [SecCertificate],
-                   let serverCert = certChain.first {
-                    let certData = SecCertificateCopyData(serverCert) as Data
-                    captured.withLock { $0 = WebSocketConnection.fingerprint(ofCertificate: certData) }
+                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
+                    captured.withLock { $0 = fingerprint }
                 }
                 // Accept the handshake: trust is informational only for the
                 // probe — the fingerprint is surfaced to the user to confirm
@@ -99,7 +109,9 @@ enum CertFingerprintProbe {
             connection.start(queue: queue)
             await withTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    for await _ in lifecycleEvents { return }
+                    // No values are ever yielded; the stream just terminates
+                    // when the handshake settles.
+                    for await _ in lifecycleEvents {}
                 }
                 group.addTask {
                     try? await Task.sleep(for: probeTimeout)
