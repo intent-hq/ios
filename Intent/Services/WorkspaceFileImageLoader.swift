@@ -18,6 +18,36 @@ final class WorkspaceFileImageLoader {
         case previouslyFailed
     }
 
+    private struct FileChunk: Sendable {
+        let content: String
+        let bytesRead: Int
+        let size: Int
+    }
+
+    @MainActor
+    private final class ChunkRequester {
+        let connection: ConnectionManagerRouting
+
+        init(connection: ConnectionManagerRouting) {
+            self.connection = connection
+        }
+
+        func request(workspaceId: String, path: String, offset: Int) async throws -> FileChunk {
+            let result = try await connection.request("file.readChunk", params: [
+                "workspaceId": workspaceId,
+                "path": path,
+                "offset": offset,
+                "length": WorkspaceFileImageLoader.chunkLength,
+            ])
+            guard let dict = result as? [String: Any],
+                  let content = dict["content"] as? String,
+                  let bytesRead = dict["bytesRead"] as? Int,
+                  let size = dict["size"] as? Int
+            else { throw LoadError.malformedResponse }
+            return FileChunk(content: content, bytesRead: bytesRead, size: size)
+        }
+    }
+
     /// Bytes requested per `file.readChunk` call (well under the daemon's
     /// 16 MiB decoded cap; most images resolve in a single round-trip).
     static let chunkLength = 4 * 1024 * 1024
@@ -37,10 +67,10 @@ final class WorkspaceFileImageLoader {
     /// persistently broken link doesn't refetch on every scroll-into-view.
     private var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
-    private let connection: ConnectionManagerRouting
+    private let chunkRequester: ChunkRequester
 
     init(connection: ConnectionManagerRouting = ConnectionManager.shared) {
-        self.connection = connection
+        chunkRequester = ChunkRequester(connection: connection)
         cache.totalCostLimit = Self.cacheTotalCostLimit
     }
 
@@ -56,9 +86,9 @@ final class WorkspaceFileImageLoader {
         if let task = inFlight[key] {
             return try await task.value
         }
-        let task = Task<UIImage, Error> { [connection, cache] in
+        let task = Task<UIImage, Error> { [chunkRequester, cache] in
             let image = try await Self.fetchAndDecode(
-                connection: connection, workspaceId: workspaceId, path: path)
+                chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
@@ -90,45 +120,39 @@ final class WorkspaceFileImageLoader {
         return cgImage.bytesPerRow * cgImage.height
     }
 
-    /// Nonisolated async, so chunk assembly, base64 decoding, and image
-    /// decode run on the global executor — only the `file.readChunk` RPC
+    /// Explicitly concurrent so chunk assembly, base64 decoding, and image
+    /// decode run on the global executor — only each `file.readChunk` RPC
     /// hops to the main actor. Keeps large decodes off the UI thread.
+    @concurrent
     private nonisolated static func fetchAndDecode(
-        connection: ConnectionManagerRouting, workspaceId: String, path: String
+        chunkRequester: ChunkRequester, workspaceId: String, path: String
     ) async throws -> UIImage {
         let data = try await fetchBytes(
-            connection: connection, workspaceId: workspaceId, path: path)
+            chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
         guard let image = decodeImage(data) else {
             throw LoadError.notAnImage
         }
         return image
     }
 
-    /// Assemble the file's raw bytes from sequential `file.readChunk` slices.
+    /// Assemble the file's raw bytes from sequential `file.readChunk` slices
+    /// on the global executor, hopping to the main actor only for each RPC.
+    @concurrent
     private nonisolated static func fetchBytes(
-        connection: ConnectionManagerRouting, workspaceId: String, path: String
+        chunkRequester: ChunkRequester, workspaceId: String, path: String
     ) async throws -> Data {
         var data = Data()
         var offset = 0
         while true {
-            let result = try await connection.request("file.readChunk", params: [
-                "workspaceId": workspaceId,
-                "path": path,
-                "offset": offset,
-                "length": chunkLength,
-            ])
-            guard let dict = result as? [String: Any],
-                  let content = dict["content"] as? String,
-                  let bytesRead = dict["bytesRead"] as? Int,
-                  let size = dict["size"] as? Int
-            else { throw LoadError.malformedResponse }
-            guard size <= maxFileBytes else { throw LoadError.fileTooLarge }
-            guard let chunk = Data(base64Encoded: content), chunk.count == bytesRead
+            let result = try await chunkRequester.request(
+                workspaceId: workspaceId, path: path, offset: offset)
+            guard result.size <= maxFileBytes else { throw LoadError.fileTooLarge }
+            guard let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead
             else { throw LoadError.malformedResponse }
             data.append(chunk)
-            offset += bytesRead
+            offset += result.bytesRead
             // EOF window (bytesRead == 0) or the whole file assembled.
-            if bytesRead == 0 || offset >= size { break }
+            if result.bytesRead == 0 || offset >= result.size { break }
         }
         return data
     }

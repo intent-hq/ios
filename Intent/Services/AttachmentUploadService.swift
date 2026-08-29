@@ -15,7 +15,7 @@ final class AttachmentUploadService {
     /// A successful placement — the daemon's `file.placeAttachment` result
     /// (`file.attachmentUpload.commit` is byte-shape-identical). The registry
     /// fields `mimeType`/`uploadedAt` are additive (v6.12) and presence-detected.
-    struct PlacedAttachment: Equatable {
+    struct PlacedAttachment: Equatable, Sendable {
         let attachmentId: String
         let fileName: String
         /// Workspace-relative path under `.intent/attachments/`.
@@ -58,10 +58,79 @@ final class AttachmentUploadService {
     /// (> 25 MB) path reports progress.
     typealias ProgressCallback = @MainActor (Double) -> Void
 
-    private let connection: ConnectionManagerRouting
+    private struct UploadSession: Sendable {
+        let uploadId: String
+        let maxChunkBytes: Int
+    }
+
+    @MainActor
+    private final class RPCClient {
+        let connection: ConnectionManagerRouting
+
+        init(connection: ConnectionManagerRouting) {
+            self.connection = connection
+        }
+
+        func placeAttachment(
+            workspaceId: String, fileName: String, encodedData: String, mimeType: String?
+        ) async throws -> PlacedAttachment {
+            var params: [String: Any] = [
+                "workspaceId": workspaceId,
+                "fileName": fileName,
+                "data": encodedData,
+            ]
+            if let mimeType, !mimeType.isEmpty { params["mimeType"] = mimeType }
+            let result = try await connection.request(
+                "file.placeAttachment", params: params, timeout: transferTimeout)
+            return try parsePlacement(result, method: "file.placeAttachment")
+        }
+
+        func begin(
+            workspaceId: String, fileName: String, mimeType: String?, size: Int, sha256: String
+        ) async throws -> UploadSession {
+            var params: [String: Any] = [
+                "workspaceId": workspaceId,
+                "fileName": fileName,
+                "sizeBytes": size,
+                "sha256": sha256,
+            ]
+            if let mimeType, !mimeType.isEmpty { params["mimeType"] = mimeType }
+            let result = try await connection.request(
+                "file.attachmentUpload.begin", params: params, timeout: transferTimeout)
+            guard let dict = result as? [String: Any],
+                  let uploadId = dict["uploadId"] as? String,
+                  let maxChunkBytes = dict["maxChunkBytes"] as? Int,
+                  maxChunkBytes > 0
+            else { throw UploadError.malformedResponse(method: "file.attachmentUpload.begin") }
+            return UploadSession(uploadId: uploadId, maxChunkBytes: maxChunkBytes)
+        }
+
+        func uploadChunk(uploadId: String, sequence: Int, encodedData: String) async throws {
+            _ = try await connection.request("file.attachmentUpload.chunk", params: [
+                "uploadId": uploadId,
+                "seq": sequence,
+                "data": encodedData,
+            ], timeout: transferTimeout)
+        }
+
+        func commit(uploadId: String) async throws -> PlacedAttachment {
+            let result = try await connection.request(
+                "file.attachmentUpload.commit", params: ["uploadId": uploadId],
+                timeout: transferTimeout)
+            return try parsePlacement(result, method: "file.attachmentUpload.commit")
+        }
+
+        func abort(uploadId: String) async {
+            _ = try? await connection.request(
+                "file.attachmentUpload.abort", params: ["uploadId": uploadId],
+                timeout: transferTimeout)
+        }
+    }
+
+    private let rpcClient: RPCClient
 
     init(connection: ConnectionManagerRouting = ConnectionManager.shared) {
-        self.connection = connection
+        rpcClient = RPCClient(connection: connection)
     }
 
     /// Place an in-memory payload (e.g. a picked or pasted image).
@@ -70,7 +139,7 @@ final class AttachmentUploadService {
         onProgress: ProgressCallback? = nil
     ) async throws -> PlacedAttachment {
         return try await Self.place(
-            connection: connection, workspaceId: workspaceId, fileName: fileName,
+            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
             data: data, mimeType: mimeType, onProgress: onProgress)
     }
 
@@ -81,15 +150,16 @@ final class AttachmentUploadService {
         onProgress: ProgressCallback? = nil
     ) async throws -> PlacedAttachment {
         return try await Self.placeFromFile(
-            connection: connection, workspaceId: workspaceId, fileName: fileName,
+            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
             fileURL: fileURL, mimeType: mimeType, onProgress: onProgress)
     }
 
     // MARK: - Placement (nonisolated: hashing and disk reads stay off the
     // main actor; only the RPCs hop — same pattern as WorkspaceFileImageLoader)
 
+    @concurrent
     private nonisolated static func place(
-        connection: ConnectionManagerRouting, workspaceId: String, fileName: String,
+        rpcClient: RPCClient, workspaceId: String, fileName: String,
         data: Data, mimeType: String?, onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         guard data.count <= maxAttachmentBytes else {
@@ -97,11 +167,11 @@ final class AttachmentUploadService {
         }
         if data.count <= maxSingleShotBytes {
             return try await placeSingleShot(
-                connection: connection, workspaceId: workspaceId, fileName: fileName,
+                rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
                 data: data, mimeType: mimeType)
         }
         return try await placeChunked(
-            connection: connection, workspaceId: workspaceId, fileName: fileName,
+            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
             mimeType: mimeType, size: data.count, sha256: sha256Hex(of: data),
             readChunk: { offset, length in
                 data.subdata(in: offset..<min(offset + length, data.count))
@@ -109,8 +179,9 @@ final class AttachmentUploadService {
             onProgress: onProgress)
     }
 
+    @concurrent
     private nonisolated static func placeFromFile(
-        connection: ConnectionManagerRouting, workspaceId: String, fileName: String,
+        rpcClient: RPCClient, workspaceId: String, fileName: String,
         fileURL: URL, mimeType: String?, onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         let size = try fileSize(of: fileURL)
@@ -120,14 +191,14 @@ final class AttachmentUploadService {
         if size <= maxSingleShotBytes {
             let data = try Data(contentsOf: fileURL)
             return try await placeSingleShot(
-                connection: connection, workspaceId: workspaceId, fileName: fileName,
+                rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
                 data: data, mimeType: mimeType)
         }
         let sha256 = try sha256Hex(fileURL: fileURL)
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
         return try await placeChunked(
-            connection: connection, workspaceId: workspaceId, fileName: fileName,
+            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
             mimeType: mimeType, size: size, sha256: sha256,
             readChunk: { offset, length in
                 try handle.seek(toOffset: UInt64(offset))
@@ -147,20 +218,12 @@ final class AttachmentUploadService {
     }
 
     private nonisolated static func placeSingleShot(
-        connection: ConnectionManagerRouting, workspaceId: String, fileName: String,
+        rpcClient: RPCClient, workspaceId: String, fileName: String,
         data: Data, mimeType: String?
     ) async throws -> PlacedAttachment {
-        var params: [String: Any] = [
-            "workspaceId": workspaceId,
-            "fileName": fileName,
-            "data": data.base64EncodedString(),
-        ]
-        if let mimeType, !mimeType.isEmpty {
-            params["mimeType"] = mimeType
-        }
-        let result = try await connection.request(
-            "file.placeAttachment", params: params, timeout: transferTimeout)
-        return try parsePlacement(result, method: "file.placeAttachment")
+        return try await rpcClient.placeAttachment(
+            workspaceId: workspaceId, fileName: fileName,
+            encodedData: data.base64EncodedString(), mimeType: mimeType)
     }
 
     /// Chunked placement: `begin` (declares size + SHA-256), sequential
@@ -169,52 +232,45 @@ final class AttachmentUploadService {
     /// abort is idempotent and the daemon sweeps orphans) and rethrows.
     /// Internal for test visibility (lets tests exercise the chunk math with
     /// small payloads).
-    nonisolated static func placeChunked(
+    static func placeChunked(
         connection: ConnectionManagerRouting, workspaceId: String, fileName: String,
         mimeType: String?, size: Int, sha256: String,
-        readChunk: (_ offset: Int, _ length: Int) throws -> Data,
+        readChunk: @Sendable (_ offset: Int, _ length: Int) throws -> Data,
         onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
-        var beginParams: [String: Any] = [
-            "workspaceId": workspaceId,
-            "fileName": fileName,
-            "sizeBytes": size,
-            "sha256": sha256,
-        ]
-        if let mimeType, !mimeType.isEmpty {
-            beginParams["mimeType"] = mimeType
-        }
-        let begin = try await connection.request(
-            "file.attachmentUpload.begin", params: beginParams, timeout: transferTimeout)
-        guard let beginDict = begin as? [String: Any],
-              let uploadId = beginDict["uploadId"] as? String,
-              let maxChunkBytes = beginDict["maxChunkBytes"] as? Int,
-              maxChunkBytes > 0
-        else { throw UploadError.malformedResponse(method: "file.attachmentUpload.begin") }
+        return try await placeChunked(
+            rpcClient: RPCClient(connection: connection), workspaceId: workspaceId,
+            fileName: fileName, mimeType: mimeType, size: size, sha256: sha256,
+            readChunk: readChunk, onProgress: onProgress)
+    }
 
-        let chunkBytes = min(uploadChunkBytes, maxChunkBytes)
+    @concurrent
+    private nonisolated static func placeChunked(
+        rpcClient: RPCClient, workspaceId: String, fileName: String,
+        mimeType: String?, size: Int, sha256: String,
+        readChunk: @Sendable (_ offset: Int, _ length: Int) throws -> Data,
+        onProgress: ProgressCallback?
+    ) async throws -> PlacedAttachment {
+        let session = try await rpcClient.begin(
+            workspaceId: workspaceId, fileName: fileName, mimeType: mimeType,
+            size: size, sha256: sha256)
+
+        let chunkBytes = min(uploadChunkBytes, session.maxChunkBytes)
         let totalChunks = (size + chunkBytes - 1) / chunkBytes
         do {
             for seq in 0..<totalChunks {
                 let chunk = try readChunk(seq * chunkBytes, chunkBytes)
-                _ = try await connection.request("file.attachmentUpload.chunk", params: [
-                    "uploadId": uploadId,
-                    "seq": seq,
-                    "data": chunk.base64EncodedString(),
-                ], timeout: transferTimeout)
+                try await rpcClient.uploadChunk(
+                    uploadId: session.uploadId, sequence: seq,
+                    encodedData: chunk.base64EncodedString())
                 if let onProgress {
                     await onProgress(Double(seq + 1) / Double(totalChunks))
                 }
             }
-            let commit = try await connection.request(
-                "file.attachmentUpload.commit", params: ["uploadId": uploadId],
-                timeout: transferTimeout)
-            return try parsePlacement(commit, method: "file.attachmentUpload.commit")
+            return try await rpcClient.commit(uploadId: session.uploadId)
         } catch {
             // Best-effort: the daemon sweeps orphaned sessions on the next begin.
-            _ = try? await connection.request(
-                "file.attachmentUpload.abort", params: ["uploadId": uploadId],
-                timeout: transferTimeout)
+            await rpcClient.abort(uploadId: session.uploadId)
             throw error
         }
     }
