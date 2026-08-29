@@ -44,8 +44,9 @@ struct MarkdownTextView: View {
         }
     }
 
-    /// Routes attachment taps: only loaded intent-file images open the
-    /// lightbox; every other attachment (e.g. failure placeholders) is inert.
+    /// Routes attachment taps: only loaded markdown images (intent-file and
+    /// remote http(s)) open the lightbox; every other attachment (e.g.
+    /// failure placeholders) is inert.
     static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
         (attachment.base as? IntentFileImageAttachment)?.image
     }

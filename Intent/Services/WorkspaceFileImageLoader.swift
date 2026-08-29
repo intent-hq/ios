@@ -114,8 +114,9 @@ final class WorkspaceFileImageLoader {
         failedKeys.remove("\(workspaceId)\u{0}\(path)")
     }
 
-    /// Approximate decoded byte size, used as the NSCache cost.
-    private static func decodedCost(of image: UIImage) -> Int {
+    /// Approximate decoded byte size, used as the NSCache cost (shared with
+    /// `RemoteImageLoader`).
+    static func decodedCost(of image: UIImage) -> Int {
         guard let cgImage = image.cgImage else { return 0 }
         return cgImage.bytesPerRow * cgImage.height
     }
@@ -159,8 +160,9 @@ final class WorkspaceFileImageLoader {
 
     /// Decode via ImageIO's downsampling thumbnail path, capping the longest
     /// edge at `maxPixelSize` so decoded memory is bounded regardless of the
-    /// dimensions the compressed file declares.
-    private nonisolated static func decodeImage(_ data: Data) -> UIImage? {
+    /// dimensions the compressed file declares (shared with
+    /// `RemoteImageLoader`).
+    nonisolated static func decodeImage(_ data: Data) -> UIImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
             return nil
