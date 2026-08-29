@@ -12,7 +12,7 @@
 # notes in fastlane/metadata/review_information/notes.txt — deliver picks
 # both up automatically from this directory layout.
 
-app_identifier("dev.intentapp.intent")
+app_identifier("dev.intentapp.ios")
 
 # App Store categories.
 primary_category("DEVELOPER_TOOLS")

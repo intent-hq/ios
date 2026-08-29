@@ -1,6 +1,6 @@
 # Appfile — shared fastlane configuration for the Intent iOS app.
 
-app_identifier("dev.intentapp.intent")
+app_identifier("dev.intentapp.ios")
 
 # TODO(user): set the Apple ID email used to sign in to App Store Connect.
 apple_id("todo-user@example.com")

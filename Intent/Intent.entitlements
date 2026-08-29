@@ -9,7 +9,7 @@
 	     written by the Mac app (service com.cloudlands.intent.backends). -->
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)dev.intentapp.intent</string>
+		<string>$(AppIdentifierPrefix)dev.intentapp.ios</string>
 		<string>$(AppIdentifierPrefix)dev.intentapp.backends</string>
 	</array>
 </dict>
