@@ -33,7 +33,7 @@ IntentUITests/                 UI and screenshot tests
 ```
 
 
-The app uses Foundation's native **URLSessionWebSocketTask** for WebSocket transport and **Textual** for rendering notes and conversation messages.
+The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport and **Textual** for rendering notes and conversation messages.
 
 ## Pairing
 
@@ -102,7 +102,7 @@ Tests run **serially** by default — the shared `Intent` scheme pins `paralleli
 
 ## Related Repositories
 
-- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
+- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios`, holds the cross-cutting docs and tooling, and hosts the central [issue tracker](https://github.com/intent-hq/intent/issues).
 - [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
 
 ## License
