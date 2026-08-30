@@ -10,6 +10,7 @@ struct MarkdownTextView: View {
     /// workspace ID (long form).
     var workspaceId: String?
     @Environment(\.colorScheme) var colorScheme
+    @State private var lightboxItem: LightboxItem?
 
     var body: some View {
         let markdownView = StructuredText(markdown: Self.replacingTaskListMarkers(text))
@@ -23,9 +24,17 @@ struct MarkdownTextView: View {
                     bottom: 4 / CompactMarkdownStyle.baseFontSize)
             )
             .textual.textSelection(.enabled)
+            .textual.onAttachmentTap { attachment in
+                if let image = Self.lightboxImage(for: attachment) {
+                    lightboxItem = LightboxItem(image: image)
+                }
+            }
             .font(.system(size: CompactMarkdownStyle.baseFontSize))
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
+            .fullScreenCover(item: $lightboxItem) { item in
+                ImageLightboxView(image: item.image)
+            }
 
         if let handler = onOpenURL {
             markdownView
@@ -33,6 +42,13 @@ struct MarkdownTextView: View {
         } else {
             markdownView
         }
+    }
+
+    /// Routes attachment taps: only loaded markdown images (intent-file and
+    /// remote http(s)) open the lightbox; every other attachment (e.g.
+    /// failure placeholders) is inert.
+    static func lightboxImage(for attachment: AnyAttachment) -> UIImage? {
+        (attachment.base as? IntentFileImageAttachment)?.image
     }
 
     /// GFM task-list line: optional blockquote prefix, indent, list marker
@@ -105,5 +121,12 @@ struct MarkdownTextView: View {
         }
         return width
     }
+}
+
+/// Identifiable wrapper so a tapped attachment image can drive
+/// `fullScreenCover(item:)`.
+private struct LightboxItem: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
 

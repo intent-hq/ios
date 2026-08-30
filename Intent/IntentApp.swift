@@ -19,7 +19,7 @@ struct IntentApp: App {
             let _ = NotificationManager.shared
             RootView()
                 .environmentObject(coordinator)
-                .environmentObject(ConnectionManager.shared)
+                .environment(ConnectionManager.shared)
                 .preferredColorScheme(resolvedColorScheme)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {

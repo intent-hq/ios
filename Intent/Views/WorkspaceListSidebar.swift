@@ -3,7 +3,7 @@ import SwiftUI
 struct WorkspaceListSidebar: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.colorScheme) var colorScheme
-    @StateObject private var viewModel = WorkspaceListViewModel()
+    @State private var viewModel = WorkspaceListViewModel()
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @FocusState private var searchFocused: Bool

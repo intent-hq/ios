@@ -168,10 +168,8 @@ struct ConnectionFailureView: View {
             var attempt = 0
             while !Task.isCancelled {
                 attempt += 1
-                await MainActor.run {
-                    attemptNumber = attempt
-                    isRetrying = true
-                }
+                attemptNumber = attempt
+                isRetrying = true
 
                 // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
                 let delay = min(Double(1 << min(attempt, 5)), 30.0)
@@ -180,7 +178,7 @@ struct ConnectionFailureView: View {
 
                 // Try to connect
                 guard let pairing = PersistenceManager.shared.loadPairing() else {
-                    await MainActor.run { coordinator.currentScreen = .pairing }
+                    coordinator.currentScreen = .pairing
                     return
                 }
 
@@ -195,10 +193,8 @@ struct ConnectionFailureView: View {
                     // switched to another saved connection while this connect
                     // was in flight, and a stale success would restore the
                     // failing daemon over the selected one.
-                    await MainActor.run {
-                        guard !Task.isCancelled else { return }
-                        coordinator.onConnectionSuccess()
-                    }
+                    guard !Task.isCancelled else { return }
+                    coordinator.onConnectionSuccess()
                     return
                 } catch {
                     // Continue retrying

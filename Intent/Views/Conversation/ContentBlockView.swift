@@ -126,6 +126,7 @@ struct ContentBlockView: View {
         } else if let uiImage = Self.decodeImage(block) {
             // Full image, or the write-time thumbnail served by the slim
             // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
+            let imageData = Self.decodeImageData(block)
             Button {
                 if imageNeedsHydration {
                     lightboxPendingHydration = true
@@ -134,16 +135,22 @@ struct ContentBlockView: View {
                     lightboxPresented = true
                 }
             } label: {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 300)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
                     .opacity(isHydratingImage ? 0.6 : 1)
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                // A slim-truncated block only carries the low-res preview
+                // thumbnail — Save/Copy here would export it as if it were
+                // the full image (and the info rows would describe the
+                // preview). Suppress the menu; tapping hydrates the full
+                // block, whose lightbox ellipsis menu offers the actions.
+                if block.dataTruncated != true {
+                    ImageActionMenuItems(image: uiImage, originalData: imageData)
+                }
+            }
             .fullScreenCover(isPresented: $lightboxPresented) {
-                ImageLightboxView(image: uiImage)
+                ImageLightboxView(image: uiImage, data: imageData)
             }
             .onChange(of: block.dataTruncated) { _, truncated in
                 // Hydration merged the full block in (the truncation flag
@@ -201,11 +208,15 @@ struct ContentBlockView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
+    /// Decode an image block's base64 payload bytes; nil when absent or
+    /// not valid base64.
+    static func decodeImageData(_ block: ContentBlock) -> Data? {
+        block.data.flatMap { Data(base64Encoded: $0) }
+    }
+
     /// Decode an image block's base64 payload; nil on any decode failure.
     static func decodeImage(_ block: ContentBlock) -> UIImage? {
-        guard let base64 = block.data,
-              let imageData = Data(base64Encoded: base64) else { return nil }
-        return UIImage(data: imageData)
+        decodeImageData(block).flatMap { UIImage(data: $0) }
     }
 
     private func findToolResult(for toolUseBlock: ContentBlock) -> ContentBlock? {
@@ -267,7 +278,6 @@ struct ImageDecodeFailureView: View {
 struct ImageAttachmentThumbnail: View {
     let block: ContentBlock
     let workspaceId: String
-    @Environment(\.colorScheme) var colorScheme
     @State private var lightboxPresented = false
 
     static let side: CGFloat = 60
@@ -279,21 +289,17 @@ struct ImageAttachmentThumbnail: View {
             AttachmentReferenceImageView(
                 workspaceId: workspaceId, attachmentId: attachmentId, style: .thumbnail)
         } else if let uiImage = ContentBlockView.decodeImage(block) {
+            let imageData = ContentBlockView.decodeImageData(block)
             Button { lightboxPresented = true } label: {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: Self.side, height: Self.side)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
-                    )
+                SquareImageThumbnail(image: uiImage, side: Self.side)
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                ImageActionMenuItems(image: uiImage, originalData: imageData)
+            }
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
-                ImageLightboxView(image: uiImage)
+                ImageLightboxView(image: uiImage, data: imageData)
             }
         } else {
             ImageDecodeFailureView()
@@ -307,9 +313,9 @@ struct ImageAttachmentThumbnail: View {
 /// tap-to-retry placeholder on failure.
 struct AttachmentReferenceImageView: View {
     enum Style {
-        /// Assistant-row inline rendering: fit within the transcript width.
+        /// Assistant-row inline rendering: large fixed square thumbnail.
         case inline
-        /// User-row attachment grid: fixed square thumbnail.
+        /// User-row attachment grid: small fixed square thumbnail.
         case thumbnail
     }
 
@@ -353,26 +359,12 @@ struct AttachmentReferenceImageView: View {
     private var content: some View {
         if let image {
             Button { lightboxPresented = true } label: {
-                switch style {
-                case .inline:
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                case .thumbnail:
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: ImageAttachmentThumbnail.side, height: ImageAttachmentThumbnail.side)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
-                        )
-                }
+                SquareImageThumbnail(image: image, side: side)
             }
             .buttonStyle(.plain)
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
             .accessibilityLabel("Attached image")
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: image)
@@ -395,25 +387,23 @@ struct AttachmentReferenceImageView: View {
         }
     }
 
-    /// Placeholder chip sized to match the eventual rendering: a fixed
-    /// square for thumbnails, a compact chip for inline images.
-    private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
-        Group {
-            switch style {
-            case .inline:
-                HStack(spacing: 4) { label() }
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-            case .thumbnail:
-                VStack(spacing: 2) { label() }
-                    .font(.caption)
-                    .frame(width: ImageAttachmentThumbnail.side, height: ImageAttachmentThumbnail.side)
-            }
+    /// Rendered side for this style: transcript-size square for inline
+    /// images, the small user-row square for attachment-grid thumbnails.
+    private var side: CGFloat {
+        switch style {
+        case .inline: SquareImageThumbnail.transcriptSide
+        case .thumbnail: ImageAttachmentThumbnail.side
         }
-        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Placeholder square sized to match the eventual rendering.
+    private func placeholder<Content: View>(@ViewBuilder _ label: () -> Content) -> some View {
+        VStack(spacing: 2) { label() }
+            .font(.caption)
+            .frame(width: side, height: side)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .background(Theme.muted(for: colorScheme).opacity(0.5))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

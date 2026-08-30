@@ -48,7 +48,7 @@ struct RootView: View {
     @EnvironmentObject var coordinator: AppCoordinator
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.colorScheme) private var colorScheme
-    @StateObject private var notificationManager = NotificationManager.shared
+    @State private var notificationManager = NotificationManager.shared
     @State private var showingWorkspaceDetail = false
     @State private var showingConversation = false
     @State private var conversationAgentId: String = ""

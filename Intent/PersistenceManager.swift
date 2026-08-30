@@ -10,7 +10,6 @@ class PersistenceManager {
     let keychainAccountServer = "serverInfo"
     let keychainAccountConnections = "connections"
     let activeConnectionIdKey = "activeConnectionId"
-    private let syncQueue = DispatchQueue(label: "com.intent.companion.persistence", qos: .userInitiated)
 
     /// Backing store for non-secret values. Tests inject a private suite so
     /// persisted state (navigation, drafts, active connection id) can't leak
@@ -26,10 +25,8 @@ class PersistenceManager {
     // MARK: - Connections
 
     func loadConnections() -> [StoredConnection] {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            return loadConnectionsLocked()
-        }
+        migrateLegacyPairingIfNeeded()
+        return loadConnectionsLocked()
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
@@ -43,42 +40,40 @@ class PersistenceManager {
     /// so previously known routes are never dropped by a narrower re-pair.
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            var connections = loadConnectionsLocked()
-            let stored: StoredConnection
-            if let index = connections.firstIndex(where: {
-                $0.server.port == connection.server.port
-                    && !Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
-            }) {
-                let existing = connections[index]
-                let server = connection.server
-                stored = StoredConnection(
-                    id: existing.id,
-                    server: PairedServer(
-                        hosts: Self.mergeHostLists(
-                            existing: existing.server.hosts, incoming: server.hosts),
-                        port: server.port,
-                        name: server.name,
-                        pairedAt: server.pairedAt,
-                        certFingerprint: server.certFingerprint
-                    ),
-                    token: connection.token,
-                    displayName: connection.displayName,
-                    lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
-                    // The LWW clock survives a re-pair: the record is still the
-                    // registry copy it was last synced from (write-back is the
-                    // push path's job, not upsert's).
-                    syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
-                )
-                connections[index] = stored
-            } else {
-                stored = connection
-                connections.append(stored)
-            }
-            saveConnectionsLocked(connections)
-            return stored
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        let stored: StoredConnection
+        if let index = connections.firstIndex(where: {
+            $0.server.port == connection.server.port
+                && !Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
+        }) {
+            let existing = connections[index]
+            let server = connection.server
+            stored = StoredConnection(
+                id: existing.id,
+                server: PairedServer(
+                    hosts: Self.mergeHostLists(
+                        existing: existing.server.hosts, incoming: server.hosts),
+                    port: server.port,
+                    name: server.name,
+                    pairedAt: server.pairedAt,
+                    certFingerprint: server.certFingerprint
+                ),
+                token: connection.token,
+                displayName: connection.displayName,
+                lastConnectedAt: connection.lastConnectedAt ?? existing.lastConnectedAt,
+                // The LWW clock survives a re-pair: the record is still the
+                // registry copy it was last synced from (write-back is the
+                // push path's job, not upsert's).
+                syncUpdatedAt: connection.syncUpdatedAt ?? existing.syncUpdatedAt
+            )
+            connections[index] = stored
+        } else {
+            stored = connection
+            connections.append(stored)
         }
+        saveConnectionsLocked(connections)
+        return stored
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -98,20 +93,18 @@ class PersistenceManager {
     /// by host set + port and would treat a grown host set as a new pairing),
     /// this never inserts or duplicates records. No-op when the id is unknown.
     func updateConnectionHosts(id: UUID, hosts: [String]) {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            var connections = loadConnectionsLocked()
-            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
-            let server = connections[index].server
-            connections[index].server = PairedServer(
-                hosts: hosts,
-                port: server.port,
-                name: server.name,
-                pairedAt: server.pairedAt,
-                certFingerprint: server.certFingerprint
-            )
-            saveConnectionsLocked(connections)
-        }
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        let server = connections[index].server
+        connections[index].server = PairedServer(
+            hosts: hosts,
+            port: server.port,
+            name: server.name,
+            pairedAt: server.pairedAt,
+            certFingerprint: server.certFingerprint
+        )
+        saveConnectionsLocked(connections)
     }
 
     /// Replaces the stored display name of the connection with the given id,
@@ -119,49 +112,39 @@ class PersistenceManager {
     /// records saved before the daemon reported a pretty hostname heal on the
     /// next successful connect. No-op when the id is unknown.
     func updateConnectionDisplayName(id: UUID, displayName: String) {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            var connections = loadConnectionsLocked()
-            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
-            connections[index].displayName = displayName
-            saveConnectionsLocked(connections)
-        }
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        connections[index].displayName = displayName
+        saveConnectionsLocked(connections)
     }
 
     func deleteConnection(id: UUID) {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            var connections = loadConnectionsLocked()
-            connections.removeAll { $0.id == id }
-            saveConnectionsLocked(connections)
-            if activeConnectionIdLocked() == id {
-                defaults.removeObject(forKey: activeConnectionIdKey)
-            }
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        connections.removeAll { $0.id == id }
+        saveConnectionsLocked(connections)
+        if activeConnectionIdLocked() == id {
+            defaults.removeObject(forKey: activeConnectionIdKey)
         }
     }
 
     func activeConnection() -> StoredConnection? {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            guard let id = activeConnectionIdLocked() else { return nil }
-            return loadConnectionsLocked().first { $0.id == id }
-        }
+        migrateLegacyPairingIfNeeded()
+        guard let id = activeConnectionIdLocked() else { return nil }
+        return loadConnectionsLocked().first { $0.id == id }
     }
 
     func setActiveConnection(id: UUID) {
-        syncQueue.sync {
-            defaults.set(id.uuidString, forKey: activeConnectionIdKey)
-        }
+        defaults.set(id.uuidString, forKey: activeConnectionIdKey)
     }
 
     func touchLastConnected(id: UUID) {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            var connections = loadConnectionsLocked()
-            guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
-            connections[index].lastConnectedAt = Date()
-            saveConnectionsLocked(connections)
-        }
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        connections[index].lastConnectedAt = Date()
+        saveConnectionsLocked(connections)
     }
 
     /// Merges the iCloud-synced backend registry's per-key winners (including
@@ -174,34 +157,31 @@ class PersistenceManager {
     /// connection; the merge simply retries on the next registry read.
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
-        syncQueue.sync {
-            migrateLegacyPairingIfNeeded()
-            let connections = loadConnectionsLocked()
-            let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
-            var removedActive = false
-            if result.changed {
-                guard saveConnectionsLocked(result.connections) else {
-                    return SyncedBackendMergeOutcome(
-                        addedIds: [], updatedIds: [], removedIds: [],
-                        removedActiveConnection: false)
-                }
-                if let activeId = activeConnectionIdLocked(),
-                    result.removedIds.contains(activeId)
-                {
-                    defaults.removeObject(forKey: activeConnectionIdKey)
-                    removedActive = true
-                }
+        migrateLegacyPairingIfNeeded()
+        let connections = loadConnectionsLocked()
+        let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
+        var removedActive = false
+        if result.changed {
+            guard saveConnectionsLocked(result.connections) else {
+                return SyncedBackendMergeOutcome(
+                    addedIds: [], updatedIds: [], removedIds: [],
+                    removedActiveConnection: false)
             }
-            return SyncedBackendMergeOutcome(
-                addedIds: result.addedIds,
-                updatedIds: result.updatedIds,
-                removedIds: result.removedIds,
-                removedActiveConnection: removedActive)
+            if let activeId = activeConnectionIdLocked(),
+                result.removedIds.contains(activeId)
+            {
+                defaults.removeObject(forKey: activeConnectionIdKey)
+                removedActive = true
+            }
         }
+        return SyncedBackendMergeOutcome(
+            addedIds: result.addedIds,
+            updatedIds: result.updatedIds,
+            removedIds: result.removedIds,
+            removedActiveConnection: removedActive)
     }
 
     private func loadConnectionsLocked() -> [StoredConnection] {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         guard let data = loadDataFromKeychain(account: keychainAccountConnections),
               let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
             return []
@@ -211,13 +191,11 @@ class PersistenceManager {
 
     @discardableResult
     private func saveConnectionsLocked(_ connections: [StoredConnection]) -> Bool {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         guard let data = try? JSONEncoder().encode(connections) else { return false }
         return saveDataToKeychain(data: data, account: keychainAccountConnections)
     }
 
     private func activeConnectionIdLocked() -> UUID? {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         guard let raw = defaults.string(forKey: activeConnectionIdKey) else { return nil }
         return UUID(uuidString: raw)
     }
@@ -226,7 +204,6 @@ class PersistenceManager {
     /// or the even older UserDefaults `pairedServer`) into the connections list.
     /// Legacy entries are only removed after the new blob is written successfully.
     private func migrateLegacyPairingIfNeeded() {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         guard loadDataFromKeychain(account: keychainAccountConnections) == nil else { return }
 
         var serverData = loadDataFromKeychain(account: keychainAccountServer)
@@ -347,33 +324,26 @@ class PersistenceManager {
     private let workspaceScreensKey = "workspaceScreens"
 
     func saveWorkspaceScreen(workspaceId: String, screen: SavedScreen) {
-        syncQueue.sync {
-            var dict = loadWorkspaceScreensDict()
-            if let data = try? JSONEncoder().encode(screen) {
-                dict[workspaceId] = data
-            }
-            defaults.set(dict, forKey: workspaceScreensKey)
+        var dict = loadWorkspaceScreensDict()
+        if let data = try? JSONEncoder().encode(screen) {
+            dict[workspaceId] = data
         }
+        defaults.set(dict, forKey: workspaceScreensKey)
     }
 
     func loadWorkspaceScreen(workspaceId: String) -> SavedScreen? {
-        syncQueue.sync {
-            let dict = loadWorkspaceScreensDict()
-            guard let data = dict[workspaceId] else { return nil }
-            return try? JSONDecoder().decode(SavedScreen.self, from: data)
-        }
+        let dict = loadWorkspaceScreensDict()
+        guard let data = dict[workspaceId] else { return nil }
+        return try? JSONDecoder().decode(SavedScreen.self, from: data)
     }
 
     func clearWorkspaceScreen(workspaceId: String) {
-        syncQueue.sync {
-            var dict = loadWorkspaceScreensDict()
-            dict.removeValue(forKey: workspaceId)
-            defaults.set(dict, forKey: workspaceScreensKey)
-        }
+        var dict = loadWorkspaceScreensDict()
+        dict.removeValue(forKey: workspaceId)
+        defaults.set(dict, forKey: workspaceScreensKey)
     }
 
     private func loadWorkspaceScreensDict() -> [String: Data] {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         return (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
     }
 
@@ -382,21 +352,16 @@ class PersistenceManager {
     private let workspaceTabsKey = "workspaceTabs"
 
     func saveWorkspaceTab(workspaceId: String, tab: Int) {
-        syncQueue.sync {
-            var dict = loadWorkspaceTabsDict()
-            dict[workspaceId] = tab
-            defaults.set(dict, forKey: workspaceTabsKey)
-        }
+        var dict = loadWorkspaceTabsDict()
+        dict[workspaceId] = tab
+        defaults.set(dict, forKey: workspaceTabsKey)
     }
 
     func loadWorkspaceTab(workspaceId: String) -> Int? {
-        syncQueue.sync {
-            loadWorkspaceTabsDict()[workspaceId]
-        }
+        loadWorkspaceTabsDict()[workspaceId]
     }
 
     private func loadWorkspaceTabsDict() -> [String: Int] {
-        dispatchPrecondition(condition: .onQueue(syncQueue))
         return (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
     }
 

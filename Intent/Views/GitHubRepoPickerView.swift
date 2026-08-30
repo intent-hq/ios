@@ -10,7 +10,7 @@ import SwiftUI
 /// are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
 struct GitHubRepoPickerView: View {
-    @ObservedObject var store: GitHubRepoStore
+    var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
 
     @Environment(\.colorScheme) private var colorScheme

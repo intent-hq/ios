@@ -41,7 +41,7 @@ class WorkspaceStore: ObservableObject {
     // MARK: - Connection observation
 
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.$connectionState
+        connectionObserver = ConnectionManager.shared.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {

@@ -108,6 +108,7 @@ struct TaskStoreIntegrationTests {
         #expect(fake.didCallMethod("task.unsubscribe"))
         #expect(fake.didCallMethod("task.subscribe"))
         #expect(fake.didCallMethod("task.list"))
+        withExtendedLifetime(store) {}
     }
     
     // MARK: - connectionLossClearsLiveThenReconnectResubscribes

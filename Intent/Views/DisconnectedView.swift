@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DisconnectedView: View {
     @EnvironmentObject var coordinator: AppCoordinator
-    @EnvironmentObject var connectionManager: ConnectionManager
+    @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.colorScheme) var colorScheme
 
     private var attemptNumber: Int {

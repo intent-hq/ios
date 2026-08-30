@@ -51,14 +51,14 @@ class FakeConnectionManager: ConnectionManagerRouting {
     /// request resolves with — e.g. a stale list captured before a state change —
     /// while later requests for the same method stay suspended.
     var pendingMethods: Set<String> = []
-    private var pendingContinuations: [String: [CheckedContinuation<Any, any Error>]] = [:]
+    private var pendingContinuations: [String: [(id: UUID, continuation: CheckedContinuation<Any, Error>)]] = [:]
 
     /// Resolve the oldest suspended request for `method` with `response`.
-    func resolvePending(_ method: String, with response: Any) {
+    func resolvePending(_ method: String, with response: sending Any) {
         guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
-        let continuation = queue.removeFirst()
+        let pending = queue.removeFirst()
         pendingContinuations[method] = queue
-        continuation.resume(returning: response)
+        pending.continuation.resume(returning: response)
     }
 
     func request(_ method: String, params: [String: Any] = [:],
@@ -66,8 +66,19 @@ class FakeConnectionManager: ConnectionManagerRouting {
         requestLog.append((method, params, Date()))
 
         if pendingMethods.contains(method) {
-            return try await withCheckedThrowingContinuation { continuation in
-                pendingContinuations[method, default: []].append(continuation)
+            let requestId = UUID()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    pendingContinuations[method, default: []].append((requestId, continuation))
+                }
+            } onCancel: {
+                Task { @MainActor in
+                    guard var queue = self.pendingContinuations[method],
+                          let index = queue.firstIndex(where: { $0.id == requestId }) else { return }
+                    let pending = queue.remove(at: index)
+                    self.pendingContinuations[method] = queue
+                    pending.continuation.resume(throwing: CancellationError())
+                }
             }
         }
 

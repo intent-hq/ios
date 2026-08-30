@@ -1,56 +1,119 @@
 import SwiftUI
 import Textual
 
+/// Routing decision for a markdown-image URL: intent-file links are served
+/// from the daemon, remote http(s) URLs from `RemoteImageLoader`, everything
+/// else from the wrapped fallback loader.
+///
+/// Cleartext `http` is claimed deliberately: ATS (`NSAllowsLocalNetworking`
+/// only) permits local-network http — e.g. images served by the daemon at
+/// 127.0.0.1 — which therefore load and get the lightbox. Non-local http
+/// fails ATS inside `RemoteImageLoader` and falls through to the fallback
+/// loader, which shares URLSession's ATS policy and fails the same way, so
+/// routing it here loses nothing.
+nonisolated enum MarkdownImageRoute: Equatable {
+    case intentFile(IntentFileLink)
+    case remote
+    case fallback
+
+    static func route(for url: URL) -> MarkdownImageRoute {
+        if let link = IntentFileLink.parse(url) {
+            return .intentFile(link)
+        }
+        if let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+            return .remote
+        }
+        return .fallback
+    }
+}
+
 /// Textual image-attachment loader that renders `![alt](intent://local/[ws-id/]file/<path>)`
-/// images by fetching the file's bytes from the daemon; every other URL falls
-/// through to the wrapped fallback loader (Textual's default network loader).
+/// images by fetching the file's bytes from the daemon and remote http(s)
+/// images via `RemoteImageLoader`, so both open the lightbox on tap; every
+/// other URL falls through to the wrapped fallback loader (Textual's default
+/// network loader).
 ///
 /// Never throws for intent-file links — one failed attachment must not break
 /// the surrounding text, so failures degrade to a placeholder attachment.
+/// Failed remote loads fall through to the fallback loader, preserving its
+/// behavior for broken URLs.
 struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader {
     /// Workspace resolving short-form links (no workspace segment in the URL).
     let workspaceId: String?
     let fallback: Fallback
+    /// Fetches and decodes a remote http(s) image; injectable for tests.
+    var remoteImage: @Sendable (URL) async throws -> UIImage = { url in
+        try await RemoteImageLoader.shared.image(for: url)
+    }
 
     func attachment(
         for url: URL,
         text: String,
         environment: ColorEnvironmentValues
     ) async throws -> AnyAttachment {
-        // The `as any Textual.Attachment` casts pin AnyAttachment's
+        // The `as any Textual.Attachment` cast pins AnyAttachment's
         // existential initializer: newer compilers (Xcode 26.x) treat the
         // `some`/`any` overload pair as ambiguous for concrete arguments.
         // Module-qualified because inside this type `Attachment` resolves to
         // the AttachmentLoader associated type (AnyAttachment), not the
         // protocol.
-        guard let link = IntentFileLink.parse(url) else {
-            return AnyAttachment(
+        try await resolvedAttachment(for: url, text: text) {
+            AnyAttachment(
                 try await fallback.attachment(for: url, text: text, environment: environment)
                     as any Textual.Attachment)
         }
-        guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
-            return AnyAttachment(
-                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+    }
+
+    /// Environment-free core of `attachment(for:)`, testable without a
+    /// `ColorEnvironmentValues` (whose initializer is internal to Textual):
+    /// the fallback loader invocation is passed in as a closure.
+    func resolvedAttachment(
+        for url: URL,
+        text: String,
+        fallback: () async throws -> AnyAttachment
+    ) async throws -> AnyAttachment {
+        switch MarkdownImageRoute.route(for: url) {
+        case .intentFile(let link):
+            guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
+                return AnyAttachment(
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            }
+            do {
+                let image = try await WorkspaceFileImageLoader.shared.image(
+                    workspaceId: ws, path: link.path)
+                return AnyAttachment(
+                    IntentFileImageAttachment(image: image, altText: text)
+                        as any Textual.Attachment)
+            } catch {
+                return AnyAttachment(
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+            }
+        case .remote:
+            if let attachment = await remoteImageAttachment(for: url, text: text) {
+                return attachment
+            }
+            return try await fallback()
+        case .fallback:
+            return try await fallback()
         }
-        do {
-            let image = try await WorkspaceFileImageLoader.shared.image(
-                workspaceId: ws, path: link.path)
-            return AnyAttachment(
-                IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
-        } catch {
-            return AnyAttachment(
-                IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
-        }
+    }
+
+    /// Loaded remote image wrapped in the lightbox-capable attachment; nil on
+    /// fetch/decode failure so the remote route falls through to the wrapped
+    /// fallback loader.
+    func remoteImageAttachment(for url: URL, text: String) async -> AnyAttachment? {
+        guard let image = try? await remoteImage(url) else { return nil }
+        return AnyAttachment(
+            IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
     }
 }
 
-/// A loaded intent-file image embedded in text; tapping opens the lightbox.
+/// A loaded markdown image (intent-file or remote http(s)) embedded in text;
+/// taps are routed by `MarkdownTextView`'s attachment tap handler to open the
+/// lightbox.
 struct IntentFileImageAttachment: Attachment {
     let image: UIImage
     let altText: String
-
-    /// Cap matching the previous MarkdownUI rendering.
-    static let maxHeight: CGFloat = 300
 
     var description: String { altText }
 
@@ -59,16 +122,15 @@ struct IntentFileImageAttachment: Attachment {
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
-        let size = image.size
-        guard size.width > 0, size.height > 0 else { return size }
-        let aspect = size.width / size.height
-        var width = min(proposal.width ?? size.width, size.width)
-        var height = width / aspect
-        if height > Self.maxHeight {
-            height = Self.maxHeight
-            width = height * aspect
-        }
-        return CGSize(width: width, height: height)
+        Self.thumbnailSize(proposedWidth: proposal.width)
+    }
+
+    /// Fixed square transcript thumbnail (FE parity), clamped to the
+    /// proposed width so narrow layouts don't overflow.
+    static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
+        let side = min(SquareImageThumbnail.transcriptSide,
+                       proposedWidth ?? SquareImageThumbnail.transcriptSide)
+        return CGSize(width: side, height: side)
     }
 
     func pngData() -> Data? {
@@ -101,7 +163,7 @@ struct IntentFileFailureAttachment: Attachment {
 }
 
 extension UIContentSizeCategory {
-    fileprivate init(_ size: DynamicTypeSize) {
+    fileprivate nonisolated init(_ size: DynamicTypeSize) {
         switch size {
         case .xSmall: self = .extraSmall
         case .small: self = .small
@@ -120,21 +182,27 @@ extension UIContentSizeCategory {
     }
 }
 
-/// Tap-for-lightbox wrapper around a loaded attachment image.
+/// Rendering for a loaded attachment image, cropped to fill the square
+/// frame Textual derives from `sizeThatFits`; tap handling lives in
+/// `MarkdownTextView` via the Textual attachment tap action.
 private struct IntentFileAttachmentImageView: View {
     let image: UIImage
-    @State private var lightboxPresented = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Button { lightboxPresented = true } label: {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .fullScreenCover(isPresented: $lightboxPresented) {
-            ImageLightboxView(image: image)
-        }
+        Color.clear
+            .overlay(
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+            )
+            .contextMenu {
+                ImageActionMenuItems(image: image)
+            }
     }
 }

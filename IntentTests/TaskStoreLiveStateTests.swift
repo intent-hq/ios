@@ -6,8 +6,6 @@ import Testing
 struct TaskStoreLiveStateTests {
     
     @Test func appliesSnapshot() async throws {
-        let store = TaskStore(workspaceId: "ws-test")
-
         let push = SubscriptionPush(
             subscriptionId: "sub-123",
             kind: .snapshot,

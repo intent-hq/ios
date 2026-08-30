@@ -4,7 +4,7 @@ struct WorkspaceDetailView: View {
     let workspaceId: String
     @EnvironmentObject var coordinator: AppCoordinator
     @State private var agentStore = AgentStore()
-    @StateObject private var viewModel = AgentListViewModel()
+    @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @State private var showBackgroundAgents = false

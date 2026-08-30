@@ -3,6 +3,8 @@ import UIKit
 import Testing
 @testable import Intent
 
+// Tests share the PersistenceManager draft key "test-ws"/"test-agent".
+@Suite(.serialized)
 @MainActor
 struct ConversationViewModelTests {
 
