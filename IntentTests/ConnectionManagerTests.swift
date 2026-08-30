@@ -620,13 +620,13 @@ struct ConnectionManagerTests {
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"disc-sub-buffered","kind":"snapshot","seq":0,"snapshot":[]}}
         """)
         manager.unregisterSubscriptionHandler(id: "disc-sub-tombstoned")
-        #expect(manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "disc-sub-buffered" })
-        #expect(manager.recentlyUnregisteredIds["disc-sub-tombstoned"] != nil)
+        #expect(manager.hasBufferedSubscriptionPush(for: "disc-sub-buffered"))
+        #expect(manager.hasRecentlyUnregisteredSubscription(id: "disc-sub-tombstoned"))
 
         manager.disconnect()
         #expect(manager.subscriptionHandlerCount == 0)
-        #expect(manager.unroutedPushBuffer.isEmpty)
-        #expect(manager.recentlyUnregisteredIds.isEmpty)
+        #expect(!manager.hasBufferedSubscriptionPush(for: "disc-sub-buffered"))
+        #expect(!manager.hasRecentlyUnregisteredSubscription(id: "disc-sub-tombstoned"))
 
         // A push for the cleared id no longer reaches the handler
         manager.dispatchMessage("""
@@ -635,7 +635,7 @@ struct ConnectionManagerTests {
         #expect(receivedCount == 0)
 
         // Clean up: the unrouted push above was buffered for replay; drop it
-        manager.unroutedPushBuffer.removeAll { $0.push.subscriptionId == "disc-sub-1" }
+        manager.unregisterSubscriptionHandler(id: "disc-sub-1")
     }
 
     @Test @MainActor func twoHandlersOnlyReceiveTheirOwnPushes() async {
@@ -788,7 +788,7 @@ struct ConnectionManagerTests {
 
         // Clean up
         manager.removeEventHandler(id: handlerId)
-        manager.unroutedPushBuffer.removeAll { $0.push.subscriptionId == "test-sub-6" }
+        manager.unregisterSubscriptionHandler(id: "test-sub-6")
     }
 
     // MARK: - Unrouted push buffering (dropped seq-0 snapshot race)
@@ -818,7 +818,7 @@ struct ConnectionManagerTests {
         #expect(received[1].kind == .delta && received[1].seq == 1)
         #expect(received[2].kind == .delta && received[2].seq == 2)
         // Buffer cleared after replay
-        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-1" })
+        #expect(!manager.hasBufferedSubscriptionPush(for: "buf-sub-1"))
 
         // Clean up
         manager.unregisterSubscriptionHandler(id: "buf-sub-1")
@@ -826,16 +826,16 @@ struct ConnectionManagerTests {
 
     @Test @MainActor func bufferEvictionRespectsBounds() async {
         let manager = ConnectionManager.shared
-        manager.unroutedPushBuffer.removeAll()
+        manager.disconnect()
 
-        let limit = ConnectionManager.unroutedPushBufferLimit
+        let limit = ConnectionSubscriptionRouter.defaultBufferLimit
         let total = limit + 6
         for seq in 0..<total {
             manager.dispatchMessage("""
             {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-evict","kind":"delta","seq":\(seq),"delta":{"added":[],"updated":[],"removedIds":[]}}}
             """)
         }
-        #expect(manager.unroutedPushBuffer.count == limit)
+        #expect(manager.bufferedSubscriptionPushCount == limit)
 
         var receivedSeqs: [Int] = []
         manager.registerSubscriptionHandler(id: "buf-sub-evict") { push in
@@ -850,30 +850,27 @@ struct ConnectionManagerTests {
     }
 
     @Test @MainActor func bufferTTLExpiresOldPushes() async {
-        let manager = ConnectionManager.shared
+        var currentDate = Date()
+        let router = ConnectionSubscriptionRouter(now: { currentDate })
+        let delta: [String: Any] = ["added": [], "updated": [], "removedIds": []]
 
-        // Fresh push arrives unrouted → buffered
-        manager.dispatchMessage("""
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-ttl","kind":"delta","seq":2,"delta":{"added":[],"updated":[],"removedIds":[]}}}
-        """)
-        // Seed a push that exceeded the TTL
-        let stalePush = SubscriptionPush(
-            subscriptionId: "buf-sub-ttl", kind: .delta, seq: 1, snapshot: nil,
-            delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: []))
-        manager.unroutedPushBuffer.append(ConnectionManager.BufferedPush(
-            push: stalePush,
-            receivedAt: Date(timeIntervalSinceNow: -(ConnectionManager.unroutedPushBufferTTL + 1))))
+        _ = router.route(method: "subscription.push", params: [
+            "subscriptionId": "buf-sub-ttl", "kind": "delta", "seq": 1, "delta": delta
+        ])
+        currentDate.addTimeInterval(ConnectionSubscriptionRouter.defaultBufferTTL + 1)
+        _ = router.route(method: "subscription.push", params: [
+            "subscriptionId": "buf-sub-ttl", "kind": "delta", "seq": 2, "delta": delta
+        ])
 
         var receivedSeqs: [Int] = []
-        manager.registerSubscriptionHandler(id: "buf-sub-ttl") { push in
+        router.register(id: "buf-sub-ttl") { push in
             receivedSeqs.append(push.seq)
         }
 
         // Only the fresh push replays; the expired one is pruned
         #expect(receivedSeqs == [2])
 
-        // Clean up
-        manager.unregisterSubscriptionHandler(id: "buf-sub-ttl")
+        router.unregister(id: "buf-sub-ttl")
     }
 
     @Test @MainActor func noDoubleDeliveryWhenHandlerRegisteredMidStream() async {
@@ -896,7 +893,7 @@ struct ConnectionManagerTests {
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-mid","kind":"delta","seq":1,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
         #expect(receivedSeqs == [0, 1])
-        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-mid" })
+        #expect(!manager.hasBufferedSubscriptionPush(for: "buf-sub-mid"))
 
         // Clean up
         manager.unregisterSubscriptionHandler(id: "buf-sub-mid")
@@ -934,7 +931,7 @@ struct ConnectionManagerTests {
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-sub-dead","kind":"delta","seq":7,"delta":{"added":[],"updated":[],"removedIds":[]}}}
         """)
-        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "buf-sub-dead" })
+        #expect(!manager.hasBufferedSubscriptionPush(for: "buf-sub-dead"))
 
         // A brand-new subscriptionId is unaffected by the tombstone
         manager.dispatchMessage("""
@@ -993,7 +990,7 @@ struct ConnectionManagerTests {
         #expect(received.count == 2)
         #expect(received[0].kind == .snapshot && received[0].seq == 0 && received[0].count == 2)
         #expect(received[1].kind == .delta && received[1].seq == 1)
-        #expect(!manager.unroutedPushBuffer.contains { $0.push.subscriptionId == "col-sub-1" })
+        #expect(!manager.hasBufferedSubscriptionPush(for: "col-sub-1"))
 
         // Array-shaped (collection) snapshot arriving pre-registration replays intact
         manager.dispatchMessage("""
