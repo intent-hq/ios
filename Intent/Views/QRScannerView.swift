@@ -245,6 +245,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
     final class Coordinator: NSObject, DataScannerViewControllerDelegate {
         var onCodeScanned: (String) -> Void
         var onUnavailable: () -> Void
+        private weak var scanner: DataScannerViewController?
         private var lastScannedCode: String?
         private var resetTask: Task<Void, Never>?
         private var isActive = true
@@ -255,7 +256,9 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         }
 
         func startScanning(_ scanner: DataScannerViewController) {
-            guard isActive, !scanner.isScanning else { return }
+            guard isActive else { return }
+            self.scanner = scanner
+            guard !scanner.isScanning else { return }
             do {
                 try scanner.startScanning()
             } catch {
@@ -266,7 +269,17 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         func dataScanner(_ dataScanner: DataScannerViewController,
                          didAdd addedItems: [RecognizedItem],
                          allItems: [RecognizedItem]) {
-            let firstCode = addedItems.lazy.compactMap { item -> String? in
+            process(addedItems)
+        }
+
+        func dataScanner(_ dataScanner: DataScannerViewController,
+                         didUpdate updatedItems: [RecognizedItem],
+                         allItems: [RecognizedItem]) {
+            process(updatedItems)
+        }
+
+        private func process(_ items: [RecognizedItem]) {
+            let firstCode = items.lazy.compactMap { item -> String? in
                 guard case .barcode(let barcode) = item else { return nil }
                 return barcode.payloadStringValue
             }.first
@@ -279,8 +292,13 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             resetTask?.cancel()
             resetTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(3))
-                guard !Task.isCancelled, self?.lastScannedCode == code else { return }
-                self?.lastScannedCode = nil
+                guard !Task.isCancelled,
+                      let self,
+                      self.lastScannedCode == code else { return }
+                self.lastScannedCode = nil
+                guard self.isActive, let scanner = self.scanner else { return }
+                scanner.stopScanning()
+                self.startScanning(scanner)
             }
         }
 
@@ -291,6 +309,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
 
         func deactivate() {
             isActive = false
+            scanner = nil
             resetTask?.cancel()
             resetTask = nil
         }
