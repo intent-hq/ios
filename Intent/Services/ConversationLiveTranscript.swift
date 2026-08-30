@@ -203,7 +203,11 @@ final class ConversationLiveTranscript {
         }
     }
 
-    func subscribe(agentId: String) async {
+    func subscribe(agentId: String, workspaceId: String? = nil) async {
+        self.agentId = agentId
+        if let workspaceId {
+            self.workspaceId = workspaceId
+        }
         chatChannelActive = true
         chatSeeded = false
 
@@ -408,7 +412,7 @@ final class ConversationLiveTranscript {
         chatSubscriptionId = nil
 
         if let agentId {
-            await subscribe(agentId: agentId)
+            await subscribe(agentId: agentId, workspaceId: workspaceId)
             await fetchConversation(agentId: agentId, workspaceId: workspaceId)
         }
     }

@@ -338,7 +338,7 @@ import SwiftUI
     // MARK: - Live chat subscription
 
     func subscribeLiveChat(agentId: String) async {
-        await liveTranscript.subscribe(agentId: agentId)
+        await liveTranscript.subscribe(agentId: agentId, workspaceId: workspaceId)
     }
 
     /// Internal (not private) so tests can drive the real ConnectionManager
