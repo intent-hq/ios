@@ -112,6 +112,16 @@ import Observation
 
     // MARK: - Fetch
 
+    /// Synchronously reset the list and load gate for a workspace switch.
+    /// Views call this from onChange(of: workspaceId) before scheduling the
+    /// async fetch, so the empty state cannot render with the previous
+    /// workspace's hasLoaded while the fetch task has not started yet.
+    func prepareForWorkspaceChange(to workspaceId: String) {
+        guard self.workspaceId != workspaceId else { return }
+        notes = []
+        hasLoaded = false
+    }
+
     func fetchNotes(workspaceId: String) async {
         let workspaceChanged = self.workspaceId != workspaceId
         // If workspace changed, clear notes immediately to prevent stale data
@@ -131,12 +141,12 @@ import Observation
         }
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
+            // Guard: a stale response for a previous workspace must not
+            // replace the current workspace's notes or flip hasLoaded. The
+            // current workspace's own fetch manages isLoading.
+            guard self.workspaceId == workspaceId else { return }
             notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
-            // Guard: a stale fetch for a previous workspace must not flip
-            // hasLoaded for the current one.
-            if self.workspaceId == workspaceId {
-                hasLoaded = true
-            }
+            hasLoaded = true
             // The spec is the one structural exception (its content links task
             // notes for the progress ring), so hydrate it full when its slim
             // row is stale. Fail-soft: a miss keeps the slim row as-is.

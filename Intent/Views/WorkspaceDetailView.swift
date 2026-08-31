@@ -166,6 +166,7 @@ struct WorkspaceDetailView: View {
         .onChange(of: workspaceId) { _, newId in
             viewModel.agents = []
             agentStore.prepareForWorkspaceChange(to: newId)
+            noteStore.prepareForWorkspaceChange(to: newId)
             showBackgroundAgents = false
             expandedDelegates = []
             agentStore.startObservingEvents()  // Re-register with new workspaceId context

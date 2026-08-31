@@ -86,12 +86,14 @@ struct AgentStoreTests {
         let currentFetch = Task { await store.fetchAgents(workspaceId: "ws-2") }
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        // The stale ws-1 fetch completing must not mark ws-2 as loaded.
+        // The stale ws-1 fetch completing must not mark ws-2 as loaded
+        // nor replace ws-2's agents with ws-1's.
         fake.resolvePending("agent.list", with: ["agents": [
             ["id": "agent-old", "name": "Old"]
         ]])
         await staleFetch.value
         #expect(store.hasLoaded == false)
+        #expect(store.agents.isEmpty)
 
         fake.resolvePending("agent.list", with: ["agents": []])
         await currentFetch.value

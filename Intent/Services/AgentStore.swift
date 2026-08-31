@@ -169,15 +169,15 @@ extension SpecialistInfo {
                 "agent.list",
                 params: ["workspaceId": workspaceId]
             )
+            // Guard: a stale response for a previous workspace must not
+            // replace the current workspace's agents or flip hasLoaded. The
+            // current workspace's own fetch manages isLoading.
+            guard self.workspaceId == workspaceId else { return }
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
                 agents = items.compactMap { AgentSession.parseAgent($0) }
             }
-            // Guard: a stale fetch for a previous workspace must not flip
-            // hasLoaded for the current one.
-            if self.workspaceId == workspaceId {
-                hasLoaded = true
-            }
+            hasLoaded = true
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
         }

@@ -719,16 +719,39 @@ struct NoteStoreIntegrationTests {
         let currentFetch = Task { await store.fetchNotes(workspaceId: "ws-2") }
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        // The stale ws-1 fetch completing must not mark ws-2 as loaded.
+        // The stale ws-1 fetch completing must not mark ws-2 as loaded
+        // nor replace ws-2's notes with ws-1's.
         fake.resolvePending("note.list", with: ["notes": [
             ["id": "note-1", "title": "Old", "content": "",
              "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
         ]])
         await staleFetch.value
         #expect(store.hasLoaded == false)
+        #expect(store.notes.isEmpty)
 
         fake.resolvePending("note.list", with: ["notes": []])
         await currentFetch.value
         #expect(store.hasLoaded == true)
+    }
+
+    @Test func prepareForWorkspaceChangeResetsSynchronously() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.hasLoaded == true)
+
+        // Same workspace: no-op (re-appear must not flash the loading state)
+        store.prepareForWorkspaceChange(to: "ws-1")
+        #expect(store.hasLoaded == true)
+        #expect(store.notes.count == 1)
+
+        // Different workspace: resets synchronously, before any fetch runs
+        store.prepareForWorkspaceChange(to: "ws-2")
+        #expect(store.hasLoaded == false)
+        #expect(store.notes.isEmpty)
     }
 }
