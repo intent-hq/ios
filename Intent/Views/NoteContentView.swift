@@ -75,7 +75,7 @@ private struct PlainTaskRow: View {
                     .padding(.top, 2)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Status for \(line.text)")
+            .accessibilityLabel("Status for \(line.text): \(line.markerStatus.label)")
             MarkdownTextView(text: line.text)
         }
         .padding(.leading, indentPadding(line.indentColumns))
@@ -127,7 +127,7 @@ private struct LinkedTaskCardRow: View {
             } label: {
                 TaskStatusIconView(status: status, size: 18)
             }
-            .accessibilityLabel("Status for \(title)")
+            .accessibilityLabel("Status for \(title): \(status.label)")
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
