@@ -1,7 +1,6 @@
 import Combine
 import PhotosUI
 import SwiftUI
-import UniformTypeIdentifiers
 
 @MainActor
 @Observable class ConversationViewModel {
@@ -89,25 +88,39 @@ import UniformTypeIdentifiers
     var specialistName: String?
     var specialistDescription: String?
 
-    // Image attachments
-    var pendingImages: [UIImage] = []
-    var selectedPhotoItems: [PhotosPickerItem] = []
-
-    // File attachments (picked via fileImporter; uploaded at send time)
-    var pendingFiles: [PendingFile] = []
-    /// URLs whose `startAccessingSecurityScopedResource()` succeeded and owe a
-    /// balancing stop. Stored (not derived from `pendingFiles`) so the
-    /// nonisolated deinit can read it — @Observable rewrites `pendingFiles`
-    /// into a computed property that deinit cannot touch.
-    @ObservationIgnored private var securityScopedURLs: [URL] = []
+    private let attachmentPipeline = ConversationAttachmentPipeline()
+    var pendingImages: [UIImage] {
+        get { attachmentPipeline.pendingImages }
+        set { attachmentPipeline.pendingImages = newValue }
+    }
+    var selectedPhotoItems: [PhotosPickerItem] {
+        get { attachmentPipeline.selectedPhotoItems }
+        set { attachmentPipeline.selectedPhotoItems = newValue }
+    }
+    var pendingFiles: [PendingFile] {
+        get { attachmentPipeline.pendingFiles }
+        set { attachmentPipeline.pendingFiles = newValue }
+    }
+    var fileUploadProgress: [UUID: Double] {
+        get { attachmentPipeline.fileUploadProgress }
+        set { attachmentPipeline.fileUploadProgress = newValue }
+    }
+    var imagePlacementError: String? {
+        get { attachmentPipeline.imagePlacementError }
+        set { attachmentPipeline.imagePlacementError = newValue }
+    }
+    var filePlacementError: String? {
+        get { attachmentPipeline.filePlacementError }
+        set { attachmentPipeline.filePlacementError = newValue }
+    }
 
     @ObservationIgnored private let draftTextSubject = PassthroughSubject<String, Never>()
     @ObservationIgnored private var draftSaveCancellable: AnyCancellable?
 
-    /// Places composer attachments into the workspace's attachment registry
-    /// at send time (PROTOCOL §5.9). Test seam: inject a service backed by a
-    /// `FakeConnectionManager`.
-    @ObservationIgnored var uploadService: AttachmentUploadService = .shared
+    var uploadService: AttachmentUploadService {
+        get { attachmentPipeline.uploadService }
+        set { attachmentPipeline.uploadService = newValue }
+    }
 
     init(agentId: String, workspaceId: String, agentName: String) {
         self.agentId = agentId
@@ -128,14 +141,6 @@ import UniformTypeIdentifiers
             }
 
         observeStreaming()
-    }
-
-    deinit {
-        // deinit is nonisolated: stop any security-scoped access still owed.
-        // `stopAccessingSecurityScopedResource` is safe to call off-main.
-        for url in securityScopedURLs {
-            url.stopAccessingSecurityScopedResource()
-        }
     }
 
     func load() async {
@@ -350,8 +355,9 @@ import UniformTypeIdentifiers
             imageBlocks = try await buildImageBlocks(from: sourceImages)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
-            surfacePlacementFailure(error, content: content,
-                                    images: images != nil ? sourceImages : nil)
+            attachmentPipeline.surfaceImagePlacementFailure(
+                error, content: content, images: images != nil ? sourceImages : nil,
+                messageText: &messageText)
             return
         }
         let fileBlocks: [[String: Any]]?
@@ -361,8 +367,9 @@ import UniformTypeIdentifiers
             AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
             // `pendingFiles` is never pre-cleared by the view, so the files
             // stay attached; restore text + any captured images too.
-            surfaceFilePlacementFailure(error, content: content,
-                                        images: images != nil ? sourceImages : nil)
+            attachmentPipeline.surfaceFilePlacementFailure(
+                error, content: content, images: images != nil ? sourceImages : nil,
+                messageText: &messageText)
             return
         }
         do {
@@ -402,7 +409,8 @@ import UniformTypeIdentifiers
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
             // `pendingImages` was never cleared on this path — composer intact.
-            surfacePlacementFailure(error, content: content, images: nil)
+            attachmentPipeline.surfaceImagePlacementFailure(
+                error, content: content, images: nil, messageText: &messageText)
             return
         }
         let fileBlocks: [[String: Any]]?
@@ -411,7 +419,8 @@ import UniformTypeIdentifiers
         } catch {
             AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
             // `pendingFiles` was never cleared on this path — composer intact.
-            surfaceFilePlacementFailure(error, content: content, images: nil)
+            attachmentPipeline.surfaceFilePlacementFailure(
+                error, content: content, images: nil, messageText: &messageText)
             return
         }
         do {
@@ -491,276 +500,31 @@ import UniformTypeIdentifiers
         agentName = newName
     }
 
-    // MARK: - Image attachments
+    // MARK: - Attachments
 
-    func addImage(_ image: UIImage) {
-        pendingImages.append(image)
-    }
+    typealias ImagePlacementError = ConversationAttachmentPipeline.ImagePlacementError
+    typealias FilePlacementError = ConversationAttachmentPipeline.FilePlacementError
+    static let maxImageReferenceBytes = ConversationAttachmentPipeline.maxImageReferenceBytes
 
-    func removeImage(at index: Int) {
-        guard pendingImages.indices.contains(index) else { return }
-        pendingImages.remove(at: index)
-    }
+    func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
+    func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
+    func loadSelectedPhotos() async { await attachmentPipeline.loadSelectedPhotos() }
+    var hasPendingAttachments: Bool { attachmentPipeline.hasPendingAttachments }
+    func addFiles(_ urls: [URL]) { attachmentPipeline.addFiles(urls) }
+    func removePendingFile(at index: Int) { attachmentPipeline.removePendingFile(at: index) }
+    func clearPendingFiles() { attachmentPipeline.clearPendingFiles() }
+    var isUploadingFiles: Bool { attachmentPipeline.isUploadingFiles }
 
-    func loadSelectedPhotos() async {
-        for item in selectedPhotoItems {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let image = UIImage(data: data) {
-                pendingImages.append(image)
-            }
-        }
-        selectedPhotoItems.removeAll()
-    }
-
-    // MARK: - File attachments
-
-    /// True when the composer has any attachment pending (images or files) —
-    /// drives send-button enablement alongside non-empty text.
-    var hasPendingAttachments: Bool {
-        !pendingImages.isEmpty || !pendingFiles.isEmpty
-    }
-
-    /// Add picked file URLs (from `.fileImporter`) to the pending list.
-    /// Starts security-scoped access per URL so the file stays readable until
-    /// it is removed or uploaded at send time; duplicates (same URL already
-    /// pending) are skipped.
-    func addFiles(_ urls: [URL]) {
-        for url in urls {
-            guard !pendingFiles.contains(where: { $0.url == url }) else { continue }
-            let accessing = url.startAccessingSecurityScopedResource()
-            if accessing {
-                securityScopedURLs.append(url)
-            }
-            let values = try? url.resourceValues(forKeys: [.nameKey, .fileSizeKey])
-            pendingFiles.append(PendingFile(
-                url: url,
-                displayName: values?.name ?? url.lastPathComponent,
-                size: (values?.fileSize).map(Int64.init)
-            ))
-        }
-    }
-
-    func removePendingFile(at index: Int) {
-        guard pendingFiles.indices.contains(index) else { return }
-        let file = pendingFiles.remove(at: index)
-        stopSecurityScopedAccess(for: file.url)
-    }
-
-    func clearPendingFiles() {
-        let urls = pendingFiles.map(\.url)
-        pendingFiles.removeAll()
-        for url in urls {
-            stopSecurityScopedAccess(for: url)
-        }
-    }
-
-    private func stopSecurityScopedAccess(for url: URL) {
-        guard let ledgerIndex = securityScopedURLs.firstIndex(of: url) else { return }
-        securityScopedURLs.remove(at: ledgerIndex)
-        url.stopAccessingSecurityScopedResource()
-    }
-
-    /// The daemon's per-image cap for attachment-reference image blocks
-    /// (30 MiB decoded, PROTOCOL §5.5 — monorepo#3338).
-    static let maxImageReferenceBytes = 30 * 1024 * 1024
-
-    /// An image the send/queue path could not place into the attachment
-    /// registry — the message is NOT sent (FE parity: fail-closed, images are
-    /// never silently dropped or partially sent).
-    enum ImagePlacementError: LocalizedError {
-        /// JPEG encoding produced no data. 1-based index for the user
-        /// message.
-        case encodingFailed(index: Int)
-        /// The encoded payload exceeds the daemon's 30 MiB per-image
-        /// reference cap. 1-based index for the user message.
-        case imageTooLarge(index: Int)
-        /// The encoded payloads together exceed the daemon's 30 MiB
-        /// aggregate cap across all image blocks in one message.
-        case imagesTooLarge
-
-        /// `file.placeAttachment` / the chunked upload session failed.
-        case placementFailed(index: Int, underlying: Error)
-
-        var errorDescription: String? {
-            switch self {
-            case .encodingFailed(let index):
-                return "Image \(index) could not be encoded for sending."
-            case .imageTooLarge(let index):
-                return "Image \(index) is too large to send (over 30 MiB as JPEG)."
-            case .imagesTooLarge:
-                return "The attached images are too large to send together (over 30 MiB total as JPEG)."
-            case .placementFailed(let index, let underlying):
-                return "Image \(index) could not be uploaded. \(underlying.localizedDescription)"
-            }
-        }
-    }
-
-    /// Place each image into the workspace's attachment registry and build
-    /// `{ type: "image", attachmentId, mimeType }` reference blocks
-    /// (PROTOCOL §5.5, monorepo#3338) — inline base64 never rides the send.
-    /// The daemon enforces the 30 MiB cap per image AND in aggregate across
-    /// a message's blocks, so both are checked before any placement.
-    /// FAIL-CLOSED: any encoding/placement failure throws
-    /// `ImagePlacementError` (FE parity: `toImageReferenceBlocks`).
     func buildImageBlocks(from images: [UIImage]) async throws -> [[String: Any]]? {
-        guard !images.isEmpty else { return nil }
-        var payloads: [Data] = []
-        for (index, image) in images.enumerated() {
-            guard let data = image.jpegData(compressionQuality: 0.8) else {
-                throw ImagePlacementError.encodingFailed(index: index + 1)
-            }
-            guard data.count <= Self.maxImageReferenceBytes else {
-                throw ImagePlacementError.imageTooLarge(index: index + 1)
-            }
-            payloads.append(data)
-        }
-        guard payloads.reduce(0, { $0 + $1.count }) <= Self.maxImageReferenceBytes else {
-            throw ImagePlacementError.imagesTooLarge
-        }
-        var blocks: [[String: Any]] = []
-        for (index, data) in payloads.enumerated() {
-            let placed: AttachmentUploadService.PlacedAttachment
-            do {
-                placed = try await uploadService.placeData(
-                    workspaceId: workspaceId,
-                    fileName: "image-\(Int(Date().timeIntervalSince1970 * 1000))-\(index + 1).jpg",
-                    data: data,
-                    mimeType: "image/jpeg")
-            } catch {
-                throw ImagePlacementError.placementFailed(index: index + 1, underlying: error)
-            }
-            blocks.append([
-                "type": "image",
-                "attachmentId": placed.attachmentId,
-                "mimeType": placed.mimeType ?? "image/jpeg",
-            ])
-        }
-        return blocks
+        try await attachmentPipeline.buildImageBlocks(from: images, workspaceId: workspaceId)
     }
 
-    /// User-facing message for a failed image placement (the send was
-    /// aborted; nothing reached the daemon). Nil when there is nothing to
-    /// surface. The view presents it as a non-destructive alert.
-    var imagePlacementError: String?
-
-    /// Surface a placement failure and restore the composer: the send text
-    /// returns to the draft and explicitly captured images (cleared from
-    /// `pendingImages` by `MessageInputView` before the async send) are
-    /// re-attached so nothing is lost.
-    private func surfacePlacementFailure(_ error: Error, content: String, images: [UIImage]?) {
-        imagePlacementError = error.localizedDescription
-        if messageText.isEmpty {
-            messageText = content
-        }
-        if let images, pendingImages.isEmpty {
-            pendingImages = images
-        }
-    }
-
-    // MARK: - File placement (send-time uploads)
-
-    /// A file the send/queue path could not place into the attachment
-    /// registry — the message is NOT sent (fail-closed, same discipline as
-    /// `ImagePlacementError`: files are never silently dropped or partially
-    /// sent).
-    enum FilePlacementError: LocalizedError {
-        /// The file exceeds the daemon's 1 GiB per-attachment cap
-        /// (`AttachmentUploadService.maxAttachmentBytes`, PROTOCOL §5.9).
-        case fileTooLarge(name: String)
-        /// `file.placeAttachment` / the chunked upload session failed, or
-        /// the file could not be read.
-        case placementFailed(name: String, underlying: Error)
-
-        var errorDescription: String? {
-            switch self {
-            case .fileTooLarge(let name):
-                return "\"\(name)\" is too large to send (over 1 GiB)."
-            case .placementFailed(let name, let underlying):
-                return "\"\(name)\" could not be uploaded. \(underlying.localizedDescription)"
-            }
-        }
-    }
-
-    /// Per-pending-file upload progress, keyed by `PendingFile.id` — set only
-    /// while a send/queue is placing that file (chunked > 25 MB uploads
-    /// report fractional progress; single-shot flips 0 → 1). The composer
-    /// chips read this to show a spinner/progress state.
-    var fileUploadProgress: [UUID: Double] = [:]
-
-    /// True while `buildFileBlocks` is placing pending files — drives chip
-    /// spinners and lets the composer disable removal mid-upload.
-    var isUploadingFiles: Bool { !fileUploadProgress.isEmpty }
-
-    /// Place each pending file into the workspace's attachment registry
-    /// (streaming off disk; chunked above 25 MB) and build
-    /// `{ type: "file", attachmentId, fileName, mimeType?, size }` reference
-    /// blocks (PROTOCOL §5.5). FAIL-CLOSED: any placement failure throws
-    /// `FilePlacementError` and the message is not sent. Does NOT clear
-    /// `pendingFiles` — callers clear on successful send only.
     func buildFileBlocks(from files: [PendingFile]) async throws -> [[String: Any]]? {
-        guard !files.isEmpty else { return nil }
-        for file in files {
-            fileUploadProgress[file.id] = 0
-        }
-        defer { fileUploadProgress.removeAll() }
-        var blocks: [[String: Any]] = []
-        for file in files {
-            if let size = file.size, size > Int64(AttachmentUploadService.maxAttachmentBytes) {
-                throw FilePlacementError.fileTooLarge(name: file.displayName)
-            }
-            let placed: AttachmentUploadService.PlacedAttachment
-            do {
-                placed = try await uploadService.placeFile(
-                    workspaceId: workspaceId,
-                    fileName: file.displayName,
-                    fileURL: file.url,
-                    mimeType: Self.mimeType(for: file.url),
-                    onProgress: { [weak self] fraction in
-                        self?.fileUploadProgress[file.id] = fraction
-                    })
-            } catch AttachmentUploadService.UploadError.payloadTooLarge {
-                throw FilePlacementError.fileTooLarge(name: file.displayName)
-            } catch {
-                throw FilePlacementError.placementFailed(name: file.displayName, underlying: error)
-            }
-            fileUploadProgress[file.id] = 1
-            var block: [String: Any] = [
-                "type": "file",
-                "attachmentId": placed.attachmentId,
-                "fileName": placed.fileName,
-                "size": placed.size,
-            ]
-            if let mimeType = placed.mimeType {
-                block["mimeType"] = mimeType
-            }
-            blocks.append(block)
-        }
-        return blocks
+        try await attachmentPipeline.buildFileBlocks(from: files, workspaceId: workspaceId)
     }
 
-    /// MIME type inferred from the file extension via UTType, nil when
-    /// unknown (the daemon then stores the attachment without a mimeType).
     static func mimeType(for url: URL) -> String? {
-        UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
-    }
-
-    /// User-facing message for a failed file placement (the send was
-    /// aborted; nothing reached the daemon). Nil when there is nothing to
-    /// surface. The view presents it as a non-destructive alert.
-    var filePlacementError: String?
-
-    /// Surface a file-placement failure and restore the composer. Pending
-    /// files were never cleared (clearing happens only after a successful
-    /// send), so only text — and captured images on the explicit-images send
-    /// path — need restoring.
-    private func surfaceFilePlacementFailure(_ error: Error, content: String, images: [UIImage]?) {
-        filePlacementError = error.localizedDescription
-        if messageText.isEmpty {
-            messageText = content
-        }
-        if let images, pendingImages.isEmpty {
-            pendingImages = images
-        }
+        ConversationAttachmentPipeline.mimeType(for: url)
     }
 
     // MARK: - Agent Q&A pending questions
@@ -845,32 +609,11 @@ import UniformTypeIdentifiers
         guard pendingQuestions == nil else { return [] }
         guard let lastMessage = messages.last,
               lastMessage.role == .assistant else { return [] }
-        // Text blocks are joined with newlines so a block boundary never fuses
-        // two lines, then only the last well-formed block supplies prompts
-        // (see `SuggestedPrompts`).
-        let text = (lastMessage.contentBlocks ?? [])
-            .filter { $0.type == .text }
-            .compactMap { $0.resolvedText }
-            .joined(separator: "\n")
-        return SuggestedPrompts.parse(text)
-    }
-}
-
-/// A file picked from the Files app, pending in the composer until send time
-/// (uploads happen at send, not at pick). Security-scoped access lifecycle is
-/// owned by `ConversationViewModel` (started in `addFiles`, stopped on
-/// remove/clear/deinit), not by this value.
-struct PendingFile: Identifiable, Equatable {
-    let id = UUID()
-    let url: URL
-    let displayName: String
-    let size: Int64?
-
-    /// Human-readable size for the composer chip (e.g. "1.2 MB"), nil when
-    /// the size could not be read at pick time.
-    var formattedSize: String? {
-        guard let size else { return nil }
-        return ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        // The same message-level scan the views use for stripping (empty
+        // join like the desktop, so mid-line splits reassemble): prompts and
+        // stripping come from one scan and can never disagree
+        // (intent-hq/intent#3936; see `SuggestedPrompts.parse(contentBlocks:)`).
+        return SuggestedPrompts.parse(contentBlocks: lastMessage.contentBlocks ?? []).prompts
     }
 }
 

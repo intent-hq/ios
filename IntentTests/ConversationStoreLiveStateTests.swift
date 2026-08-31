@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import Intent
 
@@ -93,6 +95,28 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].id == "msg-2")
         #expect(store.totalMessageCount == 2)
         #expect(store.isStreaming == false)
+    }
+
+    @Test func forwardedTranscriptStateRemainsObservable() {
+        let (store, _) = makeStore()
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.messages.count
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        store.handleStreamEvent(
+            "subscription.push",
+            params: snapshotParams(messages: [[
+                "id": "msg-1",
+                "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                "timestamp": "2026-06-27T01:00:00.000Z",
+            ]])
+        )
+
+        #expect(changeCount.withLock { $0 } == 1)
     }
 
     @Test func snapshotWithoutMetaResetsTruncationDefaults() async throws {

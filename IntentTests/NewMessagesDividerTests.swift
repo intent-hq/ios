@@ -104,6 +104,29 @@ struct NewMessagesDividerEntryScrollTests {
     }
 }
 
+struct ConversationTranscriptScrollPolicyTests {
+    @Test func tracksAwayStateAcrossBottomThreshold() {
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: -20))
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 50))
+        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 51))
+    }
+
+    @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
+            hasInitiallyScrolled: false,
+            userIsScrolledAway: false
+        ))
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowToBottom(
+            hasInitiallyScrolled: true,
+            userIsScrolledAway: false
+        ))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
+            hasInitiallyScrolled: true,
+            userIsScrolledAway: true
+        ))
+    }
+}
+
 /// Latch-once-per-viewing-session semantics on ConversationViewModel.
 @MainActor
 struct ConversationViewModelDividerLatchTests {

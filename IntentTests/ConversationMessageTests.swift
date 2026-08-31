@@ -1122,4 +1122,107 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
         #expect(SuggestedPrompts.parse(text).isEmpty)
     }
+
+    // MARK: - Message-level scan (parse(contentBlocks:))
+
+    private func texts(_ blocks: [ContentBlock]) -> [String?] {
+        blocks.map { $0.type == .text ? $0.resolvedText : nil }
+    }
+
+    @Test func contentBlocksSpanningBoundaryStripAndParse() {
+        // Opener in one block, body + closer in the next: per-block stripping
+        // sees no well-formed block in either, but the message-level scan
+        // (empty join, like the desktop) reassembles it
+        // (intent-hq/intent#3936).
+        let blocks = [
+            ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\nRun the te"),
+            ContentBlock(type: .text, text: "sts\nShip it\n-->"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Run the tests", "Ship it"])
+        #expect(texts(result.contentBlocks) == ["Done!\n", ""])
+    }
+
+    @Test func contentBlocksMidLineSplitReassembles() {
+        // The empty-separator join fuses a mid-line split back together, so
+        // even the opener token itself can straddle the boundary.
+        let blocks = [
+            ContentBlock(type: .text, text: "Done!\n<!-- suggested-"),
+            ContentBlock(type: .text, text: "prompts\nRun the tests\n-->"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Run the tests"])
+        #expect(texts(result.contentBlocks) == ["Done!\n", ""])
+    }
+
+    @Test func contentBlocksSingleBlockMatchesStringParse() {
+        // The range consumes the closer line's newline, so the result matches
+        // the line-based stripBlocks(from:) exactly — no paragraph break is
+        // introduced where the block used to be.
+        let text = "Done!\n<!-- suggested-prompts\nRun tests\n-->\nTail"
+        let result = SuggestedPrompts.parse(contentBlocks: [ContentBlock(type: .text, text: text)])
+        #expect(result.prompts == SuggestedPrompts.parse(text))
+        #expect(texts(result.contentBlocks) == [SuggestedPrompts.stripBlocks(from: text)])
+        #expect(texts(result.contentBlocks) == ["Done!\nTail"])
+    }
+
+    @Test func contentBlocksNonTextBlocksPassThroughUntouched() {
+        // Non-text blocks neither join into the scan nor get modified; a code
+        // block between the opener and closer does not interrupt the text
+        // stream (same as the desktop's text-only join).
+        let blocks = [
+            ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\n"),
+            ContentBlock(type: .code, text: "let x = 1"),
+            ContentBlock(type: .text, text: "Run the tests\n-->"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Run the tests"])
+        #expect(result.contentBlocks[1].resolvedText == "let x = 1")
+        #expect(texts(result.contentBlocks) == ["Done!\n", nil, ""])
+    }
+
+    @Test func contentBlocksUnclosedOpenerLeavesBlocksUntouched() {
+        let blocks = [
+            ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts"),
+            ContentBlock(type: .text, text: "\nRun the tests"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts.isEmpty)
+        #expect(texts(result.contentBlocks) == ["Done!\n<!-- suggested-prompts", "\nRun the tests"])
+    }
+
+    @Test func contentBlocksMultipleBlocksAllStripLastSuppliesPrompts() {
+        let blocks = [
+            ContentBlock(type: .text, text: "A\n<!-- suggested-prompts\nOne\n-->\nB\n<!-- suggested-"),
+            ContentBlock(type: .text, text: "prompts\nTwo\n-->\nC"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Two"])
+        #expect(texts(result.contentBlocks) == ["A\nB\n", "C"])
+    }
+
+    @Test func contentBlocksLegacyContentFieldRoundTrips() throws {
+        // Blocks decoded from the legacy `content` alias still join into the
+        // scan and carry the cleaned text back out via `resolvedText`.
+        let json = """
+        {"type": "text", "content": "Done!\\n<!-- suggested-prompts\\nRun the te"}
+        """.data(using: .utf8)!
+        let legacy = try JSONDecoder().decode(ContentBlock.self, from: json)
+        let blocks = [legacy, ContentBlock(type: .text, text: "sts\n-->")]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Run the tests"])
+        #expect(texts(result.contentBlocks) == ["Done!\n", ""])
+    }
+
+    @Test func contentBlocksEmojiBeforeBoundaryKeepsOffsetsAligned() {
+        // Multi-byte scalars before the boundary must not skew the range
+        // mapping — offsets are UTF-16-unit based.
+        let blocks = [
+            ContentBlock(type: .text, text: "Done 🎉!\n<!-- suggested-prompts\nRun the te"),
+            ContentBlock(type: .text, text: "sts\n-->"),
+        ]
+        let result = SuggestedPrompts.parse(contentBlocks: blocks)
+        #expect(result.prompts == ["Run the tests"])
+        #expect(texts(result.contentBlocks) == ["Done 🎉!\n", ""])
+    }
 }

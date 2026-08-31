@@ -4,23 +4,51 @@ import SwiftUI
 
 @MainActor
 @Observable class ConversationStore {
-    var messages: [ConversationMessage] = []
-    @ObservationIgnored var onStreamingChanged: ((Bool) -> Void)?
-    var isStreaming = false {
-        didSet {
-            guard oldValue != isStreaming else { return }
-            onStreamingChanged?(isStreaming)
-        }
+    var messages: [ConversationMessage] {
+        get { liveTranscript.messages }
+        set { liveTranscript.messages = newValue }
     }
-    var isLoading = false
-    var queuedMessages: [QueuedMessage] = []
-    var streamingUpdateCount: Int = 0
-    var watchedAgentIds: [String] = []
-    var delegationGroupStatus: (completed: Int, total: Int)?
-    var isWaitingForAgents = false
-    var watchedAgents: [AgentSession] = []
-    var isTruncated: Bool = false
-    var totalMessageCount: Int = 0
+    @ObservationIgnored var onStreamingChanged: ((Bool) -> Void)?
+    var isStreaming: Bool {
+        get { liveTranscript.isStreaming }
+        set { liveTranscript.isStreaming = newValue }
+    }
+    var isLoading: Bool {
+        get { liveTranscript.isLoading }
+        set { liveTranscript.isLoading = newValue }
+    }
+    var queuedMessages: [QueuedMessage] {
+        get { commands.queuedMessages }
+        set { commands.queuedMessages = newValue }
+    }
+    var streamingUpdateCount: Int {
+        get { liveTranscript.streamingUpdateCount }
+        set { liveTranscript.streamingUpdateCount = newValue }
+    }
+    var watchedAgentIds: [String] {
+        get { watchedAgentCoordinator.watchedAgentIds }
+        set { watchedAgentCoordinator.watchedAgentIds = newValue }
+    }
+    var delegationGroupStatus: (completed: Int, total: Int)? {
+        get { watchedAgentCoordinator.delegationGroupStatus }
+        set { watchedAgentCoordinator.delegationGroupStatus = newValue }
+    }
+    var isWaitingForAgents: Bool {
+        get { watchedAgentCoordinator.isWaitingForAgents }
+        set { watchedAgentCoordinator.isWaitingForAgents = newValue }
+    }
+    var watchedAgents: [AgentSession] {
+        get { watchedAgentCoordinator.watchedAgents }
+        set { watchedAgentCoordinator.watchedAgents = newValue }
+    }
+    var isTruncated: Bool {
+        get { liveTranscript.isTruncated }
+        set { liveTranscript.isTruncated = newValue }
+    }
+    var totalMessageCount: Int {
+        get { liveTranscript.totalMessageCount }
+        set { liveTranscript.totalMessageCount = newValue }
+    }
     /// Pending attention request for OUR agent (PROTOCOL §5.5), refreshed from
     /// `agent.get`. The daemon clears the underlying fields when the agent next
     /// receives a message, so this retires via the same refresh.
@@ -36,15 +64,24 @@ import SwiftUI
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
     /// `agent.get` and updated push-style by `agent:updated`. The wizard gate
     /// retires a pending set whose message id matches it.
-    var dismissedQuestionsMessageId: String?
+    var dismissedQuestionsMessageId: String? {
+        get { commands.dismissedQuestionsMessageId }
+        set { commands.dismissedQuestionsMessageId = newValue }
+    }
     /// The per-conversation seen marker (PROTOCOL §5.5, v4.5): id of the newest
     /// transcript message the user has seen, advanced via `agent.markSeen`.
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
     /// `agent.get` and updated push-style by `agent:updated` so marker moves
     /// from other clients converge here too.
-    var lastSeenMessageId: String?
+    var lastSeenMessageId: String? {
+        get { commands.lastSeenMessageId }
+        set { commands.lastSeenMessageId = newValue }
+    }
 
     private let connectionManager: ConnectionManagerRouting
+    @ObservationIgnored private let liveTranscript: ConversationLiveTranscript
+    @ObservationIgnored private let commands: ConversationCommands
+    @ObservationIgnored private let watchedAgentCoordinator: ConversationWatchedAgents
     private var agentId: String?
     private var workspaceId: String?
     private var subscriptionId: String?
@@ -52,21 +89,6 @@ import SwiftUI
     private var currentStreamId: String?
     private var isSubscribing = false
     @ObservationIgnored private var eventHandlerId: UUID?
-    /// Live-state tracking for chat.subscribe
-    private var chatLive = false
-    @ObservationIgnored private var chatSubscriptionId: String?
-    /// True while a chat.subscribe channel is (being) established; gates push processing.
-    private var chatChannelActive = false
-    /// True once the seq-0 snapshot has been applied; deltas before it are a gap.
-    private var chatSeeded = false
-    /// Next expected delta seq (snapshot seq + 1, then +1 per applied delta).
-    private var chatExpectedSeq = 0
-    private var resnapshotChatInProgress = false
-    /// Cached decoders/formatters for the hot block-delta path (many frames per second).
-    private let chatBlockDecoder = JSONDecoder()
-    private let chatTimestampFormatter = ISO8601DateFormatter()
-    /// Tracks the last time we refreshed each watched agent (for debouncing stream:activity refreshes)
-    private var watchedAgentLastRefresh: [String: Date] = [:]
     /// Buffer for stream events that arrive while the initial conversation fetch is in progress.
     /// This prevents lost deltas when subscribing before fetching.
     private var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
@@ -78,44 +100,39 @@ import SwiftUI
     /// Block keys (`{messageId}|{blockId}`) with an `agent.getMessageBlock`
     /// hydration fetch in flight (slim projection, PROTOCOL §5.5). Observed so
     /// the transcript can show a per-block loading affordance.
-    var hydratingBlockKeys: Set<String> = []
-    /// Full blocks fetched on demand, keyed by `{messageId}|{blockId}`. Cached
-    /// so a later slim refetch / chat snapshot re-merge never reverts a block
-    /// the user already expanded back to its truncated preview.
-    @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
-    /// Insertion order of `hydratedBlocks` keys (oldest first) for eviction.
-    @ObservationIgnored private var hydratedBlockOrder: [String] = []
-    /// Cap on cached hydrated blocks (FE parity: MAX_HYDRATED_BLOCKS in
-    /// chat-state-types.ts). Hydrated bodies are exactly the multi-MB payloads
-    /// the slim projection keeps out of memory, so the cache is bounded with
-    /// oldest-first eviction. Eviction is safe: `remergeHydratedBlocks()`
-    /// already substituted the full block into `messages`, so the cache only
-    /// needs to survive until the next transcript re-seed. In-flight fetches
-    /// live in `hydratingBlockKeys`, not here, so every entry is settled.
-    private static let maxHydratedBlocks = 30
+    var hydratingBlockKeys: Set<String> {
+        get { liveTranscript.hydratingBlockKeys }
+        set { liveTranscript.hydratingBlockKeys = newValue }
+    }
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        let commands = ConversationCommands(connectionManager: connectionManager)
         self.connectionManager = connectionManager
+        self.commands = commands
+        self.watchedAgentCoordinator = ConversationWatchedAgents(commands: commands)
+        self.liveTranscript = ConversationLiveTranscript(connectionManager: connectionManager)
+        liveTranscript.onStreamingChanged = { [weak self] isStreaming in
+            self?.onStreamingChanged?(isStreaming)
+        }
+        liveTranscript.onInitialLoadCompleted = { [weak self] in
+            self?.replayBufferedStreamEvents()
+        }
+        liveTranscript.onFetchError = { [weak self] error in
+            self?.raiseAgentNotFoundIfDefinitive(error)
+        }
         observeConnection()
     }
 
     isolated deinit {
-        // Remove handlers directly while deinit is isolated to MainActor.
-        guard eventHandlerId != nil || chatSubscriptionId != nil else { return }
         if let handlerId = eventHandlerId {
             connectionManager.removeEventHandler(id: handlerId)
-        }
-        if let subscriptionId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
 
     /// Test-only helper: activate the chat channel and set its subscriptionId,
     /// bypassing the real subscribe flow, so the strict push gate accepts test payloads.
     func setTestChatChannel(subscriptionId: String) {
-        chatChannelActive = true
-        chatSeeded = false
-        chatSubscriptionId = subscriptionId
+        liveTranscript.setTestChannel(subscriptionId: subscriptionId)
     }
 
     // MARK: - Connection observation
@@ -131,16 +148,7 @@ import SwiftUI
     }
 
     private func onReconnected() async {
-        // Reset live-state tracking on new connection
-        chatLive = false
-        // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
-        if let oldId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: oldId)
-        }
-        chatSubscriptionId = nil
-        chatChannelActive = false
-        chatSeeded = false
-        resnapshotChatInProgress = false
+        liveTranscript.prepareForReconnect()
 
         // Re-fetch conversation on reconnection
         guard let agentId = agentId else { return }
@@ -167,33 +175,17 @@ import SwiftUI
     /// (raise or clear) — it is server-authoritative with no optimistic state.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
         do {
-            let result = try await connectionManager.request(
-                "agent.get",
-                params: ["agentId": agentId]
-            )
-            if let dict = result as? [String: Any],
-               let agentDict = dict["agent"] as? [String: Any] {
-                let serverIsStreaming = (agentDict["isStreaming"] as? Bool ?? false)
-                    || (agentDict["isResponding"] as? Bool ?? false)
-                    || (agentDict["turnInFlight"] as? Bool ?? false)
+            if let state = try await commands.fetchAgentState(agentId: agentId) {
                 if raiseOnly {
-                    if serverIsStreaming {
-                        isStreaming = true
-                    }
+                    if state.isStreaming { isStreaming = true }
                 } else {
-                    isStreaming = serverIsStreaming
+                    isStreaming = state.isStreaming
                 }
-                attentionRequest = AgentSession.parsePendingAttentionRequest(agentDict)
-                // Question-dismissal and seen markers (AgentLite serves them
-                // under metadata; omitted when nothing was dismissed/seen).
-                if let metadata = agentDict["metadata"] as? [String: Any] {
-                    if let dismissedId = metadata["dismissedQuestionsMessageId"] as? String {
-                        dismissedQuestionsMessageId = dismissedId
-                    }
-                    if let seenId = metadata["lastSeenMessageId"] as? String {
-                        lastSeenMessageId = seenId
-                    }
+                attentionRequest = state.attentionRequest
+                if let dismissedId = state.dismissedQuestionsMessageId {
+                    dismissedQuestionsMessageId = dismissedId
                 }
+                if let seenId = state.lastSeenMessageId { lastSeenMessageId = seenId }
             }
         } catch {
             raiseAgentNotFoundIfDefinitive(error)
@@ -229,107 +221,28 @@ import SwiftUI
         if let workspaceId = workspaceId {
             self.workspaceId = workspaceId
         }
-        let isInitialLoad = messages.isEmpty
-        if isInitialLoad {
-            isLoading = true
-        }
-        do {
-            var params: [String: Any] = ["agentId": agentId]
-            if let wsId = workspaceId ?? self.workspaceId {
-                params["workspaceId"] = wsId
-            }
-            // Opt into the slim conversation projection (PROTOCOL §5.5):
-            // oversized tool/image bodies are served as bounded previews /
-            // thumbnails with additive *Truncated flags; full bodies hydrate
-            // on demand via agent.getMessageBlock.
-            params["projection"] = "slim"
-            let result = try await connectionManager.request(
-                "agent.getConversation",
-                params: params
-            )
-            if let dict = result as? [String: Any],
-               let items = dict["messages"] as? [[String: Any]] {
-                let fetchedMessages = items.compactMap { ConversationMessage.parseMessage($0) }
-
-                // Parse truncation metadata
-                isTruncated = dict["truncated"] as? Bool ?? false
-                totalMessageCount = dict["totalMessages"] as? Int ?? fetchedMessages.count
-
-                // Re-check emptiness after the await: a chat.subscribe snapshot may
-                // have seeded the transcript while the fetch was in flight — merge
-                // instead of clobbering the just-applied live state.
-                if messages.isEmpty {
-                    messages = fetchedMessages
-                } else {
-                    // Merge: update existing messages in-place, append new ones, remove deleted ones.
-                    // This avoids replacing the array wholesale which causes a UI flash.
-                    let fetchedIds = Set(fetchedMessages.map { $0.id })
-
-                    // Remove messages that no longer exist on server, but preserve a
-                    // local in-flight streaming assistant message the server page does
-                    // not yet contain (mid-turn content is not persisted until stream end).
-                    messages.removeAll { existing in
-                        if fetchedIds.contains(existing.id) { return false }
-                        if existing.role == .assistant && existing.isStreaming == true { return false }
-                        return true
-                    }
-
-                    // Update existing messages and append new ones
-                    for fetched in fetchedMessages {
-                        if let existingIndex = messages.firstIndex(where: { $0.id == fetched.id }) {
-                            messages[existingIndex] = fetched
-                        } else {
-                            messages.append(fetched)
-                        }
-                    }
-
-                    // Ensure order matches server order; locally-preserved in-flight
-                    // messages (not in the page) sort last, keeping the partial visible.
-                    let orderMap = Dictionary(uniqueKeysWithValues: fetchedMessages.enumerated().map { ($1.id, $0) })
-                    messages.sort { a, b in
-                        let aOrder = orderMap[a.id] ?? Int.max
-                        let bOrder = orderMap[b.id] ?? Int.max
-                        return aOrder < bOrder
-                    }
-                }
-
-                // A slim refetch must not revert blocks the user already
-                // hydrated back to their truncated previews.
-                remergeHydratedBlocks()
-
-                // Detect if the agent is already streaming from the fetched snapshot
-                if let lastMsg = messages.last, lastMsg.role == .assistant, lastMsg.isStreaming == true {
-                    isStreaming = true
-                }
-            }
-        } catch {
-            raiseAgentNotFoundIfDefinitive(error)
-            AppLog.conversation.error("[ConversationStore] Failed to fetch conversation: \(error)")
-        }
-        if isInitialLoad {
-            replayBufferedStreamEvents()
-            isLoading = false
-        }
+        await liveTranscript.fetchConversation(agentId: agentId, workspaceId: workspaceId)
     }
 
     // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
 
     /// Cache key for a hydrated block: owning message id + block id.
     static func hydratedBlockKey(messageId: String, blockId: String) -> String {
-        "\(messageId)|\(blockId)"
+        ConversationLiveTranscript.hydratedBlockKey(
+            messageId: messageId,
+            blockId: blockId
+        )
     }
 
     /// True when this block's full body is already hydrated (cached).
     func isBlockHydrated(messageId: String, blockId: String) -> Bool {
-        hydratedBlocks[Self.hydratedBlockKey(messageId: messageId, blockId: blockId)] != nil
+        liveTranscript.isBlockHydrated(messageId: messageId, blockId: blockId)
     }
 
     /// Block ids of `messageId` with a hydration fetch in flight (for the
     /// per-block loading affordance in the transcript).
     func hydratingBlockIds(forMessage messageId: String) -> Set<String> {
-        let prefix = "\(messageId)|"
-        return Set(hydratingBlockKeys.filter { $0.hasPrefix(prefix) }
-            .map { String($0.dropFirst(prefix.count)) })
+        liveTranscript.hydratingBlockIds(forMessage: messageId)
     }
 
     /// Fetch the FULL body of a slim-truncated block on demand via
@@ -337,73 +250,7 @@ import SwiftUI
     /// the transcript. Single-flight per block key; a hydrated block is never
     /// refetched.
     func hydrateBlock(messageId: String, blockId: String) async {
-        guard let agentId = agentId else { return }
-        let key = Self.hydratedBlockKey(messageId: messageId, blockId: blockId)
-        if hydratedBlocks[key] != nil || hydratingBlockKeys.contains(key) { return }
-        hydratingBlockKeys.insert(key)
-        defer { hydratingBlockKeys.remove(key) }
-
-        do {
-            let result = try await connectionManager.request(
-                "agent.getMessageBlock",
-                params: [
-                    "agentId": agentId,
-                    "messageId": messageId,
-                    "blockId": blockId,
-                ]
-            )
-            // A reset()/agent switch while the fetch was in flight cleared the
-            // cache for this transcript — drop the stale block instead of
-            // re-inserting the old agent's body past the reset.
-            guard self.agentId == agentId else { return }
-            guard let dict = result as? [String: Any],
-                  let blockDict = dict["block"] as? [String: Any],
-                  let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
-                  let block = try? chatBlockDecoder.decode(ContentBlock.self, from: blockData)
-            else {
-                AppLog.conversation.error(
-                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
-                return
-            }
-            storeHydratedBlock(block, forKey: key)
-            remergeHydratedBlocks()
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to hydrate block \(key): \(error)")
-        }
-    }
-
-    /// Cache a hydrated block, evicting the oldest entries beyond the cap.
-    private func storeHydratedBlock(_ block: ContentBlock, forKey key: String) {
-        if hydratedBlocks[key] == nil {
-            hydratedBlockOrder.append(key)
-        }
-        hydratedBlocks[key] = block
-        while hydratedBlockOrder.count > Self.maxHydratedBlocks {
-            let evicted = hydratedBlockOrder.removeFirst()
-            hydratedBlocks.removeValue(forKey: evicted)
-        }
-    }
-
-    /// Substitute cached full blocks back into the transcript by
-    /// `{messageId}|{blockId}` so a slim refetch / chat snapshot re-apply
-    /// never reverts an already-expanded block to its truncated preview.
-    private func remergeHydratedBlocks() {
-        guard !hydratedBlocks.isEmpty else { return }
-        for msgIndex in messages.indices {
-            guard var blocks = messages[msgIndex].contentBlocks, !blocks.isEmpty else { continue }
-            var changed = false
-            for blockIndex in blocks.indices {
-                let key = Self.hydratedBlockKey(
-                    messageId: messages[msgIndex].id, blockId: blocks[blockIndex].id)
-                if let full = hydratedBlocks[key] {
-                    blocks[blockIndex] = full
-                    changed = true
-                }
-            }
-            if changed {
-                messages[msgIndex].contentBlocks = blocks
-            }
-        }
+        await liveTranscript.hydrateBlock(messageId: messageId, blockId: blockId)
     }
 
     // MARK: - Stream event buffer replay
@@ -416,7 +263,7 @@ import SwiftUI
 
         // If the chat.subscribe channel went live while events were buffered, the
         // snapshot/deltas already cover this content — discard the firehose buffer.
-        if chatLive { return }
+        if liveTranscript.shouldDiscardBufferedFirehose { return }
 
         // Replay user message events — these may not be in the fetch snapshot
         // if the message was created after the fetch started.
@@ -471,25 +318,8 @@ import SwiftUI
 
         // Subscribe to agent stream events
         do {
-            let result = try await connectionManager.request(
-                "events.subscribe",
-                params: [
-                    "eventTypes": [
-                        "agent:stream:*", "agent:queue:*",
-                        "agent:user-message:*",
-                        "agent:subscribed", "agent:unsubscribed",
-                        "agent:status-changed", "agent:idle",
-                        "agent:woken-by-subscription",
-                        "agent:deleted", "agent:updated",
-                    ],
-                    "workspaceId": workspaceId,
-                    "replaceGroup": "streaming-\(agentId)",
-                ]
-            )
-            if let dict = result as? [String: Any],
-               let subId = dict["subscriptionId"] as? String {
-                subscriptionId = subId
-            }
+            subscriptionId = try await commands.subscribeToEvents(
+                agentId: agentId, workspaceId: workspaceId)
             AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
@@ -499,282 +329,13 @@ import SwiftUI
     // MARK: - Live chat subscription
 
     func subscribeLiveChat(agentId: String) async {
-        // Mark the channel active synchronously before await to eliminate race
-        chatChannelActive = true
-        chatSeeded = false
-
-        do {
-            // Slim projection here too (PROTOCOL §7.1): the seq-0 snapshot is
-            // bounded identically to the slim agent.getConversation read.
-            let result = try await connectionManager.request("chat.subscribe", params: [
-                "agentId": agentId,
-                "replaceGroup": "ios-chat-\(agentId)",
-                "projection": "slim"
-            ])
-            if let dict = result as? [String: Any],
-               let subId = dict["subscriptionId"] as? String {
-                // Unregister old handler if we had one. Guard against id reuse
-                // (daemon ids reset on restart) so we never drop the new
-                // subscription's buffered snapshot before registration replays it.
-                if let oldId = chatSubscriptionId, oldId != subId {
-                    connectionManager.unregisterSubscriptionHandler(id: oldId)
-                }
-                chatSubscriptionId = subId
-                // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
-                connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
-                    self?.handleChatSubscriptionPush(push)
-                }
-                AppLog.conversation.info("[ConversationStore] Subscribed to chat.subscribe: \(subId)")
-            } else {
-                // Response missing subscriptionId - clean up and fall back to legacy.
-                // Clear chatLive too so firehose events are not gated by a stale flag.
-                chatChannelActive = false
-                chatLive = false
-                chatSubscriptionId = nil
-            }
-        } catch {
-            // Subscribe failed - clean up and fall back to legacy.
-            // Clear chatLive too so firehose events are not gated by a stale flag.
-            chatChannelActive = false
-            chatLive = false
-            chatSubscriptionId = nil
-            AppLog.conversation.warning("[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
-        }
+        await liveTranscript.subscribe(agentId: agentId, workspaceId: workspaceId)
     }
 
     /// Internal (not private) so tests can drive the real ConnectionManager
     /// registration/replay path into the store.
     func handleChatSubscriptionPush(_ push: SubscriptionPush) {
-        // Only process pushes when the chat channel is active
-        guard chatChannelActive else { return }
-        // Strict gate: only accept pushes for our exact subscriptionId (tests route
-        // pushes through handleStreamEvent, which does not filter by id).
-        if let mySubId = chatSubscriptionId, push.subscriptionId != mySubId {
-            return
-        }
-
-        switch push.kind {
-        case .snapshot:
-            // Ignore stale snapshot re-delivery on an already-seeded channel when it
-            // would rewind chatExpectedSeq (deltas past it have been applied): applying
-            // it would roll the transcript back and make the next live delta read as a
-            // gap. Snapshots at the current position stay authoritative; legitimate
-            // (re)snapshots also always follow a chatSeeded reset.
-            if chatSeeded && push.seq + 1 < chatExpectedSeq { return }
-            applyChatSnapshot(push)
-
-        case .delta:
-            guard let delta = push.delta else { return }
-            if chatSeeded && push.seq == chatExpectedSeq {
-                applyChatDelta(delta)
-                chatExpectedSeq = push.seq + 1
-            } else if chatSeeded && push.seq < chatExpectedSeq {
-                // Stale/duplicate re-delivery (already applied) — not a gap, ignore silently.
-                return
-            } else {
-                // Genuine gap (seq > expected, or delta before any snapshot) —
-                // resnapshot (guard against storm)
-                if !resnapshotChatInProgress {
-                    resnapshotChatInProgress = true
-                    AppLog.conversation.warning("[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
-                    Task { await resnapshotChat() }
-                }
-            }
-        }
-    }
-
-    /// Apply the seq-0 snapshot (PROTOCOL §7.1): seed the transcript from
-    /// `snapshot.messages` and derive streaming state from the synthetic in-flight
-    /// assistant message plus the snapshot-level activity flags.
-    private func applyChatSnapshot(_ push: SubscriptionPush) {
-        guard let rawItems = push.snapshot else { return }
-        chatLive = true
-        chatSeeded = true
-        chatExpectedSeq = push.seq + 1
-
-        messages = rawItems.compactMap { ConversationMessage.parseMessage($0) }
-        // A slim (re)snapshot must not revert blocks the user already
-        // hydrated back to their truncated previews.
-        remergeHydratedBlocks()
-
-        // The snapshot is authoritative: absent meta keys reset to their defaults
-        // (not truncated, total = page size) rather than retaining stale values.
-        isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
-        totalMessageCount = push.snapshotMeta?["totalMessages"] as? Int ?? messages.count
-
-        // Mid-turn hydration: streaming is on when the snapshot carries a synthetic
-        // in-flight assistant message or the activity flags say a turn is in flight.
-        // The snapshot is authoritative both ways — an idle snapshot clears any
-        // stale streaming state (e.g. after a resnapshot or re-entry).
-        let hasInFlightMessage = messages.contains { $0.isStreaming == true }
-        let meta = push.snapshotMeta
-        let isResponding = meta?["isResponding"] as? Bool ?? false
-        let turnInFlight = meta?["turnInFlight"] as? Bool ?? false
-        isStreaming = hasInFlightMessage || isResponding || turnInFlight
-        AppLog.conversation.debug("[ConversationStore] Applied chat snapshot with \(rawItems.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
-    }
-
-    /// Reduce one block-granularity delta onto the transcript (PROTOCOL §7.1).
-    /// Each entity carries `{ agentId, messageId, role, block }` plus
-    /// `messageSeq`/`timestamp`/`streamingComplete` on the terminal frame; the
-    /// block is the FULL current block, upserted by `block.id` into the owning
-    /// message (created on first appearance). `removedIds` are block ids the
-    /// persisted message does not contain (orphan self-heal).
-    private func applyChatDelta(_ delta: SubscriptionPush.DeltaPayload) {
-        var sawTerminal = false
-        var sawUpsert = false
-
-        for entity in delta.added {
-            let (applied, terminal) = upsertChatBlock(entity)
-            sawUpsert = sawUpsert || applied
-            sawTerminal = sawTerminal || terminal
-        }
-        for entity in delta.updated {
-            let (applied, terminal) = upsertChatBlock(entity)
-            sawUpsert = sawUpsert || applied
-            sawTerminal = sawTerminal || terminal
-        }
-
-        if !delta.removedIds.isEmpty {
-            let removed = Set(delta.removedIds)
-            for index in messages.indices {
-                guard var blocks = messages[index].contentBlocks else { continue }
-                blocks.removeAll { removed.contains($0.id) }
-                messages[index].contentBlocks = blocks
-            }
-        }
-
-        // A delta re-upsert of a slim block must not revert a block the user
-        // already hydrated (no-op unless something was hydrated). Note this
-        // pins the cached hydrated copy over ANY later delta for that block
-        // id — correct while persisted truncated blocks are immutable; if the
-        // daemon ever re-serves a changed body for an existing block id, the
-        // stale hydrated copy wins until the next reset().
-        remergeHydratedBlocks()
-
-        if sawTerminal {
-            // Terminal frame: the turn is done
-            isStreaming = false
-            streamingUpdateCount = 0
-        } else if sawUpsert {
-            // A live (non-terminal) block upsert always means a turn is in flight
-            isStreaming = true
-            streamingUpdateCount += 1
-        }
-        AppLog.conversation.debug("[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
-    }
-
-    /// Upsert one delta entity's full block into its owning message.
-    /// Returns (applied, terminal): whether the entity was applied as live turn
-    /// activity and whether it carries the turn-terminal `streamingComplete`
-    /// flag. Non-assistant rows (user/system — queue drains, direct sends,
-    /// model switches; intentd#747) are authoritative persisted rows, not turn
-    /// activity: they upsert into the transcript but return (false, false) so
-    /// they neither raise nor clear the turn-level streaming flag (a direct
-    /// send's row lands while the optimistic thinking indicator is up, and a
-    /// queue drain's row lands right before the turn's first chunk).
-    private func upsertChatBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
-        guard let messageId = entity["messageId"] as? String,
-              let blockDict = entity["block"] as? [String: Any],
-              let blockData = try? JSONSerialization.data(withJSONObject: blockDict),
-              let block = try? chatBlockDecoder.decode(ContentBlock.self, from: blockData) else {
-            return (false, false)
-        }
-        let streamingComplete = entity["streamingComplete"] as? Bool ?? false
-
-        let messageIndex: Int
-        if let existing = messages.firstIndex(where: { $0.id == messageId }) {
-            messageIndex = existing
-        } else {
-            // First block of a new (in-flight) message — create it. Fall back to
-            // the current time when the entity carries no timestamp; the terminal
-            // frame's server timestamp is adopted below when it arrives.
-            let roleStr = entity["role"] as? String ?? "assistant"
-            let msg = ConversationMessage(
-                id: messageId,
-                role: MessageRole(rawValue: roleStr) ?? .system,
-                contentBlocks: [],
-                timestamp: entity["timestamp"] as? String
-                    ?? chatTimestampFormatter.string(from: Date()),
-                isStreaming: !streamingComplete
-            )
-            messages.append(msg)
-            messageIndex = messages.count - 1
-        }
-
-        // Adopt the server timestamp when the entity carries one (terminal frames
-        // include it), correcting any locally-synthesized creation timestamp.
-        if let ts = entity["timestamp"] as? String, !ts.isEmpty {
-            messages[messageIndex].timestamp = ts
-        }
-
-        var blocks = messages[messageIndex].contentBlocks ?? []
-        if let blockIndex = blocks.firstIndex(where: { $0.id == block.id }) {
-            blocks[blockIndex] = mergedToolUseBlock(prior: blocks[blockIndex], incoming: block)
-        } else {
-            blocks.append(block)
-        }
-        messages[messageIndex].contentBlocks = blocks
-        messages[messageIndex].isStreaming = !streamingComplete
-
-        let isAssistant = messages[messageIndex].role == .assistant
-        return (isAssistant, isAssistant && streamingComplete)
-    }
-
-    /// Merge a sparse `tool_use` upsert onto the prior block. The daemon's
-    /// chat.subscribe `tool_delta` synthesizes the FULL block from each
-    /// `agent:tool:call` event, but a sparse ACP `tool_call_update` (progress
-    /// or completion tick) maps every unset field to its default — `name:""`,
-    /// `input:{}`, `toolKind:"other"` — so upserting it verbatim clobbers the
-    /// titled block from first sight and the in-flight row renders as a bare
-    /// spanner for the rest of the turn. An empty incoming name marks such a
-    /// progress-only tick (mirrors the desktop firehose bridge's merge
-    /// policy, regardless of whether the prior block carries a name): keep
-    /// the prior block's name/input/toolKind, adopt only the new status.
-    /// Authoritative updates (non-empty name) replace as before.
-    private func mergedToolUseBlock(prior: ContentBlock, incoming: ContentBlock) -> ContentBlock {
-        guard incoming.type == .toolUse, prior.type == .toolUse,
-              incoming.toolCallId != nil, incoming.toolCallId == prior.toolCallId,
-              (incoming.resolvedName ?? "").isEmpty else {
-            return incoming
-        }
-        var merged = incoming
-        merged.name = prior.resolvedName
-        merged.input = prior.input
-        var metadata = merged.metadata ?? [:]
-        if let priorKind = prior.metadata?["toolKind"] {
-            metadata["toolKind"] = priorKind
-        }
-        merged.metadata = metadata
-        return merged
-    }
-
-    private func resnapshotChat() async {
-        resnapshotChatInProgress = true
-        defer { resnapshotChatInProgress = false }
-
-        chatLive = false
-        chatSeeded = false
-
-        if let subId = chatSubscriptionId {
-            // Unregister handler before unsubscribing
-            connectionManager.unregisterSubscriptionHandler(id: subId)
-            do {
-                let _ = try await connectionManager.request("chat.unsubscribe", params: [
-                    "subscriptionId": subId
-                ])
-            } catch {
-                AppLog.conversation.error("[ConversationStore] chat.unsubscribe failed: \(error)")
-            }
-        }
-
-        chatSubscriptionId = nil
-
-        if let agentId = agentId {
-            await subscribeLiveChat(agentId: agentId)
-            // Baseline refetch to bridge the gap during resnapshot
-            await fetchConversation(agentId: agentId, workspaceId: workspaceId)
-        }
+        liveTranscript.handlePush(push)
     }
 
     /// Unsubscribe the previous server-side event subscription to prevent duplicate event delivery.
@@ -782,10 +343,7 @@ import SwiftUI
         guard let subId = subscriptionId else { return }
         subscriptionId = nil
         do {
-            let _ = try await connectionManager.request(
-                "events.unsubscribe",
-                params: ["subscriptionId": subId]
-            )
+            try await commands.unsubscribeEvents(subscriptionId: subId)
             AppLog.conversation.debug("[ConversationStore] Unsubscribed previous subscription: \(subId)")
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to unsubscribe: \(error)")
@@ -857,8 +415,8 @@ import SwiftUI
             if eventAgentId != agentId { return }
         case "agent:status-changed", "agent:idle":
             // If this is a watched agent, immediately refresh just that agent
-            if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                refreshWatchedAgent(agentId: eventAgentId)
+            if let eventAgentId {
+                watchedAgentCoordinator.handleStatusChange(agentId: eventAgentId)
             }
             // Also re-fetch subscriptions for the parent agent (sub-agents completing may change groups)
             if let agentId = self.agentId, let workspaceId = self.workspaceId {
@@ -871,38 +429,17 @@ import SwiftUI
             // payload carries live preview fields (lastAgentResponse, digest)
             // when the turn has produced them — apply those push-style to an
             // already-loaded watched agent instead of refetching via agent.get.
-            if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                let lastAgentResponse = data["lastAgentResponse"] as? String
-                let digest = data["digest"] as? String
-                if let idx = watchedAgents.firstIndex(where: { $0.id == eventAgentId }) {
-                    // Loaded row: apply the preview when present. A content-free
-                    // ping means no turn text is derivable yet (pre-first-token),
-                    // so there is nothing to apply and no refetch is needed — the
-                    // next enriched ping or turn-end event will populate the row.
-                    if lastAgentResponse != nil || digest != nil {
-                        watchedAgents[idx] = watchedAgents[idx].applyingPreview(
-                            lastAgentResponse: lastAgentResponse,
-                            digest: digest
-                        )
-                    }
-                } else {
-                    // Row not yet loaded: the preview payload alone can't
-                    // populate a full AgentSession, so debounce a one-off
-                    // agent.get to materialize the row.
-                    let now = Date()
-                    let lastRefresh = watchedAgentLastRefresh[eventAgentId]
-                    if lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 3.0 {
-                        watchedAgentLastRefresh[eventAgentId] = now
-                        refreshWatchedAgent(agentId: eventAgentId)
-                    }
-                }
+            if let eventAgentId {
+                watchedAgentCoordinator.handleActivity(
+                    agentId: eventAgentId,
+                    lastAgentResponse: data["lastAgentResponse"] as? String,
+                    digest: data["digest"] as? String)
             }
             guard eventAgentId == agentId else { return }
         case "agent:stream:end":
             // When a watched agent finishes streaming, always refresh (bypass debounce) for final state
-            if let eventAgentId = eventAgentId, watchedAgentIds.contains(eventAgentId) {
-                watchedAgentLastRefresh.removeValue(forKey: eventAgentId)
-                refreshWatchedAgent(agentId: eventAgentId)
+            if let eventAgentId {
+                watchedAgentCoordinator.handleStreamEnd(agentId: eventAgentId)
             }
             // Only continue processing if this is our agent
             guard eventAgentId == agentId else { return }
@@ -914,8 +451,8 @@ import SwiftUI
         // When the chat.subscribe channel is live, block-level deltas own the transcript.
         // Drop firehose agent:stream:* mutations so they cannot create duplicate blocks
         // with client-generated ids that the terminal delta's removedIds cannot remove.
-        // agent:stream:end stays as a benign safety net (its refetch is gated on !chatLive).
-        if chatLive, eventType.hasPrefix("agent:stream:"), eventType != "agent:stream:end" {
+        // agent:stream:end stays as a benign safety net (its refetch is gated on live state).
+        if liveTranscript.shouldSuppressFirehose(eventType: eventType) {
             return
         }
 
@@ -955,7 +492,8 @@ import SwiftUI
         case "agent:idle":
             isStreaming = false
             // Re-fetch conversation to get final state (unless in live mode)
-            if !chatLive, let agentId = self.agentId {
+            if liveTranscript.shouldRefetchAfterLegacyStreamEnd,
+               let agentId = self.agentId {
                 Task { await self.fetchConversation(agentId: agentId) }
             }
             // Turn ended — refresh the pending attention request
@@ -1004,7 +542,8 @@ import SwiftUI
         }
 
         // Re-fetch to get the final server-side state (unless in live mode)
-        if !chatLive, let agentId = agentId {
+        if liveTranscript.shouldRefetchAfterLegacyStreamEnd,
+           let agentId = agentId {
             Task { await fetchConversation(agentId: agentId) }
         }
     }
@@ -1076,22 +615,6 @@ import SwiftUI
         } else {
             messageId = UUID().uuidString
         }
-        var params: [String: Any] = [
-            "agentId": agentId,
-            "content": content,
-            "workspaceId": workspaceId,
-            "messageId": messageId,
-        ]
-        if let imageBlocks = imageBlocks {
-            params["imageBlocks"] = imageBlocks
-        }
-        if let fileBlocks = fileBlocks {
-            params["fileBlocks"] = fileBlocks
-        }
-        if let messageMetadata = messageMetadata {
-            params["messageMetadata"] = messageMetadata
-        }
-
         // Add user message locally for immediate UI feedback (use messageId for
         // dedup). The block id mirrors the daemon's synthetic `{messageId}:0`
         // (CS-0 D1) so the authoritative user-row delta (intentd#747) upserts
@@ -1110,12 +633,16 @@ import SwiftUI
             isStreaming = true
         }
 
-        let result: Any
+        let queued: Bool
         do {
-            result = try await connectionManager.request(
-                "agent.sendMessage",
-                params: params
-            )
+            queued = try await commands.sendMessage(
+                agentId: agentId,
+                content: content,
+                workspaceId: workspaceId,
+                messageId: messageId,
+                imageBlocks: imageBlocks,
+                fileBlocks: fileBlocks,
+                messageMetadata: messageMetadata)
         } catch {
             // Track the failed send so retrying reuses the same messageId
             lastFailedSend = (messageId: messageId, content: content)
@@ -1131,9 +658,7 @@ import SwiftUI
         attentionRequest = nil
 
         // If the message was queued, undo the optimistic streaming state
-        if let dict = result as? [String: Any],
-           let queued = dict["queued"] as? Bool,
-           queued {
+        if queued {
             isStreaming = false
             // Message was queued — remove the optimistic message from conversation
             // since it will appear in the queued messages panel instead
@@ -1171,403 +696,93 @@ import SwiftUI
     /// race the same question message (PR #86 review). A failed call rolls
     /// the marker back (the wizard re-pends) and rethrows.
     func dismissQuestions(agentId: String, messageId: String, workspaceId: String) async throws {
-        let previousMarker = dismissedQuestionsMessageId
-        dismissedQuestionsMessageId = messageId
-        do {
-            let result = try await connectionManager.request(
-                "agent.dismissQuestions",
-                params: [
-                    "agentId": agentId,
-                    "messageId": messageId,
-                    "workspaceId": workspaceId,
-                ]
-            )
-            if let confirmedId = (result as? [String: Any])?["dismissedQuestionsMessageId"]
-                as? String {
-                dismissedQuestionsMessageId = confirmedId
-            }
-        } catch {
-            // Roll back only if nothing else (agent:updated push, a second
-            // dismissal) moved the marker while the RPC was in flight.
-            if dismissedQuestionsMessageId == messageId {
-                dismissedQuestionsMessageId = previousMarker
-            }
-            throw error
-        }
+        try await commands.dismissQuestions(
+            agentId: agentId, messageId: messageId, workspaceId: workspaceId)
     }
 
     // MARK: - Seen marker (agent.markSeen, PROTOCOL §5.5)
-
-    /// Dedupe record for `markSeen`: the last marker id we sent (or attempted
-    /// to send). Cleared on failure so a later trigger retries naturally.
-    private var lastMarkSeenSentId: String?
-
-    /// Newest persisted message id in transcript order — streaming rows
-    /// (partial assistant output not yet persisted daemon-side) are never
-    /// eligible: the marker must only ever point at a message the daemon can
-    /// resolve (FE parity: mark-agent-seen.ts `newestPersistedMessageId`).
-    private var newestPersistedMessageId: String? {
-        for message in messages.reversed() {
-            if message.isStreaming == true { continue }
-            if !message.id.isEmpty { return message.id }
-        }
-        return nil
-    }
 
     /// Fire-and-forget `agent.markSeen`: advance the per-conversation seen
     /// marker to the newest persisted message. Never throws — the daemon call
     /// is idempotent and monotonic, so a failure just leaves the marker behind
     /// and the next trigger retries (the dedupe record is rolled back).
     func markSeen(agentId: String, workspaceId: String) async {
-        guard let messageId = newestPersistedMessageId else { return }
-        // Dedupe: no point re-sending the marker id we already sent (or the
-        // daemon already serves).
-        if messageId == lastMarkSeenSentId || messageId == lastSeenMessageId { return }
-        lastMarkSeenSentId = messageId
-        do {
-            let result = try await connectionManager.request(
-                "agent.markSeen",
-                params: [
-                    "agentId": agentId,
-                    "messageId": messageId,
-                    "workspaceId": workspaceId,
-                ]
-            )
-            // Adopt the daemon's confirmed marker — under the monotonic
-            // contract it may be a NEWER id than the one we named.
-            if let confirmedId = (result as? [String: Any])?["lastSeenMessageId"] as? String {
-                lastSeenMessageId = confirmedId
-            }
-        } catch {
-            // Roll back the dedupe record so the next trigger retries — only
-            // if nothing newer was recorded while the RPC was in flight.
-            if lastMarkSeenSentId == messageId {
-                lastMarkSeenSentId = nil
-            }
-            AppLog.conversation.error("[ConversationStore] agent.markSeen failed: \(error)")
-        }
+        await commands.markSeen(
+            agentId: agentId, workspaceId: workspaceId, messages: messages)
     }
-
-    // MARK: - Queue message
 
     func queueMessage(agentId: String, content: String,
                       imageBlocks: [[String: Any]]? = nil,
                       fileBlocks: [[String: Any]]? = nil) async throws {
-        var params: [String: Any] = [
-            "agentId": agentId,
-            "content": content,
-        ]
-        if let imageBlocks = imageBlocks {
-            params["imageBlocks"] = imageBlocks
-        }
-        if let fileBlocks = fileBlocks {
-            params["fileBlocks"] = fileBlocks
-        }
-
-        let result = try await connectionManager.request(
-            "agent.queueMessage",
-            params: params
-        )
-
-        // Parse the queued message from response
-        if let dict = result as? [String: Any],
-           let qmDict = dict["queuedMessage"] as? [String: Any],
-           let data = try? JSONSerialization.data(withJSONObject: qmDict),
-           let qm = try? JSONDecoder().decode(QueuedMessage.self, from: data) {
-            queuedMessages.append(qm)
-        }
+        try await commands.queueMessage(
+            agentId: agentId, content: content,
+            imageBlocks: imageBlocks, fileBlocks: fileBlocks)
     }
-
-    // MARK: - Stop streaming
 
     func stopStreaming(agentId: String) async {
         do {
-            let _ = try await connectionManager.request(
-                "agent.stop",
-                params: ["agentId": agentId]
-            )
+            try await commands.stop(agentId: agentId)
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to stop streaming: \(error)")
         }
     }
 
-    // MARK: - Fetch queue
-
     func fetchQueue(agentId: String) async {
         do {
-            let result = try await connectionManager.request(
-                "agent.getQueue",
-                params: ["agentId": agentId]
-            )
-            if let dict = result as? [String: Any],
-               let items = dict["queue"] as? [[String: Any]] {
-                let data = try JSONSerialization.data(withJSONObject: items)
-                queuedMessages = (try? JSONDecoder().decode([QueuedMessage].self, from: data)) ?? []
-            }
+            try await commands.fetchQueue(agentId: agentId)
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
         }
     }
 
-    // MARK: - Edit queued message
-
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
-        let _ = try await connectionManager.request(
-            "agent.editQueuedMessage",
-            params: [
-                "agentId": agentId,
-                "messageId": messageId,
-                "content": content,
-            ]
-        )
-        if let idx = queuedMessages.firstIndex(where: { $0.id == messageId }) {
-            queuedMessages[idx].content = content
-        }
+        try await commands.editQueuedMessage(
+            agentId: agentId, messageId: messageId, content: content)
     }
-
-    // MARK: - Send queued message now
 
     func sendQueuedMessageNow(agentId: String, messageId: String, workspaceId: String) async throws {
-        let result: Any
-        do {
-            result = try await connectionManager.request(
-                "agent.sendQueuedMessageNow",
-                params: [
-                    "agentId": agentId,
-                    "workspaceId": workspaceId,
-                    "messageId": messageId,
-                ]
-            )
-        } catch let error as NSError where error.isEntityNotFound {
-            // Queued message not found on the daemon — refresh the queue instead of
-            // mutating local state (`agent:queue:updated` reconciles thereafter).
-            await fetchQueue(agentId: agentId)
-            throw error
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
-            // -32602 without data.code == "not-found" (invalid-params or absent
-            // data, PROTOCOL §3.3/§9) — log loudly and propagate without
-            // classifying as a missing queued message.
-            AppLog.conversation.error(
-                "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
-                    + "queued message \(messageId) (data.code: \(error.intentErrorDataCode ?? "absent")): "
-                    + error.localizedDescription)
-            throw error
-        }
-        // `queued: true` (slot race / quarantined session, §5.5): the daemon
-        // did NOT deliver — the entry stayed queued (restored at the front on
-        // a slot race) — so keep the local entry; `agent:queue:updated`
-        // reconciles ordering.
-        if let dict = result as? [String: Any], dict["queued"] as? Bool == true {
-            return
-        }
-        // Delivered: drop only the sent entry; the daemon preserves the rest
-        // of the queue (the transcript row arrives via the user-row chat delta).
-        queuedMessages.removeAll { $0.id == messageId }
+        try await commands.sendQueuedMessageNow(
+            agentId: agentId, messageId: messageId, workspaceId: workspaceId)
     }
 
-    // MARK: - Remove queued message
-
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
-        let _ = try await connectionManager.request(
-            "agent.removeQueuedMessage",
-            params: [
-                "agentId": agentId,
-                "messageId": messageId,
-            ]
-        )
-        queuedMessages.removeAll { $0.id == messageId }
+        try await commands.removeQueuedMessage(agentId: agentId, messageId: messageId)
     }
 
     // MARK: - Models
 
     func getModels(agentId: String) async throws -> [[String: Any]] {
-        let result = try await connectionManager.request(
-            "agent.getModels",
-            params: ["agentId": agentId]
-        )
-        if let dict = result as? [String: Any],
-           let models = dict["models"] as? [[String: Any]] {
-            return models
-        }
-        return []
+        try await commands.getModels(agentId: agentId)
     }
 
     func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
-        let _ = try await connectionManager.request(
-            "agent.setModel",
-            params: [
-                "agentId": agentId,
-                "modelId": modelId,
-                "workspaceId": workspaceId,
-            ]
-        )
+        try await commands.setModel(
+            agentId: agentId, modelId: modelId, workspaceId: workspaceId)
     }
 
     // MARK: - Agent subscriptions
 
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
-        do {
-            let result = try await connectionManager.request(
-                "agent.getSubscriptions",
-                params: ["agentId": agentId, "workspaceId": workspaceId]
-            )
-            guard let dict = result as? [String: Any] else { return }
-
-            let subs = dict["subscriptions"] as? [[String: Any]] ?? []
-            let groups = dict["delegationGroups"] as? [[String: Any]] ?? []
-
-            // Extract watched agent IDs from delegation groups and subscriptions
-            var agentIds = Set<String>()
-            for group in groups {
-                if let expected = group["expectedAgentIds"] as? [String] {
-                    agentIds.formUnion(expected)
-                }
-            }
-            for sub in subs {
-                // Read top-level actorIds (current wire shape from intentd)
-                if let actorIds = sub["actorIds"] as? [String] {
-                    agentIds.formUnion(actorIds)
-                }
-                // Fallback: legacy filter.actorIds for backward compatibility
-                else if let filter = sub["filter"] as? [String: Any],
-                        let actorIds = filter["actorIds"] as? [String] {
-                    agentIds.formUnion(actorIds)
-                }
-            }
-
-            watchedAgentIds = Array(agentIds)
-            isWaitingForAgents = !agentIds.isEmpty
-            await fetchWatchedAgentDetails()
-
-            // Compute completion status from delegation groups
-            if !groups.isEmpty {
-                var completed = 0
-                var total = 0
-                for group in groups {
-                    let expected = (group["expectedAgentIds"] as? [String])?.count ?? 0
-                    let done = (group["completedAgentIds"] as? [String])?.count ?? 0
-                    total += expected
-                    completed += done
-                }
-                delegationGroupStatus = (completed: completed, total: total)
-            } else {
-                delegationGroupStatus = nil
-            }
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to fetch subscriptions: \(error)")
-        }
+        await watchedAgentCoordinator.fetchSubscriptions(
+            agentId: agentId, workspaceId: workspaceId)
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {
-        do {
-            let _ = try await connectionManager.request(
-                "agent.cancelSubscriptions",
-                params: ["agentId": agentId, "workspaceId": workspaceId]
-            )
-            watchedAgentIds = []
-            isWaitingForAgents = false
-            delegationGroupStatus = nil
-            watchedAgents = []
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to cancel subscriptions: \(error)")
-        }
-    }
-
-    /// Immediately fetch and update a single watched agent's details
-    private func refreshWatchedAgent(agentId: String) {
-        Task { @MainActor in
-            do {
-                let result = try await connectionManager.request(
-                    "agent.get",
-                    params: ["agentId": agentId]
-                )
-                guard let dict = result as? [String: Any],
-                      let agentDict = dict["agent"] as? [String: Any],
-                      let updated = AgentSession.parseAgent(agentDict) else { return }
-
-                if !updated.isActive {
-                    self.watchedAgents.removeAll { $0.id == agentId }
-                    self.watchedAgentIds.removeAll { $0 == agentId }
-                    self.isWaitingForAgents = !self.watchedAgentIds.isEmpty
-                    if self.watchedAgentIds.isEmpty {
-                        self.delegationGroupStatus = nil
-                    }
-                } else {
-                    // Update just this agent in the watchedAgents array
-                    if let idx = self.watchedAgents.firstIndex(where: { $0.id == agentId }) {
-                        self.watchedAgents[idx] = updated
-                    } else {
-                        // Agent wasn't in the list yet — add it
-                        self.watchedAgents.append(updated)
-                    }
-                }
-                AppLog.conversation.debug("[ConversationStore] Updated watched agent: \(updated.name): \(updated.displayMessage ?? "nil")")
-            } catch {
-                AppLog.conversation.error("[ConversationStore] Failed to fetch watched agent \(agentId): \(error)")
-            }
-        }
-    }
-
-    private func fetchWatchedAgentDetails() async {
-        guard let workspaceId = workspaceId else { return }
-        guard !watchedAgentIds.isEmpty else {
-            await MainActor.run { watchedAgents = [] }
-            return
-        }
-        do {
-            let result = try await connectionManager.request(
-                "agent.list",
-                params: ["workspaceId": workspaceId]
-            )
-            guard let dict = result as? [String: Any],
-                  let agentDicts = dict["agents"] as? [[String: Any]] else { return }
-            let watchedSet = Set(watchedAgentIds)
-            let agents = agentDicts.compactMap { AgentSession.parseAgent($0) }
-                .filter { watchedSet.contains($0.id) }
-            AppLog.conversation.debug("[ConversationStore] Fetched \(agents.count) watched agents: \(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })")
-            await MainActor.run {
-                self.watchedAgents = agents
-            }
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to fetch watched agent details: \(error)")
-        }
+        await watchedAgentCoordinator.cancelSubscriptions(
+            agentId: agentId, workspaceId: workspaceId)
     }
 
     func stopWatchedAgents(agentIds: [String], parentAgentId: String, workspaceId: String) async {
-        // Cancel subscriptions first
-        await cancelSubscriptions(agentId: parentAgentId, workspaceId: workspaceId)
-        // Stop parent agent
-        do {
-            let _ = try await connectionManager.request(
-                "agent.stop", params: ["agentId": parentAgentId])
-        } catch {
-            AppLog.conversation.error("[ConversationStore] Failed to stop parent agent: \(error)")
-        }
-        // Stop all watched agents
-        for id in agentIds {
-            do {
-                let _ = try await connectionManager.request(
-                    "agent.stop", params: ["agentId": id])
-            } catch {
-                AppLog.conversation.error("[ConversationStore] Failed to stop agent \(id): \(error)")
-            }
-        }
+        await watchedAgentCoordinator.stopAgents(
+            agentIds: agentIds, parentAgentId: parentAgentId, workspaceId: workspaceId)
     }
 
     // MARK: - Cleanup
 
     func reset() {
-        messages = []
-        isStreaming = false
-        isLoading = false
-        queuedMessages = []
-        streamingUpdateCount = 0
-        watchedAgentIds = []
-        delegationGroupStatus = nil
-        isWaitingForAgents = false
-        watchedAgents = []
-        isTruncated = false
-        totalMessageCount = 0
+        liveTranscript.reset()
+        commands.reset()
+        watchedAgentCoordinator.reset()
         agentId = nil
         workspaceId = nil
         subscriptionId = nil
@@ -1575,25 +790,7 @@ import SwiftUI
         isSubscribing = false
         streamEventBuffer.removeAll()
         lastFailedSend = nil
-        hydratingBlockKeys = []
-        hydratedBlocks = [:]
-        hydratedBlockOrder = []
         attentionRequest = nil
         agentNotFound = false
-        dismissedQuestionsMessageId = nil
-        lastSeenMessageId = nil
-        lastMarkSeenSentId = nil
-        watchedAgentLastRefresh.removeAll()
-        chatLive = false
-        // Unregister handler on reset
-        if let oldId = chatSubscriptionId {
-            connectionManager.unregisterSubscriptionHandler(id: oldId)
-        }
-        chatSubscriptionId = nil
-        chatChannelActive = false
-        chatSeeded = false
-        chatExpectedSeq = 0
-        resnapshotChatInProgress = false
     }
 }
-

@@ -201,7 +201,12 @@ struct MessageView: View {
     @ViewBuilder
     private var assistantMessageView: some View {
         VStack(alignment: .leading, spacing: 8) {
-            let renderBlocks = Self.groupContentBlocks(blocks, isStreaming: message.isStreaming == true)
+            // Message-level suggested-prompts strip runs BEFORE grouping so a
+            // block whose opener and closer land in different text blocks is
+            // still removed (per-block stripping in ContentBlockView can't
+            // see across boundaries — intent-hq/intent#3936).
+            let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+            let renderBlocks = Self.groupContentBlocks(strippedBlocks, isStreaming: message.isStreaming == true)
 
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
@@ -315,7 +320,10 @@ struct MessageView: View {
     /// blocks, HTML comments, `<agent_digest>` and supervisor tags). Code
     /// blocks are kept verbatim; tool, thinking and image blocks are skipped.
     static func assistantCopyText(from blocks: [ContentBlock]) -> String {
-        let displayed: [ContentBlock] = groupContentBlocks(blocks).flatMap { renderBlock -> [ContentBlock] in
+        // Same message-level pre-strip as assistantMessageView so copy
+        // matches the display when markup spans text-block boundaries.
+        let stripped = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+        let displayed: [ContentBlock] = groupContentBlocks(stripped).flatMap { renderBlock -> [ContentBlock] in
             switch renderBlock {
             case .contentBlock(let block): return [block]
             case .group(let group): return group.children

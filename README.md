@@ -4,50 +4,36 @@ The **Intent iOS companion app** is a native SwiftUI client for iPhone and iPad 
 
 ## What it is
 
-- **Native SwiftUI.** Built for iOS 26.2+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports both iPhone and iPad form factors.
+- **Native SwiftUI.** Built for iOS 18.0+ with async/await, SwiftUI lifecycle, and `@MainActor` isolation. Supports both iPhone and iPad form factors.
 - **Secure pairing.** Pair with `intentd` via **QR code or manual entry**, verify TLS fingerprints (pin-on-first-use or QR code), and authenticate with bearer tokens. Traffic is **WSS/TLS** when a certificate fingerprint is available; new pairings always pin a fingerprint (manual entry aborts when the TLS probe finds no certificate), and only legacy fingerprint-less pairings still use plain `ws://`.
 - **Local-first mirror.** The app maintains a local cache of workspaces, notes, and agent sessions for offline read access, synced via WebSocket JSON-RPC push notifications.
 - **JSON-RPC client.** Talks to `intentd`'s WebSocket transport using the same JSON-RPC 2.0 protocol the desktop client uses.
 
 ## Architecture
 
-A single-target Xcode project with a SwiftUI app, structured as:
+An Xcode project with a SwiftUI app target plus unit and UI test targets, structured as:
 
 ```text
 Intent/
-├── IntentApp.swift         Entry point + theme preference
-├── AppCoordinator.swift    Navigation coordinator
-├── RootView.swift          Root view switcher (pairing / main UI)
-├── ContentView.swift       Main UI (workspace list + detail)
-├── Theme.swift             Color palette + shared styling
-├── Models/                 Codable domain models (Note, AgentSession, etc.)
-├── Services/               Business logic + JSON-RPC client
-│   ├── ConnectionManager.swift   WebSocket connection lifecycle + request/response
-│   ├── WorkspaceStore.swift      Workspace CRUD + caching
-│   ├── NoteStore.swift           Note CRUD + caching
-│   ├── AgentStore.swift          Agent session tracking
-│   └── ConversationStore.swift   Message history + streaming
-├── Views/                  SwiftUI components
-│   ├── PairingView.swift         Initial pairing flow orchestrator
-│   ├── QRScannerView.swift       QR code scanner for token + fingerprint
-│   ├── ManualTokenEntryView.swift  Manual token entry
-│   ├── WorkspaceListView.swift   Workspace list (main screen)
-│   ├── WorkspaceDetailView.swift Workspace detail (notes + agents)
-│   ├── NoteListView.swift        Note list
-│   ├── NoteDetailView.swift      Note viewer (Markdown rendering)
-│   └── ...                       (LoadingView, DisconnectedView, ToastView, etc.)
-├── ViewModels/             ObservableObject view models
-│   ├── WorkspaceListViewModel.swift  Workspace list state
-│   ├── ConversationViewModel.swift   Agent conversation state
-│   └── AgentListViewModel.swift      Agent list state
-├── Utils/
-│   ├── HapticManager.swift       Haptic feedback
-│   └── NotificationManager.swift Local notifications
-└── PersistenceManager.swift      Local storage (UserDefaults + JSON cache)
+├── IntentApp.swift, RootView.swift, AppCoordinator.swift
+│                              App lifecycle and navigation
+├── Models/                    Domain and wire models
+├── Services/                  JSON-RPC transport, live subscriptions,
+│                              feature stores, and attachment handling
+├── ViewModels/                UI state and feature orchestration
+├── Views/                     Pairing, workspace, note, and settings UI
+│   └── Conversation/          Conversation presentation, transcript,
+│                              input, and content rendering
+├── Utils/                     Shared formatting, links, haptics, and notifications
+├── Assets.xcassets            App icons and colors
+├── PrivacyInfo.xcprivacy      Privacy manifest
+└── PersistenceManager.swift   Local preferences, credentials, and cached state
+IntentTests/                   Unit and integration tests
+IntentUITests/                 UI and screenshot tests
 ```
 
 
-The app uses Foundation's native **URLSessionWebSocketTask** for WebSocket transport and **Textual** for rendering notes and conversation messages.
+The app uses **Network.framework** (`NWConnection` + `NWProtocolWebSocket`) for WebSocket transport and **Textual** for rendering notes and conversation messages.
 
 ## Pairing
 
@@ -60,17 +46,16 @@ On first launch, the app shows a pairing flow:
 
 ## JSON-RPC Surface
 
-The app calls a subset of the `intentd` JSON-RPC API:
+The app uses the daemon's namespaced JSON-RPC API for these capability groups:
 
-| Namespace | Methods |
-| --- | --- |
-| `workspace.*` | `list`, `read`, `create` (limited subset for mobile) |
-| `note.*` | `list`, `read`, `create`, `update` (viewing + creation only) |
-| `task.*` | `list`, `update` (task status toggling) |
-| `agent.*` | `list`, `getConversation`, `sendMessage` (read + send only) |
-| `events.*` | `subscribe`, `unsubscribe` (for push notifications) |
+- workspace discovery, creation, lifecycle actions, and live state;
+- note and comment reading and live state, plus task listing, status changes, and live state;
+- agent discovery and lifecycle plus conversation history, sending, queue management, questions, models, and streaming controls;
+- attachment upload, placement, and download;
+- repository, branch, provider, model, and specialist discovery; and
+- background-hook and pull-request-monitor status and controls.
 
-The app subscribes to `events.event` notifications and updates its local cache when workspaces, notes, or agents change on the backend.
+Live updates combine domain subscriptions for workspaces, notes, tasks, comments, and chats—delivered as `subscription.push` notifications—with filtered `events.subscribe` streams for agent, hook, and pull-request-monitor events.
 
 ## Quickstart
 
@@ -99,7 +84,7 @@ intentd serve --listen tcp
 
 Managed via Swift Package Manager (integrated in Xcode):
 
-- **[textual](https://github.com/gonzalezreal/textual)** `0.5.0` (exact) — Markdown rendering for notes and messages
+- **[Textual](https://github.com/intent-hq/textual)** `0.5.0-intent.2` (exact) — Markdown rendering for notes and messages
 
 ## Development
 
@@ -117,7 +102,7 @@ Tests run **serially** by default — the shared `Intent` scheme pins `paralleli
 
 ## Related Repositories
 
-- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios` and holds the cross-cutting docs and tooling.
+- [intent-hq/intent](https://github.com/intent-hq/intent) — engineering monorepo that mounts this repo at `packages/ios`, holds the cross-cutting docs and tooling, and hosts the central [issue tracker](https://github.com/intent-hq/intent/issues).
 - [intent-hq/intentd](https://github.com/intent-hq/intentd) — Rust backend daemon this app connects to.
 
 ## License
