@@ -42,7 +42,11 @@ class AppCoordinator {
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var certMismatchObserver: AnyCancellable?
     @ObservationIgnored private var reconnectLoadingObservationID: UUID?
+    /// Intentionally tracked so mutating it consumes the current one-shot
+    /// workspace-loading registration before that registration is abandoned.
+    private var reconnectLoadingObservationGeneration = 0
     @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private let reconnectLoadingObservationDidChange: @Sendable () -> Void
 
     @ObservationIgnored private let workspaceStore: WorkspaceStore
     @ObservationIgnored private let connection: ConnectionManagerRouting
@@ -52,14 +56,21 @@ class AppCoordinator {
     init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
          connection: ConnectionManagerRouting = ConnectionManager.shared,
          persistence: PersistenceManager = PersistenceManager.shared,
-         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry()) {
+         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
+         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}) {
         self.workspaceStore = workspaceStore
         self.connection = connection
         self.persistence = persistence
         self.syncedRegistry = syncedRegistry
+        self.reconnectLoadingObservationDidChange = reconnectLoadingObservationDidChange
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
+    }
+
+    isolated deinit {
+        reconnectOverlayTimeoutTask?.cancel()
+        cancelReconnectLoadingObservation()
     }
 
     private func startObservingConnection() {
@@ -69,7 +80,7 @@ class AppCoordinator {
                 guard let self = self else { return }
                 switch state {
                 case .reconnecting, .disconnected:
-                    self.reconnectLoadingObservationID = nil
+                    self.cancelReconnectLoadingObservation()
                     self.reconnectOverlayTimeoutTask?.cancel()
                     self.reconnectOverlayTimeoutTask = nil
                     if self.hasEverConnected {
@@ -108,7 +119,7 @@ class AppCoordinator {
     /// Falls back to a 5-second timeout so the overlay never gets stuck.
     private func waitForWorkspaceLoadThenClearOverlay() {
         // Cancel any previous observer from a prior reconnection attempt
-        reconnectLoadingObservationID = nil
+        cancelReconnectLoadingObservation()
         reconnectOverlayTimeoutTask?.cancel()
         reconnectOverlayTimeoutTask = nil
 
@@ -134,16 +145,25 @@ class AppCoordinator {
             guard let self, !Task.isCancelled else { return }
             self.reconnectOverlayTimeoutTask = nil
             if self.isDisconnected {
-                self.reconnectLoadingObservationID = nil
+                self.cancelReconnectLoadingObservation()
                 self.isDisconnected = false
             }
         }
     }
 
+    private func cancelReconnectLoadingObservation() {
+        guard reconnectLoadingObservationID != nil else { return }
+        reconnectLoadingObservationID = nil
+        reconnectLoadingObservationGeneration &+= 1
+    }
+
     private func observeWorkspaceLoading(observationID: UUID) {
+        let observationDidChange = reconnectLoadingObservationDidChange
         withObservationTracking {
             _ = workspaceStore.isLoading
+            _ = reconnectLoadingObservationGeneration
         } onChange: { [weak self] in
+            observationDidChange()
             Task { @MainActor [weak self] in
                 guard let self,
                       self.reconnectLoadingObservationID == observationID else { return }
@@ -152,7 +172,7 @@ class AppCoordinator {
                 } else {
                     self.reconnectOverlayTimeoutTask?.cancel()
                     self.reconnectOverlayTimeoutTask = nil
-                    self.reconnectLoadingObservationID = nil
+                    self.cancelReconnectLoadingObservation()
                     self.isDisconnected = false
                 }
             }
