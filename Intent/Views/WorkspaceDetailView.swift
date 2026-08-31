@@ -57,6 +57,7 @@ struct WorkspaceDetailView: View {
                             .font(.title3)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     }
+                    .accessibilityLabel("Workspace actions")
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, horizontalSizeClass == .compact ? 0 : 4)

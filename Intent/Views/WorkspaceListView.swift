@@ -61,6 +61,7 @@ struct WorkspaceListView: View {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
+                .accessibilityLabel("Workspace options")
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -69,6 +70,7 @@ struct WorkspaceListView: View {
                     Image(systemName: "plus")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
+                .accessibilityLabel("Create workspace")
             }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
