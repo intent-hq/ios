@@ -1,10 +1,31 @@
 import Foundation
 import Testing
 import Combine
+import Observation
+import Synchronization
 @testable import Intent
 
 @MainActor
 struct TaskStoreIntegrationTests {
+
+    @Test func fetchedTasksRemainObservable() async {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": [
+            ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.tasks.count
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        await store.fetchAll()
+
+        #expect(changeCount.withLock { $0 } == 1)
+        #expect(store.tasks.count == 1)
+    }
     
     // MARK: - subscribeOnConnect
     
