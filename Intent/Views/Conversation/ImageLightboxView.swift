@@ -71,7 +71,7 @@ struct ImageLightboxView: View {
                 .padding(10)
                 .background(.white.opacity(0.15), in: Circle())
         }
-        .accessibilityLabel("Close")
+        .accessibilityLabel("Close image")
     }
 
     // MARK: - Gestures
