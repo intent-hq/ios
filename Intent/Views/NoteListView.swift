@@ -8,7 +8,7 @@ struct NoteListView: View {
     @State private var collapsedIds: Set<String> = []
 
     var body: some View {
-        if noteStore.isLoading && noteStore.notes.isEmpty {
+        if (noteStore.isLoading || !noteStore.hasLoaded) && noteStore.notes.isEmpty {
             Spacer()
             ProgressView("Loading notes...")
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

@@ -77,14 +77,20 @@ extension SpecialistInfo {
 @Observable class AgentStore {
     var agents: [AgentSession] = []
     var isLoading = false
+    /// True once an `agent.list` for the current workspace has completed
+    /// successfully. Reset on workspace change; a failed fetch leaves it
+    /// false so views keep the loading placeholder instead of "No agents".
+    var hasLoaded = false
 
     private let connectionManager: ConnectionManagerRouting
     private var workspaceId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?
+    private var connectionObserver: AnyCancellable?
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
+        observeConnection()
     }
 
     isolated deinit {
@@ -94,11 +100,43 @@ extension SpecialistInfo {
         }
     }
 
+    // MARK: - Connection observation
+
+    private func observeConnection() {
+        connectionObserver = connectionManager.connectionStatePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                if state == .connected {
+                    Task { await self?.onConnected() }
+                }
+            }
+    }
+
+    private func onConnected() async {
+        // Refetch on (re)connect: a fetch that failed pre-connection
+        // (e.g. "Not connected") must be retried as soon as the
+        // connection is up, not wait for a coincidental agent event.
+        if let workspaceId = workspaceId {
+            await fetchAgents(workspaceId: workspaceId)
+        }
+    }
+
+    /// Synchronously reset the list and load gate for a workspace switch.
+    /// Views call this from onChange(of: workspaceId) before scheduling the
+    /// async fetch, so the empty state cannot render with the previous
+    /// workspace's hasLoaded while the fetch task has not started yet.
+    func prepareForWorkspaceChange(to workspaceId: String) {
+        guard self.workspaceId != workspaceId else { return }
+        agents = []
+        hasLoaded = false
+    }
+
     func fetchAgents(workspaceId: String) async {
         let workspaceChanged = self.workspaceId != workspaceId
         // If workspace changed, clear agents immediately to prevent stale data
         if workspaceChanged {
             agents = []
+            hasLoaded = false
         }
         self.workspaceId = workspaceId
 
@@ -131,10 +169,15 @@ extension SpecialistInfo {
                 "agent.list",
                 params: ["workspaceId": workspaceId]
             )
+            // Guard: a stale response for a previous workspace must not
+            // replace the current workspace's agents or flip hasLoaded. The
+            // current workspace's own fetch manages isLoading.
+            guard self.workspaceId == workspaceId else { return }
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
                 agents = items.compactMap { AgentSession.parseAgent($0) }
             }
+            hasLoaded = true
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
         }
