@@ -209,7 +209,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "xmark")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -220,7 +220,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "minus")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -231,7 +231,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "exclamationmark")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -265,7 +265,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "checkmark")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -276,7 +276,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -287,7 +287,7 @@ struct WorkspaceRowView: View {
                     .fill(color)
                 Image(systemName: "arrow.triangle.merge")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
 
@@ -298,7 +298,7 @@ struct WorkspaceRowView: View {
                     .strokeBorder(color, lineWidth: 1.5)
                 Image(systemName: "questionmark")
                     .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundColor(color)
+                    .foregroundStyle(color)
             }
             .frame(width: size, height: size)
         }
