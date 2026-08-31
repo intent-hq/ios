@@ -255,15 +255,15 @@ struct ConversationViewModelTests {
     }
 
     @Test func suggestedPromptsSpanningTwoTextBlocks() async {
-        // Text blocks are joined with newlines, so a block boundary must not
-        // fuse the opener onto the first prompt line.
+        // Text blocks join with the empty separator (desktop parity), so a
+        // block boundary reassembles the original stream — even mid-line.
         let vm = makeVM()
         vm.store.messages = [
             ConversationMessage(
                 id: UUID().uuidString, role: .assistant,
                 contentBlocks: [
-                    ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts"),
-                    ContentBlock(type: .text, text: "Run the tests\n-->"),
+                    ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\nRun the te"),
+                    ContentBlock(type: .text, text: "sts\n-->"),
                 ],
                 metadata: nil
             ),

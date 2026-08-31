@@ -31,12 +31,88 @@ enum SuggestedPrompts {
 
     /// Prompts from the last well-formed block, capped and sanitized.
     static func parse(_ text: String) -> [String] {
-        guard let last = blocks(in: text).last else { return [] }
+        prompts(fromLastOf: blocks(in: text))
+    }
+
+    /// Message-level scan mirroring the desktop's
+    /// `parseSuggestedPromptsFromContentBlocks` (messageParser.ts): the
+    /// combined text of every `.text` block — joined with the empty
+    /// separator, exactly like the desktop — is scanned once, and each
+    /// well-formed block's range is mapped back into its source blocks, so
+    /// markup that is well-formed only across text-block boundaries still
+    /// strips. Prompts and stripping come from this single scan, so they can
+    /// never disagree (intent-hq/intent#3936: chips rendered while the raw
+    /// markup leaked). Non-text blocks pass through untouched.
+    static func parse(
+        contentBlocks: [ContentBlock]
+    ) -> (prompts: [String], contentBlocks: [ContentBlock]) {
+        let combined = contentBlocks
+            .filter { $0.type == .text }
+            .map { $0.resolvedText ?? "" }
+            .joined()
+        let found = blocks(in: combined)
+        let prompts = Self.prompts(fromLastOf: found)
+        guard !found.isEmpty else { return (prompts, contentBlocks) }
+        let ranges = utf16Ranges(of: found, in: combined)
+        var textOffset = 0
+        let cleaned = contentBlocks.map { block -> ContentBlock in
+            guard block.type == .text else { return block }
+            let units = Array((block.resolvedText ?? "").utf16)
+            let blockStart = textOffset
+            let blockEnd = blockStart + units.count
+            textOffset = blockEnd
+            var kept: [UTF16.CodeUnit] = []
+            var cursor = 0
+            for range in ranges {
+                if range.end <= blockStart || range.start >= blockEnd { continue }
+                let localStart = min(max(0, range.start - blockStart), units.count)
+                let localEnd = min(max(0, range.end - blockStart), units.count)
+                if localStart > cursor { kept.append(contentsOf: units[cursor..<localStart]) }
+                cursor = max(cursor, localEnd)
+            }
+            kept.append(contentsOf: units[cursor...])
+            guard kept.count != units.count else { return block }
+            var next = block
+            next.text = String(decoding: kept, as: UTF16.self)
+            return next
+        }
+        return (prompts, cleaned)
+    }
+
+    /// Prompts from the last well-formed block: nothing when the body is
+    /// empty or any captured line is body-text-shaped, otherwise the valid
+    /// lines capped at `maxPrompts`.
+    private static func prompts(fromLastOf found: [Block]) -> [String] {
+        guard let last = found.last else { return [] }
         let lines = last.body
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         guard !lines.isEmpty, !lines.contains(where: looksLikeBodyText) else { return [] }
         return prompts(from: lines)
+    }
+
+    /// UTF-16 offset range of each well-formed block within `text`: from the
+    /// opener (any prefix before it survives) through the closer line's
+    /// trailing newline (clamped at text end). Consuming that newline keeps
+    /// the result identical to the line-based `stripBlocks(from:)` — which
+    /// drops whole lines, separator included — so the message-level pass
+    /// never turns a Markdown line break into a paragraph break.
+    /// UTF-16 units (not Characters) keep offsets additive across block
+    /// boundaries — grapheme clusters can merge when block texts concatenate.
+    private static func utf16Ranges(of found: [Block], in text: String) -> [(start: Int, end: Int)] {
+        let lines = text.components(separatedBy: "\n")
+        var offsets: [Int] = []
+        offsets.reserveCapacity(lines.count)
+        var offset = 0
+        for line in lines {
+            offsets.append(offset)
+            offset += line.utf16.count + 1
+        }
+        let length = text.utf16.count
+        return found.map { block in
+            (start: offsets[block.openerLine] + block.openerPrefix.utf16.count,
+             end: min(offsets[block.closerLine] + lines[block.closerLine].utf16.count + 1, length))
+        }
     }
 
     /// Removes every well-formed block, leaving all other text untouched.
