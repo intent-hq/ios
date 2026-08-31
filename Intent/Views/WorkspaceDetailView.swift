@@ -108,7 +108,7 @@ struct WorkspaceDetailView: View {
                 // Tab content
                 if selectedTab == 0 {
                     // Agent list
-                    if agentStore.isLoading && viewModel.agents.isEmpty {
+                    if (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty {
                         Spacer()
                         ProgressView("Loading agents...")
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -165,6 +165,7 @@ struct WorkspaceDetailView: View {
         }
         .onChange(of: workspaceId) { _, newId in
             viewModel.agents = []
+            agentStore.prepareForWorkspaceChange(to: newId)
             showBackgroundAgents = false
             expandedDelegates = []
             agentStore.startObservingEvents()  // Re-register with new workspaceId context

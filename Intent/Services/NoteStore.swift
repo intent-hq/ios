@@ -6,6 +6,10 @@ import Observation
 @Observable class NoteStore {
     var notes: [Note] = []
     var isLoading = false
+    /// True once a `note.list` for the current workspace has completed
+    /// successfully. Reset on workspace change; a failed fetch leaves it
+    /// false so views keep the loading placeholder instead of "No notes".
+    var hasLoaded = false
 
     private var workspaceId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
@@ -113,6 +117,7 @@ import Observation
         // If workspace changed, clear notes immediately to prevent stale data
         if workspaceChanged {
             notes = []
+            hasLoaded = false
             // Reset live-state for new workspace
             noteLive = false
             noteSubscriptionId = nil
@@ -127,6 +132,11 @@ import Observation
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
             notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
+            // Guard: a stale fetch for a previous workspace must not flip
+            // hasLoaded for the current one.
+            if self.workspaceId == workspaceId {
+                hasLoaded = true
+            }
             // The spec is the one structural exception (its content links task
             // notes for the progress ring), so hydrate it full when its slim
             // row is stale. Fail-soft: a miss keeps the slim row as-is.

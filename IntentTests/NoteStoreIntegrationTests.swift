@@ -650,4 +650,85 @@ struct NoteStoreIntegrationTests {
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
     }
+
+    // MARK: - hasLoaded gating (empty state waits for first completed load)
+
+    @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        #expect(store.hasLoaded == false)
+
+        fake.pendingMethods.insert("note.list")
+        let fetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        // Fetch in flight: still not loaded
+        #expect(store.hasLoaded == false)
+        #expect(store.isLoading == true)
+
+        // An empty successful result is a legitimate empty state
+        fake.resolvePending("note.list", with: ["notes": []])
+        await fetch.value
+        #expect(store.hasLoaded == true)
+        #expect(store.isLoading == false)
+        #expect(store.notes.isEmpty)
+    }
+
+    @Test func failedFetchLeavesHasLoadedFalse() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        // ConnectionManager.request throws immediately while the socket is
+        // still connecting ("Not connected") — must not flip to empty state.
+        fake.errorMap["note.list"] = NSError(
+            domain: "WebSocket", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+
+        await store.fetchNotes(workspaceId: "ws-1")
+
+        #expect(store.hasLoaded == false)
+        #expect(store.isLoading == false)
+    }
+
+    @Test func workspaceChangeResetsHasLoaded() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.hasLoaded == true)
+
+        // Switching workspaces resets the gate; the failed fetch for the new
+        // workspace keeps it false.
+        fake.responseMap.removeValue(forKey: "note.list")
+        fake.errorMap["note.list"] = NSError(
+            domain: "WebSocket", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+        await store.fetchNotes(workspaceId: "ws-2")
+        #expect(store.hasLoaded == false)
+        #expect(store.notes.isEmpty)
+    }
+
+    @Test func staleFetchForPreviousWorkspaceDoesNotFlipHasLoaded() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.pendingMethods.insert("note.list")
+
+        let staleFetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        let currentFetch = Task { await store.fetchNotes(workspaceId: "ws-2") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // The stale ws-1 fetch completing must not mark ws-2 as loaded.
+        fake.resolvePending("note.list", with: ["notes": [
+            ["id": "note-1", "title": "Old", "content": "",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]])
+        await staleFetch.value
+        #expect(store.hasLoaded == false)
+
+        fake.resolvePending("note.list", with: ["notes": []])
+        await currentFetch.value
+        #expect(store.hasLoaded == true)
+    }
 }
