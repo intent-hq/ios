@@ -17,7 +17,7 @@ struct LoadingView: View {
                 // connecting, so the intro keeps playing uninterrupted after
                 // the phase change — don't lengthen this to "wait out" the
                 // intro.
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                try? await Task.sleep(for: .milliseconds(1_200))
                 coordinator.onLoadComplete()
             }
     }

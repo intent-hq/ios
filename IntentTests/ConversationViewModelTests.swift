@@ -1059,14 +1059,14 @@ struct ConversationViewModelTests {
     // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
 
     /// Fake-backed VM with a short markSeen debounce for trigger tests.
-    private func makeSeenVM(debounceNanos: UInt64 = 20_000_000)
+    private func makeSeenVM(debounce: Duration = .milliseconds(20))
         -> (vm: ConversationViewModel, fake: FakeConnectionManager) {
         let vm = makeVM()
         let fake = FakeConnectionManager()
         fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
         fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
         vm.store = ConversationStore(connectionManager: fake)
-        vm.markSeenDebounceNanos = debounceNanos
+        vm.markSeenDebounceDuration = debounce
         return (vm, fake)
     }
 
@@ -1176,7 +1176,7 @@ struct ConversationViewModelTests {
 
     @Test func leavingConversationFiresMarkSeenImmediately() async {
         // Debounce far beyond the poll window: a call proves the immediate path.
-        let (vm, fake) = makeSeenVM(debounceNanos: 10_000_000_000)
+        let (vm, fake) = makeSeenVM(debounce: .seconds(10))
         vm.conversationAppeared()
         vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
 
@@ -1189,7 +1189,7 @@ struct ConversationViewModelTests {
     }
 
     @Test func leaveDuringDebounceWindowDropsPendingMarkSeen() async {
-        let (vm, fake) = makeSeenVM(debounceNanos: 200_000_000)
+        let (vm, fake) = makeSeenVM(debounce: .milliseconds(200))
         vm.conversationAppeared()
         vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
         vm.store.isStreaming = true
@@ -1208,7 +1208,7 @@ struct ConversationViewModelTests {
     }
 
     @Test func backgroundingFiresMarkSeenImmediately() async {
-        let (vm, fake) = makeSeenVM(debounceNanos: 10_000_000_000)
+        let (vm, fake) = makeSeenVM(debounce: .seconds(10))
         vm.conversationAppeared()
         vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "done")]
 

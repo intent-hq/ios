@@ -195,7 +195,7 @@ struct ToastInfo: Equatable {
         }
 
         dismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 4_000_000_000) // 4 seconds
+            try? await Task.sleep(for: .seconds(4))
             guard !Task.isCancelled else { return }
             dismissToast()
         }

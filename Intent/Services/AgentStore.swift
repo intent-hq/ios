@@ -150,7 +150,7 @@ extension SpecialistInfo {
         } else {
             // Subsequent fetches (e.g., from events) — debounce
             let task = Task {
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(for: .milliseconds(300))
                 guard !Task.isCancelled else { return }
                 await _fetchAgents(workspaceId: workspaceId)
             }
