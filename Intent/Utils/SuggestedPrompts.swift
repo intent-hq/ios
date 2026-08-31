@@ -92,8 +92,11 @@ enum SuggestedPrompts {
     }
 
     /// UTF-16 offset range of each well-formed block within `text`: from the
-    /// opener (any prefix before it survives) through the end of the closer
-    /// line, mirroring the desktop's `start`/`end` in `scanSuggestedPrompts`.
+    /// opener (any prefix before it survives) through the closer line's
+    /// trailing newline (clamped at text end). Consuming that newline keeps
+    /// the result identical to the line-based `stripBlocks(from:)` — which
+    /// drops whole lines, separator included — so the message-level pass
+    /// never turns a Markdown line break into a paragraph break.
     /// UTF-16 units (not Characters) keep offsets additive across block
     /// boundaries — grapheme clusters can merge when block texts concatenate.
     private static func utf16Ranges(of found: [Block], in text: String) -> [(start: Int, end: Int)] {
@@ -105,9 +108,10 @@ enum SuggestedPrompts {
             offsets.append(offset)
             offset += line.utf16.count + 1
         }
+        let length = text.utf16.count
         return found.map { block in
             (start: offsets[block.openerLine] + block.openerPrefix.utf16.count,
-             end: offsets[block.closerLine] + lines[block.closerLine].utf16.count)
+             end: min(offsets[block.closerLine] + lines[block.closerLine].utf16.count + 1, length))
         }
     }
 

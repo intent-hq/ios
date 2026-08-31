@@ -1156,10 +1156,14 @@ struct SuggestedPromptsTests {
     }
 
     @Test func contentBlocksSingleBlockMatchesStringParse() {
+        // The range consumes the closer line's newline, so the result matches
+        // the line-based stripBlocks(from:) exactly — no paragraph break is
+        // introduced where the block used to be.
         let text = "Done!\n<!-- suggested-prompts\nRun tests\n-->\nTail"
         let result = SuggestedPrompts.parse(contentBlocks: [ContentBlock(type: .text, text: text)])
         #expect(result.prompts == SuggestedPrompts.parse(text))
-        #expect(texts(result.contentBlocks) == ["Done!\n\nTail"])
+        #expect(texts(result.contentBlocks) == [SuggestedPrompts.stripBlocks(from: text)])
+        #expect(texts(result.contentBlocks) == ["Done!\nTail"])
     }
 
     @Test func contentBlocksNonTextBlocksPassThroughUntouched() {
@@ -1194,7 +1198,7 @@ struct SuggestedPromptsTests {
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Two"])
-        #expect(texts(result.contentBlocks) == ["A\n\nB\n", "\nC"])
+        #expect(texts(result.contentBlocks) == ["A\nB\n", "C"])
     }
 
     @Test func contentBlocksLegacyContentFieldRoundTrips() throws {

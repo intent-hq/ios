@@ -168,7 +168,7 @@ struct MessagePlainTextContentTests {
         // (intent-hq/intent#3936).
         let blocks = [
             ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nRun the te"),
-            ContentBlock(type: .text, text: "sts\n-->"),
+            ContentBlock(type: .text, text: "sts\n-->\n"),
             ContentBlock(type: .text, text: "tail"),
         ]
         #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
