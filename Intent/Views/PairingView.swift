@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct PairingView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var showQRScanner = false
     @State private var showManualEntry = false

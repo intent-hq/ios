@@ -19,7 +19,7 @@ struct ConversationView: View {
 
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
-    @EnvironmentObject private var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) private var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false

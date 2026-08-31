@@ -1,5 +1,7 @@
 import Foundation
+import Observation
 import Security
+import Synchronization
 import Testing
 @testable import Intent
 
@@ -130,6 +132,20 @@ final class AppCoordinatorTests {
         } else {
             Issue.record("Expected initial screen to be .loading, got \(coordinator.currentScreen)")
         }
+    }
+
+    @Test @MainActor func currentScreenInvalidatesObservation() {
+        let coordinator = AppCoordinator(persistence: persistence)
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = coordinator.currentScreen
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        coordinator.onConnectionSuccess()
+
+        #expect(changeCount.withLock { $0 } == 1)
     }
 
     // MARK: - Per-workspace navigation state restoration

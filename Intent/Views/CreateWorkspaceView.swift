@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct CreateWorkspaceView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
 

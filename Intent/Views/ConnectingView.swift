@@ -5,7 +5,7 @@ import SwiftUI
 /// loading → connecting transition). This view adds the small bottom HUD pill
 /// (spinner only) and owns the connection attempt.
 struct ConnectingView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
 
     var body: some View {
         VStack {

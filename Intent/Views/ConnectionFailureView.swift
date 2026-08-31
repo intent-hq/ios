@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ConnectionFailureView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     let errorMessage: String
     var isCertMismatch: Bool = false
@@ -207,12 +207,12 @@ struct ConnectionFailureView: View {
 
 #Preview("Connection Failed") {
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
-        .environmentObject(AppCoordinator())
+        .environment(AppCoordinator())
 }
 
 #Preview("Connection Failed - Dark") {
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
-        .environmentObject(AppCoordinator())
+        .environment(AppCoordinator())
         .preferredColorScheme(.dark)
 }
 

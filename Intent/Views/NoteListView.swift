@@ -2,7 +2,7 @@ import SwiftUI
 
 struct NoteListView: View {
     let workspaceId: String
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     var noteStore: NoteStore
     @Environment(\.colorScheme) var colorScheme
     @State private var collapsedIds: Set<String> = []
@@ -39,7 +39,7 @@ struct NoteListView: View {
                             collapsedIds: $collapsedIds,
                             colorScheme: colorScheme
                         )
-                        .environmentObject(coordinator)
+                        .environment(coordinator)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -60,7 +60,7 @@ struct NoteTreeNodeView: View {
     let depth: Int
     @Binding var collapsedIds: Set<String>
     let colorScheme: ColorScheme
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
 
     private var hasChildren: Bool {
         noteStore.hasChildren(note.id)
@@ -109,7 +109,7 @@ struct NoteTreeNodeView: View {
                         collapsedIds: $collapsedIds,
                         colorScheme: colorScheme
                     )
-                    .environmentObject(coordinator)
+                    .environment(coordinator)
                 }
             }
         }

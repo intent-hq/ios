@@ -45,7 +45,7 @@ struct AgentDestination: Hashable, Identifiable {
 }
 
 struct RootView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.colorScheme) private var colorScheme
     @State private var notificationManager = NotificationManager.shared

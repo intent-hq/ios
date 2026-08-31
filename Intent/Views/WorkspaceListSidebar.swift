@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WorkspaceListSidebar: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var viewModel = WorkspaceListViewModel()
     @State private var showingCreateWorkspace = false
@@ -72,11 +72,11 @@ struct WorkspaceListSidebar: View {
         }
         .sheet(isPresented: $showingCreateWorkspace) {
             CreateWorkspaceView()
-                .environmentObject(coordinator)
+                .environment(coordinator)
         }
         .sheet(isPresented: $showingConnections) {
             ConnectionsView()
-                .environmentObject(coordinator)
+                .environment(coordinator)
         }
         .refreshable {
             await WorkspaceStore.shared.fetchAll()

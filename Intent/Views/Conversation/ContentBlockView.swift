@@ -11,7 +11,7 @@ struct ContentBlockView: View {
     /// Fetch the full body of a slim-truncated block by id; absent → no
     /// hydration (bounded previews stay).
     var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
     @State private var lightboxPresented = false

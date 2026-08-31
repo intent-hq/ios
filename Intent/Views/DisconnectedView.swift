@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DisconnectedView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.colorScheme) var colorScheme
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import Observation
 
 enum AppScreen {
     case loading
@@ -15,18 +16,19 @@ enum AppScreen {
 }
 
 @MainActor
-class AppCoordinator: ObservableObject {
-    @Published var currentScreen: AppScreen = .loading
-    @Published var isDisconnected = false
+@Observable
+class AppCoordinator {
+    var currentScreen: AppScreen = .loading
+    var isDisconnected = false
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
-    @Published var pairingShowsSavedConnections = false
-    private var hasEverConnected = false
+    var pairingShowsSavedConnections = false
+    @ObservationIgnored private var hasEverConnected = false
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
-    private var suppressWorkspaceNavigation = false
+    @ObservationIgnored private var suppressWorkspaceNavigation = false
 
-    @Published var selectedWorkspaceId: String? {
+    var selectedWorkspaceId: String? {
         didSet {
             if let workspaceId = selectedWorkspaceId, selectedWorkspaceId != oldValue, !suppressWorkspaceNavigation {
                 currentScreen = .workspaceDetail(workspaceId: workspaceId)
@@ -37,15 +39,15 @@ class AppCoordinator: ObservableObject {
     var currentScreenDescription: String {
         String(describing: currentScreen)
     }
-    private var connectionObserver: AnyCancellable?
-    private var certMismatchObserver: AnyCancellable?
-    private var reconnectLoadingObservationID: UUID?
-    private var reconnectOverlayTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var certMismatchObserver: AnyCancellable?
+    @ObservationIgnored private var reconnectLoadingObservationID: UUID?
+    @ObservationIgnored private var reconnectOverlayTimeoutTask: Task<Void, Never>?
 
-    private let workspaceStore: WorkspaceStore
-    private let connection: ConnectionManagerRouting
-    private let persistence: PersistenceManager
-    private let syncedRegistry: SyncedBackendRegistry
+    @ObservationIgnored private let workspaceStore: WorkspaceStore
+    @ObservationIgnored private let connection: ConnectionManagerRouting
+    @ObservationIgnored private let persistence: PersistenceManager
+    @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
 
     init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
          connection: ConnectionManagerRouting = ConnectionManager.shared,
