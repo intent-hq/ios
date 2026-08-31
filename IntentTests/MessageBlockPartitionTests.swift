@@ -162,6 +162,18 @@ struct MessagePlainTextContentTests {
         #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
     }
 
+    @Test func assistantCopyStripsSuggestedPromptsSpanningTextBlocks() {
+        // A block well-formed only across text-block boundaries is stripped
+        // by the message-level pre-scan, so the copy matches the display
+        // (intent-hq/intent#3936).
+        let blocks = [
+            ContentBlock(type: .text, text: "Answer.\n<!-- suggested-prompts\nRun the te"),
+            ContentBlock(type: .text, text: "sts\n-->"),
+            ContentBlock(type: .text, text: "tail"),
+        ]
+        #expect(MessageView.assistantCopyText(from: blocks) == "Answer.\n\ntail")
+    }
+
     @Test func assistantCopyKeepsCodeAndSkipsToolBlocks() {
         let blocks = [
             ContentBlock(type: .text, text: "intro"),

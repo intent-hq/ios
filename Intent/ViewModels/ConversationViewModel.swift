@@ -845,14 +845,11 @@ import UniformTypeIdentifiers
         guard pendingQuestions == nil else { return [] }
         guard let lastMessage = messages.last,
               lastMessage.role == .assistant else { return [] }
-        // Text blocks are joined with newlines so a block boundary never fuses
-        // two lines, then only the last well-formed block supplies prompts
-        // (see `SuggestedPrompts`).
-        let text = (lastMessage.contentBlocks ?? [])
-            .filter { $0.type == .text }
-            .compactMap { $0.resolvedText }
-            .joined(separator: "\n")
-        return SuggestedPrompts.parse(text)
+        // The same message-level scan the views use for stripping (empty
+        // join like the desktop, so mid-line splits reassemble): prompts and
+        // stripping come from one scan and can never disagree
+        // (intent-hq/intent#3936; see `SuggestedPrompts.parse(contentBlocks:)`).
+        return SuggestedPrompts.parse(contentBlocks: lastMessage.contentBlocks ?? []).prompts
     }
 }
 
