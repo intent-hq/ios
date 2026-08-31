@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import Synchronization
 import UIKit
 import Testing
 @testable import Intent
@@ -955,6 +957,20 @@ struct ConversationViewModelTests {
         #expect(vm.pendingImages.count == 1)
         vm.addImage(img)
         #expect(vm.pendingImages.count == 2)
+    }
+
+    @Test func forwardedAttachmentStateRemainsObservable() {
+        let vm = makeVM()
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = vm.pendingImages.count
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        vm.addImage(UIImage(systemName: "star")!)
+
+        #expect(changeCount.withLock { $0 } == 1)
     }
 
     @Test func removeImageRemovesAtIndex() async {

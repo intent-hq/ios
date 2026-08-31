@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Intent
 
@@ -40,6 +41,51 @@ struct AttachmentUploadServiceTests {
         let url = dir.appendingPathComponent(name)
         try data.write(to: url)
         return url
+    }
+
+    @Test func attachmentPipelineBalancesSecurityScopedAccess() {
+        let stoppedCount = Mutex(0)
+        var pipeline: ConversationAttachmentPipeline? = ConversationAttachmentPipeline(
+            uploadService: AttachmentUploadService(connection: FakeConnectionManager()),
+            startSecurityScopedAccess: { _ in true },
+            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } })
+        let first = URL(fileURLWithPath: "/tmp/first.txt")
+        let second = URL(fileURLWithPath: "/tmp/second.txt")
+        let third = URL(fileURLWithPath: "/tmp/third.txt")
+
+        pipeline?.addFiles([first, second])
+        pipeline?.removePendingFile(at: 0)
+        #expect(stoppedCount.withLock { $0 } == 1)
+
+        pipeline?.clearPendingFiles()
+        #expect(stoppedCount.withLock { $0 } == 2)
+
+        pipeline?.addFiles([third])
+        pipeline = nil
+        #expect(stoppedCount.withLock { $0 } == 3)
+    }
+
+    @Test func attachmentPipelineFailureRetainsFileAndScopeUntilClear() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["file.placeAttachment"] = NSError(domain: "test", code: -1)
+        let stoppedCount = Mutex(0)
+        let pipeline = ConversationAttachmentPipeline(
+            uploadService: AttachmentUploadService(connection: fake),
+            startSecurityScopedAccess: { _ in true },
+            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } })
+        let file = URL(fileURLWithPath: "/tmp/pending.txt")
+        pipeline.addFiles([file])
+
+        await #expect(throws: (any Error).self) {
+            _ = try await pipeline.buildFileBlocks(
+                from: pipeline.pendingFiles, workspaceId: "ws-1")
+        }
+
+        #expect(pipeline.pendingFiles.count == 1)
+        #expect(pipeline.fileUploadProgress.isEmpty)
+        #expect(stoppedCount.withLock { $0 } == 0)
+        pipeline.clearPendingFiles()
+        #expect(stoppedCount.withLock { $0 } == 1)
     }
 
     // MARK: - Single-shot path

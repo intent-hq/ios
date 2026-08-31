@@ -2,40 +2,6 @@ import Combine
 import Foundation
 import Observation
 
-enum ConnectionState: Equatable {
-    case disconnected
-    case connecting
-    case connected
-    case reconnecting(attempt: Int)
-}
-
-// MARK: - ConnectionManagerRouting
-
-/// The subset of ConnectionManager surface that subscribe-channel stores depend on.
-/// Exists to allow tests to inject a fake; ConnectionManager conforms as-is.
-@MainActor
-protocol ConnectionManagerRouting: AnyObject {
-    var connectionState: ConnectionState { get }
-    var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
-    func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
-    @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
-    func removeEventHandler(id: UUID)
-    func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void)
-    func unregisterSubscriptionHandler(id: String)
-}
-
-extension ConnectionManagerRouting {
-    /// Convenience for calling request without params. Preserves existing call sites.
-    func request(_ method: String) async throws -> Any {
-        return try await request(method, params: [:], timeout: ConnectionManager.defaultRequestTimeout)
-    }
-
-    /// Convenience for calling request without a timeout override. Preserves existing call sites.
-    func request(_ method: String, params: [String: Any]) async throws -> Any {
-        return try await request(method, params: params, timeout: ConnectionManager.defaultRequestTimeout)
-    }
-}
-
 @MainActor
 @Observable class ConnectionManager: ConnectionManagerRouting {
     static let shared = ConnectionManager()
@@ -49,6 +15,7 @@ extension ConnectionManagerRouting {
 
     @ObservationIgnored private var connectionStateSubject: CurrentValueSubject<ConnectionState, Never>!
     @ObservationIgnored private var certMismatchSubject: CurrentValueSubject<Bool, Never>!
+    @ObservationIgnored private let subscriptionRouter = ConnectionSubscriptionRouter()
 
     @ObservationIgnored private var socket: WebSocketConnection?
     @ObservationIgnored private var messagePumpTask: Task<Void, Never>?
@@ -69,37 +36,6 @@ extension ConnectionManagerRouting {
     @ObservationIgnored private(set) var token: String?
     @ObservationIgnored private(set) var certFingerprint: String?
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
-
-    // MARK: - Subscription Push Routing
-
-    /// Registry of per-subscriptionId handlers for subscription.push dispatch.
-    /// Each store registers its handler after capturing its subscriptionId from the
-    /// subscribe RPC response. This eliminates the need for stores to filter pushes
-    /// themselves and ensures single-source-of-truth routing.
-    @ObservationIgnored private var subscriptionHandlers: [String: @MainActor (SubscriptionPush) -> Void] = [:]
-
-    /// A subscription.push that arrived before any handler was registered for its
-    /// subscriptionId (e.g. the seq-0 snapshot racing the store's handler registration,
-    /// which runs one or more actor hops after the subscribe response continuation resumes).
-    struct BufferedPush {
-        let push: SubscriptionPush
-        let receivedAt: Date
-    }
-
-    /// Unrouted pushes buffered in arrival order, replayed when a handler is registered
-    /// for their subscriptionId. Bounded: at most `unroutedPushBufferLimit` frames total
-    /// (oldest evicted first) and each frame held at most `unroutedPushBufferTTL` seconds.
-    /// Internal for test visibility.
-    @ObservationIgnored var unroutedPushBuffer: [BufferedPush] = []
-    static let unroutedPushBufferLimit = 64
-    static let unroutedPushBufferTTL: TimeInterval = 30
-
-    /// SubscriptionIds recently unregistered, mapped to when. Unrouted pushes for these
-    /// ids are dropped instead of buffered — they belong to a dead subscription that will
-    /// never be re-registered (server ids are unique per subscribe), so buffering them
-    /// would only add eviction pressure on the shared buffer. Entries expire after
-    /// `unroutedPushBufferTTL`. Internal for test visibility.
-    @ObservationIgnored var recentlyUnregisteredIds: [String: Date] = [:]
 
     private init() {
         connectionStateSubject = CurrentValueSubject(connectionState)
@@ -198,25 +134,7 @@ extension ConnectionManagerRouting {
         Task { await oldSocket?.disconnect() }
         connectionState = .disconnected
         failAllPending(error: "Connection closed")
-        clearSubscriptionHandlers()
-    }
-
-    /// Subscriptions are per-connection (PROTOCOL §6.1): once the connection is gone the
-    /// registered handlers route nothing, so drop them instead of letting dead entries
-    /// accumulate. Stores re-subscribe (and re-register) on reconnect.
-    ///
-    /// Buffered unrouted pushes and unregister tombstones are per-connection for the same
-    /// reason — subscriptionIds can be reused after a daemon restart, so a stale
-    /// prior-connection frame left in the buffer could replay into a fresh post-reconnect
-    /// handler registered under a reused id, and a stale tombstone could suppress
-    /// buffering for that id. Clear them alongside the handlers.
-    private func clearSubscriptionHandlers() {
-        guard !subscriptionHandlers.isEmpty || !unroutedPushBuffer.isEmpty
-            || !recentlyUnregisteredIds.isEmpty else { return }
-        AppLog.connection.debug("[ConnectionManager] Clearing \(subscriptionHandlers.count) subscription handler(s), \(unroutedPushBuffer.count) buffered push(es) on disconnect")
-        subscriptionHandlers.removeAll()
-        unroutedPushBuffer.removeAll()
-        recentlyUnregisteredIds.removeAll()
+        subscriptionRouter.reset()
     }
 
     // MARK: - Public API
@@ -327,91 +245,28 @@ extension ConnectionManagerRouting {
 
     // MARK: - Subscription Push Routing
 
-    /// Register a handler for subscription.push notifications with the given subscriptionId.
-    /// The handler will be invoked (on MainActor) whenever a subscription.push with matching
-    /// subscriptionId is received. Stores should call this immediately after capturing their
-    /// subscriptionId from the subscribe RPC response, in the same MainActor tick, to ensure
-    /// register-before-first-push.
-    ///
-    /// - Parameters:
-    ///   - id: The subscriptionId returned by the subscribe RPC
-    ///   - handler: The MainActor-isolated handler to invoke for pushes with this subscriptionId
     func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {
-        subscriptionHandlers[id] = handler
-        recentlyUnregisteredIds.removeValue(forKey: id)
-        AppLog.connection.debug("[ConnectionManager] Registered subscription handler for id=\(id)")
-        replayBufferedPushes(for: id, to: handler)
+        subscriptionRouter.register(id: id, handler: handler)
     }
 
-    /// Count of registered subscription handlers. Internal for test visibility.
     var subscriptionHandlerCount: Int {
-        subscriptionHandlers.count
+        subscriptionRouter.handlerCount
     }
 
-    /// Unregister the handler for the given subscriptionId. After this call, pushes for this
-    /// subscriptionId will be dropped (logged at debug and discarded).
-    ///
-    /// Stores should call this when:
-    /// - Unsubscribing explicitly
-    /// - Changing subscriptionId (unregister old id before registering new one)
-    /// - On disconnect/reset
-    /// - On deinit (if the store is deallocated)
-    ///
-    /// - Parameter id: The subscriptionId to unregister
     func unregisterSubscriptionHandler(id: String) {
-        subscriptionHandlers.removeValue(forKey: id)
-        // Any buffered pushes belong to the now-dead subscription — drop them so they
-        // can never replay into a future handler, and tombstone the id so straggler
-        // pushes arriving before the daemon processes the unsubscribe are not buffered.
-        pruneExpiredBufferedPushes()
-        unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
-        recentlyUnregisteredIds[id] = Date()
-        AppLog.connection.debug("[ConnectionManager] Unregistered subscription handler for id=\(id)")
+        subscriptionRouter.unregister(id: id)
     }
 
-    /// Buffer an unrouted subscription.push so it can be replayed when a handler is
-    /// registered for its subscriptionId (fixes the dropped seq-0 snapshot race).
-    private func bufferUnroutedPush(_ push: SubscriptionPush) {
-        pruneExpiredBufferedPushes()
-        if recentlyUnregisteredIds[push.subscriptionId] != nil {
-            // An initial snapshot (seq 0) means the daemon legitimately reused the id
-            // for a brand-new subscription (ids reset on daemon restart) — revive it
-            // so the fresh snapshot isn't lost to the tombstone. Anything else is a
-            // straggler from the dead subscription.
-            if push.kind == .snapshot && push.seq == 0 {
-                recentlyUnregisteredIds.removeValue(forKey: push.subscriptionId)
-            } else {
-                AppLog.connection.debug("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")
-                return
-            }
-        }
-        unroutedPushBuffer.append(BufferedPush(push: push, receivedAt: Date()))
-        if unroutedPushBuffer.count > Self.unroutedPushBufferLimit {
-            unroutedPushBuffer.removeFirst(unroutedPushBuffer.count - Self.unroutedPushBufferLimit)
-        }
-        AppLog.connection.debug("[ConnectionManager] Buffered unrouted subscription.push for id=\(push.subscriptionId) seq=\(push.seq) (no handler registered yet, buffered=\(unroutedPushBuffer.count))")
+    func hasBufferedSubscriptionPush(for id: String) -> Bool {
+        subscriptionRouter.hasBufferedPush(for: id)
     }
 
-    /// Replay buffered pushes for the given subscriptionId, in arrival order, to the
-    /// newly registered handler. Buffered entries are removed before delivery so a push
-    /// is either routed live or replayed once — never both.
-    private func replayBufferedPushes(for id: String, to handler: @MainActor (SubscriptionPush) -> Void) {
-        pruneExpiredBufferedPushes()
-        let matching = unroutedPushBuffer.filter { $0.push.subscriptionId == id }
-        guard !matching.isEmpty else { return }
-        unroutedPushBuffer.removeAll { $0.push.subscriptionId == id }
-        AppLog.connection.debug("[ConnectionManager] Replaying \(matching.count) buffered push(es) for id=\(id)")
-        for entry in matching {
-            handler(entry.push)
-        }
+    func hasRecentlyUnregisteredSubscription(id: String) -> Bool {
+        subscriptionRouter.hasRecentlyUnregisteredId(id)
     }
 
-    /// Drop buffered pushes and unregister tombstones older than the TTL.
-    /// Internal for test visibility.
-    func pruneExpiredBufferedPushes(now: Date = Date()) {
-        let cutoff = now.addingTimeInterval(-Self.unroutedPushBufferTTL)
-        unroutedPushBuffer.removeAll { $0.receivedAt < cutoff }
-        recentlyUnregisteredIds = recentlyUnregisteredIds.filter { $0.value >= cutoff }
+    var bufferedSubscriptionPushCount: Int {
+        subscriptionRouter.bufferedPushCount
     }
 
     /// Internal entry point for testing message dispatch.
@@ -696,26 +551,7 @@ extension ConnectionManagerRouting {
         } else if let method = json["method"] as? String {
             let params = json["params"] as Any
 
-            // Route subscription.push to the registered handler for that subscriptionId.
-            // Legacy eventHandlers must NOT receive subscription.push (router is the single source).
-            if let push = SubscriptionPush.parse(method: method, params: params) {
-                if let handler = subscriptionHandlers[push.subscriptionId] {
-                    handler(push)  // Already on MainActor, call directly
-                } else {
-                    // No handler yet — buffer for replay on registration instead of dropping.
-                    // Dropping here loses the seq-0 snapshot when the push races the store's
-                    // handler registration after the subscribe response resumes.
-                    bufferUnroutedPush(push)
-                }
-                return  // Do NOT fall through to legacy eventHandlers
-            }
-
-            // If subscription.push parse failed (malformed), drop it with a warning
-            if method == "subscription.push" {
-                let paramsDict = params as? [String: Any] ?? [:]
-                let subscriptionId = paramsDict["subscriptionId"] as? String ?? "nil"
-                let keys = paramsDict.keys.sorted().joined(separator: ", ")
-                AppLog.connection.warning("[ConnectionManager] Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
+            if subscriptionRouter.route(method: method, params: params) {
                 return
             }
 
@@ -749,7 +585,7 @@ extension ConnectionManagerRouting {
         }
         connectionState = .reconnecting(attempt: startingAttempt)
         failAllPending(error: "Connection lost")
-        clearSubscriptionHandlers()
+        subscriptionRouter.reset()
         startReconnection(disconnectTime: disconnectTime, startingAttempt: startingAttempt)
     }
 
@@ -913,25 +749,5 @@ extension ConnectionManagerRouting {
                 domain: "WebSocket", code: -3,
                 userInfo: [NSLocalizedDescriptionKey: message]))
         }
-    }
-}
-
-// MARK: - JSON-RPC error discriminator
-
-extension NSError {
-    /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
-    static let intentErrorDataCodeKey = "intentErrorDataCode"
-
-    /// The JSON-RPC `error.data.code` discriminator attached by the daemon, if any.
-    var intentErrorDataCode: String? {
-        userInfo[NSError.intentErrorDataCodeKey] as? String
-    }
-
-    /// True only for a definitive entity-not-found JSON-RPC error: `-32602` with
-    /// `error.data.code == "not-found"` (PROTOCOL §3.3/§9). Any other `-32602`
-    /// (`invalid-params`, a more specific code, or absent `data`) must NOT be
-    /// treated as "entity deleted".
-    var isEntityNotFound: Bool {
-        domain == "WebSocket" && code == -32602 && intentErrorDataCode == "not-found"
     }
 }
