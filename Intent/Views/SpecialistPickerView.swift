@@ -1,6 +1,10 @@
 import SwiftUI
 
 struct SpecialistPickerView: View {
+    private enum Route: Hashable {
+        case provider
+    }
+
     let workspaceId: String
     var agentStore: AgentStore
     @Environment(AppCoordinator.self) var coordinator
@@ -8,7 +12,7 @@ struct SpecialistPickerView: View {
     @Environment(\.colorScheme) var colorScheme
 
     // Navigation state
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath: [Route] = []
 
     // Step 1: Name + specialist
     @State private var specialists: [SpecialistInfo] = []
@@ -33,8 +37,9 @@ struct SpecialistPickerView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             specialistStepView
-                .navigationDestination(for: String.self) { step in
-                    if step == "provider" {
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .provider:
                         providerStepView
                     }
                 }
@@ -105,7 +110,7 @@ struct SpecialistPickerView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next") {
-                    navigationPath.append("provider")
+                    navigationPath.append(.provider)
                 }
                 .disabled(selectedSpecialist == nil)
                 .fontWeight(.semibold)
