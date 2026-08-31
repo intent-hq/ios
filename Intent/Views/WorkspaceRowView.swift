@@ -6,7 +6,7 @@ struct WorkspaceRowView: View {
     var showRepo: Bool = true
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
     /// indicator; the owning list provides the shared store.
-    @State private var monitorsSource = WorkspacePrMonitorsStore.shared
+    private let monitorsSource = WorkspacePrMonitorsStore.shared
 
     private var displayStatus: WorkspaceDisplayStatus {
         resolveDisplayStatus(for: workspace)

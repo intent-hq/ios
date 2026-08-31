@@ -17,20 +17,20 @@ import Observation
     /// `prMonitor.list` and dropped by the fold).
     private(set) var monitorsByWorkspace: [String: [MonitoredPr]] = [:]
 
-    private var seededWorkspaceIds: Set<String> = []
-    private var subscriptionId: String?
-    private var subscribeInFlight = false
-    private var eventHandlerId: UUID?
-    private var cancellables = Set<AnyCancellable>()
-    private let connectionManager: ConnectionManagerRouting
+    @ObservationIgnored private var seededWorkspaceIds: Set<String> = []
+    @ObservationIgnored private var subscriptionId: String?
+    @ObservationIgnored private var subscribeInFlight = false
+    @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Per-workspace single-flight refetch guards
-    private var refetchInFlight: Set<String> = []
-    private var refetchQueued: Set<String> = []
+    @ObservationIgnored private var refetchInFlight: Set<String> = []
+    @ObservationIgnored private var refetchQueued: Set<String> = []
     /// Bumped per workspace whenever its bucket changes outside `refetch()`,
     /// so a stale `prMonitor.list` response is discarded (same convergence
     /// scheme as `MonitoredPrStore`).
-    private var generation: [String: Int] = [:]
+    @ObservationIgnored private var generation: [String: Int] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager

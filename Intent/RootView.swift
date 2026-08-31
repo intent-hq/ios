@@ -443,7 +443,7 @@ struct RootView: View {
             }
             // If showingConversation is already true and agent changed,
             // the .id(conversationAgentId) modifier forces SwiftUI to
-            // destroy and recreate ConversationView with a fresh @StateObject
+            // destroy and recreate ConversationView with fresh @State-owned state
         } else if case .noteDetail(let nId, let wId, let nTitle) = coordinator.currentScreen {
             if sizeClass == .compact {
                 // iPhone: use isPresented-based navigation (not noteStack)

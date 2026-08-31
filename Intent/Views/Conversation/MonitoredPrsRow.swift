@@ -14,7 +14,7 @@ import SwiftUI
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
-    @State private var workspaceStore = WorkspaceStore.shared
+    private let workspaceStore = WorkspaceStore.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 

@@ -85,6 +85,7 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
+    .environment(AppCoordinator())
 }
 
 #Preview("Loading - Dark") {
@@ -92,5 +93,6 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
+    .environment(AppCoordinator())
     .preferredColorScheme(.dark)
 }
