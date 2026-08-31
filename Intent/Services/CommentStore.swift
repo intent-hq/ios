@@ -1,22 +1,23 @@
 import Foundation
 import Combine
+import Observation
 
 @MainActor
-class CommentStore: ObservableObject {
-    @Published var threads: [CommentThread] = []
-    @Published var isLoading = false
+@Observable class CommentStore {
+    var threads: [CommentThread] = []
+    var isLoading = false
     
-    private var workspaceId: String?
-    private var currentNoteId: String?
-    private var connectionObserver: AnyCancellable?
-    private var eventHandlerId: UUID?
-    private let connectionManager: ConnectionManagerRouting
+    @ObservationIgnored private var workspaceId: String?
+    @ObservationIgnored private var currentNoteId: String?
+    @ObservationIgnored private var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Live-state subscription tracking
-    private var commentSubscriptionId: String?
-    private var commentReconciler: DeltaReconciler<CommentThread>?
-    private var commentLive = false
-    private var resnapshotInProgress = false
+    @ObservationIgnored private var commentSubscriptionId: String?
+    @ObservationIgnored private var commentReconciler: DeltaReconciler<CommentThread>?
+    @ObservationIgnored private var commentLive = false
+    @ObservationIgnored private var resnapshotInProgress = false
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager

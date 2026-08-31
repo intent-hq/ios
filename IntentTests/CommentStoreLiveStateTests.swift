@@ -1,9 +1,25 @@
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import Intent
 
 @MainActor
 struct CommentStoreLiveStateTests {
+
+    @Test func publicStateIsObservable() {
+        let store = CommentStore(forTesting: true)
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.isLoading
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        store.isLoading = true
+
+        #expect(changeCount.withLock { $0 } == 1)
+    }
     
     // MARK: - Live-state subscription tests
     
