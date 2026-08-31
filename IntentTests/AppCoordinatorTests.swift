@@ -1042,7 +1042,7 @@ final class AppCoordinatorTests {
         )
     }
 
-    /// Let main-queue-hopping Combine sinks and spawned validation tasks run.
+    /// Let main-queue-hopping sinks and spawned validation tasks run.
     private static func drainMainQueue() async {
         try? await Task.sleep(nanoseconds: 200_000_000)
     }
@@ -1144,7 +1144,9 @@ final class AppCoordinatorTests {
 
         // Regression: the very first post-launch fetch must trigger validation
         // (lastUpdated used to be assigned after workspaces, so the first publish was skipped).
-        store.publishFetchedWorkspaces([Self.makeWorkspace(id: "other-ws")])
+        // An empty first response must still invalidate Observation through the
+        // fetch marker even though the workspace array remains empty.
+        store.publishFetchedWorkspaces([])
         await Self.drainMainQueue()
 
         if case .workspaceList = coordinator.currentScreen {

@@ -39,8 +39,7 @@ class AppCoordinator: ObservableObject {
     }
     private var connectionObserver: AnyCancellable?
     private var certMismatchObserver: AnyCancellable?
-    private var workspaceValidationObserver: AnyCancellable?
-    private var reconnectLoadingObserver: AnyCancellable?
+    private var reconnectLoadingObservationID: UUID?
     private var reconnectOverlayTimeoutTask: Task<Void, Never>?
 
     private let workspaceStore: WorkspaceStore
@@ -68,8 +67,7 @@ class AppCoordinator: ObservableObject {
                 guard let self = self else { return }
                 switch state {
                 case .reconnecting, .disconnected:
-                    self.reconnectLoadingObserver?.cancel()
-                    self.reconnectLoadingObserver = nil
+                    self.reconnectLoadingObservationID = nil
                     self.reconnectOverlayTimeoutTask?.cancel()
                     self.reconnectOverlayTimeoutTask = nil
                     if self.hasEverConnected {
@@ -108,8 +106,7 @@ class AppCoordinator: ObservableObject {
     /// Falls back to a 5-second timeout so the overlay never gets stuck.
     private func waitForWorkspaceLoadThenClearOverlay() {
         // Cancel any previous observer from a prior reconnection attempt
-        reconnectLoadingObserver?.cancel()
-        reconnectLoadingObserver = nil
+        reconnectLoadingObservationID = nil
         reconnectOverlayTimeoutTask?.cancel()
         reconnectOverlayTimeoutTask = nil
 
@@ -121,17 +118,9 @@ class AppCoordinator: ObservableObject {
         }
 
         // Observe isLoading: wait for it to go from true → false (fetchAll completed).
-        reconnectLoadingObserver = workspaceStore.$isLoading
-            .dropFirst() // skip the current value
-            .filter { !$0 } // wait for isLoading == false
-            .first()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.reconnectOverlayTimeoutTask?.cancel()
-                self?.reconnectOverlayTimeoutTask = nil
-                self?.reconnectLoadingObserver = nil
-                self?.isDisconnected = false
-            }
+        let observationID = UUID()
+        reconnectLoadingObservationID = observationID
+        observeWorkspaceLoading(observationID: observationID)
 
         // Timeout: if the fetch takes too long or fails silently, clear the overlay anyway.
         reconnectOverlayTimeoutTask = Task { @MainActor [weak self] in
@@ -143,9 +132,27 @@ class AppCoordinator: ObservableObject {
             guard let self, !Task.isCancelled else { return }
             self.reconnectOverlayTimeoutTask = nil
             if self.isDisconnected {
-                self.reconnectLoadingObserver?.cancel()
-                self.reconnectLoadingObserver = nil
+                self.reconnectLoadingObservationID = nil
                 self.isDisconnected = false
+            }
+        }
+    }
+
+    private func observeWorkspaceLoading(observationID: UUID) {
+        withObservationTracking {
+            _ = workspaceStore.isLoading
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      self.reconnectLoadingObservationID == observationID else { return }
+                if self.workspaceStore.isLoading {
+                    self.observeWorkspaceLoading(observationID: observationID)
+                } else {
+                    self.reconnectOverlayTimeoutTask?.cancel()
+                    self.reconnectOverlayTimeoutTask = nil
+                    self.reconnectLoadingObservationID = nil
+                    self.isDisconnected = false
+                }
             }
         }
     }
@@ -163,17 +170,18 @@ class AppCoordinator: ObservableObject {
     }
 
     private func startObservingWorkspaceList() {
-        // Note: validate against the store's *current* state, not the delivered
-        // value — receive(on:) defers delivery, so the value can be stale (e.g.
-        // the initial empty list arriving after the first fetch has published).
-        workspaceValidationObserver = workspaceStore.$workspaces
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
+        withObservationTracking {
+            _ = workspaceStore.lastUpdated
+            _ = workspaceStore.workspaces
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.startObservingWorkspaceList()
                 // Only validate after workspaces have been fetched at least once
                 guard self.workspaceStore.lastUpdated != nil else { return }
                 self.validateCurrentWorkspaceExists(in: self.workspaceStore.workspaces)
             }
+        }
     }
 
     /// If the current screen references a workspace that no longer exists, navigate to workspace list.

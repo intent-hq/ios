@@ -14,14 +14,13 @@ import SwiftUI
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
-    @ObservedObject private var workspaceStore: WorkspaceStore
+    @State private var workspaceStore = WorkspaceStore.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
     init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
         self.viewModel = viewModel
         self.monitoredPrStore = monitoredPrStore
-        _workspaceStore = ObservedObject(wrappedValue: WorkspaceStore.shared)
     }
 
     var body: some View {

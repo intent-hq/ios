@@ -1,4 +1,3 @@
-import Combine
 import Observation
 import SwiftUI
 
@@ -143,26 +142,12 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     var viewMode: ViewMode = .recent
     var searchText = ""
 
-    private var storeRevision = 0
-    @ObservationIgnored private var cancellable: AnyCancellable?
-
-    init() {
-        // Forward WorkspaceStore changes to trigger view updates
-        cancellable = WorkspaceStore.shared.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.storeRevision &+= 1
-            }
-    }
-
     var workspaces: [Workspace] {
-        _ = storeRevision
-        return WorkspaceStore.shared.workspaces
+        WorkspaceStore.shared.workspaces
     }
 
     var isLoading: Bool {
-        _ = storeRevision
-        return WorkspaceStore.shared.isLoading
+        WorkspaceStore.shared.isLoading
     }
 
     var filteredWorkspaces: [Workspace] {

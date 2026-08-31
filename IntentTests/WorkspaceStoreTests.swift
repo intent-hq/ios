@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Observation
 import Testing
 @testable import Intent
 
@@ -483,21 +483,24 @@ struct WorkspaceStoreWaitingTests {
 @MainActor
 struct WorkspaceStorePublishOrderTests {
 
-    /// Regression: `_fetchAll` used to assign `workspaces` before `lastUpdated`,
-    /// so `$workspaces` subscribers gating on `lastUpdated != nil` (AppCoordinator's
-    /// missing-workspace validation) skipped the very first post-launch fetch.
-    @Test func publishFetchedWorkspaces_setsLastUpdatedBeforePublishingWorkspaces() async throws {
+    /// Regression: first-fetch validation must observe the completed fetch state,
+    /// including when the fetched workspace list stays empty.
+    @Test func publishFetchedWorkspaces_observerSeesCompletedEmptyFetch() async throws {
         let store = WorkspaceStore(forTesting: true)
-        var lastUpdatedNonNilAtPublish: Bool?
-        let cancellable = store.$workspaces
-            .dropFirst() // skip the initial empty value delivered on subscribe
-            .sink { _ in
-                lastUpdatedNonNilAtPublish = store.lastUpdated != nil
+        let observedCompletedFetch = await withCheckedContinuation { continuation in
+            withObservationTracking {
+                _ = store.lastUpdated
+                _ = store.workspaces
+            } onChange: {
+                Task { @MainActor in
+                    continuation.resume(
+                        returning: store.lastUpdated != nil && store.workspaces.isEmpty)
+                }
             }
-        store.publishFetchedWorkspaces([])
-        #expect(lastUpdatedNonNilAtPublish == true,
-                "lastUpdated must be non-nil when workspaces publishes so first-fetch validation is not skipped")
-        cancellable.cancel()
+            store.publishFetchedWorkspaces([])
+        }
+        #expect(observedCompletedFetch,
+                "Observation must deliver the completed first-fetch state even when the list stays empty")
     }
 
     @Test func publishFetchedWorkspaces_updatesWorkspacesAndLastUpdated() async throws {

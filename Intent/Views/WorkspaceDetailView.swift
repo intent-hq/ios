@@ -14,7 +14,7 @@ struct WorkspaceDetailView: View {
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var noteStore = NoteStore()
-    @ObservedObject private var workspaceStore = WorkspaceStore.shared
+    @State private var workspaceStore = WorkspaceStore.shared
 
     private var workspace: Workspace? {
         workspaceStore.workspaces.first { $0.id == workspaceId }

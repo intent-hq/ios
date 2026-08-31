@@ -1,26 +1,27 @@
 import Foundation
 import Combine
+import Observation
 
 @MainActor
-class WorkspaceStore: ObservableObject {
+@Observable class WorkspaceStore {
     static let shared = WorkspaceStore()
 
-    @Published var workspaces: [Workspace] = []
-    @Published var lastUpdated: Date?
-    @Published var isLoading = false
+    var workspaces: [Workspace] = []
+    var lastUpdated: Date?
+    var isLoading = false
 
-    private var connectionObserver: AnyCancellable?
-    private var eventHandlerId: UUID?
+    @ObservationIgnored private var connectionObserver: AnyCancellable?
+    @ObservationIgnored private var eventHandlerId: UUID?
 
     /// Tracks the highest-known lastActivity per workspace so optimistic
     /// event-driven timestamps are never overwritten by stale server data.
-    var lastActivityHighWaterMark: [String: String] = [:]
+    @ObservationIgnored var lastActivityHighWaterMark: [String: String] = [:]
 
     // Live-state subscription tracking
-    private var workspaceSubscriptionId: String?
-    private var workspaceReconciler: DeltaReconciler<Workspace>?
-    private var workspaceLive = false
-    private var resnapshotInProgress = false
+    @ObservationIgnored private var workspaceSubscriptionId: String?
+    @ObservationIgnored private var workspaceReconciler: DeltaReconciler<Workspace>?
+    @ObservationIgnored private var workspaceLive = false
+    @ObservationIgnored private var resnapshotInProgress = false
 
     private init() {
         observeConnection()
@@ -86,9 +87,9 @@ class WorkspaceStore: ObservableObject {
     }
 
     /// Publishes a fetched workspace list. `lastUpdated` is set **before** `workspaces`
-    /// so `$workspaces` subscribers that gate on "fetched at least once" (e.g.
-    /// AppCoordinator's missing-workspace validation) see a non-nil `lastUpdated`
-    /// on the very first post-fetch publish.
+    /// so observers that gate on "fetched at least once" (e.g. AppCoordinator's
+    /// missing-workspace validation) see a non-nil `lastUpdated` on the very first
+    /// post-fetch change.
     func publishFetchedWorkspaces(_ parsed: [Workspace]) {
         lastUpdated = Date()
         workspaces = parsed
