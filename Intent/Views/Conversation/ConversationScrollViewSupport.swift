@@ -1,10 +1,11 @@
-import Combine
+import Observation
 import SwiftUI
 import UIKit
 
 /// Stores a weak reference to the underlying UIScrollView so we can stop inertial scrolling.
-class ScrollViewMomentumProxy: ObservableObject {
-    weak var scrollView: UIScrollView?
+@Observable
+class ScrollViewMomentumProxy {
+    @ObservationIgnored weak var scrollView: UIScrollView?
 
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
