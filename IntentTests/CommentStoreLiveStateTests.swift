@@ -7,18 +7,39 @@ import Testing
 @MainActor
 struct CommentStoreLiveStateTests {
 
-    @Test func publicStateIsObservable() {
+    @Test func snapshotThreadMutationIsObservable() async {
         let store = CommentStore(forTesting: true)
+        let reconciler = DeltaReconciler<CommentThread>(
+            getId: { dict in dict["threadId"] as? String },
+            normalize: { dict in CommentThread.parseThread(dict) }
+        )
+        await store.setTestReconciler(reconciler)
         let changeCount = Mutex(0)
         withObservationTracking {
-            _ = store.isLoading
+            _ = store.threads
         } onChange: {
             changeCount.withLock { $0 += 1 }
         }
 
-        store.isLoading = true
+        store.handleEvent("subscription.push", params: [
+            "subscriptionId": "sub-1",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": [[
+                "threadId": "thread-observed",
+                "noteId": "note-1",
+                "status": "open",
+                "createdAt": "2026-03-18T10:00:00Z",
+                "lastActivity": "2026-03-18T10:00:00Z",
+                "latestCommentAuthor": "User",
+                "latestCommentAuthorType": "user",
+                "latestCommentAt": "2026-03-18T10:00:00Z",
+                "commentCount": 1
+            ]]
+        ])
 
         #expect(changeCount.withLock { $0 } == 1)
+        #expect(store.threads.map(\.threadId) == ["thread-observed"])
     }
     
     // MARK: - Live-state subscription tests
