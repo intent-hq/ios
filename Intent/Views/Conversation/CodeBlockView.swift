@@ -43,7 +43,7 @@ struct CodeBlockView: View {
             .padding(.vertical, 8)
 
             // Code content
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 Text(code)
                     .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.9))
@@ -51,6 +51,7 @@ struct CodeBlockView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 12)
             }
+            .scrollIndicators(.hidden)
         }
         .background(codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8))
