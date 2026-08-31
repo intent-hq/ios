@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import Intent
 
@@ -105,6 +107,30 @@ struct WorkspacePrMonitorsStoreTests {
         ] as [String: Any])
         try await Task.sleep(nanoseconds: 50_000_000)
 
+        #expect(store.monitors(for: "ws-abc")[0].state == .completed)
+    }
+
+    @Test func monitorEventsInvalidateObservedWorkspaceBucket() async throws {
+        let fake = FakeConnectionManager()
+        let store = await makeSeededStore(fake, monitors: [makeMonitorDict()])
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.monitors(for: "ws-abc")
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "sub-rows",
+            "event": [
+                "type": "prMonitor:completed",
+                "workspaceId": "ws-abc",
+                "data": makeEventData(state: "completed")
+            ]
+        ] as [String: Any])
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(changeCount.withLock { $0 } == 1)
         #expect(store.monitors(for: "ws-abc")[0].state == .completed)
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Observation
 
 /// Workspace-keyed PR-monitor pool for list-row rendering (PROTOCOL §5.42,
 /// §6.5) — the sibling of the conversation-scoped `MonitoredPrStore` with no
@@ -8,13 +9,13 @@ import Combine
 /// `prMonitor.list` on first appearance, and events fold into the seeded
 /// buckets through the shared `MonitoredPrStore.foldMonitorEvent`.
 @MainActor
-class WorkspacePrMonitorsStore: ObservableObject {
+@Observable class WorkspacePrMonitorsStore {
     static let shared = WorkspacePrMonitorsStore()
 
     /// Active + completed monitors per workspace, in seed order — the same
     /// pool the FE card pill/"+N" reads (cancelled rows are excluded from
     /// `prMonitor.list` and dropped by the fold).
-    @Published private(set) var monitorsByWorkspace: [String: [MonitoredPr]] = [:]
+    private(set) var monitorsByWorkspace: [String: [MonitoredPr]] = [:]
 
     private var seededWorkspaceIds: Set<String> = []
     private var subscriptionId: String?
