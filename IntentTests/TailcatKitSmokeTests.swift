@@ -11,7 +11,10 @@ import Testing
 /// that test is skipped, but the API-surface tests still run, verifying
 /// the framework links and its Swift projection behaves.
 struct TailcatKitSmokeTests {
-    static var smokeToken: String? {
+    // nonisolated: the .enabled(if:) trait evaluates in a Sendable
+    // closure, which cannot touch main-actor-isolated state under the
+    // project's default MainActor isolation.
+    nonisolated static var smokeToken: String? {
         let env = ProcessInfo.processInfo.environment
         guard let token = env["TAILCAT_SMOKE_TOKEN"], !token.isEmpty else { return nil }
         return token
