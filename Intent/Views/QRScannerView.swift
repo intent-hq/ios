@@ -4,7 +4,7 @@ import Vision
 import VisionKit
 
 struct QRScannerView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     /// When set, pairing success is reported to the presenting context instead

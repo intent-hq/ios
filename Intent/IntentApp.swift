@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct IntentApp: App {
-    @StateObject private var coordinator = AppCoordinator()
+    @State private var coordinator = AppCoordinator()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
@@ -18,7 +18,7 @@ struct IntentApp: App {
         WindowGroup {
             let _ = NotificationManager.shared
             RootView()
-                .environmentObject(coordinator)
+                .environment(coordinator)
                 .environment(ConnectionManager.shared)
                 .preferredColorScheme(resolvedColorScheme)
                 .onChange(of: scenePhase) { _, phase in

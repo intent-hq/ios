@@ -1,5 +1,6 @@
-import Combine
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import Intent
 
@@ -483,21 +484,26 @@ struct WorkspaceStoreWaitingTests {
 @MainActor
 struct WorkspaceStorePublishOrderTests {
 
-    /// Regression: `_fetchAll` used to assign `workspaces` before `lastUpdated`,
-    /// so `$workspaces` subscribers gating on `lastUpdated != nil` (AppCoordinator's
-    /// missing-workspace validation) skipped the very first post-launch fetch.
-    @Test func publishFetchedWorkspaces_setsLastUpdatedBeforePublishingWorkspaces() async throws {
+    /// Regression: workspace observers must see the completed fetch timestamp at
+    /// the exact moment a fetched workspace list invalidates their dependency.
+    @Test func publishFetchedWorkspaces_observerSeesLastUpdatedAtInvalidation() {
         let store = WorkspaceStore(forTesting: true)
-        var lastUpdatedNonNilAtPublish: Bool?
-        let cancellable = store.$workspaces
-            .dropFirst() // skip the initial empty value delivered on subscribe
-            .sink { _ in
-                lastUpdatedNonNilAtPublish = store.lastUpdated != nil
+        let observedLastUpdated = Mutex<Bool?>(nil)
+        withObservationTracking {
+            _ = store.workspaces
+        } onChange: {
+            MainActor.assumeIsolated {
+                observedLastUpdated.withLock {
+                    $0 = store.lastUpdated != nil
+                }
             }
-        store.publishFetchedWorkspaces([])
-        #expect(lastUpdatedNonNilAtPublish == true,
-                "lastUpdated must be non-nil when workspaces publishes so first-fetch validation is not skipped")
-        cancellable.cancel()
+        }
+        let workspace = WorkspaceStore.parseWorkspace(["id": "ws-observed", "title": "Observed"])!
+        store.publishFetchedWorkspaces([workspace])
+
+        #expect(observedLastUpdated.withLock { $0 } == true,
+                "lastUpdated must already be set when workspaces invalidates")
+        #expect(store.workspaces.map(\.id) == ["ws-observed"])
     }
 
     @Test func publishFetchedWorkspaces_updatesWorkspacesAndLastUpdated() async throws {

@@ -3,7 +3,7 @@ import SwiftUI
 struct SpecialistPickerView: View {
     let workspaceId: String
     var agentStore: AgentStore
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
 

@@ -9,7 +9,7 @@ struct NoteDetailView: View {
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     @State private var noteStore = NoteStore()
     @State private var agentStore = AgentStore()
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var note: Note?
     @State private var isLoading = true

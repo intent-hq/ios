@@ -1,23 +1,24 @@
 import Foundation
 import Combine
+import Observation
 
-/// ObservableObject managing task state for a single workspace
+/// Observable task state for a single workspace.
 @MainActor
-class TaskStore: ObservableObject {
-    @Published var tasks: [WorkspaceTask] = []
-    @Published var isLoading = false
-    @Published var lastUpdated: Date?
+@Observable class TaskStore {
+    var tasks: [WorkspaceTask] = []
+    var isLoading = false
+    var lastUpdated: Date?
 
-    private var workspaceId: String
-    private var cancellables = Set<AnyCancellable>()
-    private var eventHandlerId: UUID?
-    private let connectionManager: ConnectionManagerRouting
+    @ObservationIgnored private var workspaceId: String
+    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking
-    private var tasksLive = false
-    private var taskSubscriptionId: String?
-    private var taskReconciler: DeltaReconciler<WorkspaceTask>?
-    private var resnapshotInProgress = false
+    @ObservationIgnored private var tasksLive = false
+    @ObservationIgnored private var taskSubscriptionId: String?
+    @ObservationIgnored private var taskReconciler: DeltaReconciler<WorkspaceTask>?
+    @ObservationIgnored private var resnapshotInProgress = false
 
     init(workspaceId: String, connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.workspaceId = workspaceId

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct WorkspaceDetailView: View {
     let workspaceId: String
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @State private var agentStore = AgentStore()
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
@@ -14,7 +14,7 @@ struct WorkspaceDetailView: View {
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var noteStore = NoteStore()
-    @ObservedObject private var workspaceStore = WorkspaceStore.shared
+    private let workspaceStore = WorkspaceStore.shared
 
     private var workspace: Workspace? {
         workspaceStore.workspaces.first { $0.id == workspaceId }
@@ -221,7 +221,7 @@ struct WorkspaceDetailView: View {
         }
         .fullScreenCover(isPresented: $showSpecialistPicker) {
             SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore)
-                .environmentObject(coordinator)
+                .environment(coordinator)
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)

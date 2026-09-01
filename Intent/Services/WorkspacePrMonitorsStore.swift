@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Observation
 
 /// Workspace-keyed PR-monitor pool for list-row rendering (PROTOCOL §5.42,
 /// §6.5) — the sibling of the conversation-scoped `MonitoredPrStore` with no
@@ -8,28 +9,28 @@ import Combine
 /// `prMonitor.list` on first appearance, and events fold into the seeded
 /// buckets through the shared `MonitoredPrStore.foldMonitorEvent`.
 @MainActor
-class WorkspacePrMonitorsStore: ObservableObject {
+@Observable class WorkspacePrMonitorsStore {
     static let shared = WorkspacePrMonitorsStore()
 
     /// Active + completed monitors per workspace, in seed order — the same
     /// pool the FE card pill/"+N" reads (cancelled rows are excluded from
     /// `prMonitor.list` and dropped by the fold).
-    @Published private(set) var monitorsByWorkspace: [String: [MonitoredPr]] = [:]
+    private(set) var monitorsByWorkspace: [String: [MonitoredPr]] = [:]
 
-    private var seededWorkspaceIds: Set<String> = []
-    private var subscriptionId: String?
-    private var subscribeInFlight = false
-    private var eventHandlerId: UUID?
-    private var cancellables = Set<AnyCancellable>()
-    private let connectionManager: ConnectionManagerRouting
+    @ObservationIgnored private var seededWorkspaceIds: Set<String> = []
+    @ObservationIgnored private var subscriptionId: String?
+    @ObservationIgnored private var subscribeInFlight = false
+    @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     // Per-workspace single-flight refetch guards
-    private var refetchInFlight: Set<String> = []
-    private var refetchQueued: Set<String> = []
+    @ObservationIgnored private var refetchInFlight: Set<String> = []
+    @ObservationIgnored private var refetchQueued: Set<String> = []
     /// Bumped per workspace whenever its bucket changes outside `refetch()`,
     /// so a stale `prMonitor.list` response is discarded (same convergence
     /// scheme as `MonitoredPrStore`).
-    private var generation: [String: Int] = [:]
+    @ObservationIgnored private var generation: [String: Int] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager

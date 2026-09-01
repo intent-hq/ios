@@ -43,7 +43,7 @@ enum ConnectionPairing {
 /// "Connect to…" sheet: switch between saved daemon connections, delete saved
 /// ones, or pair a new daemon.
 struct ConnectionsView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     @State private var connections: [StoredConnection] = []

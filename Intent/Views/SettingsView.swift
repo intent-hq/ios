@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
@@ -138,12 +138,12 @@ struct SettingsView: View {
 
 #Preview("Settings") {
     SettingsView()
-        .environmentObject(AppCoordinator())
+        .environment(AppCoordinator())
 }
 
 #Preview("Settings - Dark") {
     SettingsView()
-        .environmentObject(AppCoordinator())
+        .environment(AppCoordinator())
         .preferredColorScheme(.dark)
 }
 

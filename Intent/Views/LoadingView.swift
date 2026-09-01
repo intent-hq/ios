@@ -5,7 +5,7 @@ import SwiftUI
 /// loading → connecting transition). This view only owns the launch timer
 /// that advances the coordinator once the intro has had time to play.
 struct LoadingView: View {
-    @EnvironmentObject var coordinator: AppCoordinator
+    @Environment(AppCoordinator.self) var coordinator
 
     var body: some View {
         Color.clear
@@ -85,6 +85,7 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
+    .environment(AppCoordinator())
 }
 
 #Preview("Loading - Dark") {
@@ -92,5 +93,6 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
+    .environment(AppCoordinator())
     .preferredColorScheme(.dark)
 }
