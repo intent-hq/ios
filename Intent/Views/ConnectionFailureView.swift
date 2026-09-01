@@ -205,7 +205,8 @@ struct ConnectionFailureView: View {
                         hosts: pairing.server.hosts,
                         port: pairing.server.port,
                         token: pairing.token,
-                        certFingerprint: pairing.server.certFingerprint
+                        certFingerprint: pairing.server.certFingerprint,
+                        tcAddress: pairing.server.tcAddress
                     )
                     // A cancelled retry must never route: the user may have
                     // switched to another saved connection while this connect

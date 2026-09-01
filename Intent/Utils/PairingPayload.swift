@@ -14,6 +14,10 @@ struct PairingPayload: Equatable {
     let port: Int
     let token: String
     let certFingerprint: String?
+    /// Tailcat tunnel address (`tc=`, the "tc..." connection token), appended
+    /// by the daemon only when its tunnel is running. Optional and tolerated
+    /// absent; empty values are normalized to nil.
+    let tcAddress: String?
 
     /// Parse a scanned QR payload. Returns nil when the payload is not a
     /// well-formed `intent://pair` URI with token, host, and numeric port.
@@ -43,6 +47,11 @@ struct PairingPayload: Equatable {
         .compactMap { $0 }
         .first(where: { !$0.isEmpty })
 
-        return PairingPayload(hosts: hosts, port: port, token: token, certFingerprint: fingerprint)
+        let tcAddress = items.first(where: { $0.name == "tc" })?.value
+            .flatMap { $0.isEmpty ? nil : $0 }
+
+        return PairingPayload(
+            hosts: hosts, port: port, token: token, certFingerprint: fingerprint,
+            tcAddress: tcAddress)
     }
 }

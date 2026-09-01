@@ -182,7 +182,10 @@ enum SyncedBackendConnectionMerge {
                 port: record.port,
                 name: existing.server.name,
                 pairedAt: existing.server.pairedAt,
-                certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint),
+                certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint,
+                // Registry records don't carry the tunnel address; keep the
+                // locally learned one.
+                tcAddress: existing.server.tcAddress),
             token: record.token,
             displayName: displayName(for: record),
             lastConnectedAt: existing.lastConnectedAt,

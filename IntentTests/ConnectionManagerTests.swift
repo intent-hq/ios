@@ -1270,5 +1270,77 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.localIps(fromSystemStatus: "not-a-dict") == nil)
         #expect(ConnectionManager.localIps(fromSystemStatus: NSNull()) == nil)
     }
+
+    // MARK: - tcAddress parsing (system.status)
+
+    @Test @MainActor func tcAddressParsedFromSystemStatusResult() {
+        let result: [String: Any] = [
+            "version": "1.2.3",
+            "tcAddress": "tc-abcdef123456",
+        ]
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: result) == "tc-abcdef123456")
+    }
+
+    @Test @MainActor func tcAddressNilWhenAbsentMalformedOrBlank() {
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["version": "1.0.0"]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["tcAddress": 42]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["tcAddress": "  "]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: "not-a-dict") == nil)
+    }
+
+    @Test @MainActor func updateCachedCredentialsAdoptsTcAddress() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
+            tcAddress: "tc-tunnel-token")
+        #expect(manager.tcAddress == "tc-tunnel-token")
+        manager.updateCachedCredentials(
+            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil)
+        #expect(manager.tcAddress == nil)
+    }
+
+    // MARK: - Tunnel race candidate
+
+    private nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+        let localPort: Int
+        let closed = OSAllocatedUnfairLock(initialState: false)
+        init(localPort: Int) { self.localPort = localPort }
+        func close() async { closed.withLock { $0 = true } }
+        var isClosed: Bool { closed.withLock { $0 } }
+    }
+
+    private nonisolated struct FakeTunnelDialer: TunnelDialing {
+        let result: Result<FakeTunnelSession, WebSocketTransportError>
+        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+            try result.get()
+        }
+    }
+
+    /// A failed tunnel dial surfaces as a candidate failure with the tunnel
+    /// label (not a raw loopback host).
+    @Test func tunnelDialFailurePropagates() async {
+        let dialer = FakeTunnelDialer(
+            result: .failure(.failed(
+                host: ConnectionManager.tunnelCandidateLabel, message: "no derp")))
+        await #expect(throws: WebSocketTransportError.self) {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: nil)
+        }
+    }
+
+    /// When the tunnel establishes but the WSS handshake through it fails,
+    /// the session must be closed (no leaked tunnel from a dead candidate).
+    @Test func tunnelClosedWhenSocketHandshakeFails() async {
+        // Port 1 on loopback: connection refused, fast deterministic failure.
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        await #expect(throws: (any Error).self) {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: nil)
+        }
+        #expect(tunnel.isClosed)
+    }
 }
 

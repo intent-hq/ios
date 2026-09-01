@@ -6,13 +6,20 @@ struct PairedServer: Codable, Equatable {
     let name: String
     let pairedAt: Date
     let certFingerprint: String?
+    /// Tailcat tunnel address ("tc..." connection token) when the daemon
+    /// reported one — via the pairing payload (`tc=`) or `system.status`
+    /// (`tcAddress`). Optional: absent on records saved before the field
+    /// existed and on daemons without a running tunnel.
+    let tcAddress: String?
 
-    init(hosts: [String], port: Int, name: String, pairedAt: Date, certFingerprint: String? = nil) {
+    init(hosts: [String], port: Int, name: String, pairedAt: Date,
+         certFingerprint: String? = nil, tcAddress: String? = nil) {
         self.hosts = hosts
         self.port = port
         self.name = name
         self.pairedAt = pairedAt
         self.certFingerprint = certFingerprint
+        self.tcAddress = tcAddress
     }
 }
 

@@ -33,6 +33,30 @@ struct ModelsTests {
         #expect(decoded.certFingerprint == nil)
     }
 
+    @Test func pairedServerCodableWithTcAddress() async throws {
+        let server = PairedServer(
+            hosts: ["192.168.1.1"], port: 3000, name: "My Mac",
+            pairedAt: Date(timeIntervalSince1970: 1000),
+            certFingerprint: "AA:BB",
+            tcAddress: "tc-abcdef123456"
+        )
+        let data = try JSONEncoder().encode(server)
+        let decoded = try JSONDecoder().decode(PairedServer.self, from: data)
+        #expect(decoded == server)
+        #expect(decoded.tcAddress == "tc-abcdef123456")
+    }
+
+    /// Records saved before the tcAddress field existed must keep decoding
+    /// (the optional field defaults to nil).
+    @Test func pairedServerDecodesLegacyJSONWithoutTcAddress() async throws {
+        let legacy = """
+        {"hosts":["192.168.1.1"],"port":3000,"name":"My Mac","pairedAt":1000}
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(PairedServer.self, from: legacy)
+        #expect(decoded.tcAddress == nil)
+        #expect(decoded.hosts == ["192.168.1.1"])
+    }
+
     @Test func pairedServerCodableMultipleHosts() async throws {
         let server = PairedServer(
             hosts: ["192.168.1.1", "100.64.0.1"], port: 3000, name: "My Mac",

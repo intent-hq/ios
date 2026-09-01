@@ -22,12 +22,12 @@ struct SyncedBackendConnectionMergeTests {
     private func local(
         hosts: [String] = ["10.0.0.1"], port: Int = 8843, fingerprint: String? = "aa:bb",
         token: String = "tok-local", syncUpdatedAt: Double? = nil,
-        pairedAt: Date = Date(timeIntervalSince1970: 0)
+        pairedAt: Date = Date(timeIntervalSince1970: 0), tcAddress: String? = nil
     ) -> StoredConnection {
         StoredConnection(
             server: PairedServer(
                 hosts: hosts, port: port, name: "daemon", pairedAt: pairedAt,
-                certFingerprint: fingerprint),
+                certFingerprint: fingerprint, tcAddress: tcAddress),
             token: token, syncUpdatedAt: syncUpdatedAt)
     }
 
@@ -126,6 +126,16 @@ struct SyncedBackendConnectionMergeTests {
         #expect(updated.displayName == "Renamed")
         #expect(updated.server.hosts == ["10.9.9.9", "10.0.0.1"])
         #expect(updated.syncUpdatedAt == 200)
+    }
+
+    /// Registry records carry no tunnel address; a registry-driven rewrite
+    /// must keep the locally learned one.
+    @Test func newerRecordPreservesLocalTcAddress() {
+        let existing = local(syncUpdatedAt: 100, tcAddress: "tc-local-tunnel")
+        let newer = record(token: "tok-rotated", updatedAt: 200)
+        let result = SyncedBackendConnectionMerge.merge(records: [newer], into: [existing])
+        #expect(result.updatedIds == [existing.id])
+        #expect(result.connections[0].server.tcAddress == "tc-local-tunnel")
     }
 
     @Test func olderOrEqualRecordDoesNotOverwrite() {
