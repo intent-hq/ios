@@ -27,7 +27,17 @@ func newEchoPair(t *testing.T) (*EchoServer, *Client) {
 	t.Cleanup(func() { srv.Close() })
 	cl := NewClient(srv.Token())
 	t.Cleanup(func() { cl.Close() })
-	return srv, cl
+	// Warm up with retried pings: the registration ping is a single
+	// DERP packet with no retransmit, so it can race the server's DERP
+	// registration and get dropped. Once one ping succeeds the client
+	// is registered and later dials don't ping again.
+	for i := 0; i < 5; i++ {
+		if err = cl.Ping(2_000); err == nil {
+			return srv, cl
+		}
+	}
+	t.Fatalf("warm-up Ping: %v", err)
+	return nil, nil
 }
 
 func TestDialEcho(t *testing.T) {
@@ -96,6 +106,42 @@ func TestForwarder(t *testing.T) {
 	got := make([]byte, len(msg))
 	if _, err := io.ReadFull(nc, got); err != nil {
 		t.Fatalf("Read: %v", err)
+	}
+	if !bytes.Equal(got, msg) {
+		t.Fatalf("echo = %q, want %q", got, msg)
+	}
+}
+
+// TestForwarderHalfClose covers the request/response pattern where the
+// client sends its request, half-closes its write side, and still expects
+// the full response: the forwarder must not tear down the reverse
+// direction when the client→remote copy finishes.
+func TestForwarderHalfClose(t *testing.T) {
+	_, cl := newEchoPair(t)
+
+	fwd, err := cl.Forward(4713)
+	if err != nil {
+		t.Fatalf("Forward: %v", err)
+	}
+	defer fwd.Close()
+
+	nc, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(fwd.Port())), 10*time.Second)
+	if err != nil {
+		t.Fatalf("dial forwarder: %v", err)
+	}
+	defer nc.Close()
+	nc.SetDeadline(time.Now().Add(60 * time.Second))
+
+	msg := []byte("request then half-close")
+	if _, err := nc.Write(msg); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := nc.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatalf("CloseWrite: %v", err)
+	}
+	got, err := io.ReadAll(nc)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
 	}
 	if !bytes.Equal(got, msg) {
 		t.Fatalf("echo = %q, want %q", got, msg)

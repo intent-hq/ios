@@ -155,9 +155,25 @@ func pipe(local net.Conn, c *tailcat.Client, remotePort uint16) {
 	}
 	defer remote.Close()
 	done := make(chan struct{}, 2)
-	go func() { io.Copy(remote, local); done <- struct{}{} }()
-	go func() { io.Copy(local, remote); done <- struct{}{} }()
+	go func() { copyThenCloseWrite(remote, local); done <- struct{}{} }()
+	go func() { copyThenCloseWrite(local, remote); done <- struct{}{} }()
 	<-done
+	<-done
+}
+
+// copyThenCloseWrite copies src to dst, then half-closes dst's write side so
+// the peer sees EOF while the reverse direction keeps flowing. This lets a
+// client half-close its write side after sending a request and still receive
+// the full response.
+func copyThenCloseWrite(dst, src net.Conn) {
+	io.Copy(dst, src)
+	if cw, ok := dst.(interface{ CloseWrite() error }); ok {
+		cw.CloseWrite()
+	} else {
+		// No half-close support: close outright so the peer's copy
+		// unblocks instead of hanging forever.
+		dst.Close()
+	}
 }
 
 func timeoutCtx(timeoutMs int) (context.Context, context.CancelFunc) {
