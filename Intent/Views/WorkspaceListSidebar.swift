@@ -18,9 +18,9 @@ struct WorkspaceListSidebar: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 8)
+                .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
+                .padding(.top, Constants.WorkspaceList.pickerVerticalPadding)
+                .padding(.bottom, Constants.WorkspaceList.pickerVerticalPadding)
 
                 ZStack {
                     Theme.sidebar(for: colorScheme).ignoresSafeArea()
@@ -85,7 +85,7 @@ struct WorkspaceListSidebar: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Constants.WorkspaceList.emptyStateSpacing) {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -116,19 +116,29 @@ struct WorkspaceListSidebar: View {
                 ForEach(viewModel.filteredWorkspaces) { workspace in
                     WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
                         .tag(workspace.id)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                        .listRowInsets(EdgeInsets(
+                            top: Constants.WorkspaceList.sidebarRowInset,
+                            leading: Constants.WorkspaceList.sidebarRowInset,
+                            bottom: Constants.WorkspaceList.sidebarRowInset,
+                            trailing: Constants.WorkspaceList.sidebarRowInset))
                         .listRowSeparator(.hidden)
                 }
             case .repo:
                 ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                    Section(header: HStack(spacing: 6) {
-                        RepoOwnerAvatarView(owner: workspaces.first?.repositoryOwner, size: 16)
+                    Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+                        RepoOwnerAvatarView(
+                            owner: workspaces.first?.repositoryOwner,
+                            size: Constants.WorkspaceList.sidebarSectionAvatarSize)
                         Text(repoName)
                     }) {
                         ForEach(workspaces) { workspace in
                             WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
                                 .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                                .listRowInsets(EdgeInsets(
+                                    top: Constants.WorkspaceList.sidebarRowInset,
+                                    leading: Constants.WorkspaceList.sidebarRowInset,
+                                    bottom: Constants.WorkspaceList.sidebarRowInset,
+                                    trailing: Constants.WorkspaceList.sidebarRowInset))
                                 .listRowSeparator(.hidden)
                         }
                     }
@@ -139,7 +149,11 @@ struct WorkspaceListSidebar: View {
                         ForEach(workspaces) { workspace in
                             WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
                                 .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                                .listRowInsets(EdgeInsets(
+                                    top: Constants.WorkspaceList.sidebarRowInset,
+                                    leading: Constants.WorkspaceList.sidebarRowInset,
+                                    bottom: Constants.WorkspaceList.sidebarRowInset,
+                                    trailing: Constants.WorkspaceList.sidebarRowInset))
                                 .listRowSeparator(.hidden)
                         }
                     }
@@ -148,8 +162,8 @@ struct WorkspaceListSidebar: View {
         }
         .listStyle(.sidebar)
         .scrollDismissesKeyboard(.immediately)
-        .contentMargins(.top, 4)
-        .contentMargins(.bottom, 60)
+        .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+        .contentMargins(.bottom, Constants.WorkspaceList.bottomContentMargin)
     }
 }
 

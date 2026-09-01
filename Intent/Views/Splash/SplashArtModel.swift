@@ -7,8 +7,8 @@ struct SplashRandom {
     var seed: UInt32
 
     mutating func next() -> Double {
-        seed = seed &* 1664525 &+ 1013904223
-        return Double(seed) / 4294967296
+        seed = seed &* Constants.Splash.Random.multiplier &+ Constants.Splash.Random.increment
+        return Double(seed) / Constants.Splash.Random.normalizationDivisor
     }
 }
 
@@ -109,8 +109,10 @@ struct SplashArtModel {
     /// `columns = max(4, round(width / 150))`,
     /// `rows = max(6, round(height / width * columns))`.
     static func gridSize(width: Double, height: Double) -> (columns: Int, rows: Int) {
-        let columns = max(4, Int((width / 150).rounded()))
-        let rows = max(6, Int(((height / width) * Double(columns)).rounded()))
+        let columns = max(Constants.Splash.minimumColumns,
+                          Int((width / Constants.Splash.targetCellWidth).rounded()))
+        let rows = max(Constants.Splash.minimumRows,
+                       Int(((height / width) * Double(columns)).rounded()))
         return (columns, rows)
     }
 
@@ -283,7 +285,7 @@ struct SplashArtModel {
         let columnsCovered = Set(candidate.map { tiles[$0.tileIndex].col }).count
         let rowsCovered = Set(candidate.map { tiles[$0.tileIndex].row }).count
         let score = (Double(columnsCovered) / Double(columns))
-            * (Double(rowsCovered) / Double(rows)) * 1000
+            * (Double(rowsCovered) / Double(rows)) * Constants.Splash.routeCoverageWeight
             + Double(candidate.count)
         return Coverage(columnsCovered: columnsCovered, rowsCovered: rowsCovered, score: score)
     }
@@ -327,7 +329,8 @@ struct SplashArtModel {
         var bestRoute: [RouteStep] = []
         var bestOrientations: [Int] = []
         var bestScore = -1.0
-        let targetLength = Int((Double(tiles.count) * 0.65).rounded(.down))
+        let targetLength = Int(
+            (Double(tiles.count) * Constants.Splash.targetRouteCoverage).rounded(.down))
         for _ in 0..<Self.maxLayoutAttempts {
             for index in tiles.indices {
                 tiles[index].orient = rng.next() > 0.5 ? 1 : 0
@@ -358,7 +361,7 @@ struct SplashArtModel {
     /// kept explicit here so the model stays clock-free and deterministic).
     mutating func startReveal(at now: Double) {
         revealStartedAt = now
-        nextAmbientFlip = now + Self.introDuration + 700
+        nextAmbientFlip = now + Self.introDuration + Constants.Splash.firstAmbientDelay
     }
 
     /// Eased 0…1 intro progress at `now`; 1 when reduced motion is on.
@@ -383,11 +386,12 @@ struct SplashArtModel {
             for index in tiles.indices {
                 let distance = hypot(tiles[index].cx - anchor.cx, tiles[index].cy - anchor.cy)
                 if tiles[index].flipStart < 0 && distance < reach {
-                    tiles[index].flipStart = now + distance * 0.7
+                    tiles[index].flipStart = now + distance * Constants.Splash.ambientStagger
                 }
             }
         }
-        nextAmbientFlip = now + 1100 + rng.next() * 1500
+        nextAmbientFlip = now + Constants.Splash.minimumAmbientInterval
+            + rng.next() * Constants.Splash.ambientIntervalRange
     }
 
     /// Pointer/touch flip: schedules flips on settled tiles within `reach` of
@@ -397,9 +401,9 @@ struct SplashArtModel {
         for index in tiles.indices {
             let distance = hypot(tiles[index].cx - x, tiles[index].cy - y)
             if tiles[index].flipStart < 0
-                && now - tiles[index].lastFlip > 350
+                && now - tiles[index].lastFlip > Constants.Splash.repeatFlipCooldown
                 && distance < reach {
-                tiles[index].flipStart = now + distance * 0.45
+                tiles[index].flipStart = now + distance * Constants.Splash.interactiveStagger
             }
         }
     }

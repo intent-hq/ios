@@ -17,9 +17,9 @@ struct ModelChangeNoticeView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.Conversation.DividerNotice.outerSpacing) {
             line
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.DividerNotice.labelSpacing) {
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.caption2)
                 Text(label)
@@ -30,7 +30,7 @@ struct ModelChangeNoticeView: View {
             .layoutPriority(1)
             line
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Constants.Conversation.DividerNotice.verticalPadding)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(label)
@@ -39,7 +39,7 @@ struct ModelChangeNoticeView: View {
     private var line: some View {
         Rectangle()
             .fill(Theme.border(for: colorScheme))
-            .frame(height: 1)
+            .frame(height: Constants.Conversation.DividerNotice.lineHeight)
             .frame(minWidth: 16, maxWidth: .infinity)
     }
 }

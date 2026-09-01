@@ -16,16 +16,20 @@ struct DisconnectedView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            VStack(spacing: 24) {
+            VStack(spacing: Constants.Disconnected.contentSpacing) {
                 Spacer()
 
                 // Pulsing dot animation
                 Circle()
                     .fill(Color.orange)
-                    .frame(width: 12, height: 12)
-                    .scaleEffect(attemptNumber > 0 ? 1.5 : 1.0)
-                    .opacity(attemptNumber > 0 ? 0.5 : 1.0)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: attemptNumber)
+                    .frame(width: Constants.Disconnected.indicatorSize,
+                           height: Constants.Disconnected.indicatorSize)
+                    .scaleEffect(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorScale : 1.0)
+                    .opacity(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorOpacity : 1.0)
+                    .animation(
+                        .easeInOut(duration: Constants.Disconnected.indicatorAnimationDuration)
+                            .repeatForever(autoreverses: true),
+                        value: attemptNumber)
 
                 Text("Connection Lost")
                     .font(.title2.bold())
@@ -37,7 +41,7 @@ struct DisconnectedView: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 32)
+                    .padding(.horizontal, Constants.Disconnected.horizontalPadding)
                 }
 
                 if attemptNumber > 1 {
@@ -66,12 +70,12 @@ struct DisconnectedView: View {
                         .font(.body.weight(.medium))
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.red.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
+                        .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
+                        .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
                 }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 32)
+                .padding(.horizontal, Constants.Disconnected.horizontalPadding)
+                .padding(.bottom, Constants.Disconnected.bottomPadding)
             }
         }
     }

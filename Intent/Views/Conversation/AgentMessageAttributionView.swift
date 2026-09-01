@@ -17,7 +17,7 @@ struct AgentMessageAttributionView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
             if let onOpenAgent {
                 Button(action: onOpenAgent) { identity }
                     .buttonStyle(.plain)
@@ -27,9 +27,11 @@ struct AgentMessageAttributionView: View {
             }
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                withAnimation(.easeInOut(duration: Constants.Conversation.Attribution.expansionAnimationDuration)) {
+                    isExpanded.toggle()
+                }
             } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
                     Text("sent a message")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -60,7 +62,7 @@ struct AgentMessageAttributionView: View {
     /// Agent icon + truncated sender name (name is pre-truncated to ~20
     /// chars by the extraction, so it can never crowd out the preview).
     private var identity: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

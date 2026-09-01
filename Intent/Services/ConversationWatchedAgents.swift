@@ -65,7 +65,8 @@ final class ConversationWatchedAgents {
         }
         let currentDate = now()
         if let refreshedAt = lastRefresh[agentId],
-           currentDate.timeIntervalSince(refreshedAt) < 3.0 { return }
+           currentDate.timeIntervalSince(refreshedAt)
+               < Constants.Conversation.AgentWaiting.activityRefreshThrottle { return }
         lastRefresh[agentId] = currentDate
         refresh(agentId: agentId)
     }

@@ -23,17 +23,18 @@ struct NoteDetailView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: Constants.Notes.Detail.contentSpacing) {
                         // Tags
                         if !note.tags.isEmpty {
-                            HStack(spacing: 4) {
+                            HStack(spacing: Constants.Notes.Detail.tagSpacing) {
                                 ForEach(note.tags, id: \.self) { tag in
                                     Text(tag)
                                         .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
+                                        .padding(.horizontal, Constants.Notes.Detail.tagHorizontalPadding)
+                                        .padding(.vertical, Constants.Notes.Detail.tagVerticalPadding)
                                         .background(Theme.muted(for: colorScheme))
-                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                        .clipShape(RoundedRectangle(
+                                            cornerRadius: Constants.Notes.Detail.tagCornerRadius))
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 }
                             }
@@ -95,10 +96,10 @@ struct NoteDetailView: View {
                             )
                         }
                     }
-                    .padding(16)
+                    .padding(Constants.Notes.Detail.contentPadding)
                 }
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: Constants.Notes.Detail.contentSpacing) {
                     Image(systemName: "doc.text")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))

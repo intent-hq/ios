@@ -62,7 +62,7 @@ enum NewMessagesDivider {
     /// list's existing at-bottom detection (contentOffset.y <= 50).
     static func followDisabledAfterEntryScroll(
         flippedContentOffsetY: Double,
-        atBottomThreshold: Double = 50
+        atBottomThreshold: Double = Double(Constants.Conversation.Transcript.atBottomThreshold)
     ) -> Bool {
         flippedContentOffsetY > atBottomThreshold
     }

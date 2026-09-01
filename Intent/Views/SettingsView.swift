@@ -13,9 +13,9 @@ struct SettingsView: View {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: Constants.Settings.contentSpacing) {
                         // Appearance section
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: Constants.Settings.sectionSpacing) {
                             Text("Appearance")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -28,30 +28,30 @@ struct SettingsView: View {
                                     Text("System").tag("system")
                                 }
                                 .pickerStyle(.segmented)
-                                .padding(16)
+                                .padding(Constants.Settings.cardPadding)
                             }
                             .background(Theme.card(for: colorScheme))
-                            .clipShape(.rect(cornerRadius: 12))
+                            .clipShape(.rect(cornerRadius: Constants.Settings.cardCornerRadius))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: Constants.Settings.cardCornerRadius)
+                                    .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Settings.cardBorderWidth)
                             )
                         }
 
                         // Connected server card
                         if let connection = PersistenceManager.shared.activeConnection() {
-                            VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: Constants.Settings.sectionSpacing) {
                                 Text("Connected to")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     .textCase(.uppercase)
 
-                                HStack(spacing: 12) {
+                                HStack(spacing: Constants.Settings.connectionRowSpacing) {
                                     Image(systemName: "desktopcomputer")
                                         .font(.title2)
                                         .foregroundStyle(Theme.primary(for: colorScheme))
 
-                                    VStack(alignment: .leading, spacing: 2) {
+                                    VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
                                         Text(connection.displayName)
                                             .font(.body.weight(.medium))
                                             .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -62,10 +62,11 @@ struct SettingsView: View {
 
                                     Spacer()
 
-                                    HStack(spacing: 4) {
+                                    HStack(spacing: Constants.Settings.statusSpacing) {
                                         Circle()
                                             .fill(.green)
-                                            .frame(width: 8, height: 8)
+                                            .frame(width: Constants.Settings.statusDotSize,
+                                                   height: Constants.Settings.statusDotSize)
                                         Text("Connected")
                                             .font(.caption)
                                             .foregroundStyle(.green)
@@ -81,17 +82,17 @@ struct SettingsView: View {
                                         mismatches: connectionManager.certMismatches)
                                 }
                             }
-                            .padding(16)
+                            .padding(Constants.Settings.cardPadding)
                             .background(Theme.card(for: colorScheme))
-                            .clipShape(.rect(cornerRadius: 12))
+                            .clipShape(.rect(cornerRadius: Constants.Settings.cardCornerRadius))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                                RoundedRectangle(cornerRadius: Constants.Settings.cardCornerRadius)
+                                    .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Settings.cardBorderWidth)
                             )
                         }
 
                         // Account section
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: Constants.Settings.sectionSpacing) {
                             Text("Account")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -105,12 +106,12 @@ struct SettingsView: View {
                                     Text("Log Off")
                                     Spacer()
                                 }
-                                .padding(16)
+                                .padding(Constants.Settings.cardPadding)
                                 .background(Theme.card(for: colorScheme))
-                                .clipShape(.rect(cornerRadius: 12))
+                                .clipShape(.rect(cornerRadius: Constants.Settings.cardCornerRadius))
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                                    RoundedRectangle(cornerRadius: Constants.Settings.cardCornerRadius)
+                                        .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Settings.cardBorderWidth)
                                 )
                             }
                         }
@@ -146,7 +147,7 @@ struct SettingsView: View {
 
                         Spacer()
                     }
-                    .padding(20)
+                    .padding(Constants.Settings.contentPadding)
                 }
             }
             .navigationTitle("Settings")
@@ -156,7 +157,7 @@ struct SettingsView: View {
                     Button {
                         coordinator.onSettingsBack()
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: Constants.Settings.backButtonSpacing) {
                             Image(systemName: "chevron.left")
                             Text("Back")
                         }

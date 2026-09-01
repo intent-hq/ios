@@ -99,7 +99,10 @@ struct RootView: View {
                     // iPad: NavigationSplitView with sidebar selection
                     NavigationSplitView {
                         WorkspaceListSidebar()
-                            .navigationSplitViewColumnWidth(min: 300, ideal: 350, max: 400)
+                            .navigationSplitViewColumnWidth(
+                                min: Constants.Root.sidebarMinimumWidth,
+                                ideal: Constants.Root.sidebarIdealWidth,
+                                max: Constants.Root.sidebarMaximumWidth)
                     } detail: {
                         detailContent
                     }
@@ -137,7 +140,8 @@ struct RootView: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: String(describing: coordinator.currentScreen))
+        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
+                   value: String(describing: coordinator.currentScreen))
         .overlay(alignment: .top) {
             if let toast = notificationManager.currentToast {
                 ToastView(
@@ -154,20 +158,20 @@ struct RootView: View {
                         notificationManager.dismissToast()
                     }
                 )
-                .padding(.top, 8)
+                .padding(.top, Constants.Root.toastTopPadding)
             }
         }
         .overlay {
             if coordinator.isDisconnected {
                 ZStack {
                     // Light tinted backdrop — lets blurred content show through
-                    Color.black.opacity(0.15)
+                    Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
                         .ignoresSafeArea()
                         .background(.ultraThinMaterial)
 
-                    VStack(spacing: 16) {
+                    VStack(spacing: Constants.Root.reconnectPanelSpacing) {
                         ProgressView()
-                            .scaleEffect(1.2)
+                            .scaleEffect(Constants.Root.reconnectProgressScale)
                             .tint(.primary)
 
                         Text("Reconnecting...")
@@ -192,13 +196,15 @@ struct RootView: View {
                         }
                         .buttonStyle(.bordered)
                         .tint(.primary)
-                        .padding(.top, 8)
+                        .padding(.top, Constants.Root.reconnectButtonTopPadding)
                     }
-                    .padding(32)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+                    .padding(Constants.Root.reconnectPanelPadding)
+                    .background(.regularMaterial, in: RoundedRectangle(
+                        cornerRadius: Constants.Root.reconnectPanelCornerRadius))
                 }
                 .transition(.opacity)
-                .animation(.easeInOut(duration: 0.3), value: coordinator.isDisconnected)
+                .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
+                           value: coordinator.isDisconnected)
             }
         }
     }
@@ -300,7 +306,7 @@ struct RootView: View {
                                         showingConversation = false
                                         coordinator.onBackToWorkspaceDetail()
                                     } label: {
-                                        HStack(spacing: 4) {
+                                        HStack(spacing: Constants.Root.backButtonSpacing) {
                                             Image(systemName: "chevron.left")
                                             Text("Agents")
                                         }
@@ -327,7 +333,7 @@ struct RootView: View {
                                     Button {
                                         noteStack.removeLast()
                                     } label: {
-                                        HStack(spacing: 4) {
+                                        HStack(spacing: Constants.Root.backButtonSpacing) {
                                             Image(systemName: "chevron.left")
                                             Text(stackBackTitle())
                                         }
@@ -387,7 +393,7 @@ struct RootView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            VStack(spacing: 12) {
+            VStack(spacing: Constants.Root.emptyStateSpacing) {
                 Image(systemName: "sidebar.left")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -398,7 +404,7 @@ struct RootView: View {
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, Constants.Root.emptyStateHorizontalPadding)
             }
         }
     }

@@ -22,8 +22,8 @@ struct ManualTokenEntryView: View {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
                 ScrollView {
-                    VStack(spacing: 24) {
-                        VStack(spacing: 8) {
+                    VStack(spacing: Constants.ManualTokenEntry.contentSpacing) {
+                        VStack(spacing: Constants.ManualTokenEntry.headerSpacing) {
                             Image(systemName: "keyboard")
                                 .font(.largeTitle)
                                 .foregroundStyle(Theme.primary(for: colorScheme))
@@ -31,10 +31,10 @@ struct ManualTokenEntryView: View {
                                 .font(.title3.bold())
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
                         }
-                        .padding(.top, 32)
+                        .padding(.top, Constants.ManualTokenEntry.headerTopPadding)
 
-                        VStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 4) {
+                        VStack(spacing: Constants.ManualTokenEntry.formSpacing) {
+                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
                                 Text("Host")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -45,7 +45,7 @@ struct ManualTokenEntryView: View {
                                     .keyboardType(.URL)
                             }
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
                                 Text("Port")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -54,7 +54,7 @@ struct ManualTokenEntryView: View {
                                     .keyboardType(.numberPad)
                             }
 
-                            VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
                                 Text("API Token")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -78,13 +78,13 @@ struct ManualTokenEntryView: View {
                             }
                         }
                         .disabled(isValidating)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
 
                         if let error = errorMessage {
                             Text(error)
                                 .font(.caption)
                                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                                .padding(.horizontal, 24)
+                                .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
                         }
 
                         Button {
@@ -97,7 +97,7 @@ struct ManualTokenEntryView: View {
                             }
                         } label: {
                             if isValidating {
-                                HStack(spacing: 8) {
+                                HStack(spacing: Constants.ManualTokenEntry.progressSpacing) {
                                     ProgressView()
                                         .tint(.white)
                                     Text("Cancel")
@@ -111,7 +111,7 @@ struct ManualTokenEntryView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(Theme.primary(for: colorScheme))
                         .disabled(!isValidating && (host.isEmpty || token.isEmpty))
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, Constants.ManualTokenEntry.horizontalPadding)
 
                         Spacer()
                     }

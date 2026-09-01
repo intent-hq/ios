@@ -3,7 +3,7 @@ import CoreGraphics
 enum ConversationTranscriptScrollPolicy {
     static func isScrolledAway(
         flippedContentOffsetY: CGFloat,
-        atBottomThreshold: CGFloat = 50
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
         flippedContentOffsetY > atBottomThreshold
     }

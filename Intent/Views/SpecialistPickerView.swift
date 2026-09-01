@@ -63,7 +63,7 @@ struct SpecialistPickerView: View {
                 ProgressView("Loading specialists...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if specialists.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: Constants.ModalPicker.emptyStateSpacing) {
                     Image(systemName: "person.crop.rectangle.badge.plus")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -186,7 +186,7 @@ struct SpecialistPickerView: View {
 
                     Section("Model") {
                         if isLoadingModels {
-                            HStack(spacing: 8) {
+                            HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
                                 ProgressView()
                                     .controlSize(.small)
                                 Text("Loading models...")
@@ -227,16 +227,16 @@ struct SpecialistPickerView: View {
             }
 
             if isCreating {
-                Color.black.opacity(0.3).ignoresSafeArea()
-                VStack(spacing: 12) {
+                Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
+                VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                     ProgressView()
                     Text("Creating agent...")
                         .font(.subheadline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
-                .padding(24)
+                .padding(Constants.ModalPicker.loadingOverlayPadding)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
             }
         }
         .navigationTitle("Provider & Model")
@@ -309,7 +309,7 @@ struct SpecialistPickerView: View {
     /// Guidance shown when providers exist but none are signed in; provider
     /// sign-in flows run on the desktop seat and are not available on iOS.
     private var noProvidersSignedInPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -317,7 +317,7 @@ struct SpecialistPickerView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
     }
 
     // MARK: - Selection helpers (testable)
@@ -393,17 +393,18 @@ struct SpecialistPickerView: View {
 
     @ViewBuilder
     private func specialistRow(_ specialist: SpecialistInfo) -> some View {
-        HStack(spacing: 12) {
-            AgentAvatarView(agentId: specialist.id, size: 28, specialist: specialist.id, icon: specialist.icon)
+        HStack(spacing: Constants.ModalPicker.rowSpacing) {
+            AgentAvatarView(agentId: specialist.id, size: Constants.ModalPicker.rowAvatarSize,
+                            specialist: specialist.id, icon: specialist.icon)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Constants.ModalPicker.rowTextSpacing) {
                 Text(specialist.name)
                     .font(.headline)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text(specialist.description)
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .lineLimit(2)
+                    .lineLimit(Constants.ModalPicker.rowDescriptionLineLimit)
             }
 
             Spacer()
@@ -414,7 +415,7 @@ struct SpecialistPickerView: View {
                     .fontWeight(.semibold)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
         .contentShape(Rectangle())
     }
 

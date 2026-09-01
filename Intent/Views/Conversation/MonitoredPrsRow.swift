@@ -25,7 +25,7 @@ struct MonitoredPrsRow: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 6) {
+            HStack(spacing: Constants.Conversation.StatusStrip.contentSpacing) {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -38,12 +38,12 @@ struct MonitoredPrsRow: View {
                     monitorChip(monitor)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Constants.Conversation.StatusStrip.horizontalPadding)
+            .padding(.vertical, Constants.Conversation.StatusStrip.verticalPadding)
         }
         .scrollIndicators(.hidden)
-        .background(Theme.card(for: colorScheme).opacity(0.8))
-        .opacity(0.85)
+        .background(Theme.card(for: colorScheme).opacity(Constants.Conversation.StatusStrip.backgroundOpacity))
+        .opacity(Constants.Conversation.StatusStrip.contentOpacity)
     }
 
     // MARK: - Chip
@@ -86,7 +86,7 @@ struct MonitoredPrsRow: View {
 
     @ViewBuilder
     private func chipLabel(_ monitor: MonitoredPr) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Constants.Conversation.StatusStrip.chipSpacing) {
             Text(Self.chipLabel(monitor, workspaceRepo: workspaceRepo))
                 .font(.caption2)
                 .lineLimit(1)
@@ -97,13 +97,15 @@ struct MonitoredPrsRow: View {
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
         .padding(.vertical, 5)
         .background(Theme.muted(for: colorScheme).opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Theme.border(for: colorScheme).opacity(0.4), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
+                .strokeBorder(
+                    Theme.border(for: colorScheme).opacity(Constants.Conversation.StatusStrip.chipBorderOpacity),
+                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth)
         )
     }
 

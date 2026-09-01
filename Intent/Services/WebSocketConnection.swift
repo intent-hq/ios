@@ -422,7 +422,7 @@ actor WebSocketConnection {
         let pending = OSAllocatedUnfairLock<CheckedContinuation<Void, Error>?>(initialState: nil)
         let timeoutTask = Task { [host] in
             do {
-                try await Task.sleep(for: .seconds(30))
+                try await Task.sleep(for: Constants.WebSocket.pingTimeout)
             } catch {
                 return
             }
@@ -515,7 +515,9 @@ actor WebSocketConnection {
         // An unresponsive peer or dead path can leave the close-frame send
         // pending forever; guarantee teardown with a fallback cancel after a
         // grace period (cancel() is idempotent).
-        queue.asyncAfter(deadline: .now() + 2) { connection.cancel() }
+        queue.asyncAfter(
+            deadline: .now() + Constants.WebSocket.closeCancellationGracePeriod
+        ) { connection.cancel() }
     }
 }
 

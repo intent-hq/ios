@@ -41,7 +41,7 @@ struct QRScannerView: View {
                                 Text("Camera scanning isn't available — use manual token entry instead")
                                     .foregroundStyle(.white)
                                     .multilineTextAlignment(.center)
-                                    .padding(24)
+                                    .padding(Constants.QRScanner.unavailableMessagePadding)
                             }
                     }
                 }
@@ -51,7 +51,7 @@ struct QRScannerView: View {
                 VStack {
                     Spacer()
 
-                    VStack(spacing: 8) {
+                    VStack(spacing: Constants.QRScanner.statusSpacing) {
                         if isValidating {
                             ProgressView()
                                 .tint(.white)
@@ -71,10 +71,10 @@ struct QRScannerView: View {
                                 .font(.subheadline)
                         }
                     }
-                    .padding(20)
-                    .background(.black.opacity(0.7))
-                    .clipShape(.rect(cornerRadius: 12))
-                    .padding(.bottom, 60)
+                    .padding(Constants.QRScanner.statusPadding)
+                    .background(.black.opacity(Constants.QRScanner.statusBackgroundOpacity))
+                    .clipShape(.rect(cornerRadius: Constants.QRScanner.statusCornerRadius))
+                    .padding(.bottom, Constants.QRScanner.statusBottomPadding)
                 }
             }
             .toolbar {
@@ -108,7 +108,7 @@ struct QRScannerView: View {
             .task(id: errorAutoClearID) {
                 guard errorAutoClearID != nil else { return }
                 do {
-                    try await Task.sleep(for: .seconds(3))
+                    try await Task.sleep(for: Constants.QRScanner.errorDisplayDuration)
                 } catch {
                     return
                 }
@@ -291,7 +291,7 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             // Reset after 3 seconds to allow re-scanning
             resetTask?.cancel()
             resetTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: Constants.QRScanner.duplicateScanResetDelay)
                 guard !Task.isCancelled,
                       let self,
                       self.lastScannedCode == code else { return }

@@ -15,20 +15,22 @@ struct ConnectionFailureView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            VStack(spacing: 24) {
+            VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
                 Spacer()
 
                 // Error icon
                 ZStack {
                     Circle()
-                        .fill(Theme.destructive(for: colorScheme).opacity(0.1))
-                        .frame(width: 80, height: 80)
+                        .fill(Theme.destructive(for: colorScheme).opacity(
+                            Constants.ConnectionFailure.destructiveBackgroundOpacity))
+                        .frame(width: Constants.ConnectionFailure.iconBackgroundSize,
+                               height: Constants.ConnectionFailure.iconBackgroundSize)
                     Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: 32))
+                        .font(.system(size: Constants.ConnectionFailure.iconSize))
                         .foregroundStyle(Theme.destructive(for: colorScheme))
                 }
 
-                VStack(spacing: 8) {
+                VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
                     Text("Can't Connect")
                         .font(.title2.bold())
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -37,10 +39,10 @@ struct ConnectionFailureView: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
                 }
 
-                VStack(spacing: 12) {
+                VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
                     // Every observed per-host cert mismatch: on the re-pair
                     // path this lists all mismatching hosts (not just one);
                     // during auto-retry it is the passive list while retries
@@ -51,7 +53,7 @@ struct ConnectionFailureView: View {
 
                     // Auto-retry progress
                     if isRetrying {
-                        HStack(spacing: 8) {
+                        HStack(spacing: Constants.ConnectionFailure.progressSpacing) {
                             ProgressView()
                             if attemptNumber > 1 {
                                 Text("Attempt \(attemptNumber)")
@@ -60,9 +62,11 @@ struct ConnectionFailureView: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Theme.muted(for: colorScheme).opacity(0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .padding(.vertical, Constants.ConnectionFailure.controlVerticalPadding)
+                        .background(Theme.muted(for: colorScheme).opacity(
+                            Constants.ConnectionFailure.controlBackgroundOpacity))
+                        .clipShape(RoundedRectangle(
+                            cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
                     }
 
                     // Re-pair button
@@ -81,28 +85,29 @@ struct ConnectionFailureView: View {
                     // Scrollable with a bounded height so a long list never
                     // pushes the controls or rows off a small viewport.
                     if !savedConnections.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading,
+                               spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
                             Text("Saved Connections")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             ScrollView {
-                                VStack(spacing: 8) {
+                                VStack(spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
                                     ForEach(savedConnections) { connection in
                                         savedConnectionRow(connection)
                                     }
                                 }
                             }
-                            .frame(maxHeight: 220)
+                            .frame(maxHeight: Constants.ConnectionFailure.savedConnectionsMaximumHeight)
                         }
-                        .padding(.top, 8)
+                        .padding(.top, Constants.ConnectionFailure.savedConnectionsSpacing)
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
 
                 Spacer()
 
                 // Help text
-                VStack(spacing: 4) {
+                VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
                     Text("Troubleshooting")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -111,8 +116,8 @@ struct ConnectionFailureView: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.leading)
                 }
-                .padding(.horizontal, 32)
-                .padding(.bottom, 32)
+                .padding(.horizontal, Constants.ConnectionFailure.helpHorizontalPadding)
+                .padding(.bottom, Constants.ConnectionFailure.helpBottomPadding)
             }
         }
         .onAppear {
@@ -152,12 +157,12 @@ struct ConnectionFailureView: View {
             retryTask?.cancel()
             coordinator.onSwitchConnection(id: connection.id)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Constants.ConnectionFailure.savedConnectionRowSpacing) {
                 Image(systemName: "desktopcomputer")
                     .font(.body)
                     .foregroundStyle(Theme.primary(for: colorScheme))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
                     Text(connection.displayName)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -172,10 +177,11 @@ struct ConnectionFailureView: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(Theme.muted(for: colorScheme).opacity(0.3))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
+            .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
+            .background(Theme.muted(for: colorScheme).opacity(
+                Constants.ConnectionFailure.controlBackgroundOpacity))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
         }
         .buttonStyle(.plain)
     }
@@ -190,7 +196,9 @@ struct ConnectionFailureView: View {
                 isRetrying = true
 
                 // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
-                let delay = min(Double(1 << min(attempt, 5)), 30.0)
+                let delay = min(
+                    Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
+                    Constants.ConnectionFailure.retryBackoffMaximum)
                 try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { break }
 

@@ -110,8 +110,8 @@ struct QuestionWizardView: View {
         // Fill the full width of the conversation panel on all layouts,
         // matching the desktop FE's full-width question wizard.
         .frame(maxWidth: .infinity)
-        .animation(.easeInOut(duration: 0.15), value: idx)
-        .animation(.easeInOut(duration: 0.15), value: collapsed)
+        .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: idx)
+        .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: collapsed)
         .confirmationDialog(
             "Dismiss questions?",
             isPresented: $confirmingDismiss,
@@ -196,7 +196,7 @@ struct QuestionWizardView: View {
             Button {
                 collapsed = false
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
                     Image(systemName: "questionmark.circle")
                         .font(.caption)
                         .foregroundStyle(Theme.primary(for: colorScheme))
@@ -218,7 +218,7 @@ struct QuestionWizardView: View {
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
                 .padding(.vertical, 9)
                 .contentShape(Rectangle())
             }
@@ -253,7 +253,7 @@ struct QuestionWizardView: View {
 
     @ViewBuilder
     private var headerRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
             Image(systemName: "questionmark.circle")
                 .font(.caption)
                 .foregroundStyle(Theme.primary(for: colorScheme))
@@ -266,9 +266,11 @@ struct QuestionWizardView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 HStack(spacing: 4) {
                     ForEach(questions.indices, id: \.self) { i in
-                        RoundedRectangle(cornerRadius: 2)
+                        RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius)
                             .fill(segmentColor(i))
-                            .frame(width: 14, height: 4)
+                            .frame(
+                                width: Constants.Conversation.QuestionWizard.progressSegmentWidth,
+                                height: Constants.Conversation.QuestionWizard.progressSegmentHeight)
                     }
                 }
             }
@@ -293,7 +295,7 @@ struct QuestionWizardView: View {
                 dismissButton
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
         .padding(.top, 10)
     }
 
@@ -315,7 +317,9 @@ struct QuestionWizardView: View {
     /// height with no cap — on a phone that would push the transcript and
     /// footer offscreen, so the body scrolls under this cap instead.
     private var stepBodyMaxHeight: CGFloat {
-        containerHeight > 0 ? containerHeight * 0.5 : 320
+        containerHeight > 0
+            ? containerHeight * Constants.Conversation.QuestionWizard.bodyHeightFraction
+            : Constants.Conversation.QuestionWizard.fallbackBodyMaximumHeight
     }
 
     /// Long steps scroll inside the capped ScrollView; short steps keep their
@@ -328,7 +332,7 @@ struct QuestionWizardView: View {
     @ViewBuilder
     private func stepBody(for step: Int) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(current.header.uppercased())
                         .font(.caption2.weight(.semibold))
@@ -340,14 +344,14 @@ struct QuestionWizardView: View {
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                VStack(spacing: 6) {
+                VStack(spacing: Constants.Conversation.QuestionWizard.optionSpacing) {
                     ForEach(current.options.indices, id: \.self) { oi in
                         optionButton(oi)
                     }
                 }
                 otherField
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
             .padding(.top, 10)
             .padding(.bottom, 8)
             .onGeometryChange(for: CGFloat.self) { proxy in
@@ -370,7 +374,7 @@ struct QuestionWizardView: View {
         Button {
             selectOption(oi)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
                 if isMulti {
                     checkbox(selected)
                 }
@@ -395,16 +399,16 @@ struct QuestionWizardView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
+            .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
             .background(
                 selected
                     ? Theme.primary(for: colorScheme).opacity(0.1)
                     : Theme.background(for: colorScheme).opacity(0.6)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius)
                     .strokeBorder(
                         selected
                             ? Theme.primary(for: colorScheme)
@@ -419,11 +423,13 @@ struct QuestionWizardView: View {
 
     @ViewBuilder
     private func checkbox(_ selected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 4)
+        RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
             .fill(selected ? Theme.primary(for: colorScheme) : Color.clear)
-            .frame(width: 15, height: 15)
+            .frame(
+                width: Constants.Conversation.QuestionWizard.checkboxSide,
+                height: Constants.Conversation.QuestionWizard.checkboxSide)
             .overlay(
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
                     .strokeBorder(
                         selected
                             ? Color.clear
@@ -458,10 +464,10 @@ struct QuestionWizardView: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.5))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
+        .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
         .background(Theme.background(for: colorScheme).opacity(0.7))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
     }
 
     // MARK: - Footer row
@@ -521,7 +527,7 @@ struct QuestionWizardView: View {
                 .opacity(nextDisabled || submitted || dismissed ? 0.5 : 1)
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
         .padding(.top, 2)
         .padding(.bottom, 12)
     }

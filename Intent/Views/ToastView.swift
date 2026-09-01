@@ -8,12 +8,12 @@ struct ToastView: View {
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.Toast.contentSpacing) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.title2)
                 .foregroundStyle(.green)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
                 Text(toast.agentName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
@@ -31,12 +31,13 @@ struct ToastView: View {
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Constants.Toast.horizontalPadding)
+        .padding(.vertical, Constants.Toast.verticalPadding)
         .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        .padding(.horizontal, 12)
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(Constants.Toast.shadowOpacity),
+                radius: Constants.Toast.shadowRadius, x: 0, y: Constants.Toast.shadowYOffset)
+        .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
         .gesture(
             DragGesture()
@@ -44,10 +45,12 @@ struct ToastView: View {
                     dragOffset = value.translation.height
                 }
                 .onEnded { value in
-                    if value.translation.height < -40 {
+                    if value.translation.height < Constants.Toast.dismissalDragThreshold {
                         onDismiss()
                     } else {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(.spring(
+                            response: Constants.Toast.resetSpringResponse,
+                            dampingFraction: Constants.Toast.resetSpringDamping)) {
                             dragOffset = 0
                         }
                     }

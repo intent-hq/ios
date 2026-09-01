@@ -10,11 +10,11 @@ struct CompactMarkdownStyle: StructuredText.Style {
 
     /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
     static let codeForeground = DynamicColor(
-        light: Color(red: 0.77, green: 0.1, blue: 0.3),
-        dark: Color(red: 0.9, green: 0.55, blue: 0.65))
+        light: Constants.Colors.Markdown.inlineCodeForeground(for: .light),
+        dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark))
     static let codeBackground = DynamicColor(
-        light: Color.black.opacity(0.05),
-        dark: Color.white.opacity(0.1))
+        light: Constants.Colors.Markdown.inlineCodeBackground(for: .light),
+        dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark))
 
     let inlineStyle = InlineStyle()
         .code(
@@ -81,8 +81,8 @@ struct CompactBlockQuoteStyle: StructuredText.BlockQuoteStyle {
 /// rounded box, monospaced 0.85em, no horizontal scroller.
 struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     private static let background = DynamicColor(
-        light: Theme.muted(for: .light).opacity(0.5),
-        dark: Theme.muted(for: .dark).opacity(0.5))
+        light: Constants.Colors.Markdown.codeBlockBackground(for: .light),
+        dark: Constants.Colors.Markdown.codeBlockBackground(for: .dark))
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

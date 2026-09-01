@@ -12,11 +12,11 @@ struct TaskProgressRingView: View {
 
     private enum Palette {
         // Track: same muted gray as TaskStatusIconView outlines (#99999966).
-        static let track = Color(red: 0.6, green: 0.6, blue: 0.6).opacity(0.4)
+        static let track = Constants.Colors.TaskProgress.track
         // fe's emerald-500 (#10b981) completed arc.
-        static let green = Color(red: 0x10 / 255, green: 0xB9 / 255, blue: 0x81 / 255)
+        static let green = Constants.Colors.TaskProgress.complete
         // In-progress arc: the app's in-progress blue (#00BCFF).
-        static let blue = Color(red: 0x00 / 255, green: 0xBC / 255, blue: 0xFF / 255)
+        static let blue = Constants.Colors.TaskProgress.inProgress
     }
 
     var body: some View {

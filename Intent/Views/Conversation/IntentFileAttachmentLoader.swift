@@ -196,10 +196,12 @@ private struct IntentFileAttachmentImageView: View {
                     .resizable()
                     .scaledToFill()
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
+                    .strokeBorder(
+                        Theme.border(for: colorScheme),
+                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth)
             )
             .contextMenu {
                 ImageActionMenuItems(image: image)

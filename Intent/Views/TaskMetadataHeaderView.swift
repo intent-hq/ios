@@ -69,7 +69,7 @@ struct TaskMetadataHeaderView: View {
 
     var body: some View {
         let dependents = Self.dependedOnBy(noteId: note.id, in: notes)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Constants.Notes.Metadata.sectionSpacing) {
             row("Status") { statusMenu }
             if !note.assignedAgentIds.isEmpty {
                 row("Agent") { agentNames }
@@ -99,12 +99,12 @@ struct TaskMetadataHeaderView: View {
     // MARK: - Rows
 
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: Constants.Notes.Metadata.rowSpacing) {
             Text(label)
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .frame(width: 110, alignment: .leading)
-                .padding(.vertical, 3)
+                .frame(width: Constants.Notes.Metadata.labelWidth, alignment: .leading)
+                .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
             content()
             Spacer(minLength: 0)
         }
@@ -120,18 +120,19 @@ struct TaskMetadataHeaderView: View {
                 }
             }
         } label: {
-            HStack(spacing: 6) {
-                TaskStatusIconView(status: note.taskDisplayStatus ?? .unknown, size: 16)
+            HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
+                TaskStatusIconView(status: note.taskDisplayStatus ?? .unknown,
+                                   size: Constants.Notes.Metadata.statusIconSize)
                 Text((note.taskDisplayStatus ?? .unknown).label)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
-            .padding(.vertical, 3)
+            .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
         }
     }
 
     private var agentNames: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
             ForEach(
                 Self.sortedAssigneeIds(note.assignedAgentIds, createdAt: resolveAgentCreatedAt),
                 id: \.self
@@ -140,10 +141,10 @@ struct TaskMetadataHeaderView: View {
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
+                    .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
                     .background(Theme.muted(for: colorScheme))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
             }
         }
     }
@@ -152,7 +153,7 @@ struct TaskMetadataHeaderView: View {
         _ ids: [String],
         style: @escaping (String) -> (variant: ChipVariant, unmet: Bool)
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
             ForEach(ids, id: \.self) { relatedId in
                 let s = style(relatedId)
                 TaskRelationChip(
@@ -168,7 +169,9 @@ struct TaskMetadataHeaderView: View {
 
     /// Short display fallback for an unresolvable agent ID.
     static func truncatedId(_ id: String) -> String {
-        id.count <= 14 ? id : String(id.prefix(14)) + "…"
+        id.count <= Constants.Notes.Metadata.fallbackIdMaximumLength
+            ? id
+            : String(id.prefix(Constants.Notes.Metadata.fallbackIdMaximumLength)) + "…"
     }
 }
 
@@ -198,14 +201,15 @@ private struct TaskRelationChip: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 6) {
+            HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
                 if variant == .conflict {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Self.warning)
                 } else {
                     TaskStatusIconView(
-                        status: relatedNote?.taskDisplayStatus ?? .unknown, size: 14)
+                        status: relatedNote?.taskDisplayStatus ?? .unknown,
+                        size: Constants.Notes.Metadata.relationIconSize)
                 }
                 Text(title)
                     .font(.footnote.weight(.medium))
@@ -221,15 +225,16 @@ private struct TaskRelationChip: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
+            .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
             .background(
                 variant == .conflict
-                    ? Self.warning.opacity(0.12)
+                    ? Self.warning.opacity(Constants.Notes.Metadata.warningBackgroundOpacity)
                     : unmet
                         ? Theme.muted(for: colorScheme)
-                        : Theme.muted(for: colorScheme).opacity(0.4))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        : Theme.muted(for: colorScheme).opacity(
+                            Constants.Notes.Metadata.mutedBackgroundOpacity))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
         }
         .buttonStyle(.plain)
     }

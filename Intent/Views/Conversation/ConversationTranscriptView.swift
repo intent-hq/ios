@@ -216,7 +216,9 @@ struct ConversationTranscriptView: View {
         .buttonStyle(.plain)
         .padding(.bottom, 8)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
-        .animation(.easeInOut(duration: 0.2), value: userIsScrolledAway)
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
+            value: userIsScrolledAway)
     }
 
     private var thinkingIndicatorView: some View {
@@ -287,9 +289,11 @@ struct ConversationTranscriptView: View {
     private func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard !initialScrollScheduled else { return }
         initialScrollScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
             performInitialScroll(proxy: proxy)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
+            ) {
                 hasInitiallyScrolled = true
             }
         }
@@ -301,7 +305,7 @@ struct ConversationTranscriptView: View {
             return
         }
         proxy.scrollTo("new-messages-divider", anchor: .bottom)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
             let offsetY = scrollMomentumProxy.scrollView?.contentOffset.y ?? 0
             if NewMessagesDivider.followDisabledAfterEntryScroll(
                 flippedContentOffsetY: offsetY
@@ -314,16 +318,16 @@ struct ConversationTranscriptView: View {
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
         scrollDebounceTask?.cancel()
         scrollDebounceTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
             guard !Task.isCancelled else { return }
             if animated {
-                withAnimation(.easeOut(duration: 0.2)) {
+                withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
                     proxy.scrollTo("scroll-bottom", anchor: .top)
                 }
             } else {
                 proxy.scrollTo("scroll-bottom", anchor: .top)
             }
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
             guard !Task.isCancelled else { return }
             isScrollingToBottom = false
         }

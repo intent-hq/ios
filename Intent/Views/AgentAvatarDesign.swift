@@ -72,12 +72,16 @@ enum AgentAvatarDesign: String, CaseIterable {
     static func fallbackDesign(agentId: String) -> AgentAvatarDesign {
         var hash: Int32 = 0
         for unit in agentId.utf16 {
-            hash = (hash &<< 5) &- hash &+ Int32(unit)
+            hash = (hash &<< Constants.AgentAvatar.FallbackSelection.hashShift) &- hash &+ Int32(unit)
         }
-        let product = Double(hash.magnitude) * 1_103_515_245 + 12345
-        let wrapped = product.truncatingRemainder(dividingBy: 4_294_967_296)
-        let seed = UInt32(wrapped) & 0x7FFF_FFFF
-        let index = Int(Double(seed) / Double(0x8000_0000) * Double(fallbackDesigns.count))
+        let product = Double(hash.magnitude) * Constants.AgentAvatar.FallbackSelection.multiplier
+            + Constants.AgentAvatar.FallbackSelection.increment
+        let wrapped = product.truncatingRemainder(
+            dividingBy: Constants.AgentAvatar.FallbackSelection.modulus)
+        let seed = UInt32(wrapped) & Constants.AgentAvatar.FallbackSelection.mask
+        let index = Int(
+            Double(seed) / Double(Constants.AgentAvatar.FallbackSelection.normalizationDivisor)
+                * Double(fallbackDesigns.count))
         return fallbackDesigns[min(index, fallbackDesigns.count - 1)]
     }
 }

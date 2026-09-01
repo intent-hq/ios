@@ -254,7 +254,7 @@ extension UIView {
                 subview !== excluded,
                 subview.isUserInteractionEnabled,
                 !subview.isHidden,
-                subview.alpha >= 0.01
+                subview.alpha >= Constants.Conversation.CopyContextMenu.minimumInteractiveAlpha
             else { continue }
 
             let localPoint = convert(point, to: subview)
@@ -302,7 +302,9 @@ enum UprightPreviewTransform {
     static func corrective(from layer: CALayer) -> CGAffineTransform {
         let accumulated = accumulated(from: layer)
         let determinant = accumulated.a * accumulated.d - accumulated.b * accumulated.c
-        guard abs(determinant) > 1e-6 else { return .identity }
+        guard abs(determinant) > Constants.Conversation.CopyContextMenu.minimumInvertibleDeterminant else {
+            return .identity
+        }
         return accumulated.inverted()
     }
 }

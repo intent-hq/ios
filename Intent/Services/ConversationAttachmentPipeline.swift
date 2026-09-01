@@ -132,7 +132,9 @@ import UniformTypeIdentifiers
         guard !images.isEmpty else { return nil }
         var payloads: [Data] = []
         for (index, image) in images.enumerated() {
-            guard let data = image.jpegData(compressionQuality: 0.8) else {
+            guard let data = image.jpegData(
+                compressionQuality: Constants.Conversation.Composer.imageCompressionQuality
+            ) else {
                 throw ImagePlacementError.encodingFailed(index: index + 1)
             }
             guard data.count <= Self.maxImageReferenceBytes else {

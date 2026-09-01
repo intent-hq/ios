@@ -730,7 +730,7 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                     }
                     switch message {
                     case .string(let text):
-                        let preview = String(text.prefix(100))
+                        let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
                         AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
                         self.handleTextMessage(text)
                     case .data(let data):
@@ -840,7 +840,9 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             var attempt = startingAttempt
             while !Task.isCancelled {
                 if attempt > 1 {
-                    let delay = min(Double(1 << min(attempt - 2, 5)), 30.0)
+                    let delay = min(
+                        Double(1 << min(attempt - 2, Constants.Connection.reconnectBackoffExponentCap)),
+                        Constants.Connection.reconnectBackoffMaximum)
                     try? await Task.sleep(for: .seconds(delay))
                     if Task.isCancelled { break }
                 }

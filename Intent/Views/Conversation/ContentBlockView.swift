@@ -404,7 +404,7 @@ struct AttachmentReferenceImageView: View {
             .frame(width: side, height: side)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             .background(Theme.muted(for: colorScheme).opacity(0.5))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
     }
 }
 

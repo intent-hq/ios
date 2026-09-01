@@ -11,7 +11,6 @@ struct AgentAvatarView: View {
     var icon: String? = nil  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false
 
-    @Environment(\.colorScheme) private var colorScheme
     @State private var isPulsing = false
 
     private var design: AgentAvatarDesign {
@@ -20,8 +19,8 @@ struct AgentAvatarView: View {
 
     // Desktop geometry ratios (avatar-size.ts "standard": surface 20,
     // art 16, clear space 2, corner radius 6).
-    private var artSize: CGFloat { size * 0.8 }
-    private var cornerRadius: CGFloat { size * 0.3 }
+    private var artSize: CGFloat { size * Constants.AgentAvatar.artSizeRatio }
+    private var cornerRadius: CGFloat { size * Constants.AgentAvatar.cornerRadiusRatio }
 
     var body: some View {
         ZStack {
@@ -30,7 +29,10 @@ struct AgentAvatarView: View {
 
             AgentAvatarStrokeShape(glyphPath: design.glyph.strokePath)
                 .stroke(glyphColor, style: StrokeStyle(
-                    lineWidth: 1.33 * artSize / 16, lineCap: .round, lineJoin: .round))
+                    lineWidth: Constants.AgentAvatar.referenceStrokeWidth * artSize
+                        / Constants.AgentAvatar.referenceArtSize,
+                    lineCap: .round,
+                    lineJoin: .round))
                 .frame(width: artSize, height: artSize)
 
             AgentAvatarFillShape(glyphPath: design.glyph.fillPath)
@@ -40,8 +42,15 @@ struct AgentAvatarView: View {
             // Active pulsing indicator
             if isActive {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.green.opacity(isPulsing ? 0.6 : 0.2), lineWidth: 1.5)
-                    .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+                    .stroke(
+                        isPulsing
+                            ? Constants.Colors.AgentAvatar.activeStrokeStrong
+                            : Constants.Colors.AgentAvatar.activeStrokeWeak,
+                        lineWidth: Constants.AgentAvatar.activeStrokeWidth)
+                    .animation(
+                        .easeInOut(duration: Constants.AgentAvatar.pulseAnimationDuration)
+                            .repeatForever(autoreverses: true),
+                        value: isPulsing)
                     .onAppear { isPulsing = true }
             }
         }
@@ -50,15 +59,11 @@ struct AgentAvatarView: View {
 
     /// Desktop neutral tile surface (`--agent-avatar-surface-neutral`):
     /// hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
-    private var surfaceColor: Color {
-        colorScheme == .dark
-            ? Color(red: 0.754, green: 0.806, blue: 0.784)
-            : Color(red: 0.909, green: 0.931, blue: 0.922)
-    }
+    private var surfaceColor: Color { Constants.Colors.AgentAvatar.surface }
 
     /// Desktop glyph color: near-black (#080808) in both schemes — the tile
     /// stays light, so the glyph stays dark.
-    private var glyphColor: Color { Color(white: 0.03) }
+    private var glyphColor: Color { Constants.Colors.AgentAvatar.glyph }
 }
 
 private struct AgentAvatarStrokeShape: Shape {
@@ -80,5 +85,7 @@ private struct AgentAvatarFillShape: Shape {
 /// Maps the 16×16 glyph art space onto the shape's rect.
 nonisolated private func artTransform(for rect: CGRect) -> CGAffineTransform {
     CGAffineTransform(translationX: rect.minX, y: rect.minY)
-        .scaledBy(x: rect.width / 16, y: rect.height / 16)
+        .scaledBy(
+            x: rect.width / Constants.AgentAvatar.referenceArtSize,
+            y: rect.height / Constants.AgentAvatar.referenceArtSize)
 }

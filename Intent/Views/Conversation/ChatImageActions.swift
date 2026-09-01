@@ -90,10 +90,12 @@ struct SquareImageThumbnail: View {
             .resizable()
             .scaledToFill()
             .frame(width: side, height: side)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Theme.border(for: colorScheme), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
+                    .strokeBorder(
+                        Theme.border(for: colorScheme),
+                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth)
             )
     }
 }

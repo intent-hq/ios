@@ -133,7 +133,10 @@ import SwiftUI
 
         // Debounced draft saving (0.5s)
         draftSaveCancellable = draftTextSubject
-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .debounce(
+                for: .milliseconds(Constants.Conversation.Composer.draftSaveDebounceMilliseconds),
+                scheduler: DispatchQueue.main
+            )
             .sink { [weak self] text in
                 guard let self = self else { return }
                 PersistenceManager.shared.saveDraft(
