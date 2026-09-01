@@ -48,6 +48,7 @@ struct QueuedMessagesView: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Save queued message edit")
 
                 Button {
                     editingId = nil
@@ -58,6 +59,7 @@ struct QueuedMessagesView: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Cancel queued message edit")
             } else {
                 // Display mode
                 Text(message.content)
@@ -78,6 +80,7 @@ struct QueuedMessagesView: View {
                         .frame(width: 36, height: 36)
                         .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Edit queued message")
 
                 removeButton(message)
             }
@@ -96,6 +99,7 @@ struct QueuedMessagesView: View {
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
+        .accessibilityLabel("Send queued message now")
     }
 
     private func removeButton(_ message: QueuedMessage) -> some View {
@@ -108,6 +112,7 @@ struct QueuedMessagesView: View {
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
+        .accessibilityLabel("Remove queued message")
     }
 
     private func saveEdit(messageId: String) {

@@ -224,6 +224,7 @@ private struct ConversationViewContent: View {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(Theme.foreground(for: colorScheme))
         }
+        .accessibilityLabel("Agent actions")
     }
 
     /// Note detail sheet content for a tapped note reference.

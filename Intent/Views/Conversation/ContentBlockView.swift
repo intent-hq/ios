@@ -139,6 +139,7 @@ struct ContentBlockView: View {
                     .opacity(isHydratingImage ? 0.6 : 1)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(imageNeedsHydration ? "Load attached image" : "Attached image")
             .contextMenu {
                 // A slim-truncated block only carries the low-res preview
                 // thumbnail — Save/Copy here would export it as if it were

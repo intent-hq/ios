@@ -48,7 +48,7 @@ struct AgentRowView: View {
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)
                             .background(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                            .cornerRadius(4)
+                            .clipShape(.rect(cornerRadius: 4))
                     }
 
                     Spacer()

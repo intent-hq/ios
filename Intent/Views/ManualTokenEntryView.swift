@@ -73,6 +73,7 @@ struct ManualTokenEntryView: View {
                                         Image(systemName: "doc.on.clipboard")
                                             .foregroundStyle(Theme.primary(for: colorScheme))
                                     }
+                                    .accessibilityLabel("Paste API token")
                                 }
                             }
                         }

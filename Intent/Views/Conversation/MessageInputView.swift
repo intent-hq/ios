@@ -47,6 +47,7 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.destructive(for: colorScheme))
                     }
+                    .accessibilityLabel("Stop response")
                 } else {
                     // Attach menu: photos or arbitrary files (only when not streaming)
                     Menu {
@@ -65,6 +66,7 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     }
+                    .accessibilityLabel("Add attachment")
                 }
 
                 // Text editor — bound to localText to avoid lag during streaming
@@ -117,6 +119,7 @@ struct MessageInputView: View {
                                 )
                         }
                         .disabled(!hasContent)
+                        .accessibilityLabel("Send message")
                     }
                 }
             }
@@ -180,6 +183,7 @@ struct MessageInputView: View {
                                 .background(Circle().fill(.black.opacity(0.5)))
                         }
                         .offset(x: 4, y: -4)
+                        .accessibilityLabel("Remove image \(index + 1)")
                     }
                 }
             }
@@ -236,6 +240,7 @@ struct MessageInputView: View {
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             }
+                            .accessibilityLabel("Remove \(file.displayName)")
                         }
                     }
                     .padding(.horizontal, 8)

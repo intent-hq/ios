@@ -101,6 +101,7 @@ struct SpecialistPickerView: View {
                     Image(systemName: "xmark")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
+                .accessibilityLabel("Close")
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next") {

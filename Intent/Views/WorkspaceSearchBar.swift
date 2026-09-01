@@ -24,6 +24,7 @@ struct WorkspaceSearchBar: View {
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             .font(.subheadline)
                     }
+                    .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 12)

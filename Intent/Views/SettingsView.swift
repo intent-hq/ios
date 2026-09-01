@@ -30,7 +30,7 @@ struct SettingsView: View {
                                 .padding(16)
                             }
                             .background(Theme.card(for: colorScheme))
-                            .cornerRadius(12)
+                            .clipShape(.rect(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Theme.border(for: colorScheme), lineWidth: 1)
@@ -73,7 +73,7 @@ struct SettingsView: View {
                             }
                             .padding(16)
                             .background(Theme.card(for: colorScheme))
-                            .cornerRadius(12)
+                            .clipShape(.rect(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .stroke(Theme.border(for: colorScheme), lineWidth: 1)
@@ -97,7 +97,7 @@ struct SettingsView: View {
                                 }
                                 .padding(16)
                                 .background(Theme.card(for: colorScheme))
-                                .cornerRadius(12)
+                                .clipShape(.rect(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
                                         .stroke(Theme.border(for: colorScheme), lineWidth: 1)

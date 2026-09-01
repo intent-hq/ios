@@ -68,6 +68,7 @@ struct WorkspaceListSidebar: View {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
+                .accessibilityLabel("Workspace options")
             }
         }
         .sheet(isPresented: $showingCreateWorkspace) {

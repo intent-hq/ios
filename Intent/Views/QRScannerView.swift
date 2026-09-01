@@ -73,7 +73,7 @@ struct QRScannerView: View {
                     }
                     .padding(20)
                     .background(.black.opacity(0.7))
-                    .cornerRadius(12)
+                    .clipShape(.rect(cornerRadius: 12))
                     .padding(.bottom, 60)
                 }
             }

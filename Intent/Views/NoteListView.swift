@@ -152,6 +152,7 @@ struct NoteRowView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(isCollapsed ? "Expand" : "Collapse") \(note.title)")
             } else if depth > 0 {
                 // Leaf node at non-root level: small spacer for alignment
                 Spacer()
