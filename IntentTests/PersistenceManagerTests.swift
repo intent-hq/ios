@@ -412,6 +412,81 @@ struct ConnectionPersistenceTests {
         #expect(loaded.first?.server.hosts == stored.server.hosts)
     }
 
+    @Test func updateConnectionHostsPreservesTcAddress() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-abc123")
+        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-abc123")
+    }
+
+    // MARK: - updateConnectionTcAddress
+
+    @Test func updateConnectionTcAddressSetsAndReplaces() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+
+        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-first")
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-first")
+
+        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-second")
+        let loaded = pm.loadConnections().first
+        #expect(loaded?.server.tcAddress == "tc-second")
+        #expect(loaded?.server.hosts == stored.server.hosts)
+        #expect(loaded?.id == stored.id)
+    }
+
+    @Test func updateConnectionTcAddressUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionTcAddress(id: UUID(), tcAddress: "tc-x")
+        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+    }
+
+    /// A re-pair without a tunnel address (manual entry, QR from a daemon
+    /// whose tunnel is down) must not drop the known address.
+    @Test func upsertWithoutTcAddressPreservesExisting() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let withTc = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-known")
+        pm.upsertConnection(StoredConnection(server: withTc, token: "tok-old"))
+
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok-new"))
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server.tcAddress == "tc-known")
+        #expect(loaded.first?.token == "tok-new")
+    }
+
+    @Test func upsertWithTcAddressReplacesExisting() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let old = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-old")
+        pm.upsertConnection(StoredConnection(server: old, token: "tok"))
+
+        let new = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-new")
+        pm.upsertConnection(StoredConnection(server: new, token: "tok"))
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-new")
+    }
+
     // MARK: - updateConnectionDisplayName
 
     @Test func updateConnectionDisplayNameReplacesNamePreservingRecord() {

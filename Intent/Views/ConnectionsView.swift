@@ -131,6 +131,13 @@ struct ConnectionsView: View {
                     Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    if let tcAddress = connection.server.tcAddress {
+                        Label(tcAddress, systemImage: "point.3.connected.trianglepath.dotted")
+                            .font(.caption2)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    }
                     if let lastConnected = connection.lastConnectedAt {
                         Text("Last connected \(lastConnected.formatted(.relative(presentation: .named)))")
                             .font(.caption2)

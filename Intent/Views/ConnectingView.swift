@@ -50,7 +50,8 @@ struct ConnectingView: View {
                 hosts: connection.server.hosts,
                 port: connection.server.port,
                 token: connection.token,
-                certFingerprint: connection.server.certFingerprint
+                certFingerprint: connection.server.certFingerprint,
+                tcAddress: connection.server.tcAddress
             )
             PersistenceManager.shared.touchLastConnected(id: connection.id)
             // Wait for WorkspaceStore to finish fetching workspace data before

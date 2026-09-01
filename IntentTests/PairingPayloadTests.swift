@@ -91,6 +91,30 @@ struct PairingPayloadTests {
         #expect(payload?.certFingerprint == "aa")
     }
 
+    // MARK: - Tailcat tunnel address (tc=)
+
+    /// The daemon appends `tc=` only when its tunnel is running (the exact
+    /// URI shape from crates/intent-transport pairing.rs).
+    @Test func parsesTcParamAsTunnelAddress() {
+        let payload = PairingPayload.parse(
+            "intent://pair?v=1&host=192.168.1.10&port=5181&fp=aa&token=t&tc=tc-abcdef123456"
+        )
+        #expect(payload?.tcAddress == "tc-abcdef123456")
+    }
+
+    @Test func absentTcParamIsToleratedAsNil() {
+        let payload = PairingPayload.parse(
+            "intent://pair?v=1&host=h&port=5181&fp=aa&token=t"
+        )
+        #expect(payload != nil)
+        #expect(payload?.tcAddress == nil)
+    }
+
+    @Test func emptyTcParamNormalizesToNil() {
+        #expect(
+            PairingPayload.parse("intent://pair?host=h&port=1&token=t&tc=")?.tcAddress == nil)
+    }
+
     // MARK: - Multi-host list
 
     @Test func splitsMultiHostList() {

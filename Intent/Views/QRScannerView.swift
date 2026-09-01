@@ -185,8 +185,8 @@ struct QRScannerView: View {
     private func connect(payload: PairingPayload, certFingerprint: String) {
         Task {
             do {
-                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: certFingerprint)
-                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint)
+                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
+                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
                 let stored = await ConnectionPairing.finalize(server: server, token: payload.token)
                 dismiss()
                 if let onPaired {

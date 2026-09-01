@@ -638,7 +638,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func connectToDifferentTargetClearsMismatchesSameTargetKeepsThem() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin")
+            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin",
+            tcAddress: nil)
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
@@ -667,7 +668,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func pinlessTargetIdentityFallsBackToHostOverlap() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil)
+            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil,
+            tcAddress: nil)
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
@@ -686,7 +688,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
             hosts: ["10.0.0.9", "mac.local"], port: 9999,
-            token: "tok-rotated", certFingerprint: "ff:ee")
+            token: "tok-rotated", certFingerprint: "ff:ee", tcAddress: nil)
         #expect(manager.hosts == ["10.0.0.9", "mac.local"])
         #expect(manager.port == 9999)
         #expect(manager.token == "tok-rotated")
@@ -1269,6 +1271,108 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.localIps(fromSystemStatus: ["localIps": [1, 2]]) == nil)
         #expect(ConnectionManager.localIps(fromSystemStatus: "not-a-dict") == nil)
         #expect(ConnectionManager.localIps(fromSystemStatus: NSNull()) == nil)
+    }
+
+    // MARK: - tcAddress parsing (system.status)
+
+    @Test @MainActor func tcAddressParsedFromSystemStatusResult() {
+        let result: [String: Any] = [
+            "version": "1.2.3",
+            "tcAddress": "tc-abcdef123456",
+        ]
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: result) == "tc-abcdef123456")
+    }
+
+    @Test @MainActor func tcAddressNilWhenAbsentMalformedOrBlank() {
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["version": "1.0.0"]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["tcAddress": 42]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: ["tcAddress": "  "]) == nil)
+        #expect(ConnectionManager.tcAddress(fromSystemStatus: "not-a-dict") == nil)
+    }
+
+    @Test @MainActor func updateCachedCredentialsAdoptsTcAddress() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
+            tcAddress: "tc-tunnel-token")
+        #expect(manager.tcAddress == "tc-tunnel-token")
+        manager.updateCachedCredentials(
+            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
+            tcAddress: nil)
+        #expect(manager.tcAddress == nil)
+    }
+
+    // MARK: - Tunnel race candidate
+
+    private nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+        let localPort: Int
+        let closed = OSAllocatedUnfairLock(initialState: false)
+        init(localPort: Int) { self.localPort = localPort }
+        func close() async { closed.withLock { $0 = true } }
+        var isClosed: Bool { closed.withLock { $0 } }
+    }
+
+    private nonisolated struct FakeTunnelDialer: TunnelDialing {
+        let result: Result<FakeTunnelSession, WebSocketTransportError>
+        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+            try result.get()
+        }
+    }
+
+    /// A failed tunnel dial surfaces as a candidate failure with the tunnel
+    /// label (not a raw loopback host).
+    @Test func tunnelDialFailurePropagates() async {
+        let dialer = FakeTunnelDialer(
+            result: .failure(.failed(
+                host: ConnectionManager.tunnelCandidateLabel, message: "no derp")))
+        await #expect(throws: WebSocketTransportError.self) {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: nil)
+        }
+    }
+
+    /// When the tunnel establishes but the WSS handshake through it fails,
+    /// the session must be closed (no leaked tunnel from a dead candidate).
+    @Test func tunnelClosedWhenSocketHandshakeFails() async {
+        // Port 1 on loopback: connection refused, fast deterministic failure.
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        await #expect(throws: (any Error).self) {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: nil)
+        }
+        #expect(tunnel.isClosed)
+    }
+
+    /// A raced candidate that mirrors `RacedConnection`: `disconnect()` closes
+    /// the carried tunnel session, so loser cleanup releases tunnel resources.
+    private nonisolated struct FakeTunnelRaceConnection: HostRacingConnection {
+        let host: String
+        let tunnel: FakeTunnelSession?
+
+        func disconnect() async {
+            await tunnel?.close()
+        }
+    }
+
+    /// When a direct host wins the race, the LOSING tunnel candidate's session
+    /// must be closed by `raceCandidates` loser cleanup (no leaked tunnel).
+    @Test func losingTunnelCandidateSessionClosedWhenDirectHostWins() async {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let outcome = await ConnectionManager.raceCandidates(
+            ["direct.host", ConnectionManager.tunnelCandidateLabel]
+        ) { host -> FakeTunnelRaceConnection in
+            if host == ConnectionManager.tunnelCandidateLabel {
+                try? await Task.sleep(for: .milliseconds(50))
+                return FakeTunnelRaceConnection(host: host, tunnel: tunnel)
+            }
+            return FakeTunnelRaceConnection(host: host, tunnel: nil)
+        }
+
+        #expect(outcome.winner?.host == "direct.host")
+        #expect(tunnel.isClosed)
     }
 }
 

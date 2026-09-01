@@ -11,6 +11,23 @@ nonisolated protocol HostRacingConnection: Sendable {
 
 extension WebSocketConnection: HostRacingConnection {}
 
+/// One raced candidate's live result: the WebSocket plus the tailcat tunnel
+/// session carrying it (nil for direct host candidates). `disconnect()` tears
+/// down both, so loser cleanup in `raceCandidates` releases tunnel resources
+/// when a direct host wins.
+nonisolated struct RacedConnection: HostRacingConnection {
+    let socket: WebSocketConnection
+    let tunnel: (any TunnelSession)?
+    /// The candidate label: the direct host, or
+    /// `ConnectionManager.tunnelCandidateLabel` for the tunnel route.
+    let host: String
+
+    func disconnect() async {
+        await socket.disconnect()
+        await tunnel?.close()
+    }
+}
+
 /// The settled result of one `raceCandidates` run: the winner (if any), every
 /// per-host certificate mismatch observed, and the failure to throw when no
 /// candidate won.
@@ -61,7 +78,20 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     @ObservationIgnored private(set) var port: Int?
     @ObservationIgnored private(set) var token: String?
     @ObservationIgnored private(set) var certFingerprint: String?
+    /// Tailcat tunnel address of the current target (nil when the daemon has
+    /// no tunnel); adds the tunnel candidate to host racing when present.
+    @ObservationIgnored private(set) var tcAddress: String?
+    /// The tunnel session carrying the live socket (nil when a direct host
+    /// won the race); closed on teardown.
+    @ObservationIgnored private var activeTunnel: (any TunnelSession)?
+    /// Injectable for tests; defaults to the real TailcatKit-backed dialer.
+    @ObservationIgnored var tunnelDialer: any TunnelDialing = TailcatTunnelDialer()
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
+
+    /// The candidate label the tunnel route races under (also the host shown
+    /// in its transport errors). Not a dialable name: the tunnel connects via
+    /// a loopback forwarder.
+    nonisolated static let tunnelCandidateLabel = "tailcat-tunnel"
 
     private init() {
         connectionStateSubject = CurrentValueSubject(connectionState)
@@ -86,7 +116,10 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
 
     // MARK: - Connection lifecycle
 
-    func connect(hosts: [String], port: Int, token: String, certFingerprint: String? = nil) async throws {
+    func connect(
+        hosts: [String], port: Int, token: String, certFingerprint: String? = nil,
+        tcAddress: String? = nil
+    ) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
         resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
         teardownConnection()
@@ -95,33 +128,37 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         self.port = port
         self.token = token
         self.certFingerprint = certFingerprint
+        self.tcAddress = tcAddress
         connectionState = .connecting
 
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
-        let winningSocket = try await raceHosts(hosts, port: port, token: token, certFingerprint: certFingerprint)
+        let winner = try await raceHosts(
+            hosts, port: port, token: token, certFingerprint: certFingerprint,
+            tcAddress: tcAddress)
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
-        AppLog.connection.debug("[ConnectionManager] Race won by \(winningSocket.host), generation=\(myGeneration)")
+        AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(myGeneration)")
 
         do {
             try Task.checkCancellation()
         } catch {
-            await winningSocket.disconnect()
+            await winner.disconnect()
             throw error
         }
 
         // Check if we've been superseded by a newer connect() call
         guard connectionGeneration == myGeneration else {
             AppLog.connection.debug("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
-            await winningSocket.disconnect()
+            await winner.disconnect()
             throw CancellationError()
         }
 
-        self.socket = winningSocket
-        self.host = winningSocket.host
+        self.socket = winner.socket
+        self.activeTunnel = winner.tunnel
+        self.host = winner.host
         configureSocketMessagePump()
 
         let setupEnd = CFAbsoluteTimeGetCurrent()
@@ -145,12 +182,14 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     /// stale cache. The live socket is kept — the daemon checks the token at
     /// the WebSocket upgrade only, so an established connection stays valid.
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?
+        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        tcAddress: String?
     ) {
         self.hosts = hosts
         self.port = port
         self.token = token
         self.certFingerprint = certFingerprint
+        self.tcAddress = tcAddress
     }
 
     func disconnect() {
@@ -170,9 +209,14 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         lastReconnectAttempt = 0
         let oldSocket = socket
         socket = nil
+        let oldTunnel = activeTunnel
+        activeTunnel = nil
         messagePumpTask?.cancel()
         messagePumpTask = nil
-        Task { await oldSocket?.disconnect() }
+        Task {
+            await oldSocket?.disconnect()
+            await oldTunnel?.close()
+        }
         connectionState = .disconnected
         failAllPending(error: "Connection closed")
         subscriptionRouter.reset()
@@ -363,13 +407,32 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             AppLog.connection.debug("[ConnectionManager] Host route refresh: system.status failed (skipping)")
             return
         }
+
+        // A newer connect() may have superseded us while the RPC was in flight.
+        guard connectionGeneration == myGeneration else { return }
+
+        // Adopt a reported tunnel address (additive: an absent field — older
+        // daemon or tunnel down — keeps the known address rather than
+        // clearing it, matching the never-drop host merge semantics).
+        let reportedTc = Self.tcAddress(fromSystemStatus: result)
+        if let reportedTc, reportedTc != tcAddress {
+            AppLog.connection.debug("[ConnectionManager] Host route refresh: tcAddress updated")
+            tcAddress = reportedTc
+        }
+
+        // The active connection, verified against the live token + port
+        // (same record-matching rules as the host persistence below).
+        if let reportedTc,
+            let stored = PersistenceManager.shared.activeConnection(),
+            stored.token == token, stored.server.port == port,
+            stored.server.tcAddress != reportedTc {
+            PersistenceManager.shared.updateConnectionTcAddress(id: stored.id, tcAddress: reportedTc)
+        }
+
         guard let reported = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
             AppLog.connection.debug("[ConnectionManager] Host route refresh: no localIps reported (skipping)")
             return
         }
-
-        // A newer connect() may have superseded us while the RPC was in flight.
-        guard connectionGeneration == myGeneration else { return }
 
         let merged = Self.mergeHosts(existing: hosts, reported: reported)
         if merged != hosts {
@@ -432,6 +495,16 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         return ips
     }
 
+    /// Extracts the `tcAddress` field from a `system.status` result. Returns
+    /// nil when absent (older daemon, tunnel not running), malformed, or
+    /// blank.
+    static func tcAddress(fromSystemStatus result: Any) -> String? {
+        guard let status = result as? [String: Any],
+              let raw = status["tcAddress"] as? String else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     /// Merges daemon-reported IPs into the existing host list: existing hosts
     /// (originally paired/entered) keep their order and are never dropped;
     /// reported IPs not already present are appended, deduped.
@@ -462,20 +535,36 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         _ hosts: [String],
         port: Int,
         token: String,
-        certFingerprint: String?
-    ) async throws -> WebSocketConnection {
+        certFingerprint: String?,
+        tcAddress: String? = nil
+    ) async throws -> RacedConnection {
         let myGeneration = connectionGeneration
-        let outcome = await Self.raceCandidates(hosts) { [certFingerprint, token] host in
-            let hostStart = CFAbsoluteTimeGetCurrent()
-            AppLog.connection.debug("[ConnectionManager] Racing host \(host):\(port)")
+        var candidates = hosts
+        if tcAddress != nil {
+            candidates.append(Self.tunnelCandidateLabel)
+        }
+        let dialer = tunnelDialer
+        let outcome = await Self.raceCandidates(candidates) {
+            [certFingerprint, token, tcAddress] candidate in
+            let candidateStart = CFAbsoluteTimeGetCurrent()
+            if candidate == Self.tunnelCandidateLabel, let tcAddress {
+                AppLog.connection.debug("[ConnectionManager] Racing tailcat tunnel")
+                let connection = try await Self.connectViaTunnel(
+                    dialer: dialer, tcAddress: tcAddress, remotePort: port,
+                    token: token, certFingerprint: certFingerprint)
+                let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
+                AppLog.connection.debug("[ConnectionManager] Tunnel connected in \(elapsed)ms")
+                return connection
+            }
+            AppLog.connection.debug("[ConnectionManager] Racing host \(candidate):\(port)")
             let connection = try await WebSocketConnection.connect(
-                host: host,
+                host: candidate,
                 port: port,
                 token: token,
                 certFingerprint: certFingerprint)
-            let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-            AppLog.connection.debug("[ConnectionManager] Host \(host) connected in \(elapsed)ms")
-            return connection
+            let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
+            AppLog.connection.debug("[ConnectionManager] Host \(candidate) connected in \(elapsed)ms")
+            return RacedConnection(socket: connection, tunnel: nil, host: candidate)
         }
         // Surface every observed mismatch — even when a winner settled —
         // unless a newer connect()/disconnect() superseded this race.
@@ -485,6 +574,57 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         if let winner = outcome.winner { return winner }
         throw outcome.failure ?? WebSocketTransportError.failed(
             host: hosts.first ?? "unknown", message: "No reachable host found")
+    }
+
+    /// One tunnel race candidate: establishes the tailcat tunnel (including
+    /// its slow first-use warm-up), then completes the normal pinned WSS
+    /// handshake through the tunnel's loopback forwarder. The tunnel is
+    /// closed on any post-establishment failure so a lost race never leaks
+    /// the session. Static + injected dialer for test visibility.
+    nonisolated static func connectViaTunnel(
+        dialer: any TunnelDialing,
+        tcAddress: String,
+        remotePort: Int,
+        token: String,
+        certFingerprint: String?
+    ) async throws -> RacedConnection {
+        let tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        do {
+            try Task.checkCancellation()
+            let socket = try await WebSocketConnection.connect(
+                host: "127.0.0.1",
+                port: tunnel.localPort,
+                token: token,
+                certFingerprint: certFingerprint)
+            return RacedConnection(
+                socket: socket, tunnel: tunnel, host: tunnelCandidateLabel)
+        } catch {
+            await tunnel.close()
+            // Re-label loopback transport errors to the tunnel candidate so
+            // failures surface against the route the user can recognize (and
+            // a cert mismatch never collides with a real "127.0.0.1" host
+            // entry).
+            if let transportError = error as? WebSocketTransportError {
+                switch transportError {
+                case .certificateMismatch(_, let fingerprint):
+                    throw WebSocketTransportError.certificateMismatch(
+                        host: tunnelCandidateLabel, fingerprint: fingerprint)
+                case .invalidURL:
+                    throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
+                case .timedOut:
+                    throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
+                case .failed(_, let message):
+                    throw WebSocketTransportError.failed(
+                        host: tunnelCandidateLabel, message: message)
+                case .disconnected(_, let code, let reason):
+                    throw WebSocketTransportError.disconnected(
+                        host: tunnelCandidateLabel, code: code, reason: reason)
+                case .certificateMismatches:
+                    throw transportError
+                }
+            }
+            throw error
+        }
     }
 
     /// Merges newly observed per-host mismatches into `certMismatches`,
@@ -667,9 +807,14 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         stopPingTimer()
         let oldSocket = socket
         socket = nil
+        let oldTunnel = activeTunnel
+        activeTunnel = nil
         messagePumpTask?.cancel()
         messagePumpTask = nil
-        Task { await oldSocket?.disconnect() }
+        Task {
+            await oldSocket?.disconnect()
+            await oldTunnel?.close()
+        }
         let connectionLifetime = lastSuccessfulConnectAt.map { disconnectTime - $0 }
         let startingAttempt = Self.reconnectStartingAttempt(
             connectionLifetime: connectionLifetime,
@@ -704,16 +849,18 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                 AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * 1000))ms")
 
                 // Check freshness before mutating observable state, then read the connection parameters.
-                let parameters: ([String], Int, String, String?)?
+                let parameters: ([String], Int, String, String?, String?)?
                 if !Task.isCancelled,
                    let self,
                    self.connectionGeneration == myGeneration {
                     self.connectionState = .reconnecting(attempt: attempt)
-                    parameters = (self.hosts, self.port ?? 0, self.token ?? "", self.certFingerprint)
+                    parameters = (
+                        self.hosts, self.port ?? 0, self.token ?? "",
+                        self.certFingerprint, self.tcAddress)
                 } else {
                     parameters = nil
                 }
-                guard let (hostsToTry, currentPort, currentToken, currentCertFingerprint) = parameters else {
+                guard let (hostsToTry, currentPort, currentToken, currentCertFingerprint, currentTcAddress) = parameters else {
                     return
                 }
 
@@ -721,17 +868,19 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                     let raceStart = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
 
-                    let winningSocket = try await self?.raceHosts(hostsToTry, port: currentPort, token: currentToken, certFingerprint: currentCertFingerprint)
+                    let winner = try await self?.raceHosts(
+                        hostsToTry, port: currentPort, token: currentToken,
+                        certFingerprint: currentCertFingerprint, tcAddress: currentTcAddress)
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
 
-                    guard let winningSocket = winningSocket else { continue }
+                    guard let winner = winner else { continue }
 
                     do {
                         try Task.checkCancellation()
                     } catch {
-                        await winningSocket.disconnect()
+                        await winner.disconnect()
                         return
                     }
 
@@ -740,8 +889,9 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                     if !Task.isCancelled,
                        let self,
                        self.connectionGeneration == myGeneration {
-                        self.socket = winningSocket
-                        self.host = winningSocket.host
+                        self.socket = winner.socket
+                        self.activeTunnel = winner.tunnel
+                        self.host = winner.host
                         self.configureSocketMessagePump()
                         self.connectionState = .connected
                         self.lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
@@ -754,7 +904,7 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                         genOk = false
                     }
                     guard genOk else {
-                        await winningSocket.disconnect()
+                        await winner.disconnect()
                         return
                     }
 

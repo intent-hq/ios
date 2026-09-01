@@ -57,7 +57,11 @@ class PersistenceManager {
                     port: server.port,
                     name: server.name,
                     pairedAt: server.pairedAt,
-                    certFingerprint: server.certFingerprint
+                    certFingerprint: server.certFingerprint,
+                    // A re-pair without a tunnel address (manual entry, QR
+                    // from a daemon whose tunnel is down) must not drop the
+                    // known one; the post-connect refresh keeps it current.
+                    tcAddress: server.tcAddress ?? existing.server.tcAddress
                 ),
                 token: connection.token,
                 displayName: connection.displayName,
@@ -102,7 +106,28 @@ class PersistenceManager {
             port: server.port,
             name: server.name,
             pairedAt: server.pairedAt,
-            certFingerprint: server.certFingerprint
+            certFingerprint: server.certFingerprint,
+            tcAddress: server.tcAddress
+        )
+        saveConnectionsLocked(connections)
+    }
+
+    /// Replaces the stored tailcat tunnel address of the connection with the
+    /// given id, preserving the record identity. Used by the post-connect
+    /// refresh when `system.status` reports a `tcAddress`. No-op when the id
+    /// is unknown.
+    func updateConnectionTcAddress(id: UUID, tcAddress: String) {
+        migrateLegacyPairingIfNeeded()
+        var connections = loadConnectionsLocked()
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        let server = connections[index].server
+        connections[index].server = PairedServer(
+            hosts: server.hosts,
+            port: server.port,
+            name: server.name,
+            pairedAt: server.pairedAt,
+            certFingerprint: server.certFingerprint,
+            tcAddress: tcAddress
         )
         saveConnectionsLocked(connections)
     }

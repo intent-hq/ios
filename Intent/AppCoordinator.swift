@@ -280,7 +280,8 @@ class AppCoordinator {
             {
                 ConnectionManager.shared.updateCachedCredentials(
                     hosts: active.server.hosts, port: active.server.port,
-                    token: active.token, certFingerprint: active.server.certFingerprint)
+                    token: active.token, certFingerprint: active.server.certFingerprint,
+                    tcAddress: active.server.tcAddress)
             }
             // A merge while the pairing surface is up must (un)offer the
             // saved connections it added/removed.
