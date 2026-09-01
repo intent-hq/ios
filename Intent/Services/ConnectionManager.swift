@@ -2,6 +2,24 @@ import Combine
 import Foundation
 import Observation
 
+/// The minimal surface `ConnectionManager.raceCandidates` needs from a
+/// connection candidate, letting tests race fakes instead of live sockets.
+nonisolated protocol HostRacingConnection: Sendable {
+    var host: String { get }
+    func disconnect() async
+}
+
+extension WebSocketConnection: HostRacingConnection {}
+
+/// The settled result of one `raceCandidates` run: the winner (if any), every
+/// per-host certificate mismatch observed, and the failure to throw when no
+/// candidate won.
+nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
+    let winner: Connection?
+    let mismatches: [HostCertMismatch]
+    let failure: (any Error)?
+}
+
 @MainActor
 @Observable class ConnectionManager: ConnectionManagerRouting {
     static let shared = ConnectionManager()
@@ -12,9 +30,17 @@ import Observation
     var certMismatchDetected = false {
         didSet { certMismatchSubject?.send(certMismatchDetected) }
     }
+    /// Every per-host certificate mismatch observed while racing hosts for the
+    /// current target, keeping the latest fingerprint per host. Accumulates
+    /// across reconnect attempts; cleared on a fresh `connect()` to a different
+    /// target and on explicit `disconnect()`.
+    var certMismatches: [HostCertMismatch] = [] {
+        didSet { certMismatchesSubject?.send(certMismatches) }
+    }
 
     @ObservationIgnored private var connectionStateSubject: CurrentValueSubject<ConnectionState, Never>!
     @ObservationIgnored private var certMismatchSubject: CurrentValueSubject<Bool, Never>!
+    @ObservationIgnored private var certMismatchesSubject: CurrentValueSubject<[HostCertMismatch], Never>!
     @ObservationIgnored private let subscriptionRouter = ConnectionSubscriptionRouter()
 
     @ObservationIgnored private var socket: WebSocketConnection?
@@ -40,6 +66,7 @@ import Observation
     private init() {
         connectionStateSubject = CurrentValueSubject(connectionState)
         certMismatchSubject = CurrentValueSubject(certMismatchDetected)
+        certMismatchesSubject = CurrentValueSubject(certMismatches)
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -52,11 +79,17 @@ import Observation
         certMismatchSubject.eraseToAnyPublisher()
     }
 
+    /// Combine mirror of `certMismatches`, matching `certMismatchPublisher`.
+    var certMismatchesPublisher: AnyPublisher<[HostCertMismatch], Never> {
+        certMismatchesSubject.eraseToAnyPublisher()
+    }
+
     // MARK: - Connection lifecycle
 
     func connect(hosts: [String], port: Int, token: String, certFingerprint: String? = nil) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
-        disconnect()
+        resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
+        teardownConnection()
         let myGeneration = connectionGeneration
         self.hosts = hosts
         self.port = port
@@ -121,6 +154,14 @@ import Observation
     }
 
     func disconnect() {
+        teardownConnection()
+        if !certMismatches.isEmpty { certMismatches = [] }
+    }
+
+    /// Tears down the live connection without touching `certMismatches`:
+    /// `connect()` to the same target must keep the accumulated mismatches,
+    /// while an explicit `disconnect()` clears them.
+    private func teardownConnection() {
         connectionGeneration += 1
         stopPingTimer()
         reconnectTask?.cancel()
@@ -135,6 +176,16 @@ import Observation
         connectionState = .disconnected
         failAllPending(error: "Connection closed")
         subscriptionRouter.reset()
+    }
+
+    /// Drops accumulated mismatches when a fresh `connect()` targets a
+    /// different backend than the cached one. Internal for test visibility.
+    func resetCertMismatchesIfTargetChanged(
+        hosts: [String], port: Int, certFingerprint: String?
+    ) {
+        let sameTarget = hosts == self.hosts && port == self.port
+            && certFingerprint == self.certFingerprint
+        if !sameTarget, !certMismatches.isEmpty { certMismatches = [] }
     }
 
     // MARK: - Public API
@@ -407,25 +458,63 @@ import Observation
         token: String,
         certFingerprint: String?
     ) async throws -> WebSocketConnection {
-        try await withThrowingTaskGroup(of: WebSocketConnection.self) { group in
+        let myGeneration = connectionGeneration
+        let outcome = await Self.raceCandidates(hosts) { [certFingerprint, token] host in
+            let hostStart = CFAbsoluteTimeGetCurrent()
+            AppLog.connection.debug("[ConnectionManager] Racing host \(host):\(port)")
+            let connection = try await WebSocketConnection.connect(
+                host: host,
+                port: port,
+                token: token,
+                certFingerprint: certFingerprint)
+            let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
+            AppLog.connection.debug("[ConnectionManager] Host \(host) connected in \(elapsed)ms")
+            return connection
+        }
+        // Surface every observed mismatch — even when a winner settled —
+        // unless a newer connect()/disconnect() superseded this race.
+        if connectionGeneration == myGeneration {
+            recordCertMismatches(outcome.mismatches)
+        }
+        if let winner = outcome.winner { return winner }
+        throw outcome.failure ?? WebSocketTransportError.failed(
+            host: hosts.first ?? "unknown", message: "No reachable host found")
+    }
+
+    /// Merges newly observed per-host mismatches into `certMismatches`,
+    /// replacing a host's entry with its latest fingerprint. Internal for
+    /// test visibility.
+    func recordCertMismatches(_ observed: [HostCertMismatch]) {
+        guard !observed.isEmpty else { return }
+        var merged = certMismatches
+        for mismatch in observed {
+            if let index = merged.firstIndex(where: { $0.host == mismatch.host }) {
+                merged[index] = mismatch
+            } else {
+                merged.append(mismatch)
+            }
+        }
+        certMismatches = merged
+    }
+
+    /// Races one connect attempt per host and settles on the first success,
+    /// collecting EVERY per-host certificate mismatch along the way (a loser's
+    /// mismatch is not swallowed by the winner). When no candidate succeeds,
+    /// `failure` prefers an aggregate certificate error over generic failures.
+    /// Generic over the connection so tests can race fakes; internal for test
+    /// visibility.
+    nonisolated static func raceCandidates<Connection: HostRacingConnection>(
+        _ hosts: [String],
+        connect: @escaping @Sendable (String) async throws -> Connection
+    ) async -> HostRaceOutcome<Connection> {
+        await withThrowingTaskGroup(of: Connection.self) { group in
             for host in hosts {
-                group.addTask { [certFingerprint, token] in
-                    let hostStart = CFAbsoluteTimeGetCurrent()
-                    AppLog.connection.debug("[ConnectionManager] Racing host \(host):\(port)")
-                    let connection = try await WebSocketConnection.connect(
-                        host: host,
-                        port: port,
-                        token: token,
-                        certFingerprint: certFingerprint)
-                    let elapsed = Int((CFAbsoluteTimeGetCurrent() - hostStart) * 1000)
-                    AppLog.connection.debug("[ConnectionManager] Host \(host) connected in \(elapsed)ms")
-                    return connection
-                }
+                group.addTask { try await connect(host) }
             }
 
             var lastError: Error?
-            var certificateError: WebSocketTransportError?
-            var winner: WebSocketConnection?
+            var mismatches: [HostCertMismatch] = []
+            var winner: Connection?
             var cancellationObserved = false
             while let result = await group.nextResult() {
                 switch result {
@@ -453,31 +542,31 @@ import Observation
                     }
                     lastError = error
                     if let transportError = error as? WebSocketTransportError,
-                       transportError.isCertificateMismatch {
-                        certificateError = transportError
+                       case .certificateMismatch(let host, let fingerprint) = transportError {
+                        mismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
                     }
                     AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
                 }
             }
-            if cancellationObserved {
+            if cancellationObserved || Task.isCancelled {
                 if let winner {
                     await winner.disconnect()
                 }
-                throw CancellationError()
+                return HostRaceOutcome(
+                    winner: nil, mismatches: mismatches, failure: CancellationError())
             }
             if let winner {
-                do {
-                    try Task.checkCancellation()
-                    return winner
-                } catch {
-                    await winner.disconnect()
-                    throw error
-                }
+                return HostRaceOutcome(winner: winner, mismatches: mismatches, failure: nil)
             }
-            try Task.checkCancellation()
-            if let certificateError { throw certificateError }
-            throw lastError ?? WebSocketTransportError.failed(
-                host: hosts.first ?? "unknown", message: "No reachable host found")
+            if !mismatches.isEmpty {
+                return HostRaceOutcome(
+                    winner: nil, mismatches: mismatches,
+                    failure: WebSocketTransportError.certificateMismatches(mismatches: mismatches))
+            }
+            return HostRaceOutcome(
+                winner: nil, mismatches: mismatches,
+                failure: lastError ?? WebSocketTransportError.failed(
+                    host: hosts.first ?? "unknown", message: "No reachable host found"))
         }
     }
 
