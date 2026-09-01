@@ -128,6 +128,15 @@ struct ConnectionFailureView: View {
         }
     }
 
+    /// True when a connection-failure message describes a certificate
+    /// mismatch. Case-insensitive: the aggregate race error starts with
+    /// "Certificate fingerprint mismatch...", the coordinator's re-pair
+    /// prompt with "Server certificate has changed..." — both must route
+    /// to the cert path (no auto-retry, "Re-pair Device" action).
+    static func isCertificateMismatchMessage(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("certificate")
+    }
+
     /// Saved connections other than the currently failing active one,
     /// most recently used first.
     static func alternativeConnections(
