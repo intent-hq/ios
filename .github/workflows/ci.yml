@@ -89,14 +89,15 @@ jobs:
         run: go test -timeout 300s ./...
 
       # The gomobile bind output is deterministic for a given wrapper
-      # source + go.sum + Go toolchain, so cache the xcframework on a
-      # hash of the TailcatKit directory.
+      # source + module graph + Go toolchain, so cache the xcframework
+      # on a hash of those inputs. go.mod is included because it picks
+      # the toolchain (setup-go go-version-file) and module versions.
       - name: Cache TailcatKit.xcframework
         id: tailcat-cache
         uses: actions/cache@v6
         with:
           path: TailcatKit/build/TailcatKit.xcframework
-          key: ${{ runner.os }}-tailcatkit-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
+          key: ${{ runner.os }}-tailcatkit-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
 
       - name: Build TailcatKit.xcframework
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
@@ -109,14 +110,21 @@ jobs:
         working-directory: TailcatKit
         run: |
           go build -o /tmp/tcecho ./cmd/tcecho
-          /tmp/tcecho > /tmp/tcecho-token.txt &
+          /tmp/tcecho > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
+          pid=$!
           for i in $(seq 1 30); do
             [ -s /tmp/tcecho-token.txt ] && break
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "tcecho exited during startup:" >&2
+              cat /tmp/tcecho-err.txt >&2
+              exit 1
+            fi
             sleep 1
           done
           token=$(head -n 1 /tmp/tcecho-token.txt)
           if [ -z "$token" ]; then
             echo "tcecho failed to start" >&2
+            cat /tmp/tcecho-err.txt >&2
             exit 1
           fi
           echo "::add-mask::$token"

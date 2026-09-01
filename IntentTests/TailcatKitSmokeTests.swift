@@ -48,9 +48,14 @@ struct TailcatKitSmokeTests {
 
         var received = Data()
         while received.count < message.count {
-            let chunk = try conn.read(message.count - received.count)
-            if chunk.isEmpty { break }
-            received.append(chunk)
+            // Read throws an error whose description is "EOF" at end of
+            // stream (an empty Go slice would bridge to nil NSData and
+            // break the throws -> Data projection, so EOF is out-of-band).
+            do {
+                received.append(try conn.read(message.count - received.count))
+            } catch where error.localizedDescription == "EOF" {
+                break
+            }
         }
         #expect(received == message)
     }

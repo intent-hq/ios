@@ -11,16 +11,18 @@ import (
 	"github.com/tailscale/tailcat"
 	"tailscale.com/tstest/integration"
 	"tailscale.com/types/logger"
+
+	"github.com/intent-hq/ios/TailcatKit/echosrv"
 )
 
 // newEchoPair starts an in-process echo server and a client connected
 // to it, rendezvousing over an in-process DERP+STUN on 127.0.0.1
 // (an in-process pair cannot meet over the public relays, which see
 // both sides behind one socket).
-func newEchoPair(t *testing.T) (*EchoServer, *Client) {
+func newEchoPair(t *testing.T) (*echosrv.Server, *Client) {
 	t.Helper()
 	dm := integration.RunDERPAndSTUN(t, logger.Discard, "127.0.0.1")
-	srv, err := startEchoServer(&tailcat.Server{Logf: logger.Discard, Region: dm.Regions[1]})
+	srv, err := echosrv.StartWith(&tailcat.Server{Logf: logger.Discard, Region: dm.Regions[1]})
 	if err != nil {
 		t.Fatalf("startEchoServer: %v", err)
 	}
@@ -69,6 +71,37 @@ func TestDialEcho(t *testing.T) {
 	}
 	if !bytes.Equal(got, msg) {
 		t.Fatalf("echo = %q, want %q", got, msg)
+	}
+}
+
+// TestReadEOFContract verifies Conn.Read's projection-safe EOF
+// contract: any final bytes that arrive together with EOF are
+// delivered first, and the stream end surfaces as an error whose
+// message is exactly "EOF" on the following call.
+func TestReadEOFContract(t *testing.T) {
+	a, b := net.Pipe()
+	conn := &Conn{nc: a}
+	msg := []byte("final bytes")
+	go func() {
+		b.Write(msg)
+		b.Close()
+	}()
+	var got []byte
+	for {
+		chunk, err := conn.Read(1024)
+		if err != nil {
+			if err.Error() != "EOF" {
+				t.Fatalf("Read error = %q, want \"EOF\"", err)
+			}
+			break
+		}
+		if len(chunk) == 0 {
+			t.Fatal("Read returned empty chunk without error")
+		}
+		got = append(got, chunk...)
+	}
+	if !bytes.Equal(got, msg) {
+		t.Fatalf("read %q, want %q", got, msg)
 	}
 }
 

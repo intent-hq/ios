@@ -12,11 +12,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	tailcatkit "github.com/intent-hq/ios/TailcatKit"
+	"github.com/intent-hq/ios/TailcatKit/echosrv"
 )
 
 func main() {
-	srv, err := tailcatkit.StartEchoServer()
+	srv, err := echosrv.Start()
 	if err != nil {
 		log.Fatalf("tcecho: %v", err)
 	}

@@ -9,7 +9,6 @@ package tailcatkit
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -84,23 +83,41 @@ func (c *Client) Close() error { return c.c.Close() }
 // Conn is a connected byte stream over the tunnel.
 type Conn struct {
 	nc net.Conn
+	// pendingErr defers an error that arrived together with data:
+	// the data is delivered first and the error surfaces on the
+	// next Read, per the io.Reader contract.
+	pendingErr error
 }
 
 // Read reads up to maxLen bytes (<=0 means 32 KiB). It blocks until
-// some data is available and returns an empty slice at end of stream.
+// some data is available. End of stream surfaces as an error whose
+// message is exactly "EOF": gomobile bridges an empty Go byte slice
+// to a nil NSData, and a nil return without an NSError breaks the
+// Swift throws -> Data projection, so an in-band empty-slice EOF
+// sentinel cannot cross the bridge. Swift callers should treat an
+// error with localizedDescription "EOF" as a clean end of stream.
 func (c *Conn) Read(maxLen int) ([]byte, error) {
+	if err := c.pendingErr; err != nil {
+		c.pendingErr = nil
+		return nil, err
+	}
 	if maxLen <= 0 {
 		maxLen = 32 * 1024
 	}
 	buf := make([]byte, maxLen)
-	n, err := c.nc.Read(buf)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return []byte{}, nil
+	for {
+		n, err := c.nc.Read(buf)
+		if n > 0 {
+			// Deliver the data now; surface err (including io.EOF)
+			// on the next call so no final bytes are dropped.
+			c.pendingErr = err
+			return buf[:n], nil
 		}
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
+		// n == 0 with a nil error: allowed by io.Reader; retry.
 	}
-	return buf[:n], nil
 }
 
 // Write writes all of data to the stream.

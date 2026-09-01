@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AB000002AAAA000000000002 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
 		AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
@@ -72,7 +71,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AB000002AAAA000000000002 /* TailcatKit.xcframework in Frameworks */,
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
