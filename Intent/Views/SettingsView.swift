@@ -115,6 +115,35 @@ struct SettingsView: View {
                             }
                         }
 
+                        // About section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("About")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .textCase(.uppercase)
+
+                            NavigationLink {
+                                AcknowledgementsView()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "doc.text")
+                                    Text("Acknowledgements")
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                }
+                                .foregroundStyle(Theme.foreground(for: colorScheme))
+                                .padding(16)
+                                .background(Theme.card(for: colorScheme))
+                                .clipShape(.rect(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                                )
+                            }
+                        }
+
                         Spacer()
                     }
                     .padding(20)
