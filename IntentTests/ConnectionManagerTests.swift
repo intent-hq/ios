@@ -646,8 +646,37 @@ struct ConnectionManagerTests {
             hosts: ["h1"], port: 1234, certFingerprint: "pin")
         #expect(manager.certMismatches == seeded)
 
+        // Pinned targets are identified by port + pin: a drifted host list
+        // (refreshHostRoutes merges daemon-reported IPs post-connect) is the
+        // same daemon, so the list survives an app-driven reconnect from the
+        // stored record.
         manager.resetCertMismatchesIfTargetChanged(
             hosts: ["h2"], port: 1234, certFingerprint: "pin")
+        #expect(manager.certMismatches == seeded)
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h1"], port: 1234, certFingerprint: "other-pin")
+        #expect(manager.certMismatches.isEmpty)
+
+        manager.certMismatches = seeded
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h1"], port: 5678, certFingerprint: "pin")
+        #expect(manager.certMismatches.isEmpty)
+    }
+
+    @Test @MainActor func pinlessTargetIdentityFallsBackToHostOverlap() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil)
+        let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
+        manager.certMismatches = seeded
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h2", "h3"], port: 1234, certFingerprint: nil)
+        #expect(manager.certMismatches == seeded)
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h4"], port: 1234, certFingerprint: nil)
         #expect(manager.certMismatches.isEmpty)
     }
 

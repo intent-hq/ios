@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
@@ -69,6 +70,15 @@ struct SettingsView: View {
                                             .font(.caption)
                                             .foregroundStyle(.green)
                                     }
+                                }
+
+                                // Non-blocking indicator: routes to this
+                                // daemon that presented a wrong certificate
+                                // (stale mismatching siblings of the winning
+                                // host). Informational only — never an alert.
+                                if !connectionManager.certMismatches.isEmpty {
+                                    CertMismatchListView(
+                                        mismatches: connectionManager.certMismatches)
                                 }
                             }
                             .padding(16)
@@ -139,11 +149,13 @@ struct SettingsView: View {
 #Preview("Settings") {
     SettingsView()
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
 }
 
 #Preview("Settings - Dark") {
     SettingsView()
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
         .preferredColorScheme(.dark)
 }
 

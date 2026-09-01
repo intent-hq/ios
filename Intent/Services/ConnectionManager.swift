@@ -179,12 +179,18 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     }
 
     /// Drops accumulated mismatches when a fresh `connect()` targets a
-    /// different backend than the cached one. Internal for test visibility.
+    /// different backend than the cached one. When a pin is present, port +
+    /// pin identify the daemon (host lists drift: `refreshHostRoutes()` merges
+    /// daemon-reported IPs into `self.hosts`, so a later connect from the
+    /// stored record would look different under exact host equality);
+    /// pinless targets fall back to host overlap. Internal for test
+    /// visibility.
     func resetCertMismatchesIfTargetChanged(
         hosts: [String], port: Int, certFingerprint: String?
     ) {
-        let sameTarget = hosts == self.hosts && port == self.port
+        let sameTarget = port == self.port
             && certFingerprint == self.certFingerprint
+            && (certFingerprint != nil || !Set(hosts).isDisjoint(with: self.hosts))
         if !sameTarget, !certMismatches.isEmpty { certMismatches = [] }
     }
 
