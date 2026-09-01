@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB000002AAAA000000000002 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
+		AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AB000001AAAA000000000001 /* TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "TailcatKit/build/TailcatKit.xcframework"; sourceTree = "<group>"; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -69,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB000002AAAA000000000002 /* TailcatKit.xcframework in Frameworks */,
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -77,6 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,6 +101,7 @@
 				EB655ECB2F669E6B00176730 /* Intent */,
 				EB655EDD2F669E6C00176730 /* IntentTests */,
 				EB655EE72F669E6C00176730 /* IntentUITests */,
+				AB000001AAAA000000000001 /* TailcatKit.xcframework */,
 				EB655ECA2F669E6B00176730 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -301,6 +307,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TailcatKit/build",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Intent/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
@@ -340,6 +350,10 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
 				ENABLE_PREVIEWS = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TailcatKit/build",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Intent/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
@@ -500,6 +514,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TailcatKit/build",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;
@@ -524,6 +542,10 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = C26QN7DD6G;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TailcatKit/build",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 1.0;

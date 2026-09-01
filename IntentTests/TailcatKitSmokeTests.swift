@@ -1,0 +1,57 @@
+import Foundation
+import TailcatKit
+import Testing
+
+/// Smoke tests for the vendored TailcatKit.xcframework (gomobile bind
+/// of TailcatKit/, wrapping github.com/tailscale/tailcat).
+///
+/// The byte-exchange test needs a running tailcat echo server to dial:
+/// the CI harness starts TailcatKit/cmd/tcecho and passes its token via
+/// the TAILCAT_SMOKE_TOKEN environment variable. Without the variable
+/// that test is skipped, but the API-surface tests still run, verifying
+/// the framework links and its Swift projection behaves.
+struct TailcatKitSmokeTests {
+    static var smokeToken: String? {
+        let env = ProcessInfo.processInfo.environment
+        guard let token = env["TAILCAT_SMOKE_TOKEN"], !token.isEmpty else { return nil }
+        return token
+    }
+
+    @Test func invalidPortIsRejected() throws {
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+        #expect(throws: (any Error).self) {
+            try client.dial(0, timeoutMs: 1000)
+        }
+    }
+
+    @Test func invalidForwardPortIsRejected() throws {
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+        #expect(throws: (any Error).self) {
+            try client.forward(70000)
+        }
+    }
+
+    @Test(.enabled(if: smokeToken != nil))
+    func dialEchoAndExchangeBytes() throws {
+        let token = try #require(Self.smokeToken)
+        let client = try #require(TailcatkitNewClient(token))
+        defer { try? client.close() }
+
+        let conn = try client.dial(4711, timeoutMs: 60_000)
+        defer { try? conn.close() }
+
+        let message = Data("hello from iOS".utf8)
+        try conn.write(message)
+        try conn.setDeadlineMs(60_000)
+
+        var received = Data()
+        while received.count < message.count {
+            let chunk = try conn.read(message.count - received.count)
+            if chunk.isEmpty { break }
+            received.append(chunk)
+        }
+        #expect(received == message)
+    }
+}
