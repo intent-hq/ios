@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.colorScheme) var colorScheme
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
@@ -71,6 +72,15 @@ struct SettingsView: View {
                                             .foregroundStyle(.green)
                                     }
                                 }
+
+                                // Non-blocking indicator: routes to this
+                                // daemon that presented a wrong certificate
+                                // (stale mismatching siblings of the winning
+                                // host). Informational only — never an alert.
+                                if !connectionManager.certMismatches.isEmpty {
+                                    CertMismatchListView(
+                                        mismatches: connectionManager.certMismatches)
+                                }
                             }
                             .padding(Constants.Settings.cardPadding)
                             .background(Theme.card(for: colorScheme))
@@ -102,6 +112,35 @@ struct SettingsView: View {
                                 .overlay(
                                     RoundedRectangle(cornerRadius: Constants.Settings.cardCornerRadius)
                                         .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Settings.cardBorderWidth)
+                                )
+                            }
+                        }
+
+                        // About section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("About")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .textCase(.uppercase)
+
+                            NavigationLink {
+                                AcknowledgementsView()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "doc.text")
+                                    Text("Acknowledgements")
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                }
+                                .foregroundStyle(Theme.foreground(for: colorScheme))
+                                .padding(16)
+                                .background(Theme.card(for: colorScheme))
+                                .clipShape(.rect(cornerRadius: 12))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Theme.border(for: colorScheme), lineWidth: 1)
                                 )
                             }
                         }
@@ -140,11 +179,13 @@ struct SettingsView: View {
 #Preview("Settings") {
     SettingsView()
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
 }
 
 #Preview("Settings - Dark") {
     SettingsView()
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
         .preferredColorScheme(.dark)
 }
 

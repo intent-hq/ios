@@ -520,6 +520,166 @@ struct ConnectionManagerTests {
         #expect(error.localizedDescription.contains("de:ad:be:ef"))
     }
 
+    // MARK: - Host race certificate mismatch collection
+
+    private actor FakeRaceConnection: HostRacingConnection {
+        nonisolated let host: String
+        init(host: String) { self.host = host }
+        func disconnect() {}
+    }
+
+    @Test func mixedRaceCollectsLoserMismatchAndStillWins() async {
+        let outcome = await ConnectionManager.raceCandidates(
+            ["bad.host", "good.host"]
+        ) { host -> FakeRaceConnection in
+            if host == "bad.host" {
+                throw WebSocketTransportError.certificateMismatch(
+                    host: host, fingerprint: "aa:bb")
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+            return FakeRaceConnection(host: host)
+        }
+
+        #expect(outcome.winner?.host == "good.host")
+        #expect(outcome.failure == nil)
+        #expect(outcome.mismatches == [
+            HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")])
+    }
+
+    @Test func mismatchAfterWinnerSettledIsNotSwallowed() async {
+        let outcome = await ConnectionManager.raceCandidates(
+            ["good.host", "bad.host"]
+        ) { host -> FakeRaceConnection in
+            if host == "bad.host" {
+                try? await Task.sleep(for: .milliseconds(50))
+                throw WebSocketTransportError.certificateMismatch(
+                    host: host, fingerprint: "cc:dd")
+            }
+            return FakeRaceConnection(host: host)
+        }
+
+        #expect(outcome.winner?.host == "good.host")
+        #expect(outcome.mismatches == [
+            HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")])
+    }
+
+    @Test func allMismatchRaceFailsWithEveryHostCollected() async {
+        let outcome = await ConnectionManager.raceCandidates(
+            ["a.host", "b.host"]
+        ) { host -> FakeRaceConnection in
+            throw WebSocketTransportError.certificateMismatch(
+                host: host, fingerprint: "ff:\(host)")
+        }
+
+        #expect(outcome.winner == nil)
+        #expect(Set(outcome.mismatches) == Set([
+            HostCertMismatch(host: "a.host", fingerprint: "ff:a.host"),
+            HostCertMismatch(host: "b.host", fingerprint: "ff:b.host"),
+        ]))
+        let failure = outcome.failure as? WebSocketTransportError
+        #expect(failure?.isCertificateMismatch == true)
+        guard case .certificateMismatches(let carried)? = failure else {
+            Issue.record("expected aggregate certificate error, got \(String(describing: outcome.failure))")
+            return
+        }
+        #expect(Set(carried) == Set(outcome.mismatches))
+    }
+
+    @Test func certFailurePreferredOverGenericFailuresWhenNoWinner() async {
+        let outcome = await ConnectionManager.raceCandidates(
+            ["down.host", "bad.host"]
+        ) { host -> FakeRaceConnection in
+            if host == "bad.host" {
+                try? await Task.sleep(for: .milliseconds(20))
+                throw WebSocketTransportError.certificateMismatch(
+                    host: host, fingerprint: "ee:ff")
+            }
+            throw WebSocketTransportError.failed(host: host, message: "unreachable")
+        }
+
+        #expect(outcome.winner == nil)
+        #expect(outcome.mismatches == [
+            HostCertMismatch(host: "bad.host", fingerprint: "ee:ff")])
+        let failure = outcome.failure as? WebSocketTransportError
+        #expect(failure?.isCertificateMismatch == true)
+    }
+
+    @Test @MainActor func recordCertMismatchesAccumulatesLatestFingerprintPerHost() {
+        let manager = ConnectionManager.shared
+        manager.certMismatches = []
+        var received: [[HostCertMismatch]] = []
+        let cancellable = manager.certMismatchesPublisher.sink { received.append($0) }
+
+        manager.recordCertMismatches([HostCertMismatch(host: "a", fingerprint: "f1")])
+        manager.recordCertMismatches([
+            HostCertMismatch(host: "a", fingerprint: "f2"),
+            HostCertMismatch(host: "b", fingerprint: "f3"),
+        ])
+
+        #expect(manager.certMismatches == [
+            HostCertMismatch(host: "a", fingerprint: "f2"),
+            HostCertMismatch(host: "b", fingerprint: "f3"),
+        ])
+        #expect(received.last == manager.certMismatches)
+
+        manager.certMismatches = []
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test @MainActor func explicitDisconnectClearsCertMismatches() {
+        let manager = ConnectionManager.shared
+        manager.certMismatches = [HostCertMismatch(host: "a", fingerprint: "f1")]
+
+        manager.disconnect()
+
+        #expect(manager.certMismatches.isEmpty)
+    }
+
+    @Test @MainActor func connectToDifferentTargetClearsMismatchesSameTargetKeepsThem() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin")
+        let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
+        manager.certMismatches = seeded
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h1"], port: 1234, certFingerprint: "pin")
+        #expect(manager.certMismatches == seeded)
+
+        // Pinned targets are identified by port + pin: a drifted host list
+        // (refreshHostRoutes merges daemon-reported IPs post-connect) is the
+        // same daemon, so the list survives an app-driven reconnect from the
+        // stored record.
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h2"], port: 1234, certFingerprint: "pin")
+        #expect(manager.certMismatches == seeded)
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h1"], port: 1234, certFingerprint: "other-pin")
+        #expect(manager.certMismatches.isEmpty)
+
+        manager.certMismatches = seeded
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h1"], port: 5678, certFingerprint: "pin")
+        #expect(manager.certMismatches.isEmpty)
+    }
+
+    @Test @MainActor func pinlessTargetIdentityFallsBackToHostOverlap() {
+        let manager = ConnectionManager.shared
+        manager.updateCachedCredentials(
+            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil)
+        let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
+        manager.certMismatches = seeded
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h2", "h3"], port: 1234, certFingerprint: nil)
+        #expect(manager.certMismatches == seeded)
+
+        manager.resetCertMismatchesIfTargetChanged(
+            hosts: ["h4"], port: 1234, certFingerprint: nil)
+        #expect(manager.certMismatches.isEmpty)
+    }
+
     // MARK: - Synced-registry credential adoption
 
     @Test @MainActor func updateCachedCredentialsReplacesReconnectFields() {

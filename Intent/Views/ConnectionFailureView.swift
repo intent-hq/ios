@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectionFailureView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.colorScheme) var colorScheme
     let errorMessage: String
     var isCertMismatch: Bool = false
@@ -42,6 +43,14 @@ struct ConnectionFailureView: View {
                 }
 
                 VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
+                    // Every observed per-host cert mismatch: on the re-pair
+                    // path this lists all mismatching hosts (not just one);
+                    // during auto-retry it is the passive list while retries
+                    // continue on the remaining hosts.
+                    if !connectionManager.certMismatches.isEmpty {
+                        CertMismatchListView(mismatches: connectionManager.certMismatches)
+                    }
+
                     // Auto-retry progress
                     if isRetrying {
                         HStack(spacing: Constants.ConnectionFailure.progressSpacing) {
@@ -122,6 +131,15 @@ struct ConnectionFailureView: View {
         .onDisappear {
             retryTask?.cancel()
         }
+    }
+
+    /// True when a connection-failure message describes a certificate
+    /// mismatch. Case-insensitive: the aggregate race error starts with
+    /// "Certificate fingerprint mismatch...", the coordinator's re-pair
+    /// prompt with "Server certificate has changed..." — both must route
+    /// to the cert path (no auto-retry, "Re-pair Device" action).
+    static func isCertificateMismatchMessage(_ message: String) -> Bool {
+        message.localizedCaseInsensitiveContains("certificate")
     }
 
     /// Saved connections other than the currently failing active one,
@@ -216,11 +234,13 @@ struct ConnectionFailureView: View {
 #Preview("Connection Failed") {
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
 }
 
 #Preview("Connection Failed - Dark") {
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
         .environment(AppCoordinator())
+        .environment(ConnectionManager.shared)
         .preferredColorScheme(.dark)
 }
 

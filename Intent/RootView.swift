@@ -46,6 +46,7 @@ struct AgentDestination: Hashable, Identifiable {
 
 struct RootView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(ConnectionManager.self) var connectionManager
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.colorScheme) private var colorScheme
     @State private var notificationManager = NotificationManager.shared
@@ -127,7 +128,7 @@ struct RootView: View {
                     case .connectionFailed(let error):
                         ConnectionFailureView(
                             errorMessage: error,
-                            isCertMismatch: error.contains("certificate")
+                            isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error)
                         )
                     case .settings:
                         SettingsView()
@@ -181,6 +182,14 @@ struct RootView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+
+                        // Passive per-host cert-mismatch list: hosts that
+                        // presented a wrong certificate during the reconnect
+                        // race, while retries continue on the remaining hosts.
+                        if !connectionManager.certMismatches.isEmpty {
+                            CertMismatchListView(mismatches: connectionManager.certMismatches)
+                                .frame(maxWidth: 320)
+                        }
 
                         Button("Log Off") {
                             coordinator.onLogOff()

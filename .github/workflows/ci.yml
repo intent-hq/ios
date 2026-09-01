@@ -78,6 +78,58 @@ jobs:
       - name: Pre-boot simulator
         run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Go unit tests (TailcatKit)
+        working-directory: TailcatKit
+        run: go test -timeout 300s ./...
+
+      # The gomobile bind output is deterministic for a given wrapper
+      # source + module graph + Go toolchain, so cache the xcframework
+      # on a hash of those inputs. go.mod is included because it picks
+      # the toolchain (setup-go go-version-file) and module versions.
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: TailcatKit/build/TailcatKit.xcframework
+          key: ${{ runner.os }}-tailcatkit-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      # In-process tailcat echo server for the Swift smoke test; prints
+      # its connection token on the first line of stdout. The token
+      # reaches the simulator test process via the TEST_RUNNER_ prefix.
+      - name: Start tailcat echo server
+        working-directory: TailcatKit
+        run: |
+          go build -o /tmp/tcecho ./cmd/tcecho
+          /tmp/tcecho > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
+          pid=$!
+          for i in $(seq 1 30); do
+            [ -s /tmp/tcecho-token.txt ] && break
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "tcecho exited during startup:" >&2
+              cat /tmp/tcecho-err.txt >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          token=$(head -n 1 /tmp/tcecho-token.txt)
+          if [ -z "$token" ]; then
+            echo "tcecho failed to start" >&2
+            cat /tmp/tcecho-err.txt >&2
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "TAILCAT_SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
+
       # Ephemeral runner: cache SPM checkouts across runs. The xcodebuild
       # invocations pin -clonedSourcePackagesDirPath to the cached path so
       # the cache key actually covers what gets written.
@@ -108,8 +160,13 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
 
       # rm keeps the step independent of checkout's clean setting:
-      # xcodebuild refuses an existing result bundle path.
+      # xcodebuild refuses an existing result bundle path. xcodebuild
+      # forwards its TEST_RUNNER_-prefixed environment variables into
+      # the test process (minus the prefix), carrying the tcecho token
+      # to the TailcatKit smoke test.
       - name: Run unit tests
+        env:
+          TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
         run: |
           rm -rf TestResults
           xcodebuild test-without-building \
