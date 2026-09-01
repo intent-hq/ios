@@ -638,7 +638,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func connectToDifferentTargetClearsMismatchesSameTargetKeepsThem() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin")
+            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin",
+            tcAddress: nil)
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
@@ -667,7 +668,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func pinlessTargetIdentityFallsBackToHostOverlap() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil)
+            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil,
+            tcAddress: nil)
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
@@ -686,7 +688,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
             hosts: ["10.0.0.9", "mac.local"], port: 9999,
-            token: "tok-rotated", certFingerprint: "ff:ee")
+            token: "tok-rotated", certFingerprint: "ff:ee", tcAddress: nil)
         #expect(manager.hosts == ["10.0.0.9", "mac.local"])
         #expect(manager.port == 9999)
         #expect(manager.token == "tok-rotated")
@@ -1295,7 +1297,8 @@ struct ConnectionManagerTests {
             tcAddress: "tc-tunnel-token")
         #expect(manager.tcAddress == "tc-tunnel-token")
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil)
+            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
+            tcAddress: nil)
         #expect(manager.tcAddress == nil)
     }
 
@@ -1340,6 +1343,35 @@ struct ConnectionManagerTests {
                 dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
                 token: "t", certFingerprint: nil)
         }
+        #expect(tunnel.isClosed)
+    }
+
+    /// A raced candidate that mirrors `RacedConnection`: `disconnect()` closes
+    /// the carried tunnel session, so loser cleanup releases tunnel resources.
+    private nonisolated struct FakeTunnelRaceConnection: HostRacingConnection {
+        let host: String
+        let tunnel: FakeTunnelSession?
+
+        func disconnect() async {
+            await tunnel?.close()
+        }
+    }
+
+    /// When a direct host wins the race, the LOSING tunnel candidate's session
+    /// must be closed by `raceCandidates` loser cleanup (no leaked tunnel).
+    @Test func losingTunnelCandidateSessionClosedWhenDirectHostWins() async {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let outcome = await ConnectionManager.raceCandidates(
+            ["direct.host", ConnectionManager.tunnelCandidateLabel]
+        ) { host -> FakeTunnelRaceConnection in
+            if host == ConnectionManager.tunnelCandidateLabel {
+                try? await Task.sleep(for: .milliseconds(50))
+                return FakeTunnelRaceConnection(host: host, tunnel: tunnel)
+            }
+            return FakeTunnelRaceConnection(host: host, tunnel: nil)
+        }
+
+        #expect(outcome.winner?.host == "direct.host")
         #expect(tunnel.isClosed)
     }
 }

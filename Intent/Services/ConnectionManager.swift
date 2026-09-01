@@ -183,7 +183,7 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     /// the WebSocket upgrade only, so an established connection stays valid.
     func updateCachedCredentials(
         hosts: [String], port: Int, token: String, certFingerprint: String?,
-        tcAddress: String? = nil
+        tcAddress: String?
     ) {
         self.hosts = hosts
         self.port = port
@@ -600,13 +600,28 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                 socket: socket, tunnel: tunnel, host: tunnelCandidateLabel)
         } catch {
             await tunnel.close()
-            // Re-label a loopback cert mismatch to the tunnel candidate so the
-            // mismatch surfaces against the route the user can recognize (and
-            // never collides with a real "127.0.0.1" host entry).
-            if let transportError = error as? WebSocketTransportError,
-               case .certificateMismatch(_, let fingerprint) = transportError {
-                throw WebSocketTransportError.certificateMismatch(
-                    host: tunnelCandidateLabel, fingerprint: fingerprint)
+            // Re-label loopback transport errors to the tunnel candidate so
+            // failures surface against the route the user can recognize (and
+            // a cert mismatch never collides with a real "127.0.0.1" host
+            // entry).
+            if let transportError = error as? WebSocketTransportError {
+                switch transportError {
+                case .certificateMismatch(_, let fingerprint):
+                    throw WebSocketTransportError.certificateMismatch(
+                        host: tunnelCandidateLabel, fingerprint: fingerprint)
+                case .invalidURL:
+                    throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
+                case .timedOut:
+                    throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
+                case .failed(_, let message):
+                    throw WebSocketTransportError.failed(
+                        host: tunnelCandidateLabel, message: message)
+                case .disconnected(_, let code, let reason):
+                    throw WebSocketTransportError.disconnected(
+                        host: tunnelCandidateLabel, code: code, reason: reason)
+                case .certificateMismatches:
+                    throw transportError
+                }
             }
             throw error
         }
