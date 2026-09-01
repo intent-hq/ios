@@ -46,9 +46,11 @@ struct DisconnectedView: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
 
-                // Passive per-host cert-mismatch list: hosts that presented a
-                // wrong certificate during the race, while retries continue on
-                // the remaining hosts.
+                // Passive per-host cert-mismatch list, for parity with the
+                // live reconnect surface (RootView's isDisconnected overlay).
+                // Note: no coordinator path currently routes to the
+                // .disconnected screen, so this renders only if that screen
+                // gets wired up.
                 if !connectionManager.certMismatches.isEmpty {
                     CertMismatchListView(mismatches: connectionManager.certMismatches)
                         .padding(.horizontal, 32)
