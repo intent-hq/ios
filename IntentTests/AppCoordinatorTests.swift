@@ -34,13 +34,6 @@ final class AppCoordinatorTests {
         UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
     }
 
-    // MARK: - Helper to check AppScreen cases
-
-    private static func assertScreen(_ screen: AppScreen, is expected: String, file: String = #file, line: Int = #line) {
-        let description = String(describing: screen)
-        #expect(description.contains(expected), "Expected \(expected), got \(screen)")
-    }
-
     // MARK: - Navigation transitions
 
     @Test @MainActor func onConnectionSuccess_setsWorkspaceList() {

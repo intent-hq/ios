@@ -164,7 +164,7 @@ struct MessageInputView: View {
 
     @ViewBuilder
     private var pendingImagesRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(Array(viewModel.pendingImages.enumerated()), id: \.offset) { index, image in
                     ZStack(alignment: .topTrailing) {
@@ -190,13 +190,14 @@ struct MessageInputView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
         }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Pending files
 
     @ViewBuilder
     private var pendingFilesRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(Array(viewModel.pendingFiles.enumerated()), id: \.element.id) { index, file in
                     HStack(spacing: 6) {
@@ -253,6 +254,7 @@ struct MessageInputView: View {
             .padding(.horizontal, 12)
             .padding(.top, 8)
         }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Actions

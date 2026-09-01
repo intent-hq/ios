@@ -180,7 +180,7 @@ struct GitHubRepoPickerView: View {
             return
         }
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             guard let results = await store.searchRepos(query: query) else { return }
             // Publish results + the query they answer together, only if this

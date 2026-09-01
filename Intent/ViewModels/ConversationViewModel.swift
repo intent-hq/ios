@@ -203,7 +203,7 @@ import SwiftUI
     /// Debounce for the "settle" triggers (turn finish, user send) before the
     /// marker advances — the stop-looking boundary bypasses it. Desktop parity
     /// (~1s); tests shorten it.
-    var markSeenDebounceNanos: UInt64 = 1_000_000_000
+    var markSeenDebounceDuration: Duration = .seconds(1)
 
     /// True while the conversation view is on screen (appear/disappear).
     @ObservationIgnored private var isOnScreen = false
@@ -269,8 +269,8 @@ import SwiftUI
     private func scheduleDebouncedMarkSeen() {
         markSeenDebounceTask?.cancel()
         markSeenDebounceTask = Task { [weak self] in
-            guard let nanos = self?.markSeenDebounceNanos else { return }
-            try? await Task.sleep(nanoseconds: nanos)
+            guard let duration = self?.markSeenDebounceDuration else { return }
+            try? await Task.sleep(for: duration)
             guard let self = self, !Task.isCancelled else { return }
             self.markSeenDebounceTask = nil
             await self.store.markSeen(agentId: self.agentId, workspaceId: self.workspaceId)

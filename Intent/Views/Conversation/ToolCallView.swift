@@ -121,11 +121,12 @@ struct ToolCallView: View {
                 Text("Input")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                ScrollView(.horizontal, showsIndicators: false) {
+                ScrollView(.horizontal) {
                     Text(formatJSON(input))
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
+                .scrollIndicators(.hidden)
             }
             if let result = toolResult {
                 Divider()

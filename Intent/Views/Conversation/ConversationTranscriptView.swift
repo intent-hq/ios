@@ -314,7 +314,7 @@ struct ConversationTranscriptView: View {
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
         scrollDebounceTask?.cancel()
         scrollDebounceTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled else { return }
             if animated {
                 withAnimation(.easeOut(duration: 0.2)) {
@@ -323,7 +323,7 @@ struct ConversationTranscriptView: View {
             } else {
                 proxy.scrollTo("scroll-bottom", anchor: .top)
             }
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             isScrollingToBottom = false
         }

@@ -105,10 +105,11 @@ struct ResponseGroupView: View {
             } else {
                 // Collapsed: constrained scrollable preview
                 ScrollViewReader { proxy in
-                    ScrollView(.vertical, showsIndicators: false) {
+                    ScrollView(.vertical) {
                         groupChildrenView
                             .id("group-content-bottom")
                     }
+                    .scrollIndicators(.hidden)
                     .frame(maxHeight: 100)
                     .mask(
                         VStack(spacing: 0) {

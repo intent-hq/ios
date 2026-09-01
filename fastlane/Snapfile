@@ -35,9 +35,8 @@ languages(["en-US"])
 project("./Intent.xcodeproj")
 scheme("IntentScreenshots")
 
-# Only the screenshot suite — skips the Xcode template tests in the target
-# (IntentUITests.swift, IntentUITestsLaunchTests.swift), which would add
-# several extra app launches per device and abort surface.
+# Select the live App Store screenshot suite explicitly so snapshot automation
+# remains scoped to its marketing capture flows.
 only_testing(["IntentUITests/AppStoreScreenshotTests"])
 
 output_directory("./fastlane/screenshots")

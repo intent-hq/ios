@@ -1,12 +1,17 @@
 import SwiftUI
 
 struct CreateWorkspaceView: View {
+    private enum Route: Hashable {
+        case branches
+        case create
+    }
+
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
 
     // Navigation state
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath: [Route] = []
 
     // Step 1: GitHub repo selection
     @State private var githubStore = GitHubRepoStore()
@@ -43,10 +48,11 @@ struct CreateWorkspaceView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             repoSelectionView
-                .navigationDestination(for: String.self) { step in
-                    if step == "branches" {
+                .navigationDestination(for: Route.self) { route in
+                    switch route {
+                    case .branches:
                         branchSelectionView
-                    } else if step == "create" {
+                    case .create:
                         specialistAndMessageView
                     }
                 }
@@ -71,7 +77,7 @@ struct CreateWorkspaceView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Next") {
-                        navigationPath.append("branches")
+                        navigationPath.append(.branches)
                     }
                     .disabled(selectedRepo == nil)
                 }
@@ -175,7 +181,7 @@ struct CreateWorkspaceView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next") {
-                    navigationPath.append("create")
+                    navigationPath.append(.create)
                 }
                 .disabled(selectedBranch == nil)
             }

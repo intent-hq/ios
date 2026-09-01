@@ -24,7 +24,7 @@ struct MonitoredPrsRow: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.caption2)
@@ -41,6 +41,7 @@ struct MonitoredPrsRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
         }
+        .scrollIndicators(.hidden)
         .background(Theme.card(for: colorScheme).opacity(0.8))
         .opacity(0.85)
     }

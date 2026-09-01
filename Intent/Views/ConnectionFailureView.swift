@@ -173,7 +173,7 @@ struct ConnectionFailureView: View {
 
                 // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
                 let delay = min(Double(1 << min(attempt, 5)), 30.0)
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { break }
 
                 // Try to connect

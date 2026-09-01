@@ -202,7 +202,7 @@ import Observation
     func awaitResponse(id: Int, timeout: TimeInterval,
                        write: @escaping @MainActor () -> Task<Void, Never>?) async throws -> Any {
         let timeoutTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+            try? await Task.sleep(for: .seconds(max(0, timeout)))
             guard !Task.isCancelled else { return }
             if let continuation = self?.pendingRequests.removeValue(forKey: id) {
                 continuation.resume(throwing: NSError(
@@ -601,7 +601,7 @@ import Observation
             while !Task.isCancelled {
                 if attempt > 1 {
                     let delay = min(Double(1 << min(attempt - 2, 5)), 30.0)
-                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    try? await Task.sleep(for: .seconds(delay))
                     if Task.isCancelled { break }
                 }
 

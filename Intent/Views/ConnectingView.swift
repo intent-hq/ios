@@ -61,9 +61,9 @@ struct ConnectingView: View {
     /// `timeout` seconds so the app never gets stuck on the loading screen.
     private func waitForWorkspaceData(timeout: TimeInterval) async {
         let deadline = Date().addingTimeInterval(timeout)
-        let pollInterval: UInt64 = 100_000_000 // 100ms in nanoseconds
+        let pollInterval: Duration = .milliseconds(100)
         while WorkspaceStore.shared.lastUpdated == nil && Date() < deadline {
-            try? await Task.sleep(nanoseconds: pollInterval)
+            try? await Task.sleep(for: pollInterval)
         }
     }
 }
