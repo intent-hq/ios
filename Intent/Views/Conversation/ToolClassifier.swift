@@ -49,7 +49,11 @@ enum ToolClassifier {
             let titleIsRawName = acpTitle == nil
                 || cleanToolName(acpTitle!).lowercased() == "workspace_api"
             if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary) {
-                return ToolDisplay(icon: "📁", verb: String(label.prefix(80)), subject: nil, path: nil)
+                return ToolDisplay(
+                    icon: "📁",
+                    verb: String(label.prefix(Constants.Conversation.ToolClassifier.titleMaximumLength)),
+                    subject: nil,
+                    path: nil)
             }
         }
 
@@ -116,7 +120,10 @@ enum ToolClassifier {
             if clean.contains("kill") { return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil) }
             if clean.contains("list") { return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil) }
             var verb = "Run"
-            var cmd = command.map { String($0.split(separator: "\n").first ?? "").prefix(80) }.map(String.init)
+            var cmd = command.map {
+                String($0.split(separator: "\n").first ?? "")
+                    .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength)
+            }.map(String.init)
             if cmd == nil, let title = acpTitle {
                 // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
                 // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity)
@@ -132,9 +139,11 @@ enum ToolClassifier {
                     case "write": verb = "Write to"; cmd = rest
                     case "launch":
                         verb = "Launch"
-                        cmd = String(String(rest.split(separator: "\n").first ?? "").prefix(80))
+                        cmd = String(String(rest.split(separator: "\n").first ?? "")
+                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
                     default:
-                        cmd = String(String(rest.split(separator: "\n").first ?? "").prefix(80))
+                        cmd = String(String(rest.split(separator: "\n").first ?? "")
+                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
                     }
                 }
             }
@@ -156,17 +165,31 @@ enum ToolClassifier {
             let q = infoReq ?? query
             let source = clean.contains("git") || clean.contains("commit") ? "Commit History" :
                           clean.contains("conversation") ? "Conversations" : "Codebase"
-            let subject = q != nil ? "\(source) · \(String(q!.prefix(60)))" : source
+            let subject = q != nil
+                ? "\(source) · \(String(q!.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength)))"
+                : source
             return ToolDisplay(icon: "🧠", verb: "Context Engine", subject: subject, path: nil)
         }
 
         // Search
         if clean.contains("search") || clean.contains("grep") || clean.contains("glob") || clean.contains("find") {
             if clean.contains("web") {
-                return ToolDisplay(icon: "🌐", verb: "Search web", subject: query.map { String($0.prefix(60)) }, path: nil)
+                return ToolDisplay(
+                    icon: "🌐",
+                    verb: "Search web",
+                    subject: query.map {
+                        String($0.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
+                    },
+                    path: nil)
             }
             let q = query ?? infoReq ?? (input["pattern"]?.value as? String)
-            return ToolDisplay(icon: "🔍", verb: "Search", subject: q.map { String($0.prefix(60)) }, path: nil)
+            return ToolDisplay(
+                icon: "🔍",
+                verb: "Search",
+                subject: q.map {
+                    String($0.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
+                },
+                path: nil)
         }
 
         // GitHub API
@@ -174,19 +197,31 @@ enum ToolClassifier {
             let method = input["method"]?.value as? String ?? "GET"
             let apiPath = pathVal
             let summary = input["summary"]?.value as? String
-            let subject = apiPath != nil ? "\(method) \(String(apiPath!.prefix(50)))" : summary.map { String($0.prefix(60)) }
+            let subject = apiPath != nil
+                ? "\(method) \(String(apiPath!.prefix(Constants.Conversation.ToolClassifier.compactSubjectMaximumLength)))"
+                : summary.map {
+                    String($0.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
+                }
             return ToolDisplay(icon: "🐙", verb: "GitHub", subject: subject, path: nil)
         }
 
         // Linear
         if clean.contains("linear") {
             let summary = input["summary"]?.value as? String
-            return ToolDisplay(icon: "🌐", verb: "Linear", subject: summary.map { String($0.prefix(60)) }, path: nil)
+            return ToolDisplay(
+                icon: "🌐",
+                verb: "Linear",
+                subject: summary.map {
+                    String($0.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
+                },
+                path: nil)
         }
 
         // Web fetch
         if clean.contains("web-fetch") || clean.contains("web_fetch") || clean == "fetch" {
-            let subject = url.map { String($0.prefix(60)) }
+            let subject = url.map {
+                String($0.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
+            }
             return ToolDisplay(icon: "🌐", verb: "Fetch", subject: subject, path: nil)
         }
 
@@ -199,11 +234,21 @@ enum ToolClassifier {
         if clean.contains("agent") || clean.contains("delegate") || (clean.contains("report") && clean.contains("parent")) {
             if clean.contains("create") {
                 let agentName = input["name"]?.value as? String
-                return ToolDisplay(icon: "🤖", verb: "Create agent", subject: agentName.map { String($0.prefix(30)) }, path: nil)
+                return ToolDisplay(
+                    icon: "🤖",
+                    verb: "Create agent",
+                    subject: agentName.map {
+                        String($0.prefix(Constants.Conversation.ToolClassifier.agentNameMaximumLength))
+                    },
+                    path: nil)
             }
             if clean.contains("delegate") {
                 let taskText = input["taskText"]?.value as? String ?? input["taskDescription"]?.value as? String ?? "task"
-                return ToolDisplay(icon: "🤖", verb: "Delegate", subject: String(taskText.prefix(40)), path: nil)
+                return ToolDisplay(
+                    icon: "🤖",
+                    verb: "Delegate",
+                    subject: String(taskText.prefix(Constants.Conversation.ToolClassifier.taskMaximumLength)),
+                    path: nil)
             }
             if clean.contains("message") || clean.contains("send") {
                 return ToolDisplay(icon: "🤖", verb: "Message agent", subject: nil, path: nil)
@@ -219,7 +264,9 @@ enum ToolClassifier {
         // Note/workspace operations
         if clean.contains("note") || clean.contains("workspace") || clean.contains("timeline") {
             let title = input["title"]?.value as? String ?? input["noteId"]?.value as? String
-            let displayTitle = title == "spec" ? "Spec" : title.map { String($0.prefix(25)) }
+            let displayTitle = title == "spec"
+                ? "Spec"
+                : title.map { String($0.prefix(Constants.Conversation.ToolClassifier.noteTitleMaximumLength)) }
             if clean.contains("create") && clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Create note", subject: displayTitle, path: nil) }
             if clean.contains("read") && clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Read note", subject: displayTitle, path: nil) }
             if clean.contains("edit") && clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Edit note", subject: displayTitle, path: nil) }
@@ -237,7 +284,13 @@ enum ToolClassifier {
             if clean.contains("timeline") { return ToolDisplay(icon: "📁", verb: "Timeline", subject: nil, path: nil) }
             if clean.contains("name") && clean.contains("agent") {
                 let agentName = input["name"]?.value as? String
-                return ToolDisplay(icon: "📁", verb: "Rename agent", subject: agentName.map { String($0.prefix(30)) }, path: nil)
+                return ToolDisplay(
+                    icon: "📁",
+                    verb: "Rename agent",
+                    subject: agentName.map {
+                        String($0.prefix(Constants.Conversation.ToolClassifier.agentNameMaximumLength))
+                    },
+                    path: nil)
             }
             return ToolDisplay(icon: "📁", verb: "Workspace", subject: displayTitle, path: nil)
         }
@@ -254,7 +307,15 @@ enum ToolClassifier {
         // Git operations
         if clean.contains("git") || clean.contains("commit") || clean.contains("stage") || clean.contains("merge") {
             if clean.contains("status") { return ToolDisplay(icon: "📦", verb: "Git status", subject: nil, path: nil) }
-            if clean.contains("commit") { return ToolDisplay(icon: "📦", verb: "Commit", subject: (input["message"]?.value as? String).map { String($0.prefix(40)) }, path: nil) }
+            if clean.contains("commit") {
+                return ToolDisplay(
+                    icon: "📦",
+                    verb: "Commit",
+                    subject: (input["message"]?.value as? String).map {
+                        String($0.prefix(Constants.Conversation.ToolClassifier.commitMessageMaximumLength))
+                    },
+                    path: nil)
+            }
             if clean.contains("stage") { return ToolDisplay(icon: "📦", verb: "Stage", subject: nil, path: nil) }
             return ToolDisplay(icon: "📦", verb: "Git", subject: nil, path: nil)
         }
@@ -269,11 +330,17 @@ enum ToolClassifier {
                 : lower.contains("note") ? "📝"
                 : lower.contains("workspace") ? "📁"
                 : "🔧"
-            return ToolDisplay(icon: icon, verb: String(title.prefix(120)), subject: nil, path: nil)
+            return ToolDisplay(
+                icon: icon,
+                verb: String(title.prefix(Constants.Conversation.ToolClassifier.fallbackTitleMaximumLength)),
+                subject: nil,
+                path: nil)
         }
 
         // Generic fallback: use tool name as verb, first meaningful input as subject
-        let fallbackSubject = (pathVal ?? query ?? infoReq ?? command ?? url).map { String($0.prefix(50)) }
+        let fallbackSubject = (pathVal ?? query ?? infoReq ?? command ?? url).map {
+            String($0.prefix(Constants.Conversation.ToolClassifier.compactSubjectMaximumLength))
+        }
         let cleanedName = cleanToolName(name)
             .replacingOccurrences(of: "_", with: " ")
             .replacingOccurrences(of: "-", with: " ")
@@ -333,7 +400,8 @@ enum ToolClassifier {
         if trimmed.range(of: #"^[A-Za-z0-9._-]+:\s"#, options: .regularExpression) != nil {
             return true
         }
-        return trimmed.split(whereSeparator: { $0.isWhitespace }).count >= 3
+        return trimmed.split(whereSeparator: { $0.isWhitespace }).count
+            >= Constants.Conversation.ToolClassifier.proseMinimumWordCount
     }
 
     static func filename(_ path: String) -> String {

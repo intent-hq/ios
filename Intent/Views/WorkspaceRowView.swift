@@ -23,7 +23,7 @@ struct WorkspaceRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             ZStack(alignment: .topTrailing) {
                 statusIcon
@@ -31,8 +31,10 @@ struct WorkspaceRowView: View {
                 if hasActiveAgents {
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 5, height: 5)
-                        .offset(x: 2, y: -2)
+                        .frame(width: Constants.WorkspaceRow.statusDotSize,
+                               height: Constants.WorkspaceRow.statusDotSize)
+                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
+                                y: -Constants.WorkspaceRow.statusDotOffset)
                 }
 
                 // Blue dot: server-owned unread attention flag, overlaying the
@@ -40,8 +42,12 @@ struct WorkspaceRowView: View {
                 if hasUnreadAttention(workspace) {
                     Circle()
                         .fill(workspaceUnreadColor)
-                        .frame(width: 5, height: 5)
-                        .offset(x: 2, y: hasActiveAgents ? 5 : -2)
+                        .frame(width: Constants.WorkspaceRow.statusDotSize,
+                               height: Constants.WorkspaceRow.statusDotSize)
+                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
+                                y: hasActiveAgents
+                                    ? Constants.WorkspaceRow.unreadDotStackOffset
+                                    : -Constants.WorkspaceRow.statusDotOffset)
                 }
 
                 // Grey static dot: orthogonal waiting flag (protocol 6.17).
@@ -49,12 +55,14 @@ struct WorkspaceRowView: View {
                 if showsWaitingDot(workspace) {
                     Circle()
                         .fill(Color.gray)
-                        .frame(width: 5, height: 5)
-                        .offset(x: 2, y: -2)
+                        .frame(width: Constants.WorkspaceRow.statusDotSize,
+                               height: Constants.WorkspaceRow.statusDotSize)
+                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
+                                y: -Constants.WorkspaceRow.statusDotOffset)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
                 if workspace.title.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text("<Untitled>")
                         .font(.body.weight(.medium))
@@ -67,7 +75,7 @@ struct WorkspaceRowView: View {
                         .lineLimit(1)
                 }
 
-                HStack(spacing: 8) {
+                HStack(spacing: Constants.WorkspaceRow.metadataSpacing) {
                     if showRepo, let repo = workspace.repositoryName {
                         Text(repo)
                             .font(.caption)
@@ -78,11 +86,11 @@ struct WorkspaceRowView: View {
                     if let pill = prIndicator.pill {
                         let pillColor = Self.pillColor(for: pill.status)
                         Text("PR\(pill.number.map { " #\($0)" } ?? "")")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: Constants.WorkspaceRow.pillFontSize, weight: .medium))
                             .foregroundStyle(pillColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(pillColor.opacity(0.12))
+                            .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+                            .background(pillColor.opacity(Constants.WorkspaceRow.pillBackgroundOpacity))
                             .clipShape(Capsule())
                     }
 
@@ -90,11 +98,12 @@ struct WorkspaceRowView: View {
                     // primary pill (same capsule styling, muted).
                     if prIndicator.otherMonitorCount > 0 {
                         Text("+\(prIndicator.otherMonitorCount)")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: Constants.WorkspaceRow.pillFontSize, weight: .medium))
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Theme.mutedForeground(for: colorScheme).opacity(0.12))
+                            .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+                            .background(Theme.mutedForeground(for: colorScheme).opacity(
+                                Constants.WorkspaceRow.pillBackgroundOpacity))
                             .clipShape(Capsule())
                     }
                 }
@@ -109,8 +118,8 @@ struct WorkspaceRowView: View {
             }
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 6)
-        .padding(.horizontal, 4)
+        .padding(.vertical, Constants.WorkspaceRow.verticalPadding)
+        .padding(.horizontal, Constants.WorkspaceRow.horizontalPadding)
         .task {
             await monitorsSource.seed(workspaceId: workspace.id)
         }
@@ -198,7 +207,7 @@ struct WorkspaceRowView: View {
 
     @ViewBuilder
     private var statusIcon: some View {
-        let size: CGFloat = 12
+        let size = Constants.WorkspaceRow.statusIconSize
         let color = displayStatus.color
 
         switch displayStatus {
@@ -208,7 +217,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "xmark")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -219,7 +228,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "minus")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -230,7 +239,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "exclamationmark")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -238,20 +247,21 @@ struct WorkspaceRowView: View {
         case .notStarted:
             // Empty outline circle
             Circle()
-                .strokeBorder(Color.gray.opacity(0.4), lineWidth: 1.5)
+                .strokeBorder(Color.gray.opacity(Constants.WorkspaceRow.inactiveStatusOpacity),
+                              lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
                 .frame(width: size, height: size)
 
         case .idle:
             // Empty outline circle in the idle muted color
             Circle()
-                .strokeBorder(color, lineWidth: 1.5)
+                .strokeBorder(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
                 .frame(width: size, height: size)
 
         case .inProgress:
             // Half-filled circle (right half)
             ZStack {
                 Circle()
-                    .stroke(color, lineWidth: 1.5)
+                    .stroke(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
                 Circle()
                     .fill(color)
                     .clipShape(HalfCircle())
@@ -264,7 +274,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "checkmark")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -275,7 +285,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "arrow.triangle.pull")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -286,7 +296,7 @@ struct WorkspaceRowView: View {
                 Circle()
                     .fill(color)
                 Image(systemName: "arrow.triangle.merge")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: size, height: size)
@@ -295,9 +305,9 @@ struct WorkspaceRowView: View {
             // Neutral question mark for a wire value this build doesn't know
             ZStack {
                 Circle()
-                    .strokeBorder(color, lineWidth: 1.5)
+                    .strokeBorder(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
                 Image(systemName: "questionmark")
-                    .font(.system(size: size * 0.5, weight: .bold))
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(color)
             }
             .frame(width: size, height: size)
@@ -336,10 +346,16 @@ struct HalfCircle: Shape {
 extension Date {
     var relativeFormatted: String {
         let interval = Date().timeIntervalSince(self)
-        if interval < 60 { return "now" }
-        if interval < 3600 { return "\(Int(interval / 60))m" }
-        if interval < 86400 { return "\(Int(interval / 3600))h" }
-        if interval < 604800 { return "\(Int(interval / 86400))d" }
+        if interval < Constants.RelativeTime.minute { return "now" }
+        if interval < Constants.RelativeTime.hour {
+            return "\(Int(interval / Constants.RelativeTime.minute))m"
+        }
+        if interval < Constants.RelativeTime.day {
+            return "\(Int(interval / Constants.RelativeTime.hour))h"
+        }
+        if interval < Constants.RelativeTime.week {
+            return "\(Int(interval / Constants.RelativeTime.day))d"
+        }
         let formatter = DateFormatter()
         formatter.dateStyle = .short
         return formatter.string(from: self)

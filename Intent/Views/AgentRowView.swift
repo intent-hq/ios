@@ -16,26 +16,30 @@ struct AgentRowView: View {
     var indented: Bool = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Constants.AgentRow.rowSpacing) {
             // Avatar with active indicator
             ZStack(alignment: .topTrailing) {
-                AgentAvatarView(agentId: agent.id, size: 24, specialist: agent.specialist, isActive: agent.isActive)
+                AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.avatarSize,
+                                specialist: agent.specialist, isActive: agent.isActive)
 
                 if agent.isActive {
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 6, height: 6)
-                        .offset(x: 2, y: -2)
+                        .frame(width: Constants.AgentRow.activeDotSize,
+                               height: Constants.AgentRow.activeDotSize)
+                        .offset(x: Constants.AgentRow.activeDotOffset,
+                                y: -Constants.AgentRow.activeDotOffset)
                 } else if let attention = agent.pendingAttentionRequest {
                     Image(systemName: attention.kind.systemImage)
-                        .font(.system(size: 9))
+                        .font(.system(size: Constants.AgentRow.attentionIconSize))
                         .foregroundStyle(attention.kind.color)
-                        .offset(x: 3, y: -3)
+                        .offset(x: Constants.AgentRow.attentionIconOffset,
+                                y: -Constants.AgentRow.attentionIconOffset)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Constants.AgentRow.textSpacing) {
+                HStack(spacing: Constants.AgentRow.titleSpacing) {
                     Text(agent.name)
                         .font(.body)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -43,12 +47,13 @@ struct AgentRowView: View {
 
                     if agent.isBackground {
                         Text("BG")
-                            .font(.system(size: 10, weight: .bold))
+                            .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                            .clipShape(.rect(cornerRadius: 4))
+                            .padding(.horizontal, Constants.AgentRow.badgeHorizontalPadding)
+                            .padding(.vertical, Constants.AgentRow.badgeVerticalPadding)
+                            .background(Theme.mutedForeground(for: colorScheme).opacity(
+                                Constants.AgentRow.badgeBackgroundOpacity))
+                            .clipShape(.rect(cornerRadius: Constants.AgentRow.badgeCornerRadius))
                     }
 
                     Spacer()
@@ -73,8 +78,8 @@ struct AgentRowView: View {
                 }
             }
         }
-        .padding(.vertical, 6)
-        .padding(.leading, indented ? 36 : 0)
+        .padding(.vertical, Constants.AgentRow.verticalPadding)
+        .padding(.leading, indented ? Constants.AgentRow.nestedLeadingPadding : 0)
     }
 
     private func relativeDate(from isoString: String) -> String {
@@ -99,14 +104,15 @@ struct DelegatedAgentsRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 4) {
+            HStack(spacing: Constants.AgentRow.headerSpacing) {
                 // Overlapping avatars (up to 5)
-                HStack(spacing: -6) {
-                    ForEach(Array(agents.prefix(5))) { agent in
-                        AgentAvatarView(agentId: agent.id, size: 16, specialist: agent.specialist)
+                HStack(spacing: Constants.AgentRow.avatarOverlap) {
+                    ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
+                        AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
+                                        specialist: agent.specialist)
                     }
                 }
-                .padding(.leading, 40)
+                .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
 
                 Text("\(agents.count) delegated")
                     .font(.caption)
@@ -118,7 +124,7 @@ struct DelegatedAgentsRow: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, Constants.AgentRow.delegatedVerticalPadding)
         }
         .buttonStyle(.plain)
     }
@@ -132,10 +138,11 @@ struct BackgroundAgentsHeader: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: 4) {
-                HStack(spacing: -6) {
-                    ForEach(Array(agents.prefix(5))) { agent in
-                        AgentAvatarView(agentId: agent.id, size: 16, specialist: agent.specialist)
+            HStack(spacing: Constants.AgentRow.headerSpacing) {
+                HStack(spacing: Constants.AgentRow.avatarOverlap) {
+                    ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
+                        AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
+                                        specialist: agent.specialist)
                     }
                 }
 
@@ -149,7 +156,7 @@ struct BackgroundAgentsHeader: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, Constants.AgentRow.backgroundVerticalPadding)
         }
         .buttonStyle(.plain)
     }

@@ -16,25 +16,27 @@ struct SystemNoticeBannerView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Constants.Conversation.NoticeCard.contentSpacing) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.subheadline)
                 .foregroundStyle(.orange)
-                .padding(.top, 1)
+                .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)
 
             Text(displayText)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.orange)
                 .textSelection(.enabled)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Constants.Conversation.NoticeCard.horizontalPadding)
+        .padding(.vertical, Constants.Conversation.NoticeCard.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color.orange.opacity(Constants.Conversation.NoticeCard.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Color.orange.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius)
+                .strokeBorder(
+                    Color.orange.opacity(Constants.Conversation.NoticeCard.borderOpacity),
+                    lineWidth: Constants.Conversation.NoticeCard.borderWidth)
         )
     }
 }

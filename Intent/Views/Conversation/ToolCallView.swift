@@ -45,7 +45,9 @@ struct ToolCallView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Compact single-line header
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                withAnimation(.easeInOut(duration: Constants.Conversation.ToolCall.expansionAnimationDuration)) {
+                    isExpanded.toggle()
+                }
                 // Expanding a slim-truncated row triggers the on-demand full
                 // fetch (no-op for under-budget rows).
                 if isExpanded && isTruncated {
@@ -137,12 +139,12 @@ struct ToolCallView: View {
                         : Theme.mutedForeground(for: colorScheme))
                 if let output = result.output {
                     ScrollView {
-                        Text(String(describing: output.value).prefix(2000))
+                        Text(String(describing: output.value).prefix(Constants.Conversation.ToolCall.outputCharacterLimit))
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxHeight: 200)
+                    .frame(maxHeight: Constants.Conversation.ToolCall.outputMaximumHeight)
                 }
             }
         }

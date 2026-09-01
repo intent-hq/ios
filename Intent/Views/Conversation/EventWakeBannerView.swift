@@ -11,9 +11,9 @@ struct EventWakeBannerView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Constants.Conversation.DividerNotice.outerSpacing) {
             line
-            HStack(spacing: 6) {
+            HStack(spacing: Constants.Conversation.DividerNotice.labelSpacing) {
                 Image(systemName: "bell.fill")
                     .font(.caption2)
                 Text(label)
@@ -25,7 +25,7 @@ struct EventWakeBannerView: View {
             .layoutPriority(1)
             line
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, Constants.Conversation.DividerNotice.verticalPadding)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Agent woken by events: \(label)")
@@ -35,7 +35,7 @@ struct EventWakeBannerView: View {
     /// per-event summary (count-only summaries already carry the number).
     private var label: String {
         let summary = attribution.summaryLabel
-        if attribution.eventCount > 1, attribution.eventCount < 5 {
+        if Constants.Conversation.EventWake.countLabelRange.contains(attribution.eventCount) {
             return "\(summary) · \(attribution.eventCount) events"
         }
         return summary
@@ -44,7 +44,7 @@ struct EventWakeBannerView: View {
     private var line: some View {
         Rectangle()
             .fill(Theme.border(for: colorScheme))
-            .frame(height: 1)
+            .frame(height: Constants.Conversation.DividerNotice.lineHeight)
             .frame(maxWidth: .infinity)
     }
 }

@@ -14,7 +14,7 @@ struct RepoOwnerAvatarView: View {
     /// URL for a GitHub owner avatar, or nil when the owner is missing/empty.
     static func avatarURL(for owner: String?) -> URL? {
         guard let owner, !owner.isEmpty else { return nil }
-        return URL(string: "https://github.com/\(owner).png?size=64")
+        return URL(string: "https://github.com/\(owner).png?size=\(Constants.RepoOwnerAvatar.requestPixelSize)")
     }
 
     var body: some View {
@@ -38,13 +38,14 @@ struct RepoOwnerAvatarView: View {
         .clipShape(Circle())
         .overlay(
             Circle()
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                .stroke(Color.white.opacity(Constants.RepoOwnerAvatar.borderOpacity),
+                        lineWidth: Constants.RepoOwnerAvatar.borderWidth)
         )
     }
 
     private var fallbackIcon: some View {
         Image(systemName: fallbackSymbol)
-            .font(.system(size: size * 0.5))
+            .font(.system(size: size * Constants.RepoOwnerAvatar.fallbackScale))
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
     }
 }

@@ -110,7 +110,7 @@ struct Note: Identifiable, Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let firstLine = stripped.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
         guard let line = firstLine else { return nil }
-        return String(line.prefix(120))
+        return String(line.prefix(Constants.Note.previewCharacterLimit))
     }
 
     static func parseNote(_ dict: [String: Any]) -> Note? {

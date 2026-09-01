@@ -58,7 +58,7 @@ struct ResponseGroupView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Header button
             Button {
-                withAnimation(.easeInOut(duration: 0.25)) {
+                withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -94,12 +94,12 @@ struct ResponseGroupView: View {
             // Content with left border
             if isExpanded {
                 groupChildrenView
-                    .padding(.leading, 18)
+                    .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
                     .overlay(alignment: .leading) {
                         Rectangle()
                             .fill(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                            .frame(width: 1)
-                            .padding(.leading, 8)
+                            .frame(width: Constants.Conversation.ResponseGroup.railWidth)
+                            .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
@@ -110,7 +110,7 @@ struct ResponseGroupView: View {
                             .id("group-content-bottom")
                     }
                     .scrollIndicators(.hidden)
-                    .frame(maxHeight: 100)
+                    .frame(maxHeight: Constants.Conversation.ResponseGroup.collapsedMaximumHeight)
                     .mask(
                         VStack(spacing: 0) {
                             LinearGradient(
@@ -118,7 +118,7 @@ struct ResponseGroupView: View {
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
-                            .frame(height: 24)
+                            .frame(height: Constants.Conversation.ResponseGroup.collapsedFadeHeight)
                             Color.black
                         }
                     )
@@ -126,12 +126,12 @@ struct ResponseGroupView: View {
                         proxy.scrollTo("group-content-bottom", anchor: .bottom)
                     }
                 }
-                .padding(.leading, 18)
+                .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
                 .overlay(alignment: .leading) {
                     Rectangle()
                         .fill(Theme.mutedForeground(for: colorScheme).opacity(0.15))
-                        .frame(width: 1)
-                        .padding(.leading, 8)
+                        .frame(width: Constants.Conversation.ResponseGroup.railWidth)
+                        .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
                 }
                 .transition(.opacity)
             }

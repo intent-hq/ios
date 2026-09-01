@@ -188,14 +188,17 @@ struct ToastInfo: Equatable {
                            agentName: String, workspaceName: String) {
         dismissTask?.cancel()
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+        withAnimation(.spring(
+            response: Constants.Notification.presentationSpringResponse,
+            dampingFraction: Constants.Notification.presentationSpringDamping
+        )) {
             currentToast = ToastInfo(
                 agentId: agentId, workspaceId: workspaceId,
                 agentName: agentName, workspaceName: workspaceName)
         }
 
         dismissTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(4))
+            try? await Task.sleep(for: Constants.Notification.displayDuration)
             guard !Task.isCancelled else { return }
             dismissToast()
         }
@@ -203,7 +206,7 @@ struct ToastInfo: Equatable {
 
     func dismissToast() {
         dismissTask?.cancel()
-        withAnimation(.easeOut(duration: 0.25)) {
+        withAnimation(.easeOut(duration: Constants.Notification.dismissalAnimationDuration)) {
             currentToast = nil
         }
     }

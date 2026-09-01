@@ -25,9 +25,15 @@ struct ConversationColumnView: View {
             questionWizardCollapsed = false
         }
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
-        .animation(.easeInOut(duration: 0.25), value: viewModel.store.isWaitingForAgents)
-        .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentHooks.map(\.hookId))
-        .animation(.easeInOut(duration: 0.25), value: viewModel.activeAgentMonitors.map(\.monitorId))
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
+            value: viewModel.store.isWaitingForAgents)
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
+            value: viewModel.activeAgentHooks.map(\.hookId))
+        .animation(
+            .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
+            value: viewModel.activeAgentMonitors.map(\.monitorId))
     }
 
     @ViewBuilder

@@ -34,11 +34,11 @@ struct AttentionNoticeView: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: Constants.Conversation.NoticeCard.contentSpacing) {
             Image(systemName: iconName)
                 .font(.subheadline)
                 .foregroundStyle(tint)
-                .padding(.top, 1)
+                .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -53,14 +53,16 @@ struct AttentionNoticeView: View {
                 }
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Constants.Conversation.NoticeCard.horizontalPadding)
+        .padding(.vertical, Constants.Conversation.NoticeCard.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(tint.opacity(Constants.Conversation.NoticeCard.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(tint.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius)
+                .strokeBorder(
+                    tint.opacity(Constants.Conversation.NoticeCard.borderOpacity),
+                    lineWidth: Constants.Conversation.NoticeCard.borderWidth)
         )
     }
 }

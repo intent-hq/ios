@@ -105,9 +105,9 @@ struct GitHubRepoPickerView: View {
         Button {
             selectedRepo = repo
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Constants.GitHubRepoPicker.rowSpacing) {
                 RepoOwnerAvatarView(owner: repo.owner)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Constants.GitHubRepoPicker.rowTextSpacing) {
                     Text(repo.name)
                         .font(.headline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -123,13 +123,13 @@ struct GitHubRepoPickerView: View {
                         .fontWeight(.semibold)
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, Constants.GitHubRepoPicker.rowVerticalPadding)
         }
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Constants.GitHubRepoPicker.emptyStateSpacing) {
             Image(systemName: "folder.badge.questionmark")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -143,7 +143,7 @@ struct GitHubRepoPickerView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, Constants.GitHubRepoPicker.emptyStateHorizontalPadding)
         }
     }
 
@@ -151,7 +151,7 @@ struct GitHubRepoPickerView: View {
     /// runs on the desktop seat and is not available on iOS (same pattern as
     /// the "no providers signed in" placeholder).
     private var notConnectedPlaceholder: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Constants.GitHubRepoPicker.emptyStateSpacing) {
             Image(systemName: "person.crop.circle.badge.xmark")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -162,7 +162,7 @@ struct GitHubRepoPickerView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, Constants.GitHubRepoPicker.emptyStateHorizontalPadding)
         }
     }
 
@@ -180,7 +180,7 @@ struct GitHubRepoPickerView: View {
             return
         }
         searchTask = Task {
-            try? await Task.sleep(for: .milliseconds(300))
+            try? await Task.sleep(for: Constants.GitHubRepoPicker.searchDebounce)
             guard !Task.isCancelled else { return }
             guard let results = await store.searchRepos(query: query) else { return }
             // Publish results + the query they answer together, only if this

@@ -12,13 +12,13 @@ struct PairingView: View {
             ZStack {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
-                VStack(spacing: 32) {
+                VStack(spacing: Constants.Pairing.contentSpacing) {
                     Spacer()
 
                     // Header
-                    VStack(spacing: 8) {
+                    VStack(spacing: Constants.Pairing.headerSpacing) {
                         IntentLogo()
-                            .frame(width: 40, height: 40)
+                            .frame(width: Constants.Pairing.logoSize, height: Constants.Pairing.logoSize)
                             .foregroundStyle(Theme.primary(for: colorScheme))
 
                         Text("Connect to Intent")
@@ -29,11 +29,11 @@ struct PairingView: View {
                             .font(.subheadline)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
+                            .padding(.horizontal, Constants.Pairing.descriptionHorizontalPadding)
                     }
 
                     // Options
-                    VStack(spacing: 12) {
+                    VStack(spacing: Constants.Pairing.optionsSpacing) {
                         PairingOptionButton(
                             icon: "camera.fill",
                             title: "Scan QR Code",
@@ -64,7 +64,7 @@ struct PairingView: View {
                         }
 
                     }
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, Constants.Pairing.optionsHorizontalPadding)
 
                     Spacer()
                     Spacer()
@@ -92,13 +92,13 @@ struct PairingOptionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: Constants.Pairing.optionSpacing) {
                 Image(systemName: icon)
                     .font(.title3)
                     .foregroundStyle(Theme.primary(for: colorScheme))
-                    .frame(width: 32)
+                    .frame(width: Constants.Pairing.optionIconWidth)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Constants.Pairing.optionTextSpacing) {
                     Text(title)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -114,12 +114,12 @@ struct PairingOptionButton: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
-            .padding(16)
+            .padding(Constants.Pairing.optionPadding)
             .background(Theme.card(for: colorScheme))
-            .clipShape(.rect(cornerRadius: 12))
+            .clipShape(.rect(cornerRadius: Constants.Pairing.optionCornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+                RoundedRectangle(cornerRadius: Constants.Pairing.optionCornerRadius)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Pairing.optionBorderWidth)
             )
         }
     }

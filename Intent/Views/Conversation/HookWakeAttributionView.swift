@@ -9,7 +9,7 @@ struct HookWakeAttributionView: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
             Image(systemName: "bolt.fill")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

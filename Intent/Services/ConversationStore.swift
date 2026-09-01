@@ -591,7 +591,10 @@ import SwiftUI
             role: .user,
             contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
         )
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+        withAnimation(.spring(
+            response: Constants.Conversation.Sending.messageAppendSpringResponse,
+            dampingFraction: Constants.Conversation.Sending.messageAppendSpringDamping
+        )) {
             messages.append(userMessage)
         }
     }
@@ -624,12 +627,17 @@ import SwiftUI
             role: .user,
             contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
         )
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+        withAnimation(.spring(
+            response: Constants.Conversation.Sending.messageAppendSpringResponse,
+            dampingFraction: Constants.Conversation.Sending.messageAppendSpringDamping
+        )) {
             messages.append(userMessage)
         }
 
         // Optimistically show thinking indicator immediately
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(
+            duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
+        )) {
             isStreaming = true
         }
 
@@ -662,7 +670,9 @@ import SwiftUI
             isStreaming = false
             // Message was queued — remove the optimistic message from conversation
             // since it will appear in the queued messages panel instead
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(.easeOut(
+                duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
+            )) {
                 messages.removeAll { $0.id == userMessage.id }
             }
         }
@@ -677,7 +687,9 @@ import SwiftUI
     /// daemon.
     func rollbackFailedSend() {
         guard let failed = lastFailedSend else { return }
-        withAnimation(.easeOut(duration: 0.2)) {
+        withAnimation(.easeOut(
+            duration: Constants.Conversation.Sending.stateTransitionAnimationDuration
+        )) {
             messages.removeAll { $0.id == failed.messageId }
             isStreaming = false
         }

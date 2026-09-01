@@ -21,7 +21,7 @@ struct NoteContentView: View {
 
     var body: some View {
         let segments = NoteContentSegmenter.segments(for: content)
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Constants.Notes.Content.segmentSpacing) {
             ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .markdown(let text):
@@ -49,7 +49,8 @@ struct NoteContentView: View {
 
 /// Indent for nested checkboxes: ~6pt per leading whitespace column, capped.
 private func indentPadding(_ columns: Int) -> CGFloat {
-    CGFloat(min(columns, 12)) * 6
+    CGFloat(min(columns, Constants.Notes.Content.maximumIndentColumns))
+        * Constants.Notes.Content.indentWidthPerColumn
 }
 
 /// A plain checkbox line: tappable status icon cycling
@@ -67,12 +68,12 @@ private struct PlainTaskRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: Constants.Notes.Content.taskRowSpacing) {
             Button {
                 onSetStatus(nextStatus)
             } label: {
-                TaskStatusIconView(status: line.markerStatus, size: 18)
-                    .padding(.top, 2)
+                TaskStatusIconView(status: line.markerStatus, size: Constants.Notes.Content.taskIconSize)
+                    .padding(.top, Constants.Notes.Content.taskIconTopPadding)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Status for \(line.text): \(line.markerStatus.label)")
@@ -115,7 +116,7 @@ private struct LinkedTaskCardRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
             Menu {
                 ForEach(Self.statusOptions, id: \.wire) { option in
                     Button {
@@ -125,7 +126,7 @@ private struct LinkedTaskCardRow: View {
                     }
                 }
             } label: {
-                TaskStatusIconView(status: status, size: 18)
+                TaskStatusIconView(status: status, size: Constants.Notes.Content.taskIconSize)
             }
             .accessibilityLabel("Status for \(title): \(status.label)")
             Text(title)
@@ -137,13 +138,14 @@ private struct LinkedTaskCardRow: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Constants.Notes.Content.linkedTaskHorizontalPadding)
+        .padding(.vertical, Constants.Notes.Content.linkedTaskVerticalPadding)
         .background(Theme.card(for: colorScheme))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Content.linkedTaskCornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+            RoundedRectangle(cornerRadius: Constants.Notes.Content.linkedTaskCornerRadius)
+                .stroke(Theme.border(for: colorScheme),
+                        lineWidth: Constants.Notes.Content.linkedTaskBorderWidth)
         )
         .contentShape(Rectangle())
         .onTapGesture(perform: onOpen)

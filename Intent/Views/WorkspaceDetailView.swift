@@ -31,12 +31,12 @@ struct WorkspaceDetailView: View {
                         Text(title)
                             .font(.title2.bold())
                             .foregroundStyle(Theme.foreground(for: colorScheme))
-                            .lineLimit(2)
+                            .lineLimit(Constants.WorkspaceDetail.titleLineLimit)
                     } else {
                         Text("<Untitled>")
                             .font(.title2.bold())
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .lineLimit(2)
+                            .lineLimit(Constants.WorkspaceDetail.titleLineLimit)
                     }
                     Spacer()
                     Menu {
@@ -59,9 +59,10 @@ struct WorkspaceDetailView: View {
                     }
                     .accessibilityLabel("Workspace actions")
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, horizontalSizeClass == .compact ? 0 : 4)
-                .padding(.bottom, 4)
+                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                .padding(.top, horizontalSizeClass == .compact
+                    ? 0 : Constants.WorkspaceDetail.regularTitleTopPadding)
+                .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
 
                 // Repo name
                 if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
@@ -69,8 +70,8 @@ struct WorkspaceDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 4)
+                        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                        .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
                 }
 
                 // Task progress bar
@@ -79,31 +80,34 @@ struct WorkspaceDetailView: View {
                     let inProgress = workspace?.taskStatsInProgress ?? 0
                     let remaining = total - completed - inProgress
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading,
+                           spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
                         GeometryReader { geometry in
-                            HStack(spacing: 1) {
+                            HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
                                 if completed > 0 {
-                                    RoundedRectangle(cornerRadius: 2)
+                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                         .fill(Color.green)
                                         .frame(width: geometry.size.width * CGFloat(completed) / CGFloat(total))
                                 }
                                 if inProgress > 0 {
-                                    RoundedRectangle(cornerRadius: 2)
+                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                         .fill(Color.blue)
                                         .frame(width: geometry.size.width * CGFloat(inProgress) / CGFloat(total))
                                 }
                                 if remaining > 0 {
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(Theme.mutedForeground(for: colorScheme).opacity(0.2))
+                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                        .fill(Theme.mutedForeground(for: colorScheme).opacity(
+                                            Constants.WorkspaceDetail.remainingProgressOpacity))
                                         .frame(width: geometry.size.width * CGFloat(remaining) / CGFloat(total))
                                 }
                             }
-                            .clipShape(RoundedRectangle(cornerRadius: 2))
+                            .clipShape(RoundedRectangle(
+                                cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
                         }
-                        .frame(height: 4)
+                        .frame(height: Constants.WorkspaceDetail.progressHeight)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                    .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
 
                 // Tab content
@@ -116,7 +120,7 @@ struct WorkspaceDetailView: View {
                         Spacer()
                     } else if viewModel.agents.isEmpty {
                         Spacer()
-                        VStack(spacing: 12) {
+                        VStack(spacing: Constants.WorkspaceDetail.emptyStateSpacing) {
                             Image(systemName: "person.2")
                                 .font(.largeTitle)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -142,8 +146,8 @@ struct WorkspaceDetailView: View {
                     Text("Context").tag(1)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
             }
         }
         .onAppear {
@@ -286,7 +290,7 @@ struct WorkspaceDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
         }
         .refreshable {
             await agentStore.fetchAgents(workspaceId: workspaceId)

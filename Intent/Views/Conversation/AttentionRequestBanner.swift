@@ -28,7 +28,7 @@ struct AttentionRequestBanner: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .lineLimit(6)
+                        .lineLimit(Constants.Conversation.AttentionRequest.reasonLineLimit)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }

@@ -45,7 +45,9 @@ struct QueuedMessagesView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.body)
                         .foregroundStyle(Theme.primary(for: colorScheme))
-                        .frame(width: 36, height: 36)
+                        .frame(
+                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                            height: Constants.Conversation.QueuedMessage.actionButtonSide)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Save queued message edit")
@@ -56,7 +58,9 @@ struct QueuedMessagesView: View {
                     Image(systemName: "xmark.circle")
                         .font(.body)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .frame(width: 36, height: 36)
+                        .frame(
+                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                            height: Constants.Conversation.QueuedMessage.actionButtonSide)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Cancel queued message edit")
@@ -77,7 +81,9 @@ struct QueuedMessagesView: View {
                     Image(systemName: "pencil")
                         .font(.body)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .frame(width: 36, height: 36)
+                        .frame(
+                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                            height: Constants.Conversation.QueuedMessage.actionButtonSide)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Edit queued message")
@@ -96,7 +102,9 @@ struct QueuedMessagesView: View {
             Image(systemName: "paperplane.fill")
                 .font(.body)
                 .foregroundStyle(Theme.primary(for: colorScheme))
-                .frame(width: 36, height: 36)
+                .frame(
+                    width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                    height: Constants.Conversation.QueuedMessage.actionButtonSide)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Send queued message now")
@@ -109,7 +117,9 @@ struct QueuedMessagesView: View {
             Image(systemName: "xmark")
                 .font(.body)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .frame(width: 36, height: 36)
+                .frame(
+                    width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                    height: Constants.Conversation.QueuedMessage.actionButtonSide)
                 .contentShape(Rectangle())
         }
         .accessibilityLabel("Remove queued message")

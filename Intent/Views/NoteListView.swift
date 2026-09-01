@@ -15,7 +15,7 @@ struct NoteListView: View {
             Spacer()
         } else if noteStore.sortedNotes.isEmpty {
             Spacer()
-            VStack(spacing: 12) {
+            VStack(spacing: Constants.Notes.List.emptyStateSpacing) {
                 Image(systemName: "doc.text")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -42,7 +42,7 @@ struct NoteListView: View {
                         .environment(coordinator)
                     }
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, Constants.Notes.List.horizontalPadding)
             }
             .refreshable {
                 await noteStore.fetchNotes(workspaceId: workspaceId)
@@ -85,7 +85,7 @@ struct NoteTreeNodeView: View {
                 isCollapsed: isCollapsed,
                 colorScheme: colorScheme,
                 onToggleCollapse: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.easeInOut(duration: Constants.Notes.List.expansionAnimationDuration)) {
                         if collapsedIds.contains(note.id) {
                             collapsedIds.remove(note.id)
                         } else {
@@ -130,14 +130,12 @@ struct NoteRowView: View {
     var onToggleCollapse: (() -> Void)? = nil
     var onNavigate: (() -> Void)? = nil
 
-    private let indentWidth: CGFloat = 24
-
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Constants.Notes.List.rowSpacing) {
             // Indentation
             if depth > 0 {
                 Spacer()
-                    .frame(width: CGFloat(depth) * indentWidth)
+                    .frame(width: CGFloat(depth) * Constants.Notes.List.indentationWidth)
             }
 
             // Disclosure chevron (or spacer for alignment)
@@ -148,7 +146,8 @@ struct NoteRowView: View {
                     Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .frame(width: 28, height: 28)
+                        .frame(width: Constants.Notes.List.disclosureSize,
+                               height: Constants.Notes.List.disclosureSize)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -156,14 +155,14 @@ struct NoteRowView: View {
             } else if depth > 0 {
                 // Leaf node at non-root level: small spacer for alignment
                 Spacer()
-                    .frame(width: 28)
+                    .frame(width: Constants.Notes.List.disclosureSize)
             }
 
             // Tappable title/content area — navigates to the note
             Button {
                 onNavigate?()
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Constants.Notes.List.contentSpacing) {
                     // Leading icon (fe NotesPanel parity)
                     switch NoteRowIcon.kind(for: note, notes: allNotes) {
                     case .star:
@@ -182,21 +181,22 @@ struct NoteRowView: View {
                     }
 
                     // Title and content
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Constants.Notes.List.titleSpacing) {
                         Text(note.title)
                             .font(depth == 0 ? .body.weight(.medium) : .subheadline.weight(.medium))
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .lineLimit(1)
 
                         if !note.tags.isEmpty {
-                            HStack(spacing: 4) {
-                                ForEach(note.tags.prefix(3), id: \.self) { tag in
+                            HStack(spacing: Constants.Notes.List.contentSpacing) {
+                                ForEach(note.tags.prefix(Constants.Notes.List.maximumTagCount), id: \.self) { tag in
                                     Text(tag)
                                         .font(.caption2)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 2)
+                                        .padding(.horizontal, Constants.Notes.List.tagHorizontalPadding)
+                                        .padding(.vertical, Constants.Notes.List.tagVerticalPadding)
                                         .background(Theme.muted(for: colorScheme))
-                                        .clipShape(RoundedRectangle(cornerRadius: 4))
+                                        .clipShape(RoundedRectangle(
+                                            cornerRadius: Constants.Notes.List.tagCornerRadius))
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 }
                             }
@@ -214,8 +214,10 @@ struct NoteRowView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, depth == 0 ? 10 : 9)
-        .padding(.horizontal, 4)
+        .padding(.vertical, depth == 0
+            ? Constants.Notes.List.rootVerticalPadding
+            : Constants.Notes.List.nestedVerticalPadding)
+        .padding(.horizontal, Constants.Notes.List.horizontalRowPadding)
     }
 
     private var starIcon: some View {

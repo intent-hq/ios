@@ -46,17 +46,17 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
     var color: Color {
         switch self {
-        case .failed: return Color(red: 0.94, green: 0.27, blue: 0.27) // Red #EF4444
-        case .blocked: return Color(red: 0.86, green: 0.15, blue: 0.15) // Dark red #DC2626
-        case .needsAttention: return Color(red: 0.96, green: 0.62, blue: 0.043) // Amber #F59E0B
-        case .idle: return Color.gray.opacity(0.6)
-        case .notStarted: return Color.gray.opacity(0.4)
-        case .inProgress: return Color(red: 0.0, green: 0.74, blue: 1.0) // Cyan #00BCFF
-        case .complete: return Color(red: 0.0, green: 0.74, blue: 0.49) // Green #00BD7D
-        case .prReady: return Color(red: 0.13, green: 0.77, blue: 0.37) // Green #22C55E
-        case .prOpen: return Color(red: 0.43, green: 0.50, blue: 0.96) // Indigo
-        case .prMerged: return Color.purple
-        case .unknown: return Color.gray.opacity(0.5)
+        case .failed: return Constants.Colors.WorkspaceStatus.failed
+        case .blocked: return Constants.Colors.WorkspaceStatus.blocked
+        case .needsAttention: return Constants.Colors.WorkspaceStatus.needsAttention
+        case .idle: return Constants.Colors.WorkspaceStatus.idle
+        case .notStarted: return Constants.Colors.WorkspaceStatus.notStarted
+        case .inProgress: return Constants.Colors.WorkspaceStatus.inProgress
+        case .complete: return Constants.Colors.WorkspaceStatus.complete
+        case .prReady: return Constants.Colors.WorkspaceStatus.prReady
+        case .prOpen: return Constants.Colors.WorkspaceStatus.prOpen
+        case .prMerged: return Constants.Colors.WorkspaceStatus.prMerged
+        case .unknown: return Constants.Colors.WorkspaceStatus.unknown
         }
     }
 
@@ -101,7 +101,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
 /// The unread-dot blue (#3B82F6), shared by the row overlay and any other
 /// unread affordances.
-let workspaceUnreadColor = Color(red: 0.23, green: 0.51, blue: 0.96)
+let workspaceUnreadColor = Constants.Colors.WorkspaceStatus.unread
 
 /// True when the workspace carries the server-owned unread attention flag
 /// (the blue dot). `review_required` and `none` don't count — only `unread`

@@ -119,12 +119,12 @@ struct ConnectionsView: View {
             }
             dismiss()
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Constants.Connections.rowSpacing) {
                 Image(systemName: "desktopcomputer")
                     .font(.title3)
                     .foregroundStyle(Theme.primary(for: colorScheme))
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Constants.Connections.rowTextSpacing) {
                     Text(connection.displayName)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -141,10 +141,11 @@ struct ConnectionsView: View {
                 Spacer()
 
                 if connection.id == activeConnectionId {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Constants.Connections.statusSpacing) {
                         Circle()
                             .fill(.green)
-                            .frame(width: 8, height: 8)
+                            .frame(width: Constants.Connections.statusDotSize,
+                                   height: Constants.Connections.statusDotSize)
                         Text("Connected")
                             .font(.caption)
                             .foregroundStyle(.green)

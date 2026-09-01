@@ -15,7 +15,7 @@ struct PrMonitorWakeAttributionView: View {
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
             Image(systemName: "arrow.triangle.pull")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

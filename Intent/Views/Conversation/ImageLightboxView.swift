@@ -78,7 +78,7 @@ struct ImageLightboxView: View {
 
     private var doubleTapGesture: some Gesture {
         TapGesture(count: 2).onEnded {
-            withAnimation(.spring(duration: 0.3)) {
+            withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                 if scale > Self.minScale {
                     scale = Self.minScale
                     offset = .zero
@@ -97,7 +97,7 @@ struct ImageLightboxView: View {
             .onEnded { value in
                 scale = min(max(scale * value.magnification, Self.minScale), Self.maxScale)
                 gestureScale = 1
-                withAnimation(.spring(duration: 0.3)) {
+                withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                     offset = clampedOffset(offset, in: size)
                 }
             }
@@ -118,13 +118,13 @@ struct ImageLightboxView: View {
                     let raw = CGSize(width: offset.width + value.translation.width,
                                      height: offset.height + value.translation.height)
                     dragTranslation = .zero
-                    withAnimation(.spring(duration: 0.3)) {
+                    withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                         offset = clampedOffset(raw, in: size)
                     }
                 } else if value.translation.height > Self.dismissDragThreshold {
                     dismiss()
                 } else {
-                    withAnimation(.spring(duration: 0.3)) {
+                    withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                         dragTranslation = .zero
                     }
                 }

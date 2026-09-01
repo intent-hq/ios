@@ -24,19 +24,19 @@ struct TaskStatusIconView: View {
     /// conflict relation chips (fe `text-warning`).
     enum Palette {
         // #99999966
-        static let gray = Color(red: 0.6, green: 0.6, blue: 0.6).opacity(0.4)
+        static let gray = Constants.Colors.TaskStatus.neutral
         // #f59e0b
-        static let amber = Color(red: 0xF5 / 255, green: 0x9E / 255, blue: 0x0B / 255)
+        static let amber = Constants.Colors.TaskStatus.warning
         // #ef4444
-        static let red = Color(red: 0xEF / 255, green: 0x44 / 255, blue: 0x44 / 255)
+        static let red = Constants.Colors.TaskStatus.blocked
         // #00BCFF
-        static let skyBlue = Color(red: 0x00 / 255, green: 0xBC / 255, blue: 0xFF / 255)
+        static let skyBlue = Constants.Colors.TaskStatus.inProgress
         // #3b82f6
-        static let blue = Color(red: 0x3B / 255, green: 0x82 / 255, blue: 0xF6 / 255)
+        static let blue = Constants.Colors.TaskStatus.reviewRequired
         // #22c55e
-        static let greenStroke = Color(red: 0x22 / 255, green: 0xC5 / 255, blue: 0x5E / 255)
+        static let greenStroke = Constants.Colors.TaskStatus.completeStroke
         // #00BD7D
-        static let greenFill = Color(red: 0x00 / 255, green: 0xBD / 255, blue: 0x7D / 255)
+        static let greenFill = Constants.Colors.TaskStatus.completeFill
     }
 
     /// Outline stroke color per status.

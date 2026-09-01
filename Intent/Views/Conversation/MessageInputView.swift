@@ -8,7 +8,7 @@ struct MessageInputView: View {
     @Environment(\.colorScheme) var colorScheme
 
     @State private var isFocused: Bool = false
-    @State private var textViewHeight: CGFloat = 36
+    @State private var textViewHeight: CGFloat = Constants.Conversation.Composer.minimumTextViewHeight
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
 
@@ -77,7 +77,9 @@ struct MessageInputView: View {
                         isFocused: $isFocused,
                         onSubmit: { sendCurrentMessage() },
                         onHeightChange: { newHeight in
-                            textViewHeight = min(max(newHeight, 36), 120)
+                            textViewHeight = min(
+                                max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
+                                Constants.Conversation.Composer.maximumTextViewHeight)
                         }
                     )
                     .padding(.horizontal, 8)
@@ -130,7 +132,7 @@ struct MessageInputView: View {
         .photosPicker(
             isPresented: $isPhotoPickerPresented,
             selection: $viewModel.selectedPhotoItems,
-            maxSelectionCount: 5,
+            maxSelectionCount: Constants.Conversation.Composer.maximumImageSelectionCount,
             matching: .images
         )
         .onChange(of: viewModel.selectedPhotoItems) { _, _ in
@@ -171,7 +173,9 @@ struct MessageInputView: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 56, height: 56)
+                            .frame(
+                                width: Constants.Conversation.Composer.pendingImageSide,
+                                height: Constants.Conversation.Composer.pendingImageSide)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
                         Button {
@@ -246,7 +250,7 @@ struct MessageInputView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
-                    .frame(maxWidth: 200)
+                    .frame(maxWidth: Constants.Conversation.Composer.pendingFileMaximumWidth)
                     .background(Theme.muted(for: colorScheme).opacity(0.5))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
@@ -287,7 +291,7 @@ struct MessageInputView: View {
             localText = ""
             viewModel.pendingImages.removeAll()
             // Re-focus after clearing
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Composer.refocusDelay) {
                 isFocused = true
             }
             Task { await viewModel.sendMessage(text, images: imagesToSend) }

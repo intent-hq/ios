@@ -78,7 +78,8 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onSubmit = onSubmit
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
-        textView.textContainerInset = UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)
+        let inset = Constants.Conversation.Composer.textContainerInset
+        textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
         textView.isScrollEnabled = true
         textView.alwaysBounceVertical = false
         textView.setContentHuggingPriority(.defaultHigh, for: .vertical)

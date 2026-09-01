@@ -109,7 +109,7 @@ struct CreateWorkspaceView: View {
                 ProgressView("Loading branches...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if let branchLoadError {
-                VStack(spacing: 12) {
+                VStack(spacing: Constants.CreateWorkspace.errorStateSpacing) {
                     Text("Couldn't load branches")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -121,7 +121,7 @@ struct CreateWorkspaceView: View {
                         Task { await fetchBranches() }
                     }
                 }
-                .padding(24)
+                .padding(Constants.CreateWorkspace.errorStatePadding)
             } else {
                 List {
                     Section("Branches") {
@@ -148,9 +148,10 @@ struct CreateWorkspaceView: View {
                                     if branch == defaultBranch {
                                         Text("default")
                                             .font(.caption)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Theme.primary(for: colorScheme).opacity(0.15))
+                                            .padding(.horizontal, Constants.CreateWorkspace.branchBadgeHorizontalPadding)
+                                            .padding(.vertical, Constants.CreateWorkspace.branchBadgeVerticalPadding)
+                                            .background(Theme.primary(for: colorScheme).opacity(
+                                                Constants.CreateWorkspace.branchBadgeOpacity))
                                             .foregroundStyle(Theme.primary(for: colorScheme))
                                             .clipShape(Capsule())
                                     }
@@ -161,7 +162,7 @@ struct CreateWorkspaceView: View {
                                             .fontWeight(.semibold)
                                     }
                                 }
-                                .padding(.vertical, 2)
+                                .padding(.vertical, Constants.CreateWorkspace.branchRowVerticalPadding)
                             }
                             .listRowBackground(Theme.card(for: colorScheme))
                         }
@@ -259,7 +260,7 @@ struct CreateWorkspaceView: View {
                     // workspace, just without an initial prompt.
                     Section("Initial Message (Optional)") {
                         TextField("Describe what you'd like to do...", text: $messageText, axis: .vertical)
-                            .lineLimit(3...6)
+                            .lineLimit(Constants.CreateWorkspace.messageLineCountRange)
                             .font(.body)
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .listRowBackground(Theme.card(for: colorScheme))
@@ -344,16 +345,16 @@ struct CreateWorkspaceView: View {
 
             // Creating overlay
             if isCreating {
-                Color.black.opacity(0.3).ignoresSafeArea()
-                VStack(spacing: 12) {
+                Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
+                VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
                     ProgressView()
                     Text("Cloning repository…")
                         .font(.subheadline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
-                .padding(24)
+                .padding(Constants.ModalPicker.loadingOverlayPadding)
                 .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
             }
         }
         .navigationTitle("Create Workspace")
@@ -386,7 +387,7 @@ struct CreateWorkspaceView: View {
     /// Guidance shown when providers exist but none are signed in; provider
     /// sign-in flows run on the desktop seat and are not available on iOS.
     private var noProvidersSignedInPlaceholder: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Constants.ModalPicker.placeholderSpacing) {
             Text("No providers are signed in")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -394,7 +395,7 @@ struct CreateWorkspaceView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)
     }
 
     /// The Create action is unavailable while a create is in flight, the
@@ -456,7 +457,7 @@ struct CreateWorkspaceView: View {
         // the redundant round-trip.
         guard query != completedBranchQuery else { return }
         branchSearchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: Constants.CreateWorkspace.branchSearchDebounceNanoseconds)
             guard !Task.isCancelled else { return }
             guard let results = try? await githubStore.fetchRemoteBranches(
                 owner: repo.owner, repo: repo.name, prefix: query

@@ -22,7 +22,7 @@ struct AgentWaitingView: View {
                 // Header
                 HStack(spacing: 8) {
                     ProgressView()
-                        .scaleEffect(0.7)
+                        .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
 
                     Text(headerText)
                         .font(.subheadline.weight(.medium))
@@ -60,7 +60,9 @@ struct AgentWaitingView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: min(CGFloat(store.watchedAgents.count) * 44, 132))
+                    .frame(maxHeight: min(
+                        CGFloat(store.watchedAgents.count) * Constants.Conversation.AgentWaiting.rowHeight,
+                        Constants.Conversation.AgentWaiting.maximumListHeight))
                 } else if !store.watchedAgentIds.isEmpty {
                     // Fallback: show agent IDs if details haven't loaded yet
                     ScrollView {
@@ -68,8 +70,10 @@ struct AgentWaitingView: View {
                             ForEach(store.watchedAgentIds, id: \.self) { agentId in
                                 HStack(spacing: 10) {
                                     ProgressView()
-                                        .scaleEffect(0.6)
-                                    Text(agentId.prefix(12) + "...")
+                                        .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
+                                    Text(agentId.prefix(
+                                        Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength
+                                    ) + "...")
                                         .font(.caption)
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     Spacer()
@@ -79,7 +83,9 @@ struct AgentWaitingView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: min(CGFloat(store.watchedAgentIds.count) * 40, 120))
+                    .frame(maxHeight: min(
+                        CGFloat(store.watchedAgentIds.count) * Constants.Conversation.AgentWaiting.fallbackRowHeight,
+                        Constants.Conversation.AgentWaiting.fallbackMaximumListHeight))
                 }
             }
             .background(Theme.card(for: colorScheme))
@@ -91,35 +97,55 @@ struct AgentWaitingView: View {
         HStack(spacing: 8) {
             // Avatar with status indicator
             ZStack(alignment: .topTrailing) {
-                AgentAvatarView(agentId: agent.id, size: 22, specialist: agent.specialist, isActive: agent.isActive)
+                AgentAvatarView(
+                    agentId: agent.id,
+                    size: Constants.Conversation.AgentWaiting.avatarSize,
+                    specialist: agent.specialist,
+                    isActive: agent.isActive)
 
                 if agent.isErrored {
                     // Red X for errored agents
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
                         .foregroundStyle(.red)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(width: 10, height: 10))
-                        .offset(x: 2, y: -2)
+                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
+                            width: Constants.Conversation.AgentWaiting.badgeSize,
+                            height: Constants.Conversation.AgentWaiting.badgeSize))
+                        .offset(
+                            x: Constants.Conversation.AgentWaiting.badgeOffset,
+                            y: -Constants.Conversation.AgentWaiting.badgeOffset)
                 } else if let attention = agent.pendingAttentionRequest {
                     // Kind-flavored badge for pending attention requests
                     Image(systemName: attention.kind.systemImage)
-                        .font(.system(size: 8))
+                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
                         .foregroundStyle(attention.kind.color)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(width: 10, height: 10))
-                        .offset(x: 2, y: -2)
+                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
+                            width: Constants.Conversation.AgentWaiting.badgeSize,
+                            height: Constants.Conversation.AgentWaiting.badgeSize))
+                        .offset(
+                            x: Constants.Conversation.AgentWaiting.badgeOffset,
+                            y: -Constants.Conversation.AgentWaiting.badgeOffset)
                 } else if !agent.isActive && agent.digest != nil {
                     // Green checkmark for completed agents with digest
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 8))
+                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
                         .foregroundStyle(.green)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(width: 10, height: 10))
-                        .offset(x: 2, y: -2)
+                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
+                            width: Constants.Conversation.AgentWaiting.badgeSize,
+                            height: Constants.Conversation.AgentWaiting.badgeSize))
+                        .offset(
+                            x: Constants.Conversation.AgentWaiting.badgeOffset,
+                            y: -Constants.Conversation.AgentWaiting.badgeOffset)
                 } else if agent.isActive {
                     // Green dot for active agents
                     Circle()
                         .fill(Color.green)
-                        .frame(width: 5, height: 5)
-                        .offset(x: 1, y: -1)
+                        .frame(
+                            width: Constants.Conversation.AgentWaiting.activeDotSize,
+                            height: Constants.Conversation.AgentWaiting.activeDotSize)
+                        .offset(
+                            x: Constants.Conversation.AgentWaiting.activeDotOffset,
+                            y: -Constants.Conversation.AgentWaiting.activeDotOffset)
                 }
             }
 

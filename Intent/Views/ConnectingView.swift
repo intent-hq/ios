@@ -11,11 +11,11 @@ struct ConnectingView: View {
         VStack {
             Spacer()
             ProgressView()
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, Constants.Connecting.horizontalPadding)
+                .padding(.vertical, Constants.Connecting.verticalPadding)
                 .background(.regularMaterial, in: Capsule())
         }
-        .padding(.bottom, 24)
+        .padding(.bottom, Constants.Connecting.bottomPadding)
         .task {
             await attemptConnection()
         }
@@ -27,7 +27,7 @@ struct ConnectingView: View {
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
             ConnectionManager.shared.connectionState = .connected
-            await waitForWorkspaceData(timeout: 5.0)
+            await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
             coordinator.onConnectionSuccess()
             return
         }
@@ -49,7 +49,7 @@ struct ConnectingView: View {
             // navigating, so the user doesn't see an empty workspace list.
             // WorkspaceStore auto-fetches on .connected and sets lastUpdated
             // when done. Poll with a 5-second timeout to avoid getting stuck.
-            await waitForWorkspaceData(timeout: 5.0)
+            await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
             coordinator.onConnectionSuccess()
         } catch {
             coordinator.onConnectionFailed(error: error.localizedDescription)
@@ -61,9 +61,8 @@ struct ConnectingView: View {
     /// `timeout` seconds so the app never gets stuck on the loading screen.
     private func waitForWorkspaceData(timeout: TimeInterval) async {
         let deadline = Date().addingTimeInterval(timeout)
-        let pollInterval: Duration = .milliseconds(100)
         while WorkspaceStore.shared.lastUpdated == nil && Date() < deadline {
-            try? await Task.sleep(for: pollInterval)
+            try? await Task.sleep(for: Constants.Connecting.workspacePollInterval)
         }
     }
 }

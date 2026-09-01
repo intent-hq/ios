@@ -138,7 +138,7 @@ class AppCoordinator {
         // Timeout: if the fetch takes too long or fails silently, clear the overlay anyway.
         reconnectOverlayTimeoutTask = Task { @MainActor [weak self] in
             do {
-                try await Task.sleep(for: .seconds(5))
+                try await Task.sleep(for: Constants.AppCoordination.reconnectOverlayTimeout)
             } catch {
                 return
             }

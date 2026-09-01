@@ -18,8 +18,8 @@ struct WorkspaceListView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
+                .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
 
                 ZStack {
                     Theme.background(for: colorScheme).ignoresSafeArea()
@@ -87,7 +87,7 @@ struct WorkspaceListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Constants.WorkspaceList.emptyStateSpacing) {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.largeTitle)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -150,7 +150,7 @@ struct WorkspaceListView: View {
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
         .scrollDismissesKeyboard(.immediately)
-        .contentMargins(.bottom, 60)
+        .contentMargins(.bottom, Constants.WorkspaceList.bottomContentMargin)
     }
 }
 

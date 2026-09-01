@@ -42,7 +42,9 @@ struct ContextMentionChipView: View {
     /// FE truncates via CSS max-width; a character cap is the SwiftUI-simple
     /// equivalent).
     static func displayTitle(_ title: String) -> String {
-        title.count > 30 ? String(title.prefix(30)) + "…" : title
+        title.count > Constants.Conversation.ContextMention.titleMaximumLength
+            ? String(title.prefix(Constants.Conversation.ContextMention.titleMaximumLength)) + "…"
+            : title
     }
 
     /// SF Symbol per provider, mirroring the FE's provider→icon mapping
