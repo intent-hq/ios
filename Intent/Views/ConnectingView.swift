@@ -24,7 +24,10 @@ struct ConnectingView: View {
                 .background(.regularMaterial, in: Capsule())
         }
         .padding(.bottom, Constants.Connecting.bottomPadding)
-        .task {
+        // Keyed on connectionAttemptId: a connection switch performed while
+        // this view is already showing (same screen value) bumps the id to
+        // restart the attempt, which a plain one-shot .task would not.
+        .task(id: coordinator.connectionAttemptId) {
             await attemptConnection()
         }
     }
@@ -61,6 +64,10 @@ struct ConnectingView: View {
             await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
             coordinator.onConnectionSuccess()
         } catch {
+            // A bumped connectionAttemptId cancels this task and starts a
+            // replacement: the superseded attempt's failure must not stomp
+            // the screen the restarted attempt (or the connected UI) owns.
+            guard !Task.isCancelled else { return }
             coordinator.onConnectionFailed(error: error.localizedDescription)
         }
     }

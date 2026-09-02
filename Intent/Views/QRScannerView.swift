@@ -157,24 +157,21 @@ struct QRScannerView: View {
         errorAutoClearID = nil
         errorMessage = nil
 
-        if let fingerprint = payload.certFingerprint {
-            connect(payload: payload, certFingerprint: fingerprint)
-        } else {
-            // The payload carries no fingerprint: never downgrade to plain
-            // ws://. Probe the server cert like manual entry does and ask the
-            // user to trust it before connecting pinned over wss.
-            Task {
-                let probed = await CertFingerprintProbe.probeFirst(hosts: payload.hosts, port: payload.port)
-                switch CertFingerprintProbe.outcome(forFingerprint: probed) {
-                case .confirmFingerprint(let fingerprint):
-                    pendingPayload = payload
-                    probedFingerprint = fingerprint
-                    showFingerprintConfirmation = true
-                case .abort(let message):
-                    errorAutoClearID = nil
-                    errorMessage = message
-                    isValidating = false
-                }
+        // A payload fingerprint is pinned directly; without one, PairingFlow
+        // probes the server cert like manual entry does and the user must
+        // trust it before connecting pinned over wss — never plain ws://.
+        Task {
+            switch await PairingFlow.resolveFingerprint(for: payload) {
+            case .pinned(let fingerprint):
+                connect(payload: payload, certFingerprint: fingerprint)
+            case .needsUserConfirmation(let fingerprint):
+                pendingPayload = payload
+                probedFingerprint = fingerprint
+                showFingerprintConfirmation = true
+            case .failed(let message):
+                errorAutoClearID = nil
+                errorMessage = message
+                isValidating = false
             }
         }
     }
@@ -185,9 +182,8 @@ struct QRScannerView: View {
     private func connect(payload: PairingPayload, certFingerprint: String) {
         Task {
             do {
-                try await ConnectionManager.shared.connect(hosts: payload.hosts, port: payload.port, token: payload.token, certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
-                let server = PairedServer(hosts: payload.hosts, port: payload.port, name: "Intent", pairedAt: Date(), certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
-                let stored = await ConnectionPairing.finalize(server: server, token: payload.token)
+                let stored = try await PairingFlow.connect(
+                    payload: payload, certFingerprint: certFingerprint)
                 dismiss()
                 if let onPaired {
                     onPaired(stored)
