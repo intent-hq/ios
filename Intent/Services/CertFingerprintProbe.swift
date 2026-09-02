@@ -59,7 +59,13 @@ enum CertFingerprintProbe {
     /// handshake — no HTTP request is needed, the handshake alone yields the
     /// certificate. Returns nil on timeout, unreachable hosts, or plain-TCP
     /// refusals.
-    static func probe(host: String, port: Int) async -> String? {
+    ///
+    /// Must be nonisolated: the module's default actor isolation is MainActor,
+    /// and the verify block / stateUpdateHandler closures formed here inherit
+    /// the function's isolation. boringssl invokes the verify block on the
+    /// probe's private queue, where an inherited MainActor assertion traps
+    /// (EXC_BREAKPOINT in dispatch_assert_queue_fail).
+    nonisolated static func probe(host: String, port: Int) async -> String? {
         guard let nwPort = endpointPort(port) else { return nil }
 
         let captured = OSAllocatedUnfairLock<String?>(initialState: nil)
@@ -128,8 +134,9 @@ enum CertFingerprintProbe {
     }
 
     /// Probe hosts in order and return the first fingerprint found, or nil
-    /// when no host yields a certificate.
-    static func probeFirst(hosts: [String], port: Int) async -> String? {
+    /// when no host yields a certificate. Nonisolated for the same reason as
+    /// `probe(host:port:)`.
+    nonisolated static func probeFirst(hosts: [String], port: Int) async -> String? {
         for host in hosts {
             if let fingerprint = await probe(host: host, port: port), !fingerprint.isEmpty {
                 return fingerprint
