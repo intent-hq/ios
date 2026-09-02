@@ -192,4 +192,110 @@ struct ManualTokenEntryViewTests {
         let fingerprint = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
         #expect(fingerprint == Self.fixtureIdentityFingerprint)
     }
+
+    // MARK: - Input classification (direct host vs tailcat address, mirroring
+    // cloudlands-fe's shared isTcAddress predicate)
+
+    @Test func classifiesDaemonMintedTcAddressesAsTailcat() {
+        #expect(ManualConnectionInput.classify("tc-key-abc123")
+            == .tailcat(tcAddress: "tc-key-abc123"))
+        #expect(ManualConnectionInput.classify("tc-7f2a91")
+            == .tailcat(tcAddress: "tc-7f2a91"))
+    }
+
+    @Test func classificationToleratesPasteArtifacts() {
+        #expect(ManualConnectionInput.classify("  tc-key-abc123  ")
+            == .tailcat(tcAddress: "tc-key-abc123"))
+        // Hand-typed uppercase still dials: tc addresses are daemon-minted
+        // lowercase, so the dialed address is lowercased like cloudlands-fe.
+        #expect(ManualConnectionInput.classify("TC-KEY-ABC123")
+            == .tailcat(tcAddress: "tc-key-abc123"))
+    }
+
+    @Test func classifiesHostnamesIPsAndNearMissesAsDirect() {
+        #expect(ManualConnectionInput.classify("example.com") == .direct(host: "example.com"))
+        #expect(ManualConnectionInput.classify("192.168.1.10") == .direct(host: "192.168.1.10"))
+        #expect(ManualConnectionInput.classify("tcp-server.local") == .direct(host: "tcp-server.local"))
+        #expect(ManualConnectionInput.classify("tchost") == .direct(host: "tchost"))
+        #expect(ManualConnectionInput.classify("") == .direct(host: ""))
+        #expect(ManualConnectionInput.classify(" 10.0.0.7 ") == .direct(host: "10.0.0.7"))
+    }
+
+    @Test func directInputConnectsExactlyAsToday() {
+        let input = ManualConnectionInput.classify("192.168.1.42")
+        #expect(input.hosts == ["192.168.1.42"])
+        #expect(input.tcAddress == nil)
+    }
+
+    @Test func tailcatInputConnectsTunnelOnly() {
+        let input = ManualConnectionInput.classify("tc-key-abc123")
+        #expect(input.hosts == [])
+        #expect(input.tcAddress == "tc-key-abc123")
+    }
+
+    // MARK: - Fingerprint probe through the tailcat tunnel (mock dialer)
+
+    private nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+        let localPort: Int
+        private let closed = OSAllocatedUnfairLock(initialState: false)
+        init(localPort: Int) { self.localPort = localPort }
+        func close() async { closed.withLock { $0 = true } }
+        var isClosed: Bool { closed.withLock { $0 } }
+    }
+
+    private nonisolated struct FakeTunnelDialer: TunnelDialing {
+        let result: Result<FakeTunnelSession, WebSocketTransportError>
+        let observed = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
+        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+            observed.withLock { $0[tcAddress] = remotePort }
+            return try result.get()
+        }
+    }
+
+    /// The tunnel probe dials the tc address with the daemon's WSS port and
+    /// probes the tunnel's loopback forwarder — never the tc address itself.
+    @Test func probeViaTunnelProbesLoopbackForwarderAndClosesTunnel() async throws {
+        let tunnel = FakeTunnelSession(localPort: 45_678)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        let probed = OSAllocatedUnfairLock<[String]>(initialState: [])
+
+        let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+            dialer: dialer, tcAddress: "tc-key-abc123", remotePort: 5180
+        ) { host, port in
+            probed.withLock { $0.append("\(host):\(port)") }
+            return "ab:cd:ef"
+        }
+
+        #expect(fingerprint == "ab:cd:ef")
+        #expect(dialer.observed.withLock { $0 } == ["tc-key-abc123": 5180])
+        #expect(probed.withLock { $0 } == ["127.0.0.1:45678"])
+        #expect(tunnel.isClosed)
+    }
+
+    /// A tunnel that comes up but yields no certificate still returns nil
+    /// (the caller aborts unpinned) and never leaks the session.
+    @Test func probeViaTunnelClosesTunnelWhenNoCertificateCaptured() async throws {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+
+        let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+            dialer: dialer, tcAddress: "tc-key-abc123", remotePort: 5180
+        ) { _, _ in nil }
+
+        #expect(fingerprint == nil)
+        #expect(tunnel.isClosed)
+    }
+
+    /// A failed tunnel dial (invalid or unreachable tc address) throws so the
+    /// view can surface a tunnel-specific error instead of the misleading
+    /// no-certificate message.
+    @Test func probeViaTunnelThrowsWhenDialFails() async {
+        let dialer = FakeTunnelDialer(result: .failure(.failed(
+            host: ConnectionManager.tunnelCandidateLabel, message: "bad address")))
+        await #expect(throws: WebSocketTransportError.self) {
+            _ = try await CertFingerprintProbe.probeViaTunnel(
+                dialer: dialer, tcAddress: "tc-nonsense", remotePort: 5180
+            ) { _, _ in nil }
+        }
+    }
 }
