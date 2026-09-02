@@ -56,9 +56,14 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content
-                .navigationSubtitle(subtitle ?? "")
-                .task { await fetchWorkspacesIfNeeded() }
+            Group {
+                if let subtitle {
+                    content.navigationSubtitle(subtitle)
+                } else {
+                    content
+                }
+            }
+            .task { await fetchWorkspacesIfNeeded() }
         } else {
             content
                 .toolbar {
