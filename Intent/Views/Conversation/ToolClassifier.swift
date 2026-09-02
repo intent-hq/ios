@@ -352,25 +352,25 @@ enum ToolClassifier {
 
     /// Nth capture group of a case-insensitive regex match, or nil.
     /// Compiled regexes are cached by pattern (rows re-render often mid-turn).
-    private static var regexCache: [String: NSRegularExpression] = [:]
+    private static var regexCache: [String: Regex<AnyRegexOutput>] = [:]
     private static let regexCacheLock = NSLock()
 
     private static func firstCapture(_ pattern: String, in text: String, group: Int = 1) -> String? {
         regexCacheLock.lock()
         var regex = regexCache[pattern]
         if regex == nil {
-            regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
+            regex = try? Regex(pattern).ignoresCase()
             if let regex = regex { regexCache[pattern] = regex }
         }
         regexCacheLock.unlock()
         guard let regex = regex else { return nil }
-        let range = NSRange(text.startIndex..., in: text)
-        guard let match = regex.firstMatch(in: text, range: range),
-              match.numberOfRanges > group,
-              let captureRange = Range(match.range(at: group), in: text) else {
+        guard group >= 0,
+              let match = text.firstMatch(of: regex),
+              match.output.count > group,
+              let capture = match.output[group].substring else {
             return nil
         }
-        return String(text[captureRange])
+        return String(capture)
     }
 
     /// Treat a captured title fragment as a file path when it looks like one:

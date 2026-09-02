@@ -422,16 +422,13 @@ struct MessageView: View {
 
     // MARK: - Group parsing from blocks
 
+    private static let groupTagRegex = #/<group:([^>\n<]+)>|<\/group(:[^>\n<]+)?>/#
+    private static let incompleteGroupTagRegex = #/<\/?g(?:r(?:o(?:u(?:p(?::?[^>\n<]*)?)?)?)?)?$/#
+
     /// Parse `<group:Name>` and `</group>` tags from text ContentBlocks,
     /// grouping all blocks (text, tool_use, tool_result, etc.) that appear
     /// between open/close tags into ResponseGroup objects.
     static func groupContentBlocks(_ blocks: [ContentBlock], isStreaming: Bool = false) -> [RenderBlock] {
-        // Regex to match <group:Name> or </group> or </group:Name>
-        let tagPattern = "<group:([^>\\n<]+)>|</group(:[^>\\n<]+)?>"
-        guard let regex = try? NSRegularExpression(pattern: tagPattern) else {
-            return blocks.map { .contentBlock($0) }
-        }
-
         var result: [RenderBlock] = []
         var currentGroup: (id: String, name: String, children: [ContentBlock])? = nil
         // Deterministic identities: synthetic segments and groups derive their
@@ -478,11 +475,6 @@ struct MessageView: View {
             }
         }
 
-        // Regex to strip trailing incomplete group tags during streaming.
-        // Matches a trailing `<` followed by partial `group:...` or `/group...` with no closing `>`.
-        let incompleteTagPattern = "</?g(?:r(?:o(?:u(?:p(?::?[^>\\n<]*)?)?)?)?)?$"
-        let incompleteTagRegex = isStreaming ? (try? NSRegularExpression(pattern: incompleteTagPattern)) : nil
-
         for block in blocks {
             guard block.type == .text, let blockText = block.resolvedText, !blockText.isEmpty else {
                 // Non-text block or empty text — pass through into current context
@@ -494,16 +486,13 @@ struct MessageView: View {
 
             // During streaming, strip any trailing incomplete <group:...> or </group...> tag
             var processedText = blockText
-            if let incompleteRegex = incompleteTagRegex {
-                let nsBlock = processedText as NSString
-                let range = NSRange(location: 0, length: nsBlock.length)
-                processedText = incompleteRegex.stringByReplacingMatches(in: processedText, range: range, withTemplate: "")
+            if isStreaming {
+                processedText = processedText.replacing(Self.incompleteGroupTagRegex, with: "")
                 if processedText.isEmpty { continue }
             }
 
             // Scan this text block for group tags
-            let nsText = processedText as NSString
-            let matches = regex.matches(in: processedText, range: NSRange(location: 0, length: nsText.length))
+            let matches = processedText.matches(of: Self.groupTagRegex)
 
             if matches.isEmpty {
                 // No group tags — pass through as-is
@@ -515,18 +504,18 @@ struct MessageView: View {
                 continue
             }
 
-            var lastIndex = 0
+            var lastIndex = processedText.startIndex
             for match in matches {
-                let matchStart = match.range.location
-                let matchEnd = matchStart + match.range.length
+                let matchStart = match.range.lowerBound
+                let matchEnd = match.range.upperBound
 
-                if match.range(at: 1).location != NSNotFound {
+                if let capturedName = match.output.1 {
                     // Open tag: <group:Name>
-                    let groupName = nsText.substring(with: match.range(at: 1)).trimmingCharacters(in: .whitespaces)
+                    let groupName = String(capturedName).trimmingCharacters(in: .whitespaces)
 
                     // Text before the tag
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)), from: block)
+                        addTextIfNonEmpty(String(processedText[lastIndex..<matchStart]), from: block)
                     }
 
                     // Auto-close previous group if one is open
@@ -541,7 +530,7 @@ struct MessageView: View {
                 } else {
                     // Close tag: </group> or </group:Name>
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: matchStart - lastIndex)), from: block)
+                        addTextIfNonEmpty(String(processedText[lastIndex..<matchStart]), from: block)
                     }
                     closeCurrentGroup()
                 }
@@ -550,8 +539,8 @@ struct MessageView: View {
             }
 
             // Remaining text after last tag
-            if lastIndex < nsText.length {
-                addTextIfNonEmpty(nsText.substring(with: NSRange(location: lastIndex, length: nsText.length - lastIndex)), from: block)
+            if lastIndex < processedText.endIndex {
+                addTextIfNonEmpty(String(processedText[lastIndex...]), from: block)
             }
         }
 
