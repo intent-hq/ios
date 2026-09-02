@@ -122,14 +122,29 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     ) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
         resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
-        teardownConnection()
+
+        // A connect over an established or recovering connection (pairing a
+        // new daemon via QR / manual token / intent:// link) must not tear
+        // it down up front: if the new attempt fails, the existing
+        // connection (or its reconnect loop) keeps serving instead of
+        // stranding the app in .connecting on a dead socket (monorepo#4185).
+        // The old connection is torn down only after the replacement socket
+        // is established, below.
+        let preservesLiveConnection: Bool
+        switch connectionState {
+        case .connected, .reconnecting:
+            preservesLiveConnection = true
+        case .connecting, .disconnected:
+            preservesLiveConnection = false
+            teardownConnection()
+            self.hosts = hosts
+            self.port = port
+            self.token = token
+            self.certFingerprint = certFingerprint
+            self.tcAddress = tcAddress
+            connectionState = .connecting
+        }
         let myGeneration = connectionGeneration
-        self.hosts = hosts
-        self.port = port
-        self.token = token
-        self.certFingerprint = certFingerprint
-        self.tcAddress = tcAddress
-        connectionState = .connecting
 
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
@@ -154,6 +169,17 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             AppLog.connection.debug("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
             await winner.disconnect()
             throw CancellationError()
+        }
+
+        if preservesLiveConnection {
+            // The replacement is established: now retire the old connection
+            // and adopt the new target's parameters.
+            teardownConnection()
+            self.hosts = hosts
+            self.port = port
+            self.token = token
+            self.certFingerprint = certFingerprint
+            self.tcAddress = tcAddress
         }
 
         self.socket = winner.socket
