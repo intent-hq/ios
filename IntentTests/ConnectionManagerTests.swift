@@ -1385,28 +1385,44 @@ struct ConnectionManagerTests {
     /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
     /// on the listener queue and must not inherit MainActor isolation.
     private nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
+        private struct State {
+            var accepted: [NWConnection] = []
+            // Connections held back by a gated server: accepted but not
+            // started, so the client's WS handshake stays pending until
+            // `open()` releases them. Lets tests control which of two
+            // racing connect() calls completes first.
+            var pendingStart: [NWConnection] = []
+            var isOpen: Bool
+        }
+
         private let listener: NWListener
         private let queue = DispatchQueue(label: "ConnectionManagerTests.ws-server")
         // Retain accepted connections for the listener's lifetime (an
         // unreferenced NWConnection deallocates and drops the socket).
-        private let accepted = OSAllocatedUnfairLock(initialState: [NWConnection]())
+        private let state: OSAllocatedUnfairLock<State>
 
         var port: Int { Int(listener.port?.rawValue ?? 0) }
 
-        private init(listener: NWListener) {
+        private init(listener: NWListener, gated: Bool) {
             self.listener = listener
+            self.state = OSAllocatedUnfairLock(initialState: State(isOpen: !gated))
         }
 
-        static func start() async throws -> LoopbackWebSocketServer {
+        static func start(gated: Bool = false) async throws -> LoopbackWebSocketServer {
             let parameters = NWParameters.tcp
             let wsOptions = NWProtocolWebSocket.Options()
             wsOptions.autoReplyPing = true
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
             let server = LoopbackWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any))
+                listener: try NWListener(using: parameters, on: .any), gated: gated)
             server.listener.newConnectionHandler = { [weak server] connection in
                 guard let server else { return }
-                server.accepted.withLock { $0.append(connection) }
+                let startNow = server.state.withLock { state in
+                    state.accepted.append(connection)
+                    if !state.isOpen { state.pendingStart.append(connection) }
+                    return state.isOpen
+                }
+                guard startNow else { return }
                 server.receiveNext(on: connection)
                 connection.start(queue: server.queue)
             }
@@ -1430,11 +1446,28 @@ struct ConnectionManagerTests {
             return server
         }
 
+        /// Releases a gated server: starts every held-back connection so
+        /// their pending WS handshakes complete, and starts future ones
+        /// immediately.
+        func open() {
+            let held = state.withLock { state in
+                state.isOpen = true
+                let pending = state.pendingStart
+                state.pendingStart.removeAll()
+                return pending
+            }
+            for connection in held {
+                receiveNext(on: connection)
+                connection.start(queue: queue)
+            }
+        }
+
         func stop() {
             listener.cancel()
-            accepted.withLock { connections in
-                for connection in connections { connection.cancel() }
-                connections.removeAll()
+            state.withLock { state in
+                for connection in state.accepted { connection.cancel() }
+                state.accepted.removeAll()
+                state.pendingStart.removeAll()
             }
         }
 
@@ -1524,6 +1557,56 @@ struct ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
         #expect(manager.token == "token-b")
+        let result = try await manager.request("system.status")
+        #expect(result is [String: Any])
+    }
+
+    /// Two overlapping pairing attempts over a live connection: the OLDER
+    /// attempt completing first must not install its target and supersede
+    /// the newer one. Preserving connects don't tear down (and so don't
+    /// advance the generation) up front, so ordering is carried by the
+    /// connect-attempt counter: the older attempt is superseded, the newer
+    /// one adopts its target.
+    @Test @MainActor func olderOverlappingPairingAttemptDoesNotWin() async throws {
+        let manager = ConnectionManager.shared
+        let liveServer = try await LoopbackWebSocketServer.start()
+        let olderTarget = try await LoopbackWebSocketServer.start(gated: true)
+        let newerTarget = try await LoopbackWebSocketServer.start(gated: true)
+        defer {
+            manager.disconnect()
+            liveServer.stop()
+            olderTarget.stop()
+            newerTarget.stop()
+        }
+
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: liveServer.port, token: "live-token")
+        #expect(manager.connectionState == .connected)
+
+        // Both attempts hang in their WS handshake until their server opens.
+        let older = Task {
+            try await manager.connect(
+                hosts: ["127.0.0.1"], port: olderTarget.port, token: "token-old")
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        let newer = Task {
+            try await manager.connect(
+                hosts: ["127.0.0.1"], port: newerTarget.port, token: "token-new")
+        }
+        try await Task.sleep(for: .milliseconds(100))
+
+        // The older attempt completes its handshake FIRST — it must be
+        // superseded rather than install token-old and kill the newer one.
+        olderTarget.open()
+        await #expect(throws: (any Error).self) { try await older.value }
+        #expect(manager.token != "token-old")
+
+        newerTarget.open()
+        try await newer.value
+
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == newerTarget.port)
+        #expect(manager.token == "token-new")
         let result = try await manager.request("system.status")
         #expect(result is [String: Any])
     }

@@ -65,6 +65,12 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     @ObservationIgnored var pendingRequests: [Int: CheckedContinuation<Any, Error>] = [:]
     @ObservationIgnored private var nextRequestId = 1
     @ObservationIgnored private var connectionGeneration: Int = 0
+    /// Supersession order among overlapping `connect()` calls. The preserving
+    /// path (pairing over a live connection) does not tear down — and so does
+    /// not advance `connectionGeneration` — up front, so overlapping attempts
+    /// share a generation; this counter ensures the NEWEST attempt wins the
+    /// adoption race regardless of which one finishes first.
+    @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var pingTimer: Timer?
     @ObservationIgnored private var lastPongReceived: Date = Date()
@@ -145,6 +151,8 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             connectionState = .connecting
         }
         let myGeneration = connectionGeneration
+        connectAttempt += 1
+        let myAttempt = connectAttempt
 
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
@@ -164,9 +172,11 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             throw error
         }
 
-        // Check if we've been superseded by a newer connect() call
-        guard connectionGeneration == myGeneration else {
-            AppLog.connection.debug("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
+        // Check if we've been superseded: a teardown/disconnect advanced the
+        // generation, or a newer connect() started (preserving connects share
+        // a generation, so the attempt counter carries their ordering).
+        guard connectionGeneration == myGeneration, connectAttempt == myAttempt else {
+            AppLog.connection.debug("[ConnectionManager] Superseded after race: generation current=\(connectionGeneration) mine=\(myGeneration), attempt current=\(connectAttempt) mine=\(myAttempt)")
             await winner.disconnect()
             throw CancellationError()
         }
