@@ -64,6 +64,10 @@ struct ConnectingView: View {
             await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
             coordinator.onConnectionSuccess()
         } catch {
+            // A bumped connectionAttemptId cancels this task and starts a
+            // replacement: the superseded attempt's failure must not stomp
+            // the screen the restarted attempt (or the connected UI) owns.
+            guard !Task.isCancelled else { return }
             coordinator.onConnectionFailed(error: error.localizedDescription)
         }
     }
