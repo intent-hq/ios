@@ -30,7 +30,8 @@ class PersistenceManager {
     }
 
     /// Inserts the connection, or updates the existing entry in place (preserving its
-    /// id) when one at the same port shares at least one host. Returns the stored value.
+    /// id) when one at the same port shares at least one host or carries the same
+    /// tailcat tunnel address. Returns the stored value.
     ///
     /// Overlap (not set equality) is the match key because the post-connect route
     /// refresh grows stored host sets over time: a re-pair of the same daemon via a
@@ -38,6 +39,11 @@ class PersistenceManager {
     /// still update the grown record in place instead of inserting a duplicate. On a
     /// match, the existing record's hosts are kept (in order) and new hosts appended,
     /// so previously known routes are never dropped by a narrower re-pair.
+    ///
+    /// A matching tcAddress is an equally valid identity: a manual tunnel-only
+    /// re-pair carries no hosts at all (its host set is disjoint with every
+    /// record), so without this key each re-pair of the same tc address would
+    /// insert a duplicate record.
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
         migrateLegacyPairingIfNeeded()
@@ -45,7 +51,9 @@ class PersistenceManager {
         let stored: StoredConnection
         if let index = connections.firstIndex(where: {
             $0.server.port == connection.server.port
-                && !Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
+                && (!Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
+                    || (connection.server.tcAddress != nil
+                        && $0.server.tcAddress == connection.server.tcAddress))
         }) {
             let existing = connections[index]
             let server = connection.server

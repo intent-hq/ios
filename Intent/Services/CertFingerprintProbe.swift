@@ -144,4 +144,27 @@ enum CertFingerprintProbe {
         }
         return nil
     }
+
+    /// Probe the daemon's certificate fingerprint through a tailcat tunnel
+    /// (manual tc-address entry): opens the tunnel, probes its loopback
+    /// forwarder, and closes the tunnel — pairing over the tunnel stays
+    /// pinned exactly like direct hosts. Throws when the tunnel cannot be
+    /// dialed (invalid or unreachable tc address); a nil return means the
+    /// tunnel came up but no certificate was captured. The probe function is
+    /// injectable for tests; production uses the real TLS probe above. It must
+    /// stay non-throwing: the close-on-all-paths guarantee relies on the
+    /// linear open → probe → close flow (`defer { await close() }` is not
+    /// expressible), so a throwing probe would leak the tunnel.
+    /// Nonisolated for the same reason as `probe(host:port:)`.
+    nonisolated static func probeViaTunnel(
+        dialer: any TunnelDialing,
+        tcAddress: String,
+        remotePort: Int,
+        probe: @Sendable (String, Int) async -> String? = { await Self.probe(host: $0, port: $1) }
+    ) async throws -> String? {
+        let tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)
+        let fingerprint = await probe("127.0.0.1", tunnel.localPort)
+        await tunnel.close()
+        return fingerprint
+    }
 }

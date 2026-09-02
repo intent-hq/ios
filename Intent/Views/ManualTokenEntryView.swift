@@ -1,5 +1,45 @@
 import SwiftUI
 
+/// Classification of the manual-entry "Host / Tailcat Address" input: a
+/// direct host/IP dialed as today, or a tailcat tunnel address dialed via
+/// TailcatKit. Mirrors cloudlands-fe's shared `isTcAddress` predicate
+/// (PROTOCOL §12.3): tc addresses are daemon-minted lowercase with the
+/// `tc-` prefix, and the check stays a cheap prefix test on purpose — the
+/// tunnel dial itself is the authoritative validation.
+enum ManualConnectionInput: Equatable {
+    case direct(host: String)
+    case tailcat(tcAddress: String)
+
+    static func classify(_ raw: String) -> ManualConnectionInput {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("tc-") {
+            // Lowercase like cloudlands-fe does for its dial: tc addresses
+            // are daemon-minted lowercase, so a hand-typed `TC-…` still
+            // dials.
+            return .tailcat(tcAddress: trimmed.lowercased())
+        }
+        return .direct(host: trimmed)
+    }
+
+    /// Direct hosts to race and persist: empty for a tunnel-only target
+    /// (the post-connect route refresh fills in daemon-reported IPs).
+    var hosts: [String] {
+        switch self {
+        case .direct(let host): [host]
+        case .tailcat: []
+        }
+    }
+
+    /// tc address to race the tunnel with; persisted on the paired server so
+    /// reconnects race the tunnel route too.
+    var tcAddress: String? {
+        switch self {
+        case .direct: nil
+        case .tailcat(let tcAddress): tcAddress
+        }
+    }
+}
+
 struct ManualTokenEntryView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
@@ -13,6 +53,11 @@ struct ManualTokenEntryView: View {
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
+    /// The classified target whose fingerprint was probed, captured alongside
+    /// `probedFingerprint` so the confirmation alert connects to exactly the
+    /// target the user confirmed — never a re-classification of a possibly
+    /// edited field.
+    @State private var probedInput: ManualConnectionInput?
     @State private var showFingerprintConfirmation = false
     @State private var connectTask: Task<Void, Never>?
 
@@ -35,10 +80,10 @@ struct ManualTokenEntryView: View {
 
                         VStack(spacing: Constants.ManualTokenEntry.formSpacing) {
                             VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
-                                Text("Host")
+                                Text("Host / Tailcat Address")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                TextField("192.168.1.42", text: $host)
+                                TextField("192.168.1.42 or tc-…", text: $host)
                                     .textFieldStyle(.roundedBorder)
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
@@ -138,22 +183,43 @@ struct ManualTokenEntryView: View {
             errorMessage = "Invalid port number"
             return
         }
+        let input = ManualConnectionInput.classify(host)
 
         isValidating = true
         errorMessage = nil
 
         connectTask = Task {
-            let fingerprint = await CertFingerprintProbe.probe(host: host, port: portNum)
+            let fingerprint: String?
+            switch input {
+            case .direct(let host):
+                fingerprint = await CertFingerprintProbe.probe(host: host, port: portNum)
+            case .tailcat(let tcAddress):
+                do {
+                    fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+                        dialer: ConnectionManager.shared.tunnelDialer,
+                        tcAddress: tcAddress, remotePort: portNum)
+                } catch {
+                    // A failed dial is the authoritative "invalid or
+                    // unreachable Tailcat address" signal (classification is
+                    // only a prefix test).
+                    guard !Task.isCancelled else { return }
+                    errorMessage = "Could not reach the Tailcat address: \(error.localizedDescription)"
+                    isValidating = false
+                    return
+                }
+            }
 
-            // The user may have hit Cancel while the probe was in flight: the
-            // cancelled URLSession request surfaces here as a nil fingerprint,
-            // and processing it would show a spurious certificate error (or
+            // The user may have hit Cancel while the probe was in flight: a
+            // cancelled direct probe surfaces here as a nil fingerprint (the
+            // tunnel branch handles its thrown cancellation above), and
+            // processing it would show a spurious certificate error (or
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
             switch CertFingerprintProbe.outcome(forFingerprint: fingerprint) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
+                probedInput = input
                 showFingerprintConfirmation = true
             case .abort(let message):
                 // Never connect unpinned: without a probed certificate there is
@@ -165,12 +231,17 @@ struct ManualTokenEntryView: View {
     }
 
     private func connectWithFingerprint() {
-        guard let portNum = Int(port), let fingerprint = probedFingerprint else { return }
+        guard let portNum = Int(port), let fingerprint = probedFingerprint,
+              let input = probedInput else { return }
 
         Task {
             do {
-                try await ConnectionManager.shared.connect(hosts: [host], port: portNum, token: token, certFingerprint: fingerprint)
-                let server = PairedServer(hosts: [host], port: portNum, name: "Intent", pairedAt: Date(), certFingerprint: fingerprint)
+                try await ConnectionManager.shared.connect(
+                    hosts: input.hosts, port: portNum, token: token,
+                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
+                let server = PairedServer(
+                    hosts: input.hosts, port: portNum, name: "Intent", pairedAt: Date(),
+                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
                 let stored = await ConnectionPairing.finalize(server: server, token: token)
                 dismiss()
                 if let onPaired {
