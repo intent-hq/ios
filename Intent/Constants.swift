@@ -398,7 +398,7 @@ enum Constants {
         static let branchBadgeOpacity: Double = 0.15
         static let branchRowVerticalPadding: CGFloat = 2
         static let messageLineCountRange = 3...6
-        static let branchSearchDebounceNanoseconds: UInt64 = 300_000_000
+        static let branchSearchDebounce: Duration = .milliseconds(300)
     }
 
     enum GitHubRepoPicker {

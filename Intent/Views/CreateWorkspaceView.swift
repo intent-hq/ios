@@ -457,7 +457,7 @@ struct CreateWorkspaceView: View {
         // the redundant round-trip.
         guard query != completedBranchQuery else { return }
         branchSearchTask = Task {
-            try? await Task.sleep(nanoseconds: Constants.CreateWorkspace.branchSearchDebounceNanoseconds)
+            try? await Task.sleep(for: Constants.CreateWorkspace.branchSearchDebounce)
             guard !Task.isCancelled else { return }
             guard let results = try? await githubStore.fetchRemoteBranches(
                 owner: repo.owner, repo: repo.name, prefix: query
