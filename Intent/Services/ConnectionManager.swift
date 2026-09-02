@@ -65,6 +65,12 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     @ObservationIgnored var pendingRequests: [Int: CheckedContinuation<Any, Error>] = [:]
     @ObservationIgnored private var nextRequestId = 1
     @ObservationIgnored private var connectionGeneration: Int = 0
+    /// Supersession order among overlapping `connect()` calls. The preserving
+    /// path (pairing over a live connection) does not tear down — and so does
+    /// not advance `connectionGeneration` — up front, so overlapping attempts
+    /// share a generation; this counter ensures the NEWEST attempt wins the
+    /// adoption race regardless of which one finishes first.
+    @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var pingTimer: Timer?
     @ObservationIgnored private var lastPongReceived: Date = Date()
@@ -121,22 +127,57 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         tcAddress: String? = nil
     ) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
+        // Snapshot before the reset: a preserving connect (below) that fails
+        // must leave `certMismatches` exactly as the live connection had it —
+        // neither cleared by this target-change reset nor polluted by
+        // mismatches the failed pairing race recorded.
+        let certMismatchesBeforeAttempt = certMismatches
         resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
-        teardownConnection()
+
+        // A connect over an established or recovering connection (pairing a
+        // new daemon via QR / manual token / intent:// link) must not tear
+        // it down up front: if the new attempt fails, the existing
+        // connection (or its reconnect loop) keeps serving instead of
+        // stranding the app in .connecting on a dead socket (monorepo#4185).
+        // The old connection is torn down only after the replacement socket
+        // is established, below.
+        let preservesLiveConnection: Bool
+        switch connectionState {
+        case .connected, .reconnecting:
+            preservesLiveConnection = true
+        case .connecting, .disconnected:
+            preservesLiveConnection = false
+            teardownConnection()
+            self.hosts = hosts
+            self.port = port
+            self.token = token
+            self.certFingerprint = certFingerprint
+            self.tcAddress = tcAddress
+            connectionState = .connecting
+        }
         let myGeneration = connectionGeneration
-        self.hosts = hosts
-        self.port = port
-        self.token = token
-        self.certFingerprint = certFingerprint
-        self.tcAddress = tcAddress
-        connectionState = .connecting
+        connectAttempt += 1
+        let myAttempt = connectAttempt
 
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
-        let winner = try await raceHosts(
-            hosts, port: port, token: token, certFingerprint: certFingerprint,
-            tcAddress: tcAddress)
+        let winner: RacedConnection
+        do {
+            winner = try await raceHosts(
+                hosts, port: port, token: token, certFingerprint: certFingerprint,
+                tcAddress: tcAddress)
+        } catch {
+            // Failed preserving connect: the live connection keeps serving,
+            // so restore its mismatch bookkeeping (unless a newer connect or
+            // disconnect owns it now).
+            if preservesLiveConnection,
+                connectionGeneration == myGeneration, connectAttempt == myAttempt,
+                certMismatches != certMismatchesBeforeAttempt {
+                certMismatches = certMismatchesBeforeAttempt
+            }
+            throw error
+        }
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
@@ -149,11 +190,24 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             throw error
         }
 
-        // Check if we've been superseded by a newer connect() call
-        guard connectionGeneration == myGeneration else {
-            AppLog.connection.debug("[ConnectionManager] Generation mismatch after race: current=\(connectionGeneration), mine=\(myGeneration)")
+        // Check if we've been superseded: a teardown/disconnect advanced the
+        // generation, or a newer connect() started (preserving connects share
+        // a generation, so the attempt counter carries their ordering).
+        guard connectionGeneration == myGeneration, connectAttempt == myAttempt else {
+            AppLog.connection.debug("[ConnectionManager] Superseded after race: generation current=\(connectionGeneration) mine=\(myGeneration), attempt current=\(connectAttempt) mine=\(myAttempt)")
             await winner.disconnect()
             throw CancellationError()
+        }
+
+        if preservesLiveConnection {
+            // The replacement is established: now retire the old connection
+            // and adopt the new target's parameters.
+            teardownConnection()
+            self.hosts = hosts
+            self.port = port
+            self.token = token
+            self.certFingerprint = certFingerprint
+            self.tcAddress = tcAddress
         }
 
         self.socket = winner.socket
