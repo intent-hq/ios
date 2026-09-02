@@ -9,42 +9,36 @@ struct WorkspaceListSidebar: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
-                // View mode picker
-                Picker("View", selection: $viewModel.viewMode) {
-                    ForEach(ViewMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
-                .padding(.top, Constants.WorkspaceList.pickerVerticalPadding)
-                .padding(.bottom, Constants.WorkspaceList.pickerVerticalPadding)
-
-                ZStack {
-                    Theme.sidebar(for: colorScheme).ignoresSafeArea()
-
-                    if viewModel.isLoading && viewModel.workspaces.isEmpty {
-                        ProgressView("Loading workspaces...")
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    } else if viewModel.workspaces.isEmpty {
-                        emptyState
-                    } else {
-                        workspaceList
-                    }
+        VStack(spacing: 0) {
+            Picker("View", selection: $viewModel.viewMode) {
+                ForEach(ViewMode.allCases, id: \.self) { mode in
+                    Text(mode.rawValue).tag(mode)
                 }
             }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, Constants.WorkspaceList.pickerHorizontalPadding)
+            .padding(.vertical, Constants.WorkspaceList.pickerVerticalPadding)
 
-            // Floating search bar at bottom
-            WorkspaceSearchBar(
-                text: $viewModel.searchText,
-                isFocused: $searchFocused,
-                colorScheme: colorScheme
-            )
+            ZStack {
+                Theme.sidebar(for: colorScheme).ignoresSafeArea()
+
+                if viewModel.isLoading && viewModel.workspaces.isEmpty {
+                    ProgressView("Loading workspaces...")
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                } else if viewModel.filteredWorkspaces.isEmpty {
+                    if viewModel.hasSearchQuery {
+                        ContentUnavailableView.search
+                    } else {
+                        emptyState
+                    }
+                } else {
+                    workspaceList
+                }
+            }
         }
         .background(Theme.sidebar(for: colorScheme))
         .navigationTitle("Workspaces")
+        .workspaceSearch(text: $viewModel.searchText, isFocused: $searchFocused)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Menu {
@@ -85,17 +79,11 @@ struct WorkspaceListSidebar: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: Constants.WorkspaceList.emptyStateSpacing) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Text("No workspaces yet")
-                .font(.headline)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text("Create one in the desktop app.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        }
+        ContentUnavailableView(
+            "No Workspaces",
+            systemImage: "rectangle.stack.badge.plus",
+            description: Text("Create one in the desktop app.")
+        )
     }
 
     @ViewBuilder
@@ -163,7 +151,6 @@ struct WorkspaceListSidebar: View {
         .listStyle(.sidebar)
         .scrollDismissesKeyboard(.immediately)
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
-        .contentMargins(.bottom, Constants.WorkspaceList.bottomContentMargin)
     }
 }
 

@@ -150,15 +150,20 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         WorkspaceStore.shared.isLoading
     }
 
+    var hasSearchQuery: Bool {
+        !normalizedSearchText.isEmpty
+    }
+
     var filteredWorkspaces: [Workspace] {
+        let query = normalizedSearchText
         let active = workspaces.filter { ws in
             let s = ws.status?.lowercased() ?? ""
             return s != "archived" && s != "deleted"
         }
-        let filtered = searchText.isEmpty ? active : active.filter { ws in
-            ws.title.localizedCaseInsensitiveContains(searchText) ||
-            (ws.branch?.localizedCaseInsensitiveContains(searchText) ?? false) ||
-            (ws.repositoryName?.localizedCaseInsensitiveContains(searchText) ?? false)
+        let filtered = query.isEmpty ? active : active.filter { ws in
+            ws.title.localizedCaseInsensitiveContains(query) ||
+            (ws.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
+            (ws.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
         }
         return filtered.sorted {
             let t0 = $0.lastActivity ?? $0.updatedAt ?? ""
@@ -181,6 +186,10 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         let dict = Dictionary(grouping: filteredWorkspaces) { resolveDisplayStatus(for: $0) }
         return dict.sorted { $0.key.sortOrder < $1.key.sortOrder }
             .map { ($0.key.label, $0.value) }
+    }
+
+    private var normalizedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

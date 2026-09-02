@@ -19,6 +19,8 @@ struct GitHubRepoPickerView: View {
     /// The trimmed query the current `store.searchResults` answer; nil until
     /// a search completes, so stale results never surface.
     @State private var completedSearchQuery: String?
+    /// The qualifying query currently in its debounce or remote-search phase.
+    @State private var pendingSearchQuery: String?
     @State private var searchTask: Task<Void, Never>?
     /// False until the first `github.authStatus` read completes, so the
     /// not-connected guidance doesn't flash while the status is unknown.
@@ -68,7 +70,7 @@ struct GitHubRepoPickerView: View {
 
     private var repoList: some View {
         Group {
-            if store.isLoading && suggestions.isEmpty {
+            if (store.isLoading || pendingSearchQuery != nil) && suggestions.isEmpty {
                 ProgressView("Loading repositories...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if suggestions.isEmpty {
@@ -128,22 +130,22 @@ struct GitHubRepoPickerView: View {
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: Constants.GitHubRepoPicker.emptyStateSpacing) {
-            Image(systemName: "folder.badge.questionmark")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Text("No repositories found")
-                .font(.headline)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text(store.lastError
-                ?? (searchText.isEmpty
-                    ? "No GitHub repositories are available for your account."
-                    : "Try a different search."))
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.GitHubRepoPicker.emptyStateHorizontalPadding)
+        if let lastError = store.lastError {
+            ContentUnavailableView(
+                "Repositories Unavailable",
+                systemImage: "exclamationmark.triangle",
+                description: Text(lastError)
+            )
+        } else if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ContentUnavailableView.search
+        } else {
+            ContentUnavailableView(
+                "No Repositories",
+                systemImage: "folder.badge.questionmark",
+                description: Text("No GitHub repositories are available for your account.")
+            )
         }
     }
 
@@ -151,19 +153,11 @@ struct GitHubRepoPickerView: View {
     /// runs on the desktop seat and is not available on iOS (same pattern as
     /// the "no providers signed in" placeholder).
     private var notConnectedPlaceholder: some View {
-        VStack(spacing: Constants.GitHubRepoPicker.emptyStateSpacing) {
-            Image(systemName: "person.crop.circle.badge.xmark")
-                .font(.largeTitle)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            Text("GitHub is not connected")
-                .font(.headline)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-            Text("Connect GitHub in the Intent desktop app, then come back and try again.")
-                .font(.subheadline)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Constants.GitHubRepoPicker.emptyStateHorizontalPadding)
-        }
+        ContentUnavailableView(
+            "GitHub Is Not Connected",
+            systemImage: "person.crop.circle.badge.xmark",
+            description: Text("Connect GitHub in the Intent desktop app, then come back and try again.")
+        )
     }
 
     // MARK: - Debounced search
@@ -175,20 +169,25 @@ struct GitHubRepoPickerView: View {
         searchTask?.cancel()
         let query = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= GitHubRepoSuggestions.minSearchQueryLength else {
+            pendingSearchQuery = nil
             completedSearchQuery = nil
             store.searchResults = []
             return
         }
+        pendingSearchQuery = query
         searchTask = Task {
             try? await Task.sleep(for: Constants.GitHubRepoPicker.searchDebounce)
-            guard !Task.isCancelled else { return }
-            guard let results = await store.searchRepos(query: query) else { return }
+            guard !Task.isCancelled, pendingSearchQuery == query else { return }
+            let results = await store.searchRepos(query: query)
             // Publish results + the query they answer together, only if this
             // task is still the latest — an out-of-order older response can't
             // overwrite a newer one's results.
-            guard !Task.isCancelled else { return }
-            store.searchResults = results
-            completedSearchQuery = query
+            guard !Task.isCancelled, pendingSearchQuery == query else { return }
+            if let results {
+                store.searchResults = results
+                completedSearchQuery = query
+            }
+            pendingSearchQuery = nil
         }
     }
 }
