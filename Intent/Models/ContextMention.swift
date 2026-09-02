@@ -19,26 +19,20 @@ struct ContextMention: Equatable {
 
     /// Matches `@context[...]` tokens; group 1 is the inner payload.
     /// Equivalent to the FE mention regex's `context\[[^\]]+\]` branch.
-    private static let tokenRegex = try! NSRegularExpression(
-        pattern: #"@context\[([^\]]+)\]"#
-    )
+    private static let tokenRegex = #/@context\[([^\]]+)\]/#
 
     /// Splits `text` into interleaved plain-text and mention segments,
     /// preserving all surrounding text.
     static func segments(from text: String) -> [Segment] {
         var segments: [Segment] = []
-        let range = NSRange(text.startIndex..., in: text)
         var lastIndex = text.startIndex
 
-        for match in tokenRegex.matches(in: text, range: range) {
-            guard let matchRange = Range(match.range, in: text),
-                  let payloadRange = Range(match.range(at: 1), in: text) else {
-                continue
-            }
+        for match in text.matches(of: tokenRegex) {
+            let matchRange = match.range
             if matchRange.lowerBound > lastIndex {
                 segments.append(.text(String(text[lastIndex..<matchRange.lowerBound])))
             }
-            segments.append(.mention(mention(fromPayload: String(text[payloadRange]))))
+            segments.append(.mention(mention(fromPayload: String(match.1))))
             lastIndex = matchRange.upperBound
         }
 
