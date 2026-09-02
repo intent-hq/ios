@@ -153,7 +153,12 @@ struct ManualTokenEntryViewTests {
         sec_protocol_options_set_local_identity(tlsOptions.securityProtocolOptions, secIdentity)
         let listener = try NWListener(using: NWParameters(tls: tlsOptions), on: .any)
         let queue = DispatchQueue(label: "ManualTokenEntryViewTests.tls-listener")
+        // Retain accepted connections for the listener's lifetime: an
+        // unreferenced NWConnection can deallocate and cancel the handshake
+        // before the probe captures the certificate.
+        let accepted = OSAllocatedUnfairLock(initialState: [NWConnection]())
         listener.newConnectionHandler = { connection in
+            accepted.withLock { $0.append(connection) }
             connection.start(queue: queue)
         }
         let resumed = OSAllocatedUnfairLock(initialState: false)
