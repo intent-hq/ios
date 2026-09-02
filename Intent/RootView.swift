@@ -90,6 +90,7 @@ struct RootView: View {
     }
 
     var body: some View {
+        @Bindable var coordinator = coordinator
         Group {
             if isWorkspaceFlow {
                 if sizeClass == .compact {
@@ -206,6 +207,11 @@ struct RootView: View {
                 .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
                            value: coordinator.isDisconnected)
             }
+        }
+        // intent://pair deep-link confirmation — presented over whichever
+        // screen is current (first-run pairing or an existing connection).
+        .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
+            DeepLinkPairingView(payload: request.payload)
         }
     }
 

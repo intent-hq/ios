@@ -15,6 +15,14 @@ enum AppScreen {
     case disconnected
 }
 
+/// A pairing request delivered via an `intent://pair` deep link, awaiting
+/// explicit user confirmation before any connection is attempted — unlike the
+/// in-app camera scan, a deep link can be triggered by any web page.
+struct DeepLinkPairingRequest: Identifiable, Equatable {
+    let id = UUID()
+    let payload: PairingPayload
+}
+
 @MainActor
 @Observable
 class AppCoordinator {
@@ -24,7 +32,14 @@ class AppCoordinator {
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
     var pairingShowsSavedConnections = false
+    /// Deep-link pairing awaiting user confirmation; drives the
+    /// DeepLinkPairingView sheet in RootView.
+    var pendingDeepLinkPairing: DeepLinkPairingRequest?
     @ObservationIgnored private var hasEverConnected = false
+    @ObservationIgnored private var hasLoadCompleted = false
+    /// Pair payload from a URL that arrived before onLoadComplete (cold
+    /// start); surfaced as pendingDeepLinkPairing once load finishes.
+    @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
 
@@ -235,6 +250,7 @@ class AppCoordinator {
     }
 
     func onLoadComplete() {
+        hasLoadCompleted = true
         refreshSyncedBackends()
         if DemoMode.pretendPaired || persistence.activeConnection() != nil {
             currentScreen = .connecting
@@ -243,6 +259,48 @@ class AppCoordinator {
             // saved earlier) must be offered on the pairing surface.
             pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
             currentScreen = .pairing
+        }
+        // A deep link that arrived during the cold-start load is surfaced
+        // now, over whichever screen the load routed to.
+        if let payload = stashedDeepLinkPayload {
+            stashedDeepLinkPayload = nil
+            pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
+        }
+    }
+
+    // MARK: - Deep links (intent:// URLs)
+
+    /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Only
+    /// `intent://pair` URIs are actionable: they surface a confirmation
+    /// (DeepLinkPairingView) before any connection is attempted. Every other
+    /// or malformed `intent://` URL is ignored without disturbing app state.
+    /// The URL itself is never logged — pair payloads carry the auth token.
+    func handleIncomingURL(_ url: URL) {
+        guard let payload = PairingPayload.parse(url.absoluteString) else {
+            AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
+            return
+        }
+        guard hasLoadCompleted else {
+            // Cold start: the URL can arrive before onLoadComplete has routed
+            // to the first screen — stash it and surface it after load.
+            stashedDeepLinkPayload = payload
+            return
+        }
+        pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
+    }
+
+    /// A deep-link pairing connected and persisted successfully. From the
+    /// first-run pairing surface this lands in the connected UI directly,
+    /// same as a successful QR scan; from anywhere else (already connected
+    /// to another daemon, connecting, failed) it routes through
+    /// onSwitchConnection so state from the previous daemon is fully reset.
+    func onDeepLinkPaired(_ connection: StoredConnection) {
+        pendingDeepLinkPairing = nil
+        if case .pairing = currentScreen {
+            pairingShowsSavedConnections = false
+            onConnectionSuccess()
+        } else {
+            onSwitchConnection(id: connection.id)
         }
     }
 

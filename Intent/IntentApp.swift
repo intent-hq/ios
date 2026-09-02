@@ -21,6 +21,9 @@ struct IntentApp: App {
                 .environment(coordinator)
                 .environment(ConnectionManager.shared)
                 .preferredColorScheme(resolvedColorScheme)
+                .onOpenURL { url in
+                    coordinator.handleIncomingURL(url)
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
                         coordinator.onScenePhaseActive()

@@ -273,6 +273,126 @@ final class AppCoordinatorTests {
         #expect(!coordinator.pairingShowsSavedConnections)
     }
 
+    // MARK: - Deep-link URL routing (intent://)
+
+    @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        coordinator.handleIncomingURL(
+            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!)
+
+        #expect(coordinator.pendingDeepLinkPairing?.payload == PairingPayload(
+            hosts: ["127.0.0.1"], port: 5181, token: "t",
+            certFingerprint: nil, tcAddress: nil))
+    }
+
+    @Test @MainActor func handleIncomingURL_nonPairURL_isIgnored() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        coordinator.handleIncomingURL(URL(string: "intent://something?x=1")!)
+
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        if case .pairing = coordinator.currentScreen {
+            // pass — app state untouched
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func handleIncomingURL_malformedPairURL_isIgnored() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        // Missing token — PairingPayload.parse rejects it.
+        coordinator.handleIncomingURL(
+            URL(string: "intent://pair?host=127.0.0.1&port=5181")!)
+
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        if case .pairing = coordinator.currentScreen {
+            // pass — app state untouched
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func handleIncomingURL_beforeLoadComplete_stashesUntilLoad() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+
+        // Cold start: the URL arrives while currentScreen is still .loading.
+        coordinator.handleIncomingURL(
+            URL(string: "intent://pair?token=t&host=10.0.0.5&port=4242")!)
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+
+        coordinator.onLoadComplete()
+        #expect(coordinator.pendingDeepLinkPairing?.payload.hosts == ["10.0.0.5"])
+        if case .pairing = coordinator.currentScreen {
+            // pass — load still routed to its normal first screen
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onDeepLinkPaired_fromPairingSurface_landsInConnectedUI() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+        coordinator.handleIncomingURL(
+            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!)
+
+        coordinator.onDeepLinkPaired(Self.makeConnection(port: 5181))
+
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        if case .workspaceList = coordinator.currentScreen {
+            // pass — same landing as a successful QR scan
+        } else {
+            Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onDeepLinkPaired_whileConnectedElsewhere_switchesConnection() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.currentScreen = .workspaceList
+        coordinator.pendingDeepLinkPairing = DeepLinkPairingRequest(
+            payload: PairingPayload(
+                hosts: ["10.0.0.1"], port: 4242, token: "tok-4242",
+                certFingerprint: nil, tcAddress: nil))
+
+        coordinator.onDeepLinkPaired(stored)
+
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(persistence.activeConnection()?.id == stored.id)
+        if case .connecting = coordinator.currentScreen {
+            // pass — routed through onSwitchConnection
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
     // MARK: - Synced backend registry merge
 
     /// Registry whose keychain returns the given records as raw rows.
