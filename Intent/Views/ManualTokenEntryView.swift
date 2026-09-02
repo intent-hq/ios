@@ -53,6 +53,11 @@ struct ManualTokenEntryView: View {
     @State private var isValidating = false
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
+    /// The classified target whose fingerprint was probed, captured alongside
+    /// `probedFingerprint` so the confirmation alert connects to exactly the
+    /// target the user confirmed — never a re-classification of a possibly
+    /// edited field.
+    @State private var probedInput: ManualConnectionInput?
     @State private var showFingerprintConfirmation = false
     @State private var connectTask: Task<Void, Never>?
 
@@ -204,15 +209,17 @@ struct ManualTokenEntryView: View {
                 }
             }
 
-            // The user may have hit Cancel while the probe was in flight: the
-            // cancelled URLSession request surfaces here as a nil fingerprint,
-            // and processing it would show a spurious certificate error (or
+            // The user may have hit Cancel while the probe was in flight: a
+            // cancelled direct probe surfaces here as a nil fingerprint (the
+            // tunnel branch handles its thrown cancellation above), and
+            // processing it would show a spurious certificate error (or
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
             switch CertFingerprintProbe.outcome(forFingerprint: fingerprint) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
+                probedInput = input
                 showFingerprintConfirmation = true
             case .abort(let message):
                 // Never connect unpinned: without a probed certificate there is
@@ -224,8 +231,8 @@ struct ManualTokenEntryView: View {
     }
 
     private func connectWithFingerprint() {
-        guard let portNum = Int(port), let fingerprint = probedFingerprint else { return }
-        let input = ManualConnectionInput.classify(host)
+        guard let portNum = Int(port), let fingerprint = probedFingerprint,
+              let input = probedInput else { return }
 
         Task {
             do {

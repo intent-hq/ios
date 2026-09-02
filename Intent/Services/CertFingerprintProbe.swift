@@ -151,7 +151,10 @@ enum CertFingerprintProbe {
     /// pinned exactly like direct hosts. Throws when the tunnel cannot be
     /// dialed (invalid or unreachable tc address); a nil return means the
     /// tunnel came up but no certificate was captured. The probe function is
-    /// injectable for tests; production uses the real TLS probe above.
+    /// injectable for tests; production uses the real TLS probe above. It must
+    /// stay non-throwing: the close-on-all-paths guarantee relies on the
+    /// linear open → probe → close flow (`defer { await close() }` is not
+    /// expressible), so a throwing probe would leak the tunnel.
     /// Nonisolated for the same reason as `probe(host:port:)`.
     nonisolated static func probeViaTunnel(
         dialer: any TunnelDialing,
