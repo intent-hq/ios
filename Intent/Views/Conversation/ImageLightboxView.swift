@@ -141,28 +141,10 @@ struct ImageLightboxView: View {
     /// Keep the zoomed image edge-locked to the viewport: no panning past the
     /// fitted image's scaled bounds, and no panning at all while unzoomed.
     private func clampedOffset(_ proposed: CGSize, in container: CGSize) -> CGSize {
-        ImageLightboxLayout.clampedOffset(
-            proposed,
-            imageSize: image.size,
-            scale: scale,
-            minimumScale: Self.minScale,
-            in: container
-        )
-    }
-}
-
-enum ImageLightboxLayout {
-    static func clampedOffset(
-        _ proposed: CGSize,
-        imageSize: CGSize,
-        scale: CGFloat,
-        minimumScale: CGFloat,
-        in container: CGSize
-    ) -> CGSize {
-        guard scale > minimumScale, imageSize.width > 0, imageSize.height > 0,
+        guard scale > Self.minScale, image.size.width > 0, image.size.height > 0,
               container.width > 0, container.height > 0 else { return .zero }
-        let fitRatio = min(container.width / imageSize.width, container.height / imageSize.height)
-        let fitted = CGSize(width: imageSize.width * fitRatio, height: imageSize.height * fitRatio)
+        let fitRatio = min(container.width / image.size.width, container.height / image.size.height)
+        let fitted = CGSize(width: image.size.width * fitRatio, height: image.size.height * fitRatio)
         let maxX = max(0, (fitted.width * scale - container.width) / 2)
         let maxY = max(0, (fitted.height * scale - container.height) / 2)
         return CGSize(width: min(max(proposed.width, -maxX), maxX),

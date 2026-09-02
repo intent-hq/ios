@@ -87,30 +87,36 @@ struct WorkspaceDetailView: View {
                             if progress.completed > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Color.green)
-                                    .containerRelativeFrame(
-                                        .horizontal,
-                                        count: progress.total,
-                                        span: progress.completed,
-                                        spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    .containerRelativeFrame(.horizontal) { width, _ in
+                                        progress.segmentWidth(
+                                            for: progress.completed,
+                                            in: width,
+                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    }
                             }
                             if progress.inProgress > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Color.blue)
-                                    .containerRelativeFrame(
-                                        .horizontal,
-                                        count: progress.total,
-                                        span: progress.inProgress,
-                                        spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    .containerRelativeFrame(.horizontal) { width, _ in
+                                        progress.segmentWidth(
+                                            for: progress.inProgress,
+                                            in: width,
+                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    }
                             }
                             if progress.remaining > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Theme.mutedForeground(for: colorScheme).opacity(
                                         Constants.WorkspaceDetail.remainingProgressOpacity))
-                                    .containerRelativeFrame(
-                                        .horizontal,
-                                        count: progress.total,
-                                        span: progress.remaining,
-                                        spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    .containerRelativeFrame(.horizontal) { width, _ in
+                                        progress.segmentWidth(
+                                            for: progress.remaining,
+                                            in: width,
+                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                    }
                             }
                         }
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
@@ -317,7 +323,7 @@ struct WorkspaceDetailView: View {
     }
 }
 
-struct WorkspaceTaskProgressLayout: Equatable {
+private struct WorkspaceTaskProgressLayout: Equatable {
     let total: Int
     let completed: Int
     let inProgress: Int
@@ -329,6 +335,22 @@ struct WorkspaceTaskProgressLayout: Equatable {
         self.completed = min(max(0, completed), total)
         self.inProgress = min(max(0, inProgress), total - self.completed)
         self.remaining = total - self.completed - self.inProgress
+    }
+
+    var visibleSegmentCount: Int {
+        [completed, inProgress, remaining].count(where: { $0 > 0 })
+    }
+
+    func segmentWidth(
+        for count: Int,
+        in containerWidth: CGFloat,
+        horizontalPadding: CGFloat,
+        spacing: CGFloat
+    ) -> CGFloat {
+        let paddedWidth = max(0, containerWidth - horizontalPadding * 2)
+        let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
+        let proportionalWidth = max(0, paddedWidth - totalSpacing)
+        return proportionalWidth * CGFloat(count) / CGFloat(total)
     }
 }
 

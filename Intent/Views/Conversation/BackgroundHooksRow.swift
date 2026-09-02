@@ -162,36 +162,22 @@ private struct HookTimeBar: View {
     var body: some View {
         Rectangle()
             .fill(color)
-            .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
-                length * fraction
-            }
             .frame(height: 1)
+            .scaleEffect(x: fraction, y: 1, anchor: .leading)
             .onAppear(perform: start)
     }
 
     private func start() {
-        let timing = HookTimeBarTiming(nextRunAt: nextRunAt, delayMs: delayMs)
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { fraction = timing.fraction }
-        withAnimation(.linear(duration: timing.duration)) { fraction = 0 }
-    }
-}
-
-struct HookTimeBarTiming: Equatable {
-    let fraction: CGFloat
-    let duration: TimeInterval
-
-    init(nextRunAt: String, delayMs: Int, now: Date = Date()) {
         guard delayMs > 0,
               let next = ISO8601DateFormatter.lenientDate(from: nextRunAt) else {
             fraction = 0
-            duration = 0
             return
         }
         let total = Double(delayMs) / 1000.0
-        let remaining = max(0, min(total, next.timeIntervalSince(now)))
-        fraction = CGFloat(remaining / total)
-        duration = remaining
+        let remaining = max(0, min(total, next.timeIntervalSinceNow))
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { fraction = CGFloat(remaining / total) }
+        withAnimation(.linear(duration: remaining)) { fraction = 0 }
     }
 }
