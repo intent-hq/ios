@@ -15,22 +15,34 @@ set -euo pipefail
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
-if ! command -v go >/dev/null; then
+# A go >= 1.21 auto-downloads the exact toolchain version go.mod
+# requires, so any modern go works regardless of go.mod's (newer)
+# requirement; older gos cannot and must be replaced.
+go_is_usable() {
+  command -v go >/dev/null || return 1
+  v=$(go env GOVERSION 2>/dev/null) || return 1
+  v=${v#go}
+  major=${v%%.*}
+  minor=${v#*.}
+  minor=${minor%%[!0-9]*}
+  [ "${major:-0}" -gt 1 ] 2>/dev/null ||
+    { [ "${major:-0}" -eq 1 ] && [ "${minor:-0}" -ge 21 ]; } 2>/dev/null
+}
+
+if ! go_is_usable; then
   echo "== Installing Go via Homebrew =="
   if ! command -v brew >/dev/null; then
-    echo "error: neither go nor brew found in PATH" >&2
+    echo "error: no usable go (>= 1.21) and no brew found in PATH" >&2
     exit 1
   fi
   HOMEBREW_NO_AUTO_UPDATE=1 brew install go
-  if ! command -v go >/dev/null; then
-    echo "error: brew install go succeeded but go is not in PATH" >&2
+  hash -r
+  if ! go_is_usable; then
+    echo "error: still no usable go (>= 1.21) after brew install" >&2
     exit 1
   fi
 fi
 
-# The go command auto-downloads the toolchain version go.mod requires
-# (any go >= 1.21 supports this), so a brew go older than go.mod's
-# requirement still works; just surface both versions for the log.
 required=$(sed -n 's/^go //p' "$REPO_ROOT/TailcatKit/go.mod")
 echo "== Go toolchain: $(go version) (go.mod requires go $required) =="
 
