@@ -163,7 +163,7 @@ struct ManualTokenEntryView: View {
                 }
             }
             .navigationTitle("Manual Connection")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

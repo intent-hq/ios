@@ -77,7 +77,7 @@ struct ConnectionsView: View {
                 }
             }
             .navigationTitle("Connect to…")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }

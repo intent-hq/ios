@@ -97,7 +97,7 @@ struct SpecialistPickerView: View {
             }
         }
         .navigationTitle("New Agent")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
@@ -240,7 +240,7 @@ struct SpecialistPickerView: View {
             }
         }
         .navigationTitle("Provider & Model")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCreating)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

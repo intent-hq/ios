@@ -64,7 +64,7 @@ struct CreateWorkspaceView: View {
     private var repoSelectionView: some View {
         GitHubRepoPickerView(store: githubStore, selectedRepo: $selectedRepo)
             .navigationTitle("Select Repository")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -178,7 +178,7 @@ struct CreateWorkspaceView: View {
             }
         }
         .navigationTitle("Select Branch")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Next") {
@@ -358,7 +358,7 @@ struct CreateWorkspaceView: View {
             }
         }
         .navigationTitle("Create Workspace")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCreating)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

@@ -92,7 +92,7 @@ struct AcknowledgementsView: View {
             }
         }
         .navigationTitle("Acknowledgements")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
     }
 }
 
