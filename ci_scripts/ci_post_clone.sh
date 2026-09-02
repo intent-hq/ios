@@ -21,7 +21,11 @@ if ! command -v go >/dev/null; then
     echo "error: neither go nor brew found in PATH" >&2
     exit 1
   fi
-  brew install go
+  HOMEBREW_NO_AUTO_UPDATE=1 brew install go
+  if ! command -v go >/dev/null; then
+    echo "error: brew install go succeeded but go is not in PATH" >&2
+    exit 1
+  fi
 fi
 
 # The go command auto-downloads the toolchain version go.mod requires
