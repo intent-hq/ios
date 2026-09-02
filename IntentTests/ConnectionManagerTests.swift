@@ -1534,6 +1534,33 @@ struct ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
+    /// A failed pairing attempt over a live connection must leave the live
+    /// connection's `certMismatches` bookkeeping untouched: the entry-point
+    /// reset (different target) must not wipe it, and mismatches observed by
+    /// the failed race must not stick to the preserved connection.
+    @Test @MainActor func failedPairingOverLiveConnectionKeepsCertMismatches() async throws {
+        let manager = ConnectionManager.shared
+        let server = try await LoopbackWebSocketServer.start()
+        defer {
+            manager.disconnect()
+            server.stop()
+        }
+
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: server.port, token: "live-token")
+        #expect(manager.connectionState == .connected)
+        let liveMismatches = [HostCertMismatch(host: "127.0.0.1", fingerprint: "aa:bb")]
+        manager.certMismatches = liveMismatches
+
+        let deadPort = try await Self.unusedLoopbackPort()
+        await #expect(throws: (any Error).self) {
+            try await manager.connect(
+                hosts: ["127.0.0.1"], port: deadPort, token: "new-token")
+        }
+
+        #expect(manager.certMismatches == liveMismatches)
+    }
+
     /// The success side of the same flow: pairing over a live connection
     /// adopts the new target only once the replacement socket is
     /// established, and the new connection serves round-trips.

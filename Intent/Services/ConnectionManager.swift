@@ -127,6 +127,11 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         tcAddress: String? = nil
     ) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
+        // Snapshot before the reset: a preserving connect (below) that fails
+        // must leave `certMismatches` exactly as the live connection had it —
+        // neither cleared by this target-change reset nor polluted by
+        // mismatches the failed pairing race recorded.
+        let certMismatchesBeforeAttempt = certMismatches
         resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
 
         // A connect over an established or recovering connection (pairing a
@@ -157,9 +162,22 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
-        let winner = try await raceHosts(
-            hosts, port: port, token: token, certFingerprint: certFingerprint,
-            tcAddress: tcAddress)
+        let winner: RacedConnection
+        do {
+            winner = try await raceHosts(
+                hosts, port: port, token: token, certFingerprint: certFingerprint,
+                tcAddress: tcAddress)
+        } catch {
+            // Failed preserving connect: the live connection keeps serving,
+            // so restore its mismatch bookkeeping (unless a newer connect or
+            // disconnect owns it now).
+            if preservesLiveConnection,
+                connectionGeneration == myGeneration, connectAttempt == myAttempt,
+                certMismatches != certMismatchesBeforeAttempt {
+                certMismatches = certMismatchesBeforeAttempt
+            }
+            throw error
+        }
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
