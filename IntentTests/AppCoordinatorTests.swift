@@ -393,6 +393,42 @@ final class AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func onDeepLinkPaired_whileConnecting_restartsConnectionAttempt() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // Cold start with an active saved connection: onLoadComplete routes
+        // to .connecting and the stashed deep link is confirmed over it.
+        let old = persistence.upsertConnection(Self.makeConnection(port: 1111))
+        persistence.setActiveConnection(id: old.id)
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.handleIncomingURL(
+            URL(string: "intent://pair?token=t&host=10.0.0.2&port=2222")!)
+        coordinator.onLoadComplete()
+        if case .connecting = coordinator.currentScreen {
+            // as expected — the deep-link sheet is presented over .connecting
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+        let attemptBefore = coordinator.connectionAttemptId
+
+        let paired = persistence.upsertConnection(Self.makeConnection(port: 2222))
+        coordinator.onDeepLinkPaired(paired)
+
+        // Screen stays .connecting (same value), so the restart must come
+        // from the attempt id that keys ConnectingView's .task(id:).
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(persistence.activeConnection()?.id == paired.id)
+        #expect(coordinator.connectionAttemptId != attemptBefore,
+                "Switching while already on .connecting must restart the attempt")
+        if case .connecting = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
     // MARK: - Synced backend registry merge
 
     /// Registry whose keychain returns the given records as raw rows.

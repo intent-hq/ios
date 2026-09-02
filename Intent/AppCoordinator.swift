@@ -35,6 +35,12 @@ class AppCoordinator {
     /// Deep-link pairing awaiting user confirmation; drives the
     /// DeepLinkPairingView sheet in RootView.
     var pendingDeepLinkPairing: DeepLinkPairingRequest?
+    /// Keys ConnectingView's one-shot connection-attempt task. Bumped by
+    /// onSwitchConnection so a switch performed while currentScreen is
+    /// already .connecting (e.g. a deep-link pairing confirmed over the
+    /// cold-start connect) restarts the attempt — SwiftUI would otherwise
+    /// keep the existing ConnectingView and never re-run its task.
+    private(set) var connectionAttemptId = 0
     @ObservationIgnored private var hasEverConnected = false
     @ObservationIgnored private var hasLoadCompleted = false
     /// Pair payload from a URL that arrived before onLoadComplete (cold
@@ -442,6 +448,7 @@ class AppCoordinator {
         persistence.setActiveConnection(id: id)
         selectedWorkspaceId = nil
         pairingShowsSavedConnections = false
+        connectionAttemptId += 1
         currentScreen = .connecting
     }
 

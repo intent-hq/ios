@@ -15,6 +15,9 @@ struct DeepLinkPairingView: View {
     @State private var errorMessage: String?
     @State private var probedFingerprint: String?
     @State private var showFingerprintConfirmation = false
+    /// In-flight probe/connect task, cancelled when the sheet goes away so a
+    /// dismissed pairing can't complete (and persist + navigate) afterwards.
+    @State private var pairingTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -70,6 +73,9 @@ struct DeepLinkPairingView: View {
                     Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }
                 }
             }
+            // Covers the toolbar Cancel and every other dismissal (swipe
+            // down): pairing must not complete after the sheet is gone.
+            .onDisappear { pairingTask?.cancel() }
             .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
                 Button("Cancel", role: .cancel) {
                     isValidating = false
@@ -98,8 +104,10 @@ struct DeepLinkPairingView: View {
         // Same pinning rules as QR pairing (PairingFlow): a payload
         // fingerprint is pinned directly; without one the server cert is
         // probed and the user must trust it — never plain ws://.
-        Task {
-            switch await PairingFlow.resolveFingerprint(for: payload) {
+        pairingTask = Task {
+            let resolution = await PairingFlow.resolveFingerprint(for: payload)
+            guard !Task.isCancelled else { return }
+            switch resolution {
             case .pinned(let fingerprint):
                 connect(certFingerprint: fingerprint)
             case .needsUserConfirmation(let fingerprint):
@@ -113,12 +121,14 @@ struct DeepLinkPairingView: View {
     }
 
     private func connect(certFingerprint: String) {
-        Task {
+        pairingTask = Task {
             do {
                 let stored = try await PairingFlow.connect(
                     payload: payload, certFingerprint: certFingerprint)
+                guard !Task.isCancelled else { return }
                 coordinator.onDeepLinkPaired(stored)
             } catch {
+                guard !Task.isCancelled else { return }
                 errorMessage = "Connection failed: \(error.localizedDescription)"
                 isValidating = false
             }

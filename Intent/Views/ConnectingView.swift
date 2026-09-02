@@ -24,7 +24,10 @@ struct ConnectingView: View {
                 .background(.regularMaterial, in: Capsule())
         }
         .padding(.bottom, Constants.Connecting.bottomPadding)
-        .task {
+        // Keyed on connectionAttemptId: a connection switch performed while
+        // this view is already showing (same screen value) bumps the id to
+        // restart the attempt, which a plain one-shot .task would not.
+        .task(id: coordinator.connectionAttemptId) {
             await attemptConnection()
         }
     }

@@ -49,6 +49,9 @@ enum PairingFlow {
         try await ConnectionManager.shared.connect(
             hosts: payload.hosts, port: payload.port, token: payload.token,
             certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
+        // A cancelled pairing (deep-link sheet dismissed mid-flight) must
+        // not be persisted after the connect happens to complete first.
+        try Task.checkCancellation()
         let server = PairedServer(
             hosts: payload.hosts, port: payload.port, name: "Intent",
             pairedAt: Date(), certFingerprint: certFingerprint,
