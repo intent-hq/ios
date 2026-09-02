@@ -102,7 +102,7 @@ struct ManualTokenEntryViewTests {
     /// identity (CN=CertFingerprintProbe Live Handshake Fixture), plus the
     /// leaf certificate's independently computed SHA-256 fingerprint
     /// (openssl dgst -sha256 -c).
-    private static let fixtureIdentityP12Base64 = """
+    private nonisolated static let fixtureIdentityP12Base64 = """
         MIIDwgIBAzCCA4gGCSqGSIb3DQEHAaCCA3kEggN1MIIDcTCCAmcGCSqGSIb3DQEH\
         BqCCAlgwggJUAgEAMIICTQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQMwDgQIKjGU\
         RG5CHioCAggAgIICIKX4vqHc5LEBJoDk4LCj/2pjqp2i0Nj/U90hNmNOivkfyHi7\
@@ -125,7 +125,7 @@ struct ManualTokenEntryViewTests {
         UrVnMDEwITAJBgUrDgMCGgUABBQ2+7hWu5Qe6SsZHyl7pq9jBLcTsQQIfjmQQ3oB\
         8nUCAggA
         """
-    private static let fixtureIdentityFingerprint =
+    private nonisolated static let fixtureIdentityFingerprint =
         "e7:24:5c:fe:e7:65:5b:70:6b:e9:7e:02:1f:81:dc:f5:a1:15:38:8c:d1:a3:5f:22:90:08:f6:5e:97:3c:cc:ea"
 
     private nonisolated static func fixtureIdentity() throws -> SecIdentity {
