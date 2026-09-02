@@ -356,6 +356,72 @@ struct ConnectionPersistenceTests {
         #expect(pm.loadConnections().count == 2)
     }
 
+    /// A tunnel-only re-pair (manual tc-address entry) carries no hosts, so
+    /// host overlap can never match — the tcAddress is the record identity.
+    /// Regression: without the tcAddress match key each re-pair inserted a
+    /// duplicate record, including after the record had learned routes.
+    @Test func upsertSameTcAddressUpdatesInPlaceDespiteDisjointHosts() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let original = pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "tok-old"))
+        pm.updateConnectionHosts(id: original.id, hosts: ["10.0.0.1"])
+
+        let stored = pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "tok-new"))
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        // Learned routes survive the tunnel-only re-pair.
+        #expect(loaded.first?.server.hosts == ["10.0.0.1"])
+        #expect(loaded.first?.server.tcAddress == "tc-abc123")
+    }
+
+    /// Records without a tcAddress never match on the tunnel key: two
+    /// tunnel-less records with disjoint hosts stay separate (nil == nil must
+    /// not collapse them).
+    @Test func upsertNilTcAddressDoesNotMatchOnTunnelKey() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t3"))
+        #expect(pm.loadConnections().count == 3)
+    }
+
+    /// Same tc address on a different port is a different daemon listener —
+    /// port stays part of the identity like it is for host matches.
+    @Test func upsertSameTcAddressDifferentPortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t1"))
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4243, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
     @Test func mergeHostListsKeepsExistingFirstAndAppendsNew() {
         #expect(PersistenceManager.mergeHostLists(
             existing: ["nat.example.com", "192.168.1.10"],
