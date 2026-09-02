@@ -16,6 +16,7 @@ struct ImageLightboxView: View {
     @State private var gestureScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var dragTranslation: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
 
     private static let minScale: CGFloat = 1
     private static let maxScale: CGFloat = 5
@@ -23,29 +24,35 @@ struct ImageLightboxView: View {
     private static let dismissDragThreshold: CGFloat = 120
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-                    .onTapGesture { dismiss() }
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture { dismiss() }
 
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(scale * gestureScale)
-                    .offset(x: offset.width + dragTranslation.width,
-                            y: offset.height + dragTranslation.height)
-                    .gesture(doubleTapGesture)
-                    .gesture(dragGesture(in: geo.size))
-                    .simultaneousGesture(magnifyGesture(in: geo.size))
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale * gestureScale)
+                .offset(x: offset.width + dragTranslation.width,
+                        y: offset.height + dragTranslation.height)
+                .gesture(doubleTapGesture)
+                .gesture(dragGesture(in: viewportSize))
+                .simultaneousGesture(magnifyGesture(in: viewportSize))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            if size.width > 0, size.height > 0 {
+                viewportSize = size
             }
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: 8) {
-                    actionsMenu
-                    closeButton
-                }
-                .padding(12)
+        }
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                actionsMenu
+                closeButton
             }
+            .padding(12)
         }
         .background(Color.black.ignoresSafeArea())
     }
@@ -134,10 +141,28 @@ struct ImageLightboxView: View {
     /// Keep the zoomed image edge-locked to the viewport: no panning past the
     /// fitted image's scaled bounds, and no panning at all while unzoomed.
     private func clampedOffset(_ proposed: CGSize, in container: CGSize) -> CGSize {
-        guard scale > Self.minScale, image.size.width > 0, image.size.height > 0,
+        ImageLightboxLayout.clampedOffset(
+            proposed,
+            imageSize: image.size,
+            scale: scale,
+            minimumScale: Self.minScale,
+            in: container
+        )
+    }
+}
+
+enum ImageLightboxLayout {
+    static func clampedOffset(
+        _ proposed: CGSize,
+        imageSize: CGSize,
+        scale: CGFloat,
+        minimumScale: CGFloat,
+        in container: CGSize
+    ) -> CGSize {
+        guard scale > minimumScale, imageSize.width > 0, imageSize.height > 0,
               container.width > 0, container.height > 0 else { return .zero }
-        let fitRatio = min(container.width / image.size.width, container.height / image.size.height)
-        let fitted = CGSize(width: image.size.width * fitRatio, height: image.size.height * fitRatio)
+        let fitRatio = min(container.width / imageSize.width, container.height / imageSize.height)
+        let fitted = CGSize(width: imageSize.width * fitRatio, height: imageSize.height * fitRatio)
         let maxX = max(0, (fitted.width * scale - container.width) / 2)
         let maxY = max(0, (fitted.height * scale - container.height) / 2)
         return CGSize(width: min(max(proposed.width, -maxX), maxX),

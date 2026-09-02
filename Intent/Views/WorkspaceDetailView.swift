@@ -75,38 +75,49 @@ struct WorkspaceDetailView: View {
                 }
 
                 // Task progress bar
-                if let total = workspace?.taskStatsTotal, total > 0 {
-                    let completed = workspace?.taskStatsCompleted ?? 0
-                    let inProgress = workspace?.taskStatsInProgress ?? 0
-                    let remaining = total - completed - inProgress
-
+                if let total = workspace?.taskStatsTotal,
+                   let progress = WorkspaceTaskProgressLayout(
+                       total: total,
+                       completed: workspace?.taskStatsCompleted ?? 0,
+                       inProgress: workspace?.taskStatsInProgress ?? 0
+                   ) {
                     VStack(alignment: .leading,
                            spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
-                        GeometryReader { geometry in
-                            HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-                                if completed > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Color.green)
-                                        .frame(width: geometry.size.width * CGFloat(completed) / CGFloat(total))
-                                }
-                                if inProgress > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Color.blue)
-                                        .frame(width: geometry.size.width * CGFloat(inProgress) / CGFloat(total))
-                                }
-                                if remaining > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Theme.mutedForeground(for: colorScheme).opacity(
-                                            Constants.WorkspaceDetail.remainingProgressOpacity))
-                                        .frame(width: geometry.size.width * CGFloat(remaining) / CGFloat(total))
-                                }
+                        HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
+                            if progress.completed > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Color.green)
+                                    .containerRelativeFrame(
+                                        .horizontal,
+                                        count: progress.total,
+                                        span: progress.completed,
+                                        spacing: Constants.WorkspaceDetail.progressSpacing)
                             }
-                            .clipShape(RoundedRectangle(
-                                cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+                            if progress.inProgress > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Color.blue)
+                                    .containerRelativeFrame(
+                                        .horizontal,
+                                        count: progress.total,
+                                        span: progress.inProgress,
+                                        spacing: Constants.WorkspaceDetail.progressSpacing)
+                            }
+                            if progress.remaining > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Theme.mutedForeground(for: colorScheme).opacity(
+                                        Constants.WorkspaceDetail.remainingProgressOpacity))
+                                    .containerRelativeFrame(
+                                        .horizontal,
+                                        count: progress.total,
+                                        span: progress.remaining,
+                                        spacing: Constants.WorkspaceDetail.progressSpacing)
+                            }
                         }
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
+                        .clipShape(RoundedRectangle(
+                            cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
                     }
-                    .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                    .safeAreaPadding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
 
@@ -303,6 +314,21 @@ struct WorkspaceDetailView: View {
         } else {
             expandedDelegates.insert(agentId)
         }
+    }
+}
+
+struct WorkspaceTaskProgressLayout: Equatable {
+    let total: Int
+    let completed: Int
+    let inProgress: Int
+    let remaining: Int
+
+    init?(total: Int, completed: Int, inProgress: Int) {
+        guard total > 0 else { return nil }
+        self.total = total
+        self.completed = min(max(0, completed), total)
+        self.inProgress = min(max(0, inProgress), total - self.completed)
+        self.remaining = total - self.completed - self.inProgress
     }
 }
 

@@ -160,26 +160,38 @@ private struct HookTimeBar: View {
     @State private var fraction: CGFloat = 1
 
     var body: some View {
-        GeometryReader { geo in
-            Rectangle()
-                .fill(color)
-                .frame(width: geo.size.width * fraction)
-        }
-        .frame(height: 1)
-        .onAppear(perform: start)
+        Rectangle()
+            .fill(color)
+            .containerRelativeFrame(.horizontal, alignment: .leading) { length, _ in
+                length * fraction
+            }
+            .frame(height: 1)
+            .onAppear(perform: start)
     }
 
     private func start() {
+        let timing = HookTimeBarTiming(nextRunAt: nextRunAt, delayMs: delayMs)
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { fraction = timing.fraction }
+        withAnimation(.linear(duration: timing.duration)) { fraction = 0 }
+    }
+}
+
+struct HookTimeBarTiming: Equatable {
+    let fraction: CGFloat
+    let duration: TimeInterval
+
+    init(nextRunAt: String, delayMs: Int, now: Date = Date()) {
         guard delayMs > 0,
               let next = ISO8601DateFormatter.lenientDate(from: nextRunAt) else {
             fraction = 0
+            duration = 0
             return
         }
         let total = Double(delayMs) / 1000.0
-        let remaining = max(0, min(total, next.timeIntervalSinceNow))
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { fraction = CGFloat(remaining / total) }
-        withAnimation(.linear(duration: remaining)) { fraction = 0 }
+        let remaining = max(0, min(total, next.timeIntervalSince(now)))
+        fraction = CGFloat(remaining / total)
+        duration = remaining
     }
 }

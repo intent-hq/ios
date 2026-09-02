@@ -113,6 +113,29 @@ struct BackgroundHookStoreTests {
         #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
 
+    @Test func hookTimeBarUsesRemainingCycleFraction() throws {
+        let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:15Z"))
+        let timing = HookTimeBarTiming(
+            nextRunAt: "2026-07-31T10:06:00Z",
+            delayMs: 60_000,
+            now: now
+        )
+
+        #expect(timing.fraction == 0.75)
+        #expect(timing.duration == 45)
+    }
+
+    @Test func hookTimeBarCollapsesInvalidAndElapsedCycles() throws {
+        let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:15Z"))
+
+        #expect(HookTimeBarTiming(nextRunAt: "invalid", delayMs: 60_000, now: now).fraction == 0)
+        #expect(HookTimeBarTiming(
+            nextRunAt: "2026-07-31T10:05:00Z",
+            delayMs: 60_000,
+            now: now
+        ).duration == 0)
+    }
+
     // MARK: - Fold
 
     @Test func foldRunStartedSetsRunning() throws {
