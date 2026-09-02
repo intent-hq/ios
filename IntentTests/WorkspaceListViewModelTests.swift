@@ -74,6 +74,29 @@ struct WorkspaceListViewModelTests {
         #expect(vm.filteredWorkspaces.count == 2)
     }
 
+    @Test @MainActor func filteredWorkspaces_returnsAll_whenSearchIsWhitespaceOnly() {
+        let ws = [makeWorkspace(id: "1", title: "Alpha"), makeWorkspace(id: "2", title: "Beta")]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        let allWorkspaceIDs = Set(vm.filteredWorkspaces.map(\.id))
+        vm.searchText = " \n\t "
+
+        #expect(!vm.hasSearchQuery)
+        #expect(Set(vm.filteredWorkspaces.map(\.id)) == allWorkspaceIDs)
+    }
+
+    @Test @MainActor func filteredWorkspaces_filtersUsingTrimmedValue_whenSearchIsPadded() {
+        let ws = [makeWorkspace(id: "1", title: "My Project"), makeWorkspace(id: "2", title: "Other")]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        vm.searchText = "  my proj  "
+
+        #expect(vm.hasSearchQuery)
+        #expect(vm.filteredWorkspaces.map(\.id) == ["1"])
+    }
+
     @Test @MainActor func filteredWorkspaces_filtersByTitle_caseInsensitive() {
         let ws = [makeWorkspace(id: "1", title: "My Project"), makeWorkspace(id: "2", title: "Other")]
         let vm = setUp(ws)
