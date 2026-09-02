@@ -151,6 +151,8 @@ private struct ConversationViewContent: View {
         conversationColumn
             .navigationTitle(viewModel.agentName)
             .navigationBarTitleDisplayMode(.inline)
+            .workspaceNavigationSubtitle(
+                title: viewModel.agentName, workspaceId: viewModel.workspaceId)
             .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
