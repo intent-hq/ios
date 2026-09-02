@@ -14,12 +14,12 @@ struct QuestionsDismissedNoticeView: View {
             line
             HStack(spacing: Constants.Conversation.DividerNotice.labelSpacing) {
                 Image(systemName: "bubble.left.slash")
-                    .font(.caption2)
+                    .font(.caption)
                 Text("Questions dismissed")
                     .font(.caption)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .fixedSize()
+            .fixedSize(horizontal: false, vertical: true)
             line
         }
         .padding(.vertical, Constants.Conversation.DividerNotice.verticalPadding)

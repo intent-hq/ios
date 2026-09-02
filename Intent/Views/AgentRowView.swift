@@ -14,6 +14,8 @@ struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
     var indented: Bool = false
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         HStack(spacing: Constants.AgentRow.rowSpacing) {
@@ -24,11 +26,13 @@ struct AgentRowView: View {
 
                 if agent.isActive {
                     Circle()
-                        .fill(Color.green)
+                        .fill(.green)
                         .frame(width: Constants.AgentRow.activeDotSize,
                                height: Constants.AgentRow.activeDotSize)
                         .offset(x: Constants.AgentRow.activeDotOffset,
                                 y: -Constants.AgentRow.activeDotOffset)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Active agent")
                 } else if let attention = agent.pendingAttentionRequest {
                     Image(systemName: attention.kind.systemImage)
                         .font(.system(size: Constants.AgentRow.attentionIconSize))
@@ -43,17 +47,26 @@ struct AgentRowView: View {
                     Text(agent.name)
                         .font(.body)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
                     if agent.isBackground {
                         Text("BG")
                             .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .foregroundStyle(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast))
                             .padding(.horizontal, Constants.AgentRow.badgeHorizontalPadding)
                             .padding(.vertical, Constants.AgentRow.badgeVerticalPadding)
-                            .background(Theme.mutedForeground(for: colorScheme).opacity(
-                                Constants.AgentRow.badgeBackgroundOpacity))
+                            .background(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                    Constants.AgentRow.badgeBackgroundOpacity))
                             .clipShape(.rect(cornerRadius: Constants.AgentRow.badgeCornerRadius))
+                            .overlay {
+                                if colorSchemeContrast == .increased {
+                                    RoundedRectangle(cornerRadius: Constants.AgentRow.badgeCornerRadius)
+                                        .strokeBorder(Theme.border(
+                                            for: colorScheme, contrast: colorSchemeContrast))
+                                }
+                            }
                     }
 
                     Spacer()
@@ -61,7 +74,8 @@ struct AgentRowView: View {
                     if let timestamp = agent.bestTimestamp {
                         Text(relativeDate(from: timestamp))
                             .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .foregroundStyle(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast))
                     }
                 }
 
@@ -69,11 +83,12 @@ struct AgentRowView: View {
                     Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
                         .font(.subheadline)
                         .foregroundStyle(attention.kind.color)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 } else if let message = agent.displayMessage {
                     Text(message)
                         .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .foregroundStyle(Theme.mutedForeground(
+                            for: colorScheme, contrast: colorSchemeContrast))
                         .lineLimit(1)
                 }
             }

@@ -4,6 +4,8 @@ struct WorkspaceRowView: View {
     let workspace: Workspace
     let colorScheme: ColorScheme
     var showRepo: Bool = true
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
     /// indicator; the owning list provides the shared store.
     private let monitorsSource = WorkspacePrMonitorsStore.shared
@@ -27,83 +29,89 @@ struct WorkspaceRowView: View {
             // Status icon with agent activity / unread dot overlays
             ZStack(alignment: .topTrailing) {
                 statusIcon
+                    .accessibilityLabel(displayStatus.label)
 
                 if hasActiveAgents {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: Constants.WorkspaceRow.statusDotSize,
-                               height: Constants.WorkspaceRow.statusDotSize)
-                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
-                                y: -Constants.WorkspaceRow.statusDotOffset)
+                    statusDot(color: .green, differentiatedSymbol: "bolt.fill")
+                        .accessibilityLabel("Active agent")
+                        .offset(x: statusCueOffset, y: -statusCueOffset)
                 }
 
                 // Blue dot: server-owned unread attention flag, overlaying the
                 // real status; cleared via workspace.markSeen on open.
                 if hasUnreadAttention(workspace) {
-                    Circle()
-                        .fill(workspaceUnreadColor)
-                        .frame(width: Constants.WorkspaceRow.statusDotSize,
-                               height: Constants.WorkspaceRow.statusDotSize)
-                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
+                    statusDot(color: workspaceUnreadColor,
+                              differentiatedSymbol: "exclamationmark.triangle.fill")
+                        .accessibilityLabel("Unread attention")
+                        .offset(x: statusCueOffset,
                                 y: hasActiveAgents
-                                    ? Constants.WorkspaceRow.unreadDotStackOffset
-                                    : -Constants.WorkspaceRow.statusDotOffset)
+                                    ? unreadStatusCueStackOffset
+                                    : -statusCueOffset)
                 }
 
                 // Grey static dot: orthogonal waiting flag (protocol 6.17).
                 // Lowest precedence — running and unread dots win.
                 if showsWaitingDot(workspace) {
-                    Circle()
-                        .fill(Color.gray)
-                        .frame(width: Constants.WorkspaceRow.statusDotSize,
-                               height: Constants.WorkspaceRow.statusDotSize)
-                        .offset(x: Constants.WorkspaceRow.statusDotOffset,
-                                y: -Constants.WorkspaceRow.statusDotOffset)
+                    statusDot(color: .gray, differentiatedSymbol: "clock.fill")
+                        .accessibilityLabel("Waiting")
+                        .offset(x: statusCueOffset, y: -statusCueOffset)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
                 if workspace.title.trimmingCharacters(in: .whitespaces).isEmpty {
                     Text("<Untitled>")
                         .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .lineLimit(1)
+                        .foregroundStyle(Theme.mutedForeground(
+                            for: colorScheme, contrast: colorSchemeContrast))
+                        .lineLimit(2)
                 } else {
                     Text(workspace.title)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(1)
+                        .lineLimit(2)
                 }
 
                 HStack(spacing: Constants.WorkspaceRow.metadataSpacing) {
                     if showRepo, let repo = workspace.repositoryName {
                         Text(repo)
                             .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .lineLimit(1)
+                            .foregroundStyle(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast))
+                            .lineLimit(2)
                     }
 
                     if let pill = prIndicator.pill {
                         let pillColor = Self.pillColor(for: pill.status)
-                        Text("PR\(pill.number.map { " #\($0)" } ?? "")")
-                            .font(.system(size: Constants.WorkspaceRow.pillFontSize, weight: .medium))
-                            .foregroundStyle(pillColor)
-                            .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
-                            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                            .background(pillColor.opacity(Constants.WorkspaceRow.pillBackgroundOpacity))
-                            .clipShape(Capsule())
+                        HStack(spacing: 3) {
+                            Image(systemName: Self.pillSystemImage(for: pill.status))
+                            Text("PR\(pill.number.map { " #\($0)" } ?? "")")
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(pillColor)
+                        .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                        .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+                        .background(pillColor.opacity(Constants.WorkspaceRow.pillBackgroundOpacity))
+                        .clipShape(Capsule())
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(
+                            "\(pill.status.rawValue.capitalized) pull request"
+                                + (pill.number.map { " #\($0)" } ?? ""))
                     }
 
                     // "+N": other monitored PRs in the pool beyond the
                     // primary pill (same capsule styling, muted).
                     if prIndicator.otherMonitorCount > 0 {
                         Text("+\(prIndicator.otherMonitorCount)")
-                            .font(.system(size: Constants.WorkspaceRow.pillFontSize, weight: .medium))
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast))
                             .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
                             .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                            .background(Theme.mutedForeground(for: colorScheme).opacity(
-                                Constants.WorkspaceRow.pillBackgroundOpacity))
+                            .background(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                    Constants.WorkspaceRow.pillBackgroundOpacity))
                             .clipShape(Capsule())
                     }
                 }
@@ -114,7 +122,8 @@ struct WorkspaceRowView: View {
             if let activity = workspace.lastActivity ?? workspace.updatedAt {
                 Text(relativeDate(from: activity))
                     .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .foregroundStyle(Theme.mutedForeground(
+                        for: colorScheme, contrast: colorSchemeContrast))
             }
         }
         .contentShape(Rectangle())
@@ -205,10 +214,53 @@ struct WorkspaceRowView: View {
         }
     }
 
+    static func pillSystemImage(for status: WorkspacePrPill.Status) -> String {
+        switch status {
+        case .merged: return "arrow.triangle.merge"
+        case .open: return "arrow.triangle.pull"
+        case .draft: return "pencil.circle"
+        case .closed: return "xmark.circle"
+        }
+    }
+
+    private var statusStrokeWidth: CGFloat {
+        Constants.WorkspaceRow.statusStrokeWidth * (colorSchemeContrast == .increased ? 1.5 : 1)
+    }
+
+    private var statusCueSize: CGFloat {
+        differentiateWithoutColor
+            ? Constants.WorkspaceRow.differentiatedStatusCueSize
+            : Constants.WorkspaceRow.statusDotSize
+    }
+
+    private var statusCueOffset: CGFloat {
+        differentiateWithoutColor
+            ? Constants.WorkspaceRow.differentiatedStatusCueOffset
+            : Constants.WorkspaceRow.statusDotOffset
+    }
+
+    private var unreadStatusCueStackOffset: CGFloat {
+        differentiateWithoutColor
+            ? Constants.WorkspaceRow.differentiatedUnreadStackOffset
+            : Constants.WorkspaceRow.unreadDotStackOffset
+    }
+
+    private var statusColor: Color {
+        if colorSchemeContrast == .increased {
+            switch displayStatus {
+            case .idle, .notStarted, .unknown:
+                return Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
+            default:
+                break
+            }
+        }
+        return displayStatus.color
+    }
+
     @ViewBuilder
     private var statusIcon: some View {
         let size = Constants.WorkspaceRow.statusIconSize
-        let color = displayStatus.color
+        let color = statusColor
 
         switch displayStatus {
         case .failed:
@@ -247,21 +299,31 @@ struct WorkspaceRowView: View {
         case .notStarted:
             // Empty outline circle
             Circle()
-                .strokeBorder(Color.gray.opacity(Constants.WorkspaceRow.inactiveStatusOpacity),
-                              lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
+                .strokeBorder(
+                    color.opacity(colorSchemeContrast == .increased
+                        ? 1
+                        : Constants.WorkspaceRow.inactiveStatusOpacity),
+                    lineWidth: statusStrokeWidth)
                 .frame(width: size, height: size)
 
         case .idle:
             // Empty outline circle in the idle muted color
-            Circle()
-                .strokeBorder(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
-                .frame(width: size, height: size)
+            ZStack {
+                Circle()
+                    .strokeBorder(color, lineWidth: statusStrokeWidth)
+                if differentiateWithoutColor {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: size * 0.35, weight: .bold))
+                        .foregroundStyle(color)
+                }
+            }
+            .frame(width: size, height: size)
 
         case .inProgress:
             // Half-filled circle (right half)
             ZStack {
                 Circle()
-                    .stroke(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
+                    .stroke(color, lineWidth: statusStrokeWidth)
                 Circle()
                     .fill(color)
                     .clipShape(HalfCircle())
@@ -279,12 +341,21 @@ struct WorkspaceRowView: View {
             }
             .frame(width: size, height: size)
 
-        case .prOpen, .prReady:
-            // Filled circle with PR icon (prReady shows the same icon in green)
+        case .prOpen:
             ZStack {
                 Circle()
                     .fill(color)
                 Image(systemName: "arrow.triangle.pull")
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: size, height: size)
+
+        case .prReady:
+            ZStack {
+                Circle()
+                    .fill(color)
+                Image(systemName: differentiateWithoutColor ? "checkmark" : "arrow.triangle.pull")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
             }
@@ -305,12 +376,27 @@ struct WorkspaceRowView: View {
             // Neutral question mark for a wire value this build doesn't know
             ZStack {
                 Circle()
-                    .strokeBorder(color, lineWidth: Constants.WorkspaceRow.statusStrokeWidth)
+                    .strokeBorder(color, lineWidth: statusStrokeWidth)
                 Image(systemName: "questionmark")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(color)
             }
             .frame(width: size, height: size)
+        }
+    }
+
+    @ViewBuilder
+    private func statusDot(color: Color, differentiatedSymbol: String) -> some View {
+        if differentiateWithoutColor {
+            Image(systemName: differentiatedSymbol)
+                .font(.system(size: statusCueSize, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: statusCueSize, height: statusCueSize)
+        } else {
+            Circle()
+                .fill(color)
+                .frame(width: Constants.WorkspaceRow.statusDotSize,
+                       height: Constants.WorkspaceRow.statusDotSize)
         }
     }
 

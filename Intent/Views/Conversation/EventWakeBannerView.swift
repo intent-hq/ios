@@ -18,7 +18,6 @@ struct EventWakeBannerView: View {
                     .font(.caption2)
                 Text(label)
                     .font(.caption)
-                    .lineLimit(2)
                     .multilineTextAlignment(.center)
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))

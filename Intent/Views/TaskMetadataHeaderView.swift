@@ -128,7 +128,10 @@ struct TaskMetadataHeaderView: View {
                     .foregroundStyle(Theme.foreground(for: colorScheme))
             }
             .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
+            .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         }
+        .accessibilityLabel("Change task status")
+        .accessibilityValue((note.taskDisplayStatus ?? .unknown).label)
     }
 
     private var agentNames: some View {
@@ -235,7 +238,14 @@ private struct TaskRelationChip: View {
                         : Theme.muted(for: colorScheme).opacity(
                             Constants.Notes.Metadata.mutedBackgroundOpacity))
             .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
+            .frame(
+                minWidth: Constants.Accessibility.minimumTapTarget,
+                minHeight: Constants.Accessibility.minimumTapTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Open related task \(title)")
+        .accessibilityValue(
+            variant == .conflict ? "Conflict" : unmet ? "Unmet dependency" : "Dependency")
     }
 }

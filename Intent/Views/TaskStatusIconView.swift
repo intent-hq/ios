@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Compact circular task status indicator, visually matching the desktop
 /// frontend's `TaskStatusIcon.svelte`:
-/// - notStarted / unknown: empty gray outline circle
+/// - notStarted: empty gray outline circle; unknown adds a question mark
 /// - waiting: gray outline circle with a clock glyph (deliberate addition;
 ///   the fe currently renders waiting identically to not_started)
 /// - discussionNeeded: amber filled circle with a question mark
@@ -16,9 +16,18 @@ import SwiftUI
 struct TaskStatusIconView: View {
     let status: TaskDisplayStatus
     var size: CGFloat = 16
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     /// Scale factor from the 24×24 reference space to the rendered size.
     private var s: CGFloat { size / 24 }
+
+    private var statusStrokeWidth: CGFloat {
+        (colorSchemeContrast == .increased ? 3.5 : 2.5) * s
+    }
+
+    private var neutralColor: Color {
+        colorSchemeContrast == .increased ? .primary.opacity(0.75) : Palette.gray
+    }
 
     /// Shared task-status palette; `amber` doubles as the warning color for
     /// conflict relation chips (fe `text-warning`).
@@ -42,7 +51,7 @@ struct TaskStatusIconView: View {
     /// Outline stroke color per status.
     private var strokeColor: Color {
         switch status {
-        case .notStarted, .waiting, .cancelled, .unknown: return Palette.gray
+        case .notStarted, .waiting, .cancelled, .unknown: return neutralColor
         case .discussionNeeded: return Palette.amber
         case .blocked: return Palette.red
         case .inProgress: return Palette.skyBlue
@@ -71,7 +80,7 @@ struct TaskStatusIconView: View {
                 fillCircle(color: fill.color, radius: fill.radius)
             }
             Circle()
-                .stroke(strokeColor, lineWidth: 2.5 * s)
+                .stroke(strokeColor, lineWidth: statusStrokeWidth)
                 .frame(width: 21.6 * s, height: 21.6 * s)
             if status == .inProgress {
                 // fe draws an extra inner ring (r=10, width 2) that thickens
@@ -109,12 +118,16 @@ struct TaskStatusIconView: View {
     @ViewBuilder
     private var glyph: some View {
         switch status {
-        case .notStarted, .inProgress, .unknown:
+        case .notStarted, .inProgress:
             EmptyView()
+        case .unknown:
+            Image(systemName: "questionmark")
+                .font(.system(size: 11 * s, weight: .bold))
+                .foregroundStyle(neutralColor)
         case .waiting:
             Image(systemName: "clock")
                 .font(.system(size: 11 * s, weight: .medium))
-                .foregroundStyle(Palette.gray)
+                .foregroundStyle(neutralColor)
         case .discussionNeeded:
             Image(systemName: "questionmark")
                 .font(.system(size: 12 * s, weight: .bold))
@@ -139,13 +152,14 @@ struct TaskStatusIconView: View {
                 p.addLine(to: point(10.5, 16))
                 p.addLine(to: point(17, 9))
             }
-            .stroke(.white, style: StrokeStyle(lineWidth: 3.5 * s, lineCap: .round, lineJoin: .round))
+            .stroke(.white,
+                    style: StrokeStyle(lineWidth: 3.5 * s, lineCap: .round, lineJoin: .round))
         case .cancelled:
             Path { p in
                 p.move(to: point(5, 19))
                 p.addLine(to: point(19, 5))
             }
-            .stroke(Palette.gray, style: StrokeStyle(lineWidth: 2.5 * s, lineCap: .round))
+            .stroke(neutralColor, style: StrokeStyle(lineWidth: statusStrokeWidth, lineCap: .round))
         }
     }
 

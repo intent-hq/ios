@@ -25,12 +25,16 @@ struct Theme {
         Constants.Colors.Theme.muted(for: scheme)
     }
 
-    static func mutedForeground(for scheme: ColorScheme) -> Color {
-        Constants.Colors.Theme.mutedForeground(for: scheme)
+    static func mutedForeground(
+        for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+    ) -> Color {
+        Constants.Colors.Theme.mutedForeground(for: scheme, contrast: contrast)
     }
 
-    static func border(for scheme: ColorScheme) -> Color {
-        Constants.Colors.Theme.border(for: scheme)
+    static func border(
+        for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+    ) -> Color {
+        Constants.Colors.Theme.border(for: scheme, contrast: contrast)
     }
 
     static func destructive(for scheme: ColorScheme) -> Color {

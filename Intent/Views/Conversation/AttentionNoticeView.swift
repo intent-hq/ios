@@ -8,6 +8,7 @@ import SwiftUI
 struct AttentionNoticeView: View {
     let notice: AttentionNotice
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     private var tint: Color {
         switch notice.kind {
@@ -43,12 +44,12 @@ struct AttentionNoticeView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
 
                 if !notice.reason.isEmpty {
                     Text(notice.reason)
                         .font(.subheadline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
                         .textSelection(.enabled)
                 }
             }
@@ -56,13 +57,20 @@ struct AttentionNoticeView: View {
         .padding(.horizontal, Constants.Conversation.NoticeCard.horizontalPadding)
         .padding(.vertical, Constants.Conversation.NoticeCard.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(Constants.Conversation.NoticeCard.backgroundOpacity))
+        .background(tint.opacity(
+            colorSchemeContrast == .increased
+                ? Constants.Conversation.NoticeCard.backgroundOpacity * 1.75
+                : Constants.Conversation.NoticeCard.backgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius)
                 .strokeBorder(
-                    tint.opacity(Constants.Conversation.NoticeCard.borderOpacity),
-                    lineWidth: Constants.Conversation.NoticeCard.borderWidth)
+                    tint.opacity(colorSchemeContrast == .increased
+                        ? 1
+                        : Constants.Conversation.NoticeCard.borderOpacity),
+                    lineWidth: colorSchemeContrast == .increased
+                        ? Constants.Conversation.NoticeCard.borderWidth * 2
+                        : Constants.Conversation.NoticeCard.borderWidth)
         )
     }
 }
