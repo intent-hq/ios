@@ -111,6 +111,7 @@ struct NoteDetailView: View {
         }
         .navigationTitle(noteTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
             await loadNote()
             // Also fetch all notes so we can resolve titles for intent:// links
