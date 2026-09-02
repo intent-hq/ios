@@ -14,19 +14,12 @@ struct NoteListView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Spacer()
         } else if noteStore.sortedNotes.isEmpty {
-            Spacer()
-            VStack(spacing: Constants.Notes.List.emptyStateSpacing) {
-                Image(systemName: "doc.text")
-                    .font(.largeTitle)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                Text("No notes")
-                    .font(.headline)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Text("Notes will appear here when created.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            }
-            Spacer()
+            ContentUnavailableView(
+                "No Notes",
+                systemImage: "doc.text",
+                description: Text("Notes will appear here when created.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -148,10 +141,14 @@ struct NoteRowView: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .frame(width: Constants.Notes.List.disclosureSize,
                                height: Constants.Notes.List.disclosureSize)
+                        .frame(
+                            minWidth: Constants.Accessibility.minimumTapTarget,
+                            minHeight: Constants.Accessibility.minimumTapTarget)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("\(isCollapsed ? "Expand" : "Collapse") \(note.title)")
+                .accessibilityLabel("Child notes for \(note.title)")
+                .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
             } else if depth > 0 {
                 // Leaf node at non-root level: small spacer for alignment
                 Spacer()
@@ -185,13 +182,13 @@ struct NoteRowView: View {
                         Text(note.title)
                             .font(depth == 0 ? .body.weight(.medium) : .subheadline.weight(.medium))
                             .foregroundStyle(Theme.foreground(for: colorScheme))
-                            .lineLimit(1)
+                            .lineLimit(2)
 
                         if !note.tags.isEmpty {
                             HStack(spacing: Constants.Notes.List.contentSpacing) {
                                 ForEach(note.tags.prefix(Constants.Notes.List.maximumTagCount), id: \.self) { tag in
                                     Text(tag)
-                                        .font(.caption2)
+                                        .font(.caption)
                                         .padding(.horizontal, Constants.Notes.List.tagHorizontalPadding)
                                         .padding(.vertical, Constants.Notes.List.tagVerticalPadding)
                                         .background(Theme.muted(for: colorScheme))
@@ -204,12 +201,17 @@ struct NoteRowView: View {
                             Text(preview)
                                 .font(.caption)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                .lineLimit(1)
+                                .lineLimit(2)
                         }
                     }
 
                     Spacer()
                 }
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    maxWidth: .infinity,
+                    minHeight: Constants.Accessibility.minimumTapTarget,
+                    alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

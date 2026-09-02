@@ -6,7 +6,7 @@ struct WorkspaceDetailView: View {
     @State private var agentStore = AgentStore()
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @State private var showBackgroundAgents = false
     @State private var expandedDelegates: Set<String> = []
     @State private var showDeleteConfirmation = false
@@ -20,50 +20,19 @@ struct WorkspaceDetailView: View {
         workspaceStore.workspaces.first { $0.id == workspaceId }
     }
 
+    private var workspaceTitle: String {
+        guard let title = workspace?.title,
+              !title.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return "<Untitled>"
+        }
+        return title
+    }
+
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Title row with menu aligned
-                HStack(alignment: .center) {
-                    if let title = workspace?.title, !title.trimmingCharacters(in: .whitespaces).isEmpty {
-                        Text(title)
-                            .font(.title2.bold())
-                            .foregroundStyle(Theme.foreground(for: colorScheme))
-                            .lineLimit(Constants.WorkspaceDetail.titleLineLimit)
-                    } else {
-                        Text("<Untitled>")
-                            .font(.title2.bold())
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .lineLimit(Constants.WorkspaceDetail.titleLineLimit)
-                    }
-                    Spacer()
-                    Menu {
-                        Button {
-                            showSpecialistPicker = true
-                        } label: {
-                            Label("Create New Agent", systemImage: "plus.circle")
-                        }
-                        Divider()
-                        Button(role: .none, action: { showArchiveConfirmation = true }) {
-                            Label("Archive", systemImage: "archivebox")
-                        }
-                        Button(role: .destructive, action: { showDeleteConfirmation = true }) {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.title3)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    }
-                    .accessibilityLabel("Workspace actions")
-                }
-                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                .padding(.top, horizontalSizeClass == .compact
-                    ? 0 : Constants.WorkspaceDetail.regularTitleTopPadding)
-                .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
-
                 // Repo name
                 if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
                     Text("\(owner)/\(repo)")
@@ -79,9 +48,17 @@ struct WorkspaceDetailView: View {
                     let completed = workspace?.taskStatsCompleted ?? 0
                     let inProgress = workspace?.taskStatsInProgress ?? 0
                     let remaining = total - completed - inProgress
+                    let progressSummary = "\(completed) of \(total) tasks complete"
+                        + (inProgress > 0 ? ", \(inProgress) in progress" : "")
 
                     VStack(alignment: .leading,
                            spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
+                        Text(progressSummary)
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast))
+                            .fixedSize(horizontal: false, vertical: true)
+
                         GeometryReader { geometry in
                             HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
                                 if completed > 0 {
@@ -96,8 +73,11 @@ struct WorkspaceDetailView: View {
                                 }
                                 if remaining > 0 {
                                     RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Theme.mutedForeground(for: colorScheme).opacity(
-                                            Constants.WorkspaceDetail.remainingProgressOpacity))
+                                        .fill(Theme.mutedForeground(
+                                            for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                                colorSchemeContrast == .increased
+                                                    ? 0.55
+                                                    : Constants.WorkspaceDetail.remainingProgressOpacity))
                                         .frame(width: geometry.size.width * CGFloat(remaining) / CGFloat(total))
                                 }
                             }
@@ -105,10 +85,28 @@ struct WorkspaceDetailView: View {
                                 cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
                         }
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
+                        .overlay {
+                            if colorSchemeContrast == .increased {
+                                RoundedRectangle(
+                                    cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .strokeBorder(Theme.border(
+                                        for: colorScheme, contrast: colorSchemeContrast),
+                                        lineWidth: 1.5)
+                            }
+                        }
+                        .accessibilityHidden(true)
                     }
                     .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
+
+                Picker("Workspace Content", selection: $selectedTab) {
+                    Text("Agents").tag(0)
+                    Text("Context").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
 
                 // Tab content
                 if selectedTab == 0 {
@@ -119,19 +117,12 @@ struct WorkspaceDetailView: View {
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         Spacer()
                     } else if viewModel.agents.isEmpty {
-                        Spacer()
-                        VStack(spacing: Constants.WorkspaceDetail.emptyStateSpacing) {
-                            Image(systemName: "person.2")
-                                .font(.largeTitle)
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            Text("No agents")
-                                .font(.headline)
-                                .foregroundStyle(Theme.foreground(for: colorScheme))
-                            Text("Agents will appear here when active.")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        }
-                        Spacer()
+                        ContentUnavailableView(
+                            "No Agents",
+                            systemImage: "person.2",
+                            description: Text("Agents will appear here when active.")
+                        )
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         agentListContent
                     }
@@ -140,14 +131,6 @@ struct WorkspaceDetailView: View {
                     NoteListView(workspaceId: workspaceId, noteStore: noteStore)
                 }
 
-                // Bottom tab bar
-                Picker("View", selection: $selectedTab) {
-                    Text("Agents").tag(0)
-                    Text("Context").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
             }
         }
         .onAppear {
@@ -224,12 +207,35 @@ struct WorkspaceDetailView: View {
         } message: {
             Text("Archive this workspace? You can unarchive it later.")
         }
-        .fullScreenCover(isPresented: $showSpecialistPicker) {
+        .sheet(isPresented: $showSpecialistPicker) {
             SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore)
                 .environment(coordinator)
         }
-        .navigationTitle("")
+        .navigationTitle(workspaceTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        showSpecialistPicker = true
+                    } label: {
+                        Label("Create New Agent", systemImage: "plus.circle")
+                    }
+                    Divider()
+                    Button { showArchiveConfirmation = true } label: {
+                        Label("Archive", systemImage: "archivebox")
+                    }
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("Workspace actions")
+            }
+        }
 
     }
 
