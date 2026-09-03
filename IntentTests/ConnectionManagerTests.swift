@@ -543,7 +543,11 @@ struct ConnectionManagerTests {
 
         #expect(outcome.winner?.host == "good.host")
         #expect(outcome.failure == nil)
-        #expect(outcome.mismatches == [
+        // The race settles on the first success, so whether the loser's
+        // mismatch is on the outcome or reported by the background drain
+        // depends on scheduling; either way it must not be swallowed.
+        let lateMismatches = await outcome.drain?.value ?? []
+        #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")])
     }
 

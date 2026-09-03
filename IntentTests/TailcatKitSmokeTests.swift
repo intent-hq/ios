@@ -111,8 +111,11 @@ struct TailcatDialHandleTests {
         #expect(handle.register(client))
         let start = CFAbsoluteTimeGetCurrent()
         handle.cancel()
-        // The close is dispatched off-thread; the cancel call itself must
-        // return promptly even when the Go side would take its time.
+        // Smoke check only: an unused client's close is a no-op on the Go
+        // side, so this cannot tell a synchronous close from the off-thread
+        // dispatch `cancel()` performs — that guarantee is reviewable only by
+        // inspection (the gomobile client cannot be faked). It pins that
+        // `cancel()` is at least cheap in the no-op case.
         #expect(CFAbsoluteTimeGetCurrent() - start < 1)
     }
 }

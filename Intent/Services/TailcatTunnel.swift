@@ -159,12 +159,12 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                             // latency near zero means it did, a latency near the
                             // ping's own timeout means the ping ran to completion.
                             let latencyMs = Int((CFAbsoluteTimeGetCurrent() - cancelledAt) * 1000)
-                            AppLog.connection.debug("[TailcatTunnel] Dial cancelled mid-ping: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
+                            AppLog.connection.debug("[TailcatTunnel] Dial cancelled before ping returned: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
                             // The cancel's close may have been a no-op if the
                             // client had not started yet; close again (idempotent
                             // on the Go side) so the stack never lives on unowned.
                             try? client.close()
-                            logFinished("cancelled mid-ping")
+                            logFinished("cancelled before ping returned")
                             continuation.resume(throwing: CancellationError())
                             return
                         }

@@ -788,8 +788,12 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// before settling are collected on the outcome (a loser's mismatch is not
     /// swallowed by the winner). When no candidate succeeds, every candidate
     /// is awaited and `failure` prefers an aggregate certificate error over
-    /// generic failures. Generic over the connection so tests can race fakes;
-    /// internal for test visibility.
+    /// generic failures. Cancelling the losers runs each candidate's task
+    /// cancellation handlers synchronously on the settling thread, so
+    /// candidate cancellation handlers must not block (the tunnel dial's
+    /// `DialHandle.cancel()` closes off-thread for this reason) — a blocking
+    /// handler would stall the settle inside `cancelAll()`. Generic over the
+    /// connection so tests can race fakes; internal for test visibility.
     nonisolated static func raceCandidates<Connection: HostRacingConnection>(
         _ hosts: [String],
         connect: @escaping @Sendable (String) async throws -> Connection
