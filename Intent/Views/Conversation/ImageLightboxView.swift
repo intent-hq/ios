@@ -16,6 +16,7 @@ struct ImageLightboxView: View {
     @State private var gestureScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var dragTranslation: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
 
     private static let minScale: CGFloat = 1
     private static let maxScale: CGFloat = 5
@@ -23,31 +24,35 @@ struct ImageLightboxView: View {
     private static let dismissDragThreshold: CGFloat = 120
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-                    .onTapGesture { dismiss() }
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+                .onTapGesture { dismiss() }
 
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(scale * gestureScale)
-                    .offset(x: offset.width + dragTranslation.width,
-                            y: offset.height + dragTranslation.height)
-                    .gesture(doubleTapGesture)
-                    .gesture(dragGesture(in: geo.size))
-                    .simultaneousGesture(magnifyGesture(in: geo.size))
-            }
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: 8) {
-                    actionsMenu
-                    closeButton
-                }
-                .padding(12)
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale * gestureScale)
+                .offset(x: offset.width + dragTranslation.width,
+                        y: offset.height + dragTranslation.height)
+                .gesture(doubleTapGesture)
+                .gesture(dragGesture(in: viewportSize))
+                .simultaneousGesture(magnifyGesture(in: viewportSize))
+        }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            if size.width > 0, size.height > 0 {
+                viewportSize = size
             }
         }
-        .background(Color.black.ignoresSafeArea())
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                actionsMenu
+                closeButton
+            }
+            .padding(12)
+        }
     }
 
     private var actionsMenu: some View {

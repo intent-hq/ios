@@ -160,13 +160,11 @@ private struct HookTimeBar: View {
     @State private var fraction: CGFloat = 1
 
     var body: some View {
-        GeometryReader { geo in
-            Rectangle()
-                .fill(color)
-                .frame(width: geo.size.width * fraction)
-        }
-        .frame(height: 1)
-        .onAppear(perform: start)
+        Rectangle()
+            .fill(color)
+            .frame(height: 1)
+            .scaleEffect(x: fraction, y: 1, anchor: .leading)
+            .onAppear(perform: start)
     }
 
     private func start() {

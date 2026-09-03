@@ -13,6 +13,7 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
+    @State private var progressWidth: CGFloat = 0
     @State private var noteStore = NoteStore()
     private let workspaceStore = WorkspaceStore.shared
 
@@ -75,36 +76,56 @@ struct WorkspaceDetailView: View {
                 }
 
                 // Task progress bar
-                if let total = workspace?.taskStatsTotal, total > 0 {
-                    let completed = workspace?.taskStatsCompleted ?? 0
-                    let inProgress = workspace?.taskStatsInProgress ?? 0
-                    let remaining = total - completed - inProgress
-
+                if let total = workspace?.taskStatsTotal,
+                   let progress = WorkspaceTaskProgressLayout(
+                       total: total,
+                       completed: workspace?.taskStatsCompleted ?? 0,
+                       inProgress: workspace?.taskStatsInProgress ?? 0
+                   ) {
                     VStack(alignment: .leading,
                            spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
-                        GeometryReader { geometry in
-                            HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-                                if completed > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Color.green)
-                                        .frame(width: geometry.size.width * CGFloat(completed) / CGFloat(total))
-                                }
-                                if inProgress > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Color.blue)
-                                        .frame(width: geometry.size.width * CGFloat(inProgress) / CGFloat(total))
-                                }
-                                if remaining > 0 {
-                                    RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                        .fill(Theme.mutedForeground(for: colorScheme).opacity(
-                                            Constants.WorkspaceDetail.remainingProgressOpacity))
-                                        .frame(width: geometry.size.width * CGFloat(remaining) / CGFloat(total))
-                                }
+                        HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
+                            if progress.completed > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Color.green)
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
+                                            for: progress.completed,
+                                            in: progressWidth,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                        : 0)
                             }
-                            .clipShape(RoundedRectangle(
-                                cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+                            if progress.inProgress > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Color.blue)
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
+                                            for: progress.inProgress,
+                                            in: progressWidth,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                        : 0)
+                            }
+                            if progress.remaining > 0 {
+                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
+                                    .fill(Theme.mutedForeground(for: colorScheme).opacity(
+                                        Constants.WorkspaceDetail.remainingProgressOpacity))
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
+                                            for: progress.remaining,
+                                            in: progressWidth,
+                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                        : 0)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
+                        .clipShape(RoundedRectangle(
+                            cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.width
+                        } action: { width in
+                            progressWidth = width
+                        }
                     }
                     .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
@@ -303,6 +324,35 @@ struct WorkspaceDetailView: View {
         } else {
             expandedDelegates.insert(agentId)
         }
+    }
+}
+
+struct WorkspaceTaskProgressLayout: Equatable {
+    let total: Int
+    let completed: Int
+    let inProgress: Int
+    let remaining: Int
+
+    init?(total: Int, completed: Int, inProgress: Int) {
+        guard total > 0 else { return nil }
+        self.total = total
+        self.completed = min(max(0, completed), total)
+        self.inProgress = min(max(0, inProgress), total - self.completed)
+        self.remaining = total - self.completed - self.inProgress
+    }
+
+    var visibleSegmentCount: Int {
+        [completed, inProgress, remaining].count(where: { $0 > 0 })
+    }
+
+    func segmentWidth(
+        for count: Int,
+        in measuredWidth: CGFloat,
+        spacing: CGFloat
+    ) -> CGFloat {
+        let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
+        let distributableWidth = max(0, measuredWidth - totalSpacing)
+        return distributableWidth * CGFloat(count) / CGFloat(total)
     }
 }
 
