@@ -46,42 +46,95 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
     static let establishTimeoutMs = 20_000
 
     /// Bridges task cancellation to the blocking gomobile dial: `cancel()`
-    /// closes the in-flight client so a blocked `ping` fails promptly instead
-    /// of running out its full timeout. Without this, `raceCandidates` (which
-    /// drains its whole group before returning) would stall the race on the
-    /// tunnel candidate for up to `establishTimeoutMs` after a direct host
-    /// already won. `@unchecked Sendable`: state is lock-guarded.
-    private final class DialHandle: @unchecked Sendable {
+    /// records the cancellation and closes the in-flight client so a blocked
+    /// `ping` is torn down rather than left running unowned. The close runs
+    /// OFF the cancelling thread: gomobile `close()` takes the same Go mutex
+    /// that first-use startup (DERP map fetch, engine start) holds for its
+    /// whole duration, so a synchronous close inside a cancellation handler
+    /// would block whoever called `Task.cancel()` — possibly the main actor —
+    /// until startup finished. `@unchecked Sendable`: state is lock-guarded.
+    /// Internal for test visibility.
+    ///
+    /// What the gomobile close can and cannot interrupt (tailcat `Client`):
+    /// - Before first use, `Close()` is a no-op (nothing is started yet), so
+    ///   a cancel landing between `register` and the ping's startup closes
+    ///   nothing and the stack still starts afterwards. The dial thread
+    ///   re-checks `isCancelled` once `ping` returns and tears down itself.
+    /// - During startup, `Close()` blocks on the startup mutex and only closes
+    ///   once startup finished; it cannot abort a DERP map fetch in flight.
+    /// - During the meow wait, `Close()` closes the engine but does not wake
+    ///   the wait, which runs to its own internal 10 s cap.
+    /// Cancellation therefore never shortens `ping`; it only guarantees
+    /// teardown. `raceCandidates` no longer waits on losers, so this cost is
+    /// off the connect critical path; the log lines below measure it.
+    nonisolated final class DialHandle: @unchecked Sendable {
         private let lock = NSLock()
         private var client: TailcatkitClient?
-        private var cancelled = false
+        private var cancelledAtLocked: CFAbsoluteTime?
 
         /// Registers the dialing client; returns false when the dial was
         /// already cancelled (the caller must close it and bail).
         func register(_ client: TailcatkitClient) -> Bool {
             lock.lock()
             defer { lock.unlock() }
-            if cancelled { return false }
+            if cancelledAtLocked != nil { return false }
             self.client = client
             return true
         }
 
+        var isCancelled: Bool { cancelledAt != nil }
+
+        /// When `cancel()` first ran, or nil while the dial is still wanted.
+        var cancelledAt: CFAbsoluteTime? {
+            lock.lock()
+            defer { lock.unlock() }
+            return cancelledAtLocked
+        }
+
+        /// Idempotent: only the first call records the time and closes.
         func cancel() {
             lock.lock()
-            cancelled = true
-            let inFlight = client
+            guard cancelledAtLocked == nil else {
+                lock.unlock()
+                return
+            }
+            let cancelTime = CFAbsoluteTimeGetCurrent()
+            cancelledAtLocked = cancelTime
+            let registered = client != nil
             lock.unlock()
-            try? inFlight?.close()
+            // Pre-registration: the dial thread closes the client itself
+            // when `register` fails.
+            guard registered else { return }
+            // Captures self (lock-guarded) rather than the non-Sendable
+            // gomobile client; `client` is never unset once registered.
+            DispatchQueue.global(qos: .utility).async { [self] in
+                lock.lock()
+                let inFlight = client
+                lock.unlock()
+                try? inFlight?.close()
+                let closeMs = Int((CFAbsoluteTimeGetCurrent() - cancelTime) * 1000)
+                AppLog.connection.debug("[TailcatTunnel] Dial cancelled: client.close() returned \(closeMs)ms after cancel")
+            }
         }
     }
 
     func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
         let handle = DialHandle()
+        let dialStart = CFAbsoluteTimeGetCurrent()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 // The gomobile calls block; keep them off the cooperative pool.
                 DispatchQueue.global(qos: .userInitiated).async {
+                    func logFinished(_ outcome: String) {
+                        let now = CFAbsoluteTimeGetCurrent()
+                        var detail = "\(outcome) in \(Int((now - dialStart) * 1000))ms"
+                        if let cancelledAt = handle.cancelledAt {
+                            detail += " (cancelled at +\(Int((cancelledAt - dialStart) * 1000))ms, cancel→teardown \(Int((now - cancelledAt) * 1000))ms)"
+                        }
+                        AppLog.connection.debug("[TailcatTunnel] Dial \(detail)")
+                    }
                     guard let client = TailcatkitNewClient(tcAddress) else {
+                        logFinished("failed: client init")
                         continuation.resume(throwing: WebSocketTransportError.failed(
                             host: ConnectionManager.tunnelCandidateLabel,
                             message: "TailcatKit client init failed"))
@@ -89,6 +142,7 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                     }
                     guard handle.register(client) else {
                         try? client.close()
+                        logFinished("cancelled before start")
                         continuation.resume(throwing: CancellationError())
                         return
                     }
@@ -97,12 +151,31 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                         // the loopback forwarder: the local TCP connect succeeds
                         // instantly, so without this the WebSocket handshake
                         // deadline would tick against tunnel establishment.
-                        try client.ping(Self.establishTimeoutMs)
+                        let pingStart = CFAbsoluteTimeGetCurrent()
+                        let pingResult = Result { try client.ping(Self.establishTimeoutMs) }
+                        let pingMs = Int((CFAbsoluteTimeGetCurrent() - pingStart) * 1000)
+                        if let cancelledAt = handle.cancelledAt {
+                            // Measures whether close() interrupted the ping: a
+                            // latency near zero means it did, a latency near the
+                            // ping's own timeout means the ping ran to completion.
+                            let latencyMs = Int((CFAbsoluteTimeGetCurrent() - cancelledAt) * 1000)
+                            AppLog.connection.debug("[TailcatTunnel] Dial cancelled mid-ping: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
+                            // The cancel's close may have been a no-op if the
+                            // client had not started yet; close again (idempotent
+                            // on the Go side) so the stack never lives on unowned.
+                            try? client.close()
+                            logFinished("cancelled mid-ping")
+                            continuation.resume(throwing: CancellationError())
+                            return
+                        }
+                        try pingResult.get()
                         let forwarder = try client.forward(remotePort)
+                        logFinished("established (ping \(pingMs)ms)")
                         continuation.resume(
                             returning: TailcatTunnelSession(client: client, forwarder: forwarder))
                     } catch {
                         try? client.close()
+                        logFinished("failed: \(error.localizedDescription)")
                         continuation.resume(throwing: error)
                     }
                 }
