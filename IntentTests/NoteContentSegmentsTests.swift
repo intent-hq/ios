@@ -125,6 +125,15 @@ struct NoteContentSegmentsTests {
         #expect(line.text.isEmpty)
     }
 
+    @Test func taskLineAcceptsTrailingCarriageReturn() {
+        guard let line = NoteContentSegmenter.taskLine(from: "- [x] Done\r", lineNumber: 7) else {
+            Issue.record("expected task line"); return
+        }
+        #expect(line.lineNumber == 7)
+        #expect(line.marker == "x")
+        #expect(line.text == "Done")
+    }
+
     // MARK: - replacingCheckboxMarker
 
     @Test func rewritesMarkerForEachStatus() {

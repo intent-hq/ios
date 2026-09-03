@@ -33,14 +33,10 @@ enum TaskContentParser {
     /// Matches `[text](intent://local/task/{id})`; group 1 = text, group 2 = id.
     /// Line terminators are excluded from both classes so an unclosed link
     /// cannot consume a later line's `)` and match across lines.
-    private static let taskLinkRegex = try! NSRegularExpression(
-        pattern: #"\[([^\]\r\n]+)\]\(intent://local/task/([^)\r\n]+)\)"#
-    )
+    private static let taskLinkRegex = #/\[([^\]\r\n]+)\]\(intent://local/task/([^)\r\n]+)\)/#
 
     /// Matches a checkbox list-item prefix; group 1 = the marker character.
-    private static let checkboxRegex = try! NSRegularExpression(
-        pattern: #"^\s*[-*]\s+\[([ xX/])\]"#
-    )
+    private static let checkboxRegex = #/^\s*[-*]\s+\[([ xX/])\]/#
 
     /// Count linked-task progress in `content`, resolving each linked ID
     /// against `notes`. Classification (matching the fe):
@@ -58,13 +54,11 @@ enum TaskContentParser {
         var completed = 0
         var inProgress = 0
 
-        let fullRange = NSRange(content.startIndex..., in: content)
-        taskLinkRegex.enumerateMatches(in: content, range: fullRange) { match, _, _ in
-            guard let match, let idRange = Range(match.range(at: 2), in: content) else { return }
-            let noteId = String(content[idRange])
+        for match in content.matches(of: taskLinkRegex) {
+            let noteId = String(match.2)
             let status = noteById[noteId]?.taskDisplayStatus
 
-            if status == .cancelled { return }
+            if status == .cancelled { continue }
             total += 1
             switch status {
             case .complete: completed += 1
@@ -78,13 +72,10 @@ enum TaskContentParser {
 
     /// First `[title](intent://local/task/{id})` link in `line`, if any.
     static func firstTaskLink(in line: String) -> LinkedTaskRef? {
-        let range = NSRange(line.startIndex..., in: line)
-        guard let match = taskLinkRegex.firstMatch(in: line, range: range),
-              let titleRange = Range(match.range(at: 1), in: line),
-              let idRange = Range(match.range(at: 2), in: line) else {
+        guard let match = line.firstMatch(of: taskLinkRegex) else {
             return nil
         }
-        return LinkedTaskRef(title: String(line[titleRange]), noteId: String(line[idRange]))
+        return LinkedTaskRef(title: String(match.1), noteId: String(match.2))
     }
 
     /// Extract linked-task lines from `content`, in document order. Lines with
@@ -97,22 +88,16 @@ enum TaskContentParser {
         content.enumerateSubstrings(in: content.startIndex..<content.endIndex, options: [.byLines, .substringNotRequired]) { _, lineRange, _, _ in
             defer { lineIndex += 1 }
             let line = String(content[lineRange])
-            let lineNSRange = NSRange(line.startIndex..., in: line)
 
-            let checkboxMarker: Character? = checkboxRegex
-                .firstMatch(in: line, range: lineNSRange)
-                .flatMap { Range($0.range(at: 1), in: line) }
-                .map { Character(line[$0.lowerBound].lowercased()) }
+            let checkboxMarker = line.firstMatch(of: checkboxRegex)
+                .map { Character($0.1.lowercased()) }
 
-            taskLinkRegex.enumerateMatches(in: line, range: lineNSRange) { match, _, _ in
-                guard let match,
-                      let titleRange = Range(match.range(at: 1), in: line),
-                      let idRange = Range(match.range(at: 2), in: line) else { return }
+            for match in line.matches(of: taskLinkRegex) {
                 results.append(LinkedTaskLine(
                     lineIndex: lineIndex,
                     lineRange: lineRange,
-                    title: String(line[titleRange]),
-                    noteId: String(line[idRange]),
+                    title: String(match.1),
+                    noteId: String(match.2),
                     checkboxMarker: checkboxMarker
                 ))
             }
