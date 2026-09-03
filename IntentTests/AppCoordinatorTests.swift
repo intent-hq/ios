@@ -57,7 +57,8 @@ final class AppCoordinatorTests {
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
 
         coordinator.handleNotificationSelection(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
+            connectionId: stored.id)
         coordinator.onLoadComplete()
         if case .connecting = coordinator.currentScreen {
             // Normal cold-start routing remains in control until connection succeeds.
@@ -73,6 +74,64 @@ final class AppCoordinatorTests {
             #expect(agentName == "Build Agent")
         } else {
             Issue.record("Expected notification target conversation, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func notificationSelectionWaitsOnFailedAndDisconnectedScreens() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        persistence.setActiveConnection(id: stored.id)
+        let coordinator = AppCoordinator(persistence: persistence)
+
+        coordinator.currentScreen = .connectionFailed(error: "timeout")
+        coordinator.handleNotificationSelection(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
+            connectionId: stored.id)
+        if case .connectionFailed = coordinator.currentScreen {} else {
+            Issue.record("Notification replaced the connection failure screen")
+        }
+        coordinator.onRetryConnection()
+        coordinator.onConnectionSuccess()
+        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-1")
+        } else {
+            Issue.record("Expected deferred notification after retry")
+        }
+
+        coordinator.currentScreen = .disconnected
+        coordinator.handleNotificationSelection(
+            agentId: "agent-2", workspaceId: "workspace-2", agentName: "Test Agent",
+            connectionId: stored.id)
+        if case .disconnected = coordinator.currentScreen {} else {
+            Issue.record("Notification replaced the disconnected screen")
+        }
+        coordinator.onRetryConnection()
+        coordinator.onConnectionSuccess()
+        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-2")
+        } else {
+            Issue.record("Expected deferred notification after reconnect")
+        }
+    }
+
+    @Test @MainActor func deferredNotificationIsDiscardedAfterConnectionSwitch() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let first = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let second = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        persistence.setActiveConnection(id: first.id)
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.currentScreen = .connecting
+        coordinator.handleNotificationSelection(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
+            connectionId: first.id)
+
+        coordinator.onSwitchConnection(id: second.id)
+        coordinator.onConnectionSuccess()
+
+        if case .workspaceList = coordinator.currentScreen {} else {
+            Issue.record("Stale notification routed after connection switch")
         }
     }
 

@@ -39,6 +39,8 @@ private final class NotificationManagerFakeCenter: LocalNotificationCenter {
 @Suite("NotificationManager idle-alert suppression")
 @MainActor
 struct NotificationManagerTests {
+    private static let connectionId = UUID(
+        uuidString: "11111111-1111-1111-1111-111111111111")!
 
     private func makeNotificationManager(
         state: UIApplication.State,
@@ -49,6 +51,7 @@ struct NotificationManagerTests {
         let manager = NotificationManager(
             localNotificationService: service,
             applicationState: { state },
+            activeConnectionId: { Self.connectionId },
             presentFeedback: feedback,
             registerEvents: false)
         return (manager, center)
@@ -221,6 +224,36 @@ struct NotificationManagerTests {
         #expect(manager.currentToast == nil)
     }
 
+    @Test func foregroundDeliveryReplaysFeedbackAndToastBeforeSuppressingBanner() async {
+        let center = NotificationManagerFakeCenter()
+        let service = LocalNotificationService(center: center)
+        var feedbackCount = 0
+        let manager = NotificationManager(
+            localNotificationService: service,
+            applicationState: { .active },
+            activeConnectionId: { Self.connectionId },
+            presentFeedback: { feedbackCount += 1 },
+            registerEvents: false)
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [
+                "agentId": "agent-1",
+                "workspaceId": "workspace-1",
+                "agentName": "Build Agent",
+                "connectionId": Self.connectionId.uuidString,
+            ])
+
+        let options = await withCheckedContinuation { continuation in
+            service.deliverForegroundNotification(response) { options in
+                continuation.resume(returning: options)
+            }
+        }
+
+        #expect(options.isEmpty)
+        #expect(feedbackCount == 1)
+        #expect(manager.currentToast?.agentId == "agent-1")
+    }
+
     // MARK: - Tap routing and delivered cleanup
 
     @Test @MainActor func notificationTapRoutesAfterColdStartHandlerInstallation() {
@@ -231,15 +264,54 @@ struct NotificationManagerTests {
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
                 "agentName": "Build Agent",
+                "connectionId": Self.connectionId.uuidString,
             ])
         var routedValues: (String, String, String)?
 
         manager.handleNotificationResponse(response)
-        manager.setAgentSelectionHandler { routedValues = ($0, $1, $2) }
+        manager.setAgentSelectionHandler { agentId, workspaceId, agentName, _ in
+            routedValues = (agentId, workspaceId, agentName)
+        }
 
         #expect(routedValues?.0 == "agent-1")
         #expect(routedValues?.1 == "workspace-1")
         #expect(routedValues?.2 == "Build Agent")
+    }
+
+    @Test @MainActor func notificationTapFromDifferentConnectionIsIgnored() {
+        let (manager, _) = makeNotificationManager(state: .inactive)
+        let otherConnectionId = UUID()
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [
+                "agentId": "agent-1",
+                "workspaceId": "workspace-1",
+                "agentName": "Build Agent",
+                "connectionId": otherConnectionId.uuidString,
+            ])
+        var didRoute = false
+        manager.setAgentSelectionHandler { _, _, _, _ in didRoute = true }
+
+        manager.handleNotificationResponse(response)
+
+        #expect(!didRoute)
+    }
+
+    @Test @MainActor func notificationTapWithoutConnectionScopeIsIgnored() {
+        let (manager, _) = makeNotificationManager(state: .inactive)
+        let response = LocalNotificationService.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: [
+                "agentId": "agent-1",
+                "workspaceId": "workspace-1",
+                "agentName": "Build Agent",
+            ])
+        var didRoute = false
+        manager.setAgentSelectionHandler { _, _, _, _ in didRoute = true }
+
+        manager.handleNotificationResponse(response)
+
+        #expect(!didRoute)
     }
 
     @Test @MainActor func openingConversationClearsDeliveredAgentNotification() {
@@ -247,6 +319,8 @@ struct NotificationManagerTests {
 
         manager.currentAgentId = "agent-1"
 
-        #expect(center.removedNotificationIdentifiers == [["agent-idle-agent-1"]])
+        #expect(center.removedNotificationIdentifiers == [[
+            "agent-idle-\(Self.connectionId.uuidString)-agent-1"
+        ]])
     }
 }

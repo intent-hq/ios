@@ -212,11 +212,13 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
-            notificationManager.setAgentSelectionHandler { [weak coordinator] agentId, workspaceId, agentName in
+            notificationManager.setAgentSelectionHandler {
+                [weak coordinator] agentId, workspaceId, agentName, connectionId in
                 coordinator?.handleNotificationSelection(
                     agentId: agentId,
                     workspaceId: workspaceId,
-                    agentName: agentName
+                    agentName: agentName,
+                    connectionId: connectionId
                 )
             }
         }

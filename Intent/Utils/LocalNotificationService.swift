@@ -64,11 +64,12 @@ final class LocalNotificationService: NSObject {
         let agentId: String?
         let workspaceId: String?
         let agentName: String?
+        let connectionId: UUID?
     }
 
     static let shared = LocalNotificationService()
 
-    var onWillPresentNotification: ((String) -> Void)?
+    var onWillPresentNotification: ((Response) -> Void)?
     var onNotificationResponse: ((Response) -> Void)?
 
     private let center: any LocalNotificationCenter
@@ -90,7 +91,8 @@ final class LocalNotificationService: NSObject {
         agentId: String,
         workspaceId: String,
         agentName: String,
-        workspaceName: String
+        workspaceName: String,
+        connectionId: UUID
     ) {
         let content = UNMutableNotificationContent()
         content.title = agentName
@@ -100,23 +102,29 @@ final class LocalNotificationService: NSObject {
             "agentId": agentId,
             "workspaceId": workspaceId,
             "agentName": agentName,
+            "connectionId": connectionId.uuidString,
         ]
 
         let request = UNNotificationRequest(
-            identifier: Self.notificationIdentifier(forAgentId: agentId),
+            identifier: Self.notificationIdentifier(
+                forAgentId: agentId, connectionId: connectionId),
             content: content,
             trigger: nil
         )
         center.add(request, withCompletionHandler: nil)
     }
 
-    func removeDeliveredNotifications(forAgentId agentId: String) {
+    func removeDeliveredNotifications(forAgentId agentId: String, connectionId: UUID) {
         center.removeDeliveredNotifications(
-            withIdentifiers: [Self.notificationIdentifier(forAgentId: agentId)])
+            withIdentifiers: [Self.notificationIdentifier(
+                forAgentId: agentId, connectionId: connectionId)])
     }
 
-    nonisolated static func notificationIdentifier(forAgentId agentId: String) -> String {
-        "agent-idle-\(agentId)"
+    nonisolated static func notificationIdentifier(
+        forAgentId agentId: String,
+        connectionId: UUID
+    ) -> String {
+        "agent-idle-\(connectionId.uuidString)-\(agentId)"
     }
 
     nonisolated static func response(
@@ -127,8 +135,29 @@ final class LocalNotificationService: NSObject {
             actionIdentifier: actionIdentifier,
             agentId: userInfo["agentId"] as? String,
             workspaceId: userInfo["workspaceId"] as? String,
-            agentName: userInfo["agentName"] as? String
+            agentName: userInfo["agentName"] as? String,
+            connectionId: (userInfo["connectionId"] as? String).flatMap(UUID.init(uuidString:))
         )
+    }
+
+    nonisolated func deliverForegroundNotification(
+        _ response: Response,
+        completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
+        Task { @MainActor [weak self] in
+            self?.onWillPresentNotification?(response)
+            completionHandler(Self.presentationOptionsForForegroundNotification())
+        }
+    }
+
+    nonisolated func deliverNotificationResponse(
+        _ response: Response,
+        completionHandler: @escaping @Sendable () -> Void
+    ) {
+        Task { @MainActor [weak self] in
+            self?.onNotificationResponse?(response)
+            completionHandler()
+        }
     }
 
     nonisolated static func presentationOptionsForForegroundNotification()
@@ -142,28 +171,28 @@ extension LocalNotificationService: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
-        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+        withCompletionHandler completionHandler:
+            @escaping @Sendable (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler(Self.presentationOptionsForForegroundNotification())
-        let identifier = notification.request.identifier
-        Task { @MainActor [weak self] in
-            self?.onWillPresentNotification?(identifier)
-        }
+        let forwardedResponse = Self.response(
+            actionIdentifier: UNNotificationDefaultActionIdentifier,
+            userInfo: notification.request.content.userInfo
+        )
+        deliverForegroundNotification(
+            forwardedResponse, completionHandler: completionHandler)
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
-        withCompletionHandler completionHandler: @escaping () -> Void
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
-        completionHandler()
         let userInfo = response.notification.request.content.userInfo
         let forwardedResponse = Self.response(
             actionIdentifier: response.actionIdentifier,
             userInfo: userInfo
         )
-        Task { @MainActor [weak self] in
-            self?.onNotificationResponse?(forwardedResponse)
-        }
+        deliverNotificationResponse(
+            forwardedResponse, completionHandler: completionHandler)
     }
 }

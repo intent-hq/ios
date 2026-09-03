@@ -46,9 +46,9 @@ class AppCoordinator {
     /// Pair payload from a URL that arrived before onLoadComplete (cold
     /// start); surfaced as pendingDeepLinkPairing once load finishes.
     @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
-    /// Notification selection awaiting completion of cold-start connection routing.
+    /// Notification selection awaiting completion of connection or retry routing.
     @ObservationIgnored private var pendingNotificationSelection: (
-        agentId: String, workspaceId: String, agentName: String
+        agentId: String, workspaceId: String, agentName: String, connectionId: UUID
     )?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
@@ -322,11 +322,13 @@ class AppCoordinator {
     func handleNotificationSelection(
         agentId: String,
         workspaceId: String,
-        agentName: String
+        agentName: String,
+        connectionId: UUID
     ) {
+        guard persistence.activeConnection()?.id == connectionId else { return }
         switch currentScreen {
-        case .loading, .connecting, .pairing:
-            pendingNotificationSelection = (agentId, workspaceId, agentName)
+        case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
+            pendingNotificationSelection = (agentId, workspaceId, agentName, connectionId)
         default:
             onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
         }
@@ -388,12 +390,14 @@ class AppCoordinator {
     func onConnectionSuccess() {
         if let selection = pendingNotificationSelection {
             pendingNotificationSelection = nil
-            onSelectAgent(
-                selection.agentId,
-                workspaceId: selection.workspaceId,
-                agentName: selection.agentName
-            )
-            return
+            if persistence.activeConnection()?.id == selection.connectionId {
+                onSelectAgent(
+                    selection.agentId,
+                    workspaceId: selection.workspaceId,
+                    agentName: selection.agentName
+                )
+                return
+            }
         }
 
         // Try to restore last viewed screen. Restoring into a workspace counts
