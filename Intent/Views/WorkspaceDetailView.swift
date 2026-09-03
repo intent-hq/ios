@@ -13,6 +13,7 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
+    @State private var progressWidth: CGFloat = 0
     @State private var noteStore = NoteStore()
     private let workspaceStore = WorkspaceStore.shared
 
@@ -87,43 +88,46 @@ struct WorkspaceDetailView: View {
                             if progress.completed > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Color.green)
-                                    .containerRelativeFrame(.horizontal) { width, _ in
-                                        progress.segmentWidth(
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
                                             for: progress.completed,
-                                            in: width,
-                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            in: progressWidth,
                                             spacing: Constants.WorkspaceDetail.progressSpacing)
-                                    }
+                                        : 0)
                             }
                             if progress.inProgress > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Color.blue)
-                                    .containerRelativeFrame(.horizontal) { width, _ in
-                                        progress.segmentWidth(
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
                                             for: progress.inProgress,
-                                            in: width,
-                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            in: progressWidth,
                                             spacing: Constants.WorkspaceDetail.progressSpacing)
-                                    }
+                                        : 0)
                             }
                             if progress.remaining > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
                                     .fill(Theme.mutedForeground(for: colorScheme).opacity(
                                         Constants.WorkspaceDetail.remainingProgressOpacity))
-                                    .containerRelativeFrame(.horizontal) { width, _ in
-                                        progress.segmentWidth(
+                                    .frame(width: progressWidth > 0
+                                        ? progress.segmentWidth(
                                             for: progress.remaining,
-                                            in: width,
-                                            horizontalPadding: Constants.WorkspaceDetail.horizontalPadding,
+                                            in: progressWidth,
                                             spacing: Constants.WorkspaceDetail.progressSpacing)
-                                    }
+                                        : 0)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
                         .clipShape(RoundedRectangle(
                             cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.width
+                        } action: { width in
+                            progressWidth = width
+                        }
                     }
-                    .safeAreaPadding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                    .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
 
@@ -323,7 +327,7 @@ struct WorkspaceDetailView: View {
     }
 }
 
-private struct WorkspaceTaskProgressLayout: Equatable {
+struct WorkspaceTaskProgressLayout: Equatable {
     let total: Int
     let completed: Int
     let inProgress: Int
@@ -343,14 +347,12 @@ private struct WorkspaceTaskProgressLayout: Equatable {
 
     func segmentWidth(
         for count: Int,
-        in containerWidth: CGFloat,
-        horizontalPadding: CGFloat,
+        in measuredWidth: CGFloat,
         spacing: CGFloat
     ) -> CGFloat {
-        let paddedWidth = max(0, containerWidth - horizontalPadding * 2)
         let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
-        let proportionalWidth = max(0, paddedWidth - totalSpacing)
-        return proportionalWidth * CGFloat(count) / CGFloat(total)
+        let distributableWidth = max(0, measuredWidth - totalSpacing)
+        return distributableWidth * CGFloat(count) / CGFloat(total)
     }
 }
 

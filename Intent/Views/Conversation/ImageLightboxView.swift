@@ -39,7 +39,6 @@ struct ImageLightboxView: View {
                 .gesture(dragGesture(in: viewportSize))
                 .simultaneousGesture(magnifyGesture(in: viewportSize))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
         } action: { size in
@@ -54,7 +53,6 @@ struct ImageLightboxView: View {
             }
             .padding(12)
         }
-        .background(Color.black.ignoresSafeArea())
     }
 
     private var actionsMenu: some View {
