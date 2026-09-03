@@ -560,7 +560,10 @@ struct ConnectionManagerTests {
         }
 
         #expect(outcome.winner?.host == "good.host")
-        #expect(outcome.mismatches == [
+        // The loser's mismatch lands after the winner settled the race, so it
+        // is reported by the background drain rather than the outcome itself.
+        let lateMismatches = await outcome.drain?.value ?? []
+        #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")])
     }
 
@@ -1373,7 +1376,39 @@ struct ConnectionManagerTests {
         }
 
         #expect(outcome.winner?.host == "direct.host")
+        _ = await outcome.drain?.value
         #expect(tunnel.isClosed)
+    }
+
+    /// Regression: the race must settle as soon as a candidate wins instead of
+    /// waiting for every loser to finish. A loser that ignores cancellation
+    /// (a tunnel dial whose Go side does not abort promptly) must not delay
+    /// the connect, and must still be disconnected by the background drain.
+    @Test func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
+        let loserTunnel = FakeTunnelSession(localPort: 1)
+        let start = ContinuousClock.now
+        let outcome = await ConnectionManager.raceCandidates(
+            ["direct.host", ConnectionManager.tunnelCandidateLabel]
+        ) { host -> FakeTunnelRaceConnection in
+            if host == ConnectionManager.tunnelCandidateLabel {
+                // Sleeping in a detached task and awaiting its value is not
+                // interrupted by the candidate task's cancellation.
+                _ = await Task.detached {
+                    try? await Task.sleep(for: .seconds(2))
+                }.value
+                return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+            }
+            return FakeTunnelRaceConnection(host: host, tunnel: nil)
+        }
+        let elapsed = ContinuousClock.now - start
+
+        #expect(outcome.winner?.host == "direct.host")
+        #expect(outcome.failure == nil)
+        #expect(elapsed < .seconds(1), "race waited on the loser: \(elapsed)")
+        // The loser is still in flight; cleanup happens off the critical path.
+        #expect(!loserTunnel.isClosed)
+        _ = await outcome.drain?.value
+        #expect(loserTunnel.isClosed)
     }
 
     // MARK: - Pairing over a live connection (monorepo#4185)
