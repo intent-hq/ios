@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import Observation
+import os
 
 /// The minimal surface `ConnectionManager.raceCandidates` needs from a
 /// connection candidate, letting tests race fakes instead of live sockets.
@@ -29,12 +30,58 @@ nonisolated struct RacedConnection: HostRacingConnection {
 }
 
 /// The settled result of one `raceCandidates` run: the winner (if any), every
-/// per-host certificate mismatch observed, and the failure to throw when no
-/// candidate won.
+/// per-host certificate mismatch observed before settling, and the failure to
+/// throw when no candidate won.
 nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
     let winner: Connection?
     let mismatches: [HostCertMismatch]
     let failure: (any Error)?
+    /// The background task draining the candidates still in flight when the
+    /// race settled: it disconnects every late success (a losing tunnel
+    /// session is never leaked) and resolves to the certificate mismatches
+    /// those candidates reported. `nil` when every candidate had already
+    /// finished.
+    let drain: Task<[HostCertMismatch], Never>?
+}
+
+/// A single-consumer mailbox for raced candidate results. `raceCandidates`
+/// runs its candidates as unstructured tasks — a task group's body cannot
+/// return before every child finishes, which is exactly the stall a slow
+/// loser would cause — and awaits them here. Unlike `AsyncStream`, delivery
+/// keeps working after the consuming task is cancelled, so cleanup can still
+/// drain every candidate.
+private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
+    private struct State: Sendable {
+        var pending: [Result<Connection, any Error>] = []
+        var waiter: CheckedContinuation<Result<Connection, any Error>, Never>?
+    }
+
+    private let lock = OSAllocatedUnfairLock(initialState: State())
+
+    func deliver(_ result: Result<Connection, any Error>) {
+        let waiter = lock.withLock { state -> CheckedContinuation<Result<Connection, any Error>, Never>? in
+            if let waiter = state.waiter {
+                state.waiter = nil
+                return waiter
+            }
+            state.pending.append(result)
+            return nil
+        }
+        waiter?.resume(returning: result)
+    }
+
+    func next() async -> Result<Connection, any Error> {
+        await withCheckedContinuation { continuation in
+            let ready = lock.withLock { state -> Result<Connection, any Error>? in
+                if state.pending.isEmpty {
+                    state.waiter = continuation
+                    return nil
+                }
+                return state.pending.removeFirst()
+            }
+            if let ready { continuation.resume(returning: ready) }
+        }
+    }
 }
 
 @MainActor
@@ -162,9 +209,9 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
-        let winner: RacedConnection
+        let raced: WonHostRace
         do {
-            winner = try await raceHosts(
+            raced = try await raceHosts(
                 hosts, port: port, token: token, certFingerprint: certFingerprint,
                 tcAddress: tcAddress)
         } catch {
@@ -177,6 +224,15 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                 certMismatches = certMismatchesBeforeAttempt
             }
             throw error
+        }
+        let winner = raced.winner
+        // The drain's late mismatches belong to this connect's generation.
+        // The preserving path advances it below when it retires the old
+        // connection — that is not supersession of this race — so the
+        // generation to guard against is settled only on the way out.
+        var lateMismatchGeneration = myGeneration
+        defer {
+            recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
         }
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
@@ -203,6 +259,7 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
             // The replacement is established: now retire the old connection
             // and adopt the new target's parameters.
             teardownConnection()
+            lateMismatchGeneration = connectionGeneration
             self.hosts = hosts
             self.port = port
             self.token = token
@@ -585,13 +642,21 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
 
     // MARK: - Private
 
+    /// A won race: the winner plus the background drain of the candidates
+    /// still in flight (`HostRaceOutcome.drain`). The drain is handed to the
+    /// caller because only it knows which connection generation the drain's
+    /// late mismatches belong to (see `recordLateCertMismatches`).
+    private typealias WonHostRace = (
+        winner: RacedConnection, drain: Task<[HostCertMismatch], Never>?
+    )
+
     private func raceHosts(
         _ hosts: [String],
         port: Int,
         token: String,
         certFingerprint: String?,
         tcAddress: String? = nil
-    ) async throws -> RacedConnection {
+    ) async throws -> WonHostRace {
         let myGeneration = connectionGeneration
         var candidates = hosts
         if tcAddress != nil {
@@ -625,9 +690,27 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         if connectionGeneration == myGeneration {
             recordCertMismatches(outcome.mismatches)
         }
-        if let winner = outcome.winner { return winner }
+        if let winner = outcome.winner {
+            return (winner: winner, drain: outcome.drain)
+        }
+        recordLateCertMismatches(from: outcome.drain, generation: myGeneration)
         throw outcome.failure ?? WebSocketTransportError.failed(
             host: hosts.first ?? "unknown", message: "No reachable host found")
+    }
+
+    /// Records the mismatches from candidates still in flight when a race
+    /// settled, once the background drain finishes — unless
+    /// `connectionGeneration` moved past `generation` by then (a newer
+    /// connect() or disconnect() superseded the race).
+    private func recordLateCertMismatches(
+        from drain: Task<[HostCertMismatch], Never>?, generation: Int
+    ) {
+        guard let drain else { return }
+        Task { [weak self] in
+            let lateMismatches = await drain.value
+            guard let self, self.connectionGeneration == generation else { return }
+            self.recordCertMismatches(lateMismatches)
+        }
     }
 
     /// One tunnel race candidate: establishes the tailcat tunnel (including
@@ -697,48 +780,62 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
         certMismatches = merged
     }
 
-    /// Races one connect attempt per host and settles on the first success,
-    /// collecting EVERY per-host certificate mismatch along the way (a loser's
-    /// mismatch is not swallowed by the winner). When no candidate succeeds,
-    /// `failure` prefers an aggregate certificate error over generic failures.
-    /// Generic over the connection so tests can race fakes; internal for test
-    /// visibility.
+    /// Races one connect attempt per host and settles on the first success
+    /// WITHOUT waiting for the losers: the remaining candidates are cancelled
+    /// and drained by a background task (see `HostRaceOutcome.drain`) that
+    /// disconnects late successes and reports late certificate mismatches, so
+    /// a slow loser never delays an already-won connect. Mismatches observed
+    /// before settling are collected on the outcome (a loser's mismatch is not
+    /// swallowed by the winner). When no candidate succeeds, every candidate
+    /// is awaited and `failure` prefers an aggregate certificate error over
+    /// generic failures. Cancelling the losers runs each candidate's task
+    /// cancellation handlers synchronously on the settling thread, so
+    /// candidate cancellation handlers must not block (the tunnel dial's
+    /// `DialHandle.cancel()` closes off-thread for this reason) — a blocking
+    /// handler would stall the settle inside `cancelAll()`. Generic over the
+    /// connection so tests can race fakes; internal for test visibility.
     nonisolated static func raceCandidates<Connection: HostRacingConnection>(
         _ hosts: [String],
         connect: @escaping @Sendable (String) async throws -> Connection
     ) async -> HostRaceOutcome<Connection> {
-        await withThrowingTaskGroup(of: Connection.self) { group in
-            for host in hosts {
-                group.addTask { try await connect(host) }
+        let mailbox = RaceMailbox<Connection>()
+        let candidates = hosts.map { host in
+            Task {
+                do {
+                    let connection = try await connect(host)
+                    mailbox.deliver(.success(connection))
+                } catch {
+                    mailbox.deliver(.failure(error))
+                }
             }
+        }
+        let cancelAll = { @Sendable in
+            for candidate in candidates { candidate.cancel() }
+        }
 
+        return await withTaskCancellationHandler { () -> HostRaceOutcome<Connection> in
             var lastError: Error?
             var mismatches: [HostCertMismatch] = []
             var winner: Connection?
             var cancellationObserved = false
-            while let result = await group.nextResult() {
+            var remaining = hosts.count
+            settle: while remaining > 0 {
+                let result = await mailbox.next()
+                remaining -= 1
                 switch result {
                 case .success(let connection):
-                    if Task.isCancelled || cancellationObserved {
+                    cancelAll()
+                    if Task.isCancelled {
                         cancellationObserved = true
                         await connection.disconnect()
-                        if let selectedWinner = winner {
-                            await selectedWinner.disconnect()
-                            winner = nil
-                        }
-                        group.cancelAll()
-                        continue
+                        break settle
                     }
-                    if winner == nil {
-                        winner = connection
-                        group.cancelAll()
-                    } else {
-                        await connection.disconnect()
-                    }
+                    winner = connection
+                    break settle
                 case .failure(let error):
                     if Task.isCancelled {
                         cancellationObserved = true
-                        group.cancelAll()
+                        cancelAll()
                     }
                     lastError = error
                     if let transportError = error as? WebSocketTransportError,
@@ -746,27 +843,57 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                         mismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
                     }
                     AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
+                    if cancellationObserved { break settle }
                 }
             }
+
+            var drain: Task<[HostCertMismatch], Never>?
+            if remaining > 0 {
+                let pending = remaining
+                AppLog.connection.debug("[ConnectionManager] Host racing settled; draining \(pending) candidate(s) in the background")
+                drain = Task.detached { () -> [HostCertMismatch] in
+                    var lateMismatches: [HostCertMismatch] = []
+                    for _ in 0..<pending {
+                        switch await mailbox.next() {
+                        case .success(let loser):
+                            await loser.disconnect()
+                        case .failure(let error):
+                            if let transportError = error as? WebSocketTransportError,
+                               case .certificateMismatch(let host, let fingerprint) = transportError {
+                                lateMismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
+                            }
+                            AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
+                        }
+                    }
+                    return lateMismatches
+                }
+            }
+
             if cancellationObserved || Task.isCancelled {
                 if let winner {
                     await winner.disconnect()
                 }
                 return HostRaceOutcome(
-                    winner: nil, mismatches: mismatches, failure: CancellationError())
+                    winner: nil, mismatches: mismatches, failure: CancellationError(),
+                    drain: drain)
             }
             if let winner {
-                return HostRaceOutcome(winner: winner, mismatches: mismatches, failure: nil)
+                return HostRaceOutcome(
+                    winner: winner, mismatches: mismatches, failure: nil, drain: drain)
             }
             if !mismatches.isEmpty {
                 return HostRaceOutcome(
                     winner: nil, mismatches: mismatches,
-                    failure: WebSocketTransportError.certificateMismatches(mismatches: mismatches))
+                    failure: WebSocketTransportError.certificateMismatches(mismatches: mismatches),
+                    drain: drain)
             }
             return HostRaceOutcome(
                 winner: nil, mismatches: mismatches,
                 failure: lastError ?? WebSocketTransportError.failed(
-                    host: hosts.first ?? "unknown", message: "No reachable host found"))
+                    host: hosts.first ?? "unknown", message: "No reachable host found"),
+                drain: drain)
+        } onCancel: {
+            cancelAll()
         }
     }
 
@@ -924,14 +1051,16 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
                     let raceStart = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
 
-                    let winner = try await self?.raceHosts(
+                    let raced = try await self?.raceHosts(
                         hostsToTry, port: currentPort, token: currentToken,
                         certFingerprint: currentCertFingerprint, tcAddress: currentTcAddress)
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
 
-                    guard let winner = winner else { continue }
+                    guard let raced else { continue }
+                    let winner = raced.winner
+                    self?.recordLateCertMismatches(from: raced.drain, generation: myGeneration)
 
                     do {
                         try Task.checkCancellation()
