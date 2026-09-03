@@ -110,7 +110,7 @@ struct NoteDetailView: View {
             }
         }
         .navigationTitle(noteTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .workspaceNavigationSubtitle(title: noteTitle, workspaceId: workspaceId)
         .task {
             await loadNote()
