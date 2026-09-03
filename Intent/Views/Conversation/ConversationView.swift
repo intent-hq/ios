@@ -150,7 +150,7 @@ private struct ConversationViewContent: View {
     private var conversationChrome: some View {
         conversationColumn
             .navigationTitle(viewModel.agentName)
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .workspaceNavigationSubtitle(
                 title: viewModel.agentName, workspaceId: viewModel.workspaceId)
             .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)

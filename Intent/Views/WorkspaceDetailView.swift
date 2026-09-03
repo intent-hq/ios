@@ -212,7 +212,7 @@ struct WorkspaceDetailView: View {
                 .environment(coordinator)
         }
         .navigationTitle(workspaceTitle)
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {

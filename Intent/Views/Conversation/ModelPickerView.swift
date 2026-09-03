@@ -37,7 +37,7 @@ struct ModelPickerView: View {
                 }
             }
             .navigationTitle("Select Model")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
