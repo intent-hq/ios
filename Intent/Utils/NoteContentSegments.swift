@@ -66,7 +66,7 @@ enum NoteContentSegmenter {
 
         for (index, rawLine) in content.components(separatedBy: "\n").enumerated() {
             let line = rawLine.hasSuffix("\r") ? String(rawLine.dropLast()) : rawLine
-            if let taskLine = taskLine(from: line, lineNumber: index + 1) {
+            if let taskLine = taskLine(from: rawLine, lineNumber: index + 1) {
                 flushMarkdown()
                 segments.append(.taskLine(taskLine))
             } else {
@@ -79,9 +79,11 @@ enum NoteContentSegmenter {
     }
 
     /// Parse a single content line as a checkbox line; nil when it is not one.
+    /// Accepts one trailing carriage return from a raw CRLF-split line.
     /// `lineNumber` is the 1-based position of the line within the content.
     static func taskLine(from line: String, lineNumber: Int) -> NoteTaskLine? {
-        guard let match = line.wholeMatch(of: checkboxLineRegex) else {
+        let matchTarget = line.hasSuffix("\r") ? line.dropLast() : line[...]
+        guard let match = matchTarget.wholeMatch(of: checkboxLineRegex) else {
             return nil
         }
         let text = String(match.3)

@@ -422,8 +422,8 @@ struct MessageView: View {
 
     // MARK: - Group parsing from blocks
 
-    private static let groupTagRegex = #/<group:([^>\n<]+)>|<\/group(:[^>\n<]+)?>/#
-    private static let incompleteGroupTagRegex = #/<\/?g(?:r(?:o(?:u(?:p(?::?[^>\n<]*)?)?)?)?)?$/#
+    private static let groupTagRegex = #/<group:([^>\r\n<]+)>|<\/group(:[^>\r\n<]+)?>/#
+    private static let incompleteGroupTagRegex = #/<\/?g(?:r(?:o(?:u(?:p(?::?[^>\r\n<]*)?)?)?)?)?$/#
 
     /// Parse `<group:Name>` and `</group>` tags from text ContentBlocks,
     /// grouping all blocks (text, tool_use, tool_result, etc.) that appear

@@ -360,7 +360,11 @@ enum ToolClassifier {
         var regex = regexCache[pattern]
         if regex == nil {
             regex = try? Regex(pattern).ignoresCase()
-            if let regex = regex { regexCache[pattern] = regex }
+            if let regex = regex {
+                regexCache[pattern] = regex
+            } else {
+                assertionFailure("Invalid tool-title regex pattern: \(pattern)")
+            }
         }
         regexCacheLock.unlock()
         guard let regex = regex else { return nil }

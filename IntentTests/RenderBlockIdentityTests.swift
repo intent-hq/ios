@@ -55,6 +55,17 @@ struct RenderBlockIdentityTests {
         #expect(ids(blocks) == ["b1", "b2"])
     }
 
+    @Test func crlfInsideGroupTagStaysPlainText() {
+        let text = "<group:Foo\r\nbar>"
+        let result = MessageView.groupContentBlocks([textBlock("b1", text)])
+        guard case .contentBlock(let block)? = result.first else {
+            Issue.record("expected plain text content block"); return
+        }
+        #expect(result.count == 1)
+        #expect(block.id == "b1")
+        #expect(block.resolvedText == text)
+    }
+
     @Test func streamingDeltaKeepsIdsOfAlreadyRenderedSegments() {
         let prefix = [textBlock("b1", "intro\n<group:Setup>\nreading")]
         let grown = [textBlock("b1", "intro\n<group:Setup>\nreading files\n</group>\nanswer")]
