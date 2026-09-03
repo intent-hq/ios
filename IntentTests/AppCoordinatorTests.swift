@@ -3,6 +3,7 @@ import Observation
 import Security
 import Synchronization
 import Testing
+import UIKit
 @testable import Intent
 
 @Suite(.serialized)
@@ -43,6 +44,35 @@ final class AppCoordinatorTests {
             // pass
         } else {
             Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func notificationSelectionBeforeLoadRoutesAfterConnectionSuccess() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        persistence.setActiveConnection(id: stored.id)
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+
+        coordinator.handleNotificationSelection(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+        coordinator.onLoadComplete()
+        if case .connecting = coordinator.currentScreen {
+            // Normal cold-start routing remains in control until connection succeeds.
+        } else {
+            Issue.record("Expected .connecting before connection success, got \(coordinator.currentScreen)")
+        }
+
+        coordinator.onConnectionSuccess()
+
+        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+            #expect(agentId == "agent-1")
+            #expect(workspaceId == "workspace-1")
+            #expect(agentName == "Build Agent")
+        } else {
+            Issue.record("Expected notification target conversation, got \(coordinator.currentScreen)")
         }
     }
 
@@ -478,6 +508,29 @@ final class AppCoordinatorTests {
         coordinator.onScenePhaseActive()
 
         #expect(persistence.loadConnections().count == 1)
+    }
+
+    @Test @MainActor func scenePhaseLifecycleBeginsAndEndsBackgroundTask() {
+        let identifier = UIBackgroundTaskIdentifier(rawValue: 1)
+        var beginCount = 0
+        var endedIdentifiers: [UIBackgroundTaskIdentifier] = []
+        let backgroundTaskManager = BackgroundTaskManager(
+            beginTask: { _ in
+                beginCount += 1
+                return identifier
+            },
+            endTask: { endedIdentifiers.append($0) }
+        )
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            backgroundTaskManager: backgroundTaskManager
+        )
+
+        coordinator.onScenePhaseNotActive()
+        coordinator.onScenePhaseActive()
+
+        #expect(beginCount == 1)
+        #expect(endedIdentifiers == [identifier])
     }
 
     @Test @MainActor func refreshSyncedBackends_onPairingScreen_offersFreshlyMergedConnections() {

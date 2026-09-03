@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import AudioToolbox
+import UserNotifications
 
 struct ToastInfo: Equatable {
     let id: UUID
@@ -25,15 +26,71 @@ struct ToastInfo: Equatable {
     var currentToast: ToastInfo?
 
     /// The agent ID currently being viewed in ConversationView
-    var currentAgentId: String?
+    var currentAgentId: String? {
+        didSet {
+            if let currentAgentId, currentAgentId != oldValue {
+                localNotificationService.removeDeliveredNotifications(forAgentId: currentAgentId)
+            }
+        }
+    }
 
     /// The workspace ID currently being viewed (workspace detail or conversation)
     var currentWorkspaceId: String?
 
     @ObservationIgnored private var dismissTask: Task<Void, Never>?
+    @ObservationIgnored private let localNotificationService: LocalNotificationService
+    @ObservationIgnored private let applicationState: () -> UIApplication.State
+    @ObservationIgnored private let presentFeedback: () -> Void
+    @ObservationIgnored private var agentSelectionHandler: ((String, String, String) -> Void)?
+    @ObservationIgnored private var pendingNotificationResponse: LocalNotificationService.Response?
 
-    private init() {
-        registerEventHandler()
+    init(
+        localNotificationService: LocalNotificationService = .shared,
+        applicationState: @escaping () -> UIApplication.State = {
+            UIApplication.shared.applicationState
+        },
+        presentFeedback: @escaping () -> Void = {
+            HapticManager.notification(.success)
+            AudioServicesPlaySystemSound(1152)
+        },
+        registerEvents: Bool = true
+    ) {
+        self.localNotificationService = localNotificationService
+        self.applicationState = applicationState
+        self.presentFeedback = presentFeedback
+        localNotificationService.onNotificationResponse = { [weak self] response in
+            self?.handleNotificationResponse(response)
+        }
+        localNotificationService.requestAuthorizationIfNeeded()
+        if registerEvents { registerEventHandler() }
+    }
+
+    func setAgentSelectionHandler(_ handler: @escaping (String, String, String) -> Void) {
+        agentSelectionHandler = handler
+        if let pendingNotificationResponse {
+            self.pendingNotificationResponse = nil
+            routeNotificationResponse(pendingNotificationResponse)
+        }
+    }
+
+    func handleNotificationResponse(_ response: LocalNotificationService.Response) {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+              response.agentId != nil, response.workspaceId != nil, response.agentName != nil
+        else { return }
+
+        guard agentSelectionHandler != nil else {
+            pendingNotificationResponse = response
+            return
+        }
+        routeNotificationResponse(response)
+    }
+
+    private func routeNotificationResponse(_ response: LocalNotificationService.Response) {
+        guard let agentId = response.agentId,
+              let workspaceId = response.workspaceId,
+              let agentName = response.agentName
+        else { return }
+        agentSelectionHandler?(agentId, workspaceId, agentName)
     }
 
     private func registerEventHandler() {
@@ -124,17 +181,16 @@ struct ToastInfo: Equatable {
     /// awaited child's completion wakes the parent, whose next turn emits a
     /// fresh `agent:idle` with the flag cleared.
     ///
-    /// The other-agents gate includes `isProcessing` in addition to desktop's
-    /// `isStreaming || isResponding` — a deliberate divergence matching
-    /// `AgentSession.isActive` semantics; do not "fix" it back in a parity sweep.
-    nonisolated static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]?) -> Bool {
+    /// The other-agents gate uses the canonical `AgentSession.isActive`
+    /// predicate so status-only active agents suppress premature completion alerts.
+    static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]?) -> Bool {
         guard let agents else { return false }
         if let idleAgent = agents.first(where: { $0.id == idleAgentId }) {
             if idleAgent.isBackground { return true }
             if idleAgent.isWaitingForOtherAgents || !idleAgent.waitingForAgentIds.isEmpty { return true }
         }
         return agents.contains { agent in
-            agent.id != idleAgentId && (agent.isStreaming || agent.isResponding || agent.isProcessing)
+            agent.id != idleAgentId && agent.isActive
         }
     }
 
@@ -157,31 +213,34 @@ struct ToastInfo: Equatable {
         }
     }
 
-    private func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
+    func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         // Look up workspace name
         let workspaceName = WorkspaceStore.shared.workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
 
+        guard applicationState() == .active else {
+            localNotificationService.postAgentIdleNotification(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                workspaceName: workspaceName
+            )
+            return
+        }
+
         if agentId == currentAgentId {
             // Currently viewing this exact agent's conversation — haptic + sound, no toast
-            HapticManager.notification(.success)
-            playSound()
+            presentFeedback()
         } else if workspaceId == currentWorkspaceId {
             // Viewing this workspace (agent list) — haptic + sound, no toast
             // The agent list will update via events, so the user will see the change
-            HapticManager.notification(.success)
-            playSound()
+            presentFeedback()
         } else {
             // Different workspace — haptic + sound + toast
-            HapticManager.notification(.success)
-            playSound()
+            presentFeedback()
             showToast(agentId: agentId, workspaceId: workspaceId,
                       agentName: agentName, workspaceName: workspaceName)
         }
-    }
-
-    private func playSound() {
-        AudioServicesPlaySystemSound(1152) // "Bloom" — soft, pleasant completion chime
     }
 
     private func showToast(agentId: String, workspaceId: String,
