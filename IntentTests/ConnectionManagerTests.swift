@@ -1623,6 +1623,57 @@ struct ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
+    /// A tunnel dialer that reports a certificate mismatch only after a delay
+    /// the race's loser cancellation cannot cut short, so a direct candidate
+    /// wins first and the mismatch is reported by the background drain.
+    private nonisolated struct SlowMismatchTunnelDialer: TunnelDialing {
+        let fingerprint: String
+        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+            _ = await Task.detached {
+                try? await Task.sleep(for: .milliseconds(300))
+            }.value
+            throw WebSocketTransportError.certificateMismatch(
+                host: ConnectionManager.tunnelCandidateLabel, fingerprint: fingerprint)
+        }
+    }
+
+    /// A preserving connect() retires the old connection — advancing the
+    /// connection generation — only AFTER its race is won. A slower losing
+    /// candidate's certificate mismatch, reported by the background drain,
+    /// must still reach `certMismatches`: the race was not superseded.
+    @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
+        let manager = ConnectionManager.shared
+        let serverA = try await LoopbackWebSocketServer.start()
+        let serverB = try await LoopbackWebSocketServer.start()
+        let originalDialer = manager.tunnelDialer
+        defer {
+            manager.tunnelDialer = originalDialer
+            manager.disconnect()
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+
+        manager.tunnelDialer = SlowMismatchTunnelDialer(fingerprint: "cc:dd")
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: serverB.port, token: "token-b",
+            tcAddress: "tc-slow")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        #expect(manager.token == "token-b")
+
+        let expected = [HostCertMismatch(
+            host: ConnectionManager.tunnelCandidateLabel, fingerprint: "cc:dd")]
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline, manager.certMismatches != expected {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(manager.certMismatches == expected)
+    }
+
     /// Two overlapping pairing attempts over a live connection: the OLDER
     /// attempt completing first must not install its target and supersede
     /// the newer one. Preserving connects don't tear down (and so don't

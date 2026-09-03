@@ -209,9 +209,9 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         let raceStart = CFAbsoluteTimeGetCurrent()
         AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
 
-        let winner: RacedConnection
+        let raced: WonHostRace
         do {
-            winner = try await raceHosts(
+            raced = try await raceHosts(
                 hosts, port: port, token: token, certFingerprint: certFingerprint,
                 tcAddress: tcAddress)
         } catch {
@@ -224,6 +224,15 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 certMismatches = certMismatchesBeforeAttempt
             }
             throw error
+        }
+        let winner = raced.winner
+        // The drain's late mismatches belong to this connect's generation.
+        // The preserving path advances it below when it retires the old
+        // connection — that is not supersession of this race — so the
+        // generation to guard against is settled only on the way out.
+        var lateMismatchGeneration = myGeneration
+        defer {
+            recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
         }
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
@@ -250,6 +259,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             // The replacement is established: now retire the old connection
             // and adopt the new target's parameters.
             teardownConnection()
+            lateMismatchGeneration = connectionGeneration
             self.hosts = hosts
             self.port = port
             self.token = token
@@ -632,13 +642,21 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
 
     // MARK: - Private
 
+    /// A won race: the winner plus the background drain of the candidates
+    /// still in flight (`HostRaceOutcome.drain`). The drain is handed to the
+    /// caller because only it knows which connection generation the drain's
+    /// late mismatches belong to (see `recordLateCertMismatches`).
+    private typealias WonHostRace = (
+        winner: RacedConnection, drain: Task<[HostCertMismatch], Never>?
+    )
+
     private func raceHosts(
         _ hosts: [String],
         port: Int,
         token: String,
         certFingerprint: String?,
         tcAddress: String? = nil
-    ) async throws -> RacedConnection {
+    ) async throws -> WonHostRace {
         let myGeneration = connectionGeneration
         var candidates = hosts
         if tcAddress != nil {
@@ -672,19 +690,27 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         if connectionGeneration == myGeneration {
             recordCertMismatches(outcome.mismatches)
         }
-        if let drain = outcome.drain {
-            // Mismatches from candidates still in flight when the race
-            // settled arrive once the background drain finishes, under the
-            // same generation guard.
-            Task { [weak self] in
-                let lateMismatches = await drain.value
-                guard let self, self.connectionGeneration == myGeneration else { return }
-                self.recordCertMismatches(lateMismatches)
-            }
+        if let winner = outcome.winner {
+            return (winner: winner, drain: outcome.drain)
         }
-        if let winner = outcome.winner { return winner }
+        recordLateCertMismatches(from: outcome.drain, generation: myGeneration)
         throw outcome.failure ?? WebSocketTransportError.failed(
             host: hosts.first ?? "unknown", message: "No reachable host found")
+    }
+
+    /// Records the mismatches from candidates still in flight when a race
+    /// settled, once the background drain finishes — unless
+    /// `connectionGeneration` moved past `generation` by then (a newer
+    /// connect() or disconnect() superseded the race).
+    private func recordLateCertMismatches(
+        from drain: Task<[HostCertMismatch], Never>?, generation: Int
+    ) {
+        guard let drain else { return }
+        Task { [weak self] in
+            let lateMismatches = await drain.value
+            guard let self, self.connectionGeneration == generation else { return }
+            self.recordCertMismatches(lateMismatches)
+        }
     }
 
     /// One tunnel race candidate: establishes the tailcat tunnel (including
@@ -1021,14 +1047,16 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     let raceStart = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
 
-                    let winner = try await self?.raceHosts(
+                    let raced = try await self?.raceHosts(
                         hostsToTry, port: currentPort, token: currentToken,
                         certFingerprint: currentCertFingerprint, tcAddress: currentTcAddress)
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
 
-                    guard let winner = winner else { continue }
+                    guard let raced else { continue }
+                    let winner = raced.winner
+                    self?.recordLateCertMismatches(from: raced.drain, generation: myGeneration)
 
                     do {
                         try Task.checkCancellation()
