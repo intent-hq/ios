@@ -16,6 +16,7 @@ struct ImageLightboxView: View {
     @State private var gestureScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var dragTranslation: CGSize = .zero
+    @State private var viewportSize: CGSize = .zero
 
     private static let minScale: CGFloat = 1
     private static let maxScale: CGFloat = 5
@@ -23,60 +24,64 @@ struct ImageLightboxView: View {
     private static let dismissDragThreshold: CGFloat = 120
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Button { dismiss() } label: {
-                    Color.black
-                        .ignoresSafeArea()
-                }
-                .buttonStyle(.plain)
-                .accessibilityHidden(true)
+        ZStack {
+            Button { dismiss() } label: {
+                Color.black
+                    .ignoresSafeArea()
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
 
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(scale * gestureScale)
-                    .offset(x: offset.width + dragTranslation.width,
-                            y: offset.height + dragTranslation.height)
-                    .accessibilityLabel("Image preview")
-                    .accessibilityValue("\(Int(scale * 100)) percent zoom")
-                    .accessibilityAdjustableAction { direction in
-                        adjustZoom(direction, in: geo.size)
-                    }
-                    .accessibilityActions {
-                        if scale > Self.minScale {
-                            Button("Pan left") {
-                                panImage(by: CGSize(width: -50, height: 0), in: geo.size)
-                            }
-                            Button("Pan right") {
-                                panImage(by: CGSize(width: 50, height: 0), in: geo.size)
-                            }
-                            Button("Pan up") {
-                                panImage(by: CGSize(width: 0, height: -50), in: geo.size)
-                            }
-                            Button("Pan down") {
-                                panImage(by: CGSize(width: 0, height: 50), in: geo.size)
-                            }
-                            Button("Reset zoom") {
-                                scale = Self.minScale
-                                gestureScale = 1
-                                offset = .zero
-                            }
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .scaleEffect(scale * gestureScale)
+                .offset(x: offset.width + dragTranslation.width,
+                        y: offset.height + dragTranslation.height)
+                .accessibilityLabel("Image preview")
+                .accessibilityValue("\(Int(scale * 100)) percent zoom")
+                .accessibilityAdjustableAction { direction in
+                    adjustZoom(direction, in: viewportSize)
+                }
+                .accessibilityActions {
+                    if scale > Self.minScale {
+                        Button("Pan left") {
+                            panImage(by: CGSize(width: -50, height: 0), in: viewportSize)
+                        }
+                        Button("Pan right") {
+                            panImage(by: CGSize(width: 50, height: 0), in: viewportSize)
+                        }
+                        Button("Pan up") {
+                            panImage(by: CGSize(width: 0, height: -50), in: viewportSize)
+                        }
+                        Button("Pan down") {
+                            panImage(by: CGSize(width: 0, height: 50), in: viewportSize)
+                        }
+                        Button("Reset zoom") {
+                            scale = Self.minScale
+                            gestureScale = 1
+                            offset = .zero
                         }
                     }
-                    .gesture(doubleTapGesture)
-                    .gesture(dragGesture(in: geo.size))
-                    .simultaneousGesture(magnifyGesture(in: geo.size))
-            }
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: 8) {
-                    actionsMenu
-                    closeButton
                 }
-                .padding(12)
+                .gesture(doubleTapGesture)
+                .gesture(dragGesture(in: viewportSize))
+                .simultaneousGesture(magnifyGesture(in: viewportSize))
+        }
+        .onGeometryChange(for: CGSize.self) { proxy in
+            proxy.size
+        } action: { size in
+            if size.width > 0, size.height > 0 {
+                viewportSize = size
             }
         }
-        .background(Color.black.ignoresSafeArea())
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 8) {
+                actionsMenu
+                closeButton
+            }
+            .padding(12)
+        }
     }
 
     private var actionsMenu: some View {
