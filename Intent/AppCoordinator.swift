@@ -46,6 +46,10 @@ class AppCoordinator {
     /// Pair payload from a URL that arrived before onLoadComplete (cold
     /// start); surfaced as pendingDeepLinkPairing once load finishes.
     @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
+    /// Notification selection awaiting completion of connection or retry routing.
+    @ObservationIgnored private var pendingNotificationSelection: (
+        agentId: String, workspaceId: String, agentName: String, connectionId: UUID
+    )?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
 
@@ -73,16 +77,19 @@ class AppCoordinator {
     @ObservationIgnored private let connection: ConnectionManagerRouting
     @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
+    @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
 
     init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
          connection: ConnectionManagerRouting = ConnectionManager.shared,
          persistence: PersistenceManager = PersistenceManager.shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
+         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
          reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}) {
         self.workspaceStore = workspaceStore
         self.connection = connection
         self.persistence = persistence
         self.syncedRegistry = syncedRegistry
+        self.backgroundTaskManager = backgroundTaskManager
         self.reconnectLoadingObservationDidChange = reconnectLoadingObservationDidChange
         startObservingConnection()
         startObservingCertMismatch()
@@ -310,11 +317,35 @@ class AppCoordinator {
         }
     }
 
+    /// Routes notification taps immediately once the connected UI is stable,
+    /// or stashes them until cold-start connection routing completes.
+    func handleNotificationSelection(
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        connectionId: UUID
+    ) {
+        guard persistence.activeConnection()?.id == connectionId else { return }
+        switch currentScreen {
+        case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
+            pendingNotificationSelection = (agentId, workspaceId, agentName, connectionId)
+        default:
+            onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
+        }
+    }
+
     /// Called when the scene becomes active (launch and every return to the
     /// foreground): re-merges the iCloud-synced backend registry so changes
     /// made on other devices while the app was backgrounded show up.
     func onScenePhaseActive() {
+        backgroundTaskManager.endIfNeeded()
         refreshSyncedBackends()
+    }
+
+    /// Called when the scene leaves the foreground so agent-completion events
+    /// can continue arriving during iOS's extended background execution window.
+    func onScenePhaseNotActive() {
+        backgroundTaskManager.beginIfNeeded()
     }
 
     /// Merges the iCloud-synced backend registry into the saved connections
@@ -357,6 +388,18 @@ class AppCoordinator {
     }
 
     func onConnectionSuccess() {
+        if let selection = pendingNotificationSelection {
+            pendingNotificationSelection = nil
+            if persistence.activeConnection()?.id == selection.connectionId {
+                onSelectAgent(
+                    selection.agentId,
+                    workspaceId: selection.workspaceId,
+                    agentName: selection.agentName
+                )
+                return
+            }
+        }
+
         // Try to restore last viewed screen. Restoring into a workspace counts
         // as viewing it, so it marks the workspace seen — mirroring the FE,
         // where the workspace surface marks seen whenever it becomes active

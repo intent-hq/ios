@@ -6,6 +6,10 @@ struct IntentApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
+    init() {
+        _ = NotificationManager.shared
+    }
+
     private var resolvedColorScheme: ColorScheme? {
         switch themePreference {
         case "light": return .light
@@ -16,7 +20,6 @@ struct IntentApp: App {
 
     var body: some Scene {
         WindowGroup {
-            let _ = NotificationManager.shared
             RootView()
                 .environment(coordinator)
                 .environment(ConnectionManager.shared)
@@ -27,6 +30,8 @@ struct IntentApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
                         coordinator.onScenePhaseActive()
+                    } else {
+                        coordinator.onScenePhaseNotActive()
                     }
                 }
         }

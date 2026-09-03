@@ -211,6 +211,17 @@ struct RootView: View {
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
             DeepLinkPairingView(payload: request.payload)
         }
+        .onAppear {
+            notificationManager.setAgentSelectionHandler {
+                [weak coordinator] agentId, workspaceId, agentName, connectionId in
+                coordinator?.handleNotificationSelection(
+                    agentId: agentId,
+                    workspaceId: workspaceId,
+                    agentName: agentName,
+                    connectionId: connectionId
+                )
+            }
+        }
     }
 
     @ViewBuilder
