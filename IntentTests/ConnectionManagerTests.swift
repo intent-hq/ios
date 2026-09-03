@@ -543,7 +543,11 @@ struct ConnectionManagerTests {
 
         #expect(outcome.winner?.host == "good.host")
         #expect(outcome.failure == nil)
-        #expect(outcome.mismatches == [
+        // The race settles on the first success, so whether the loser's
+        // mismatch is on the outcome or reported by the background drain
+        // depends on scheduling; either way it must not be swallowed.
+        let lateMismatches = await outcome.drain?.value ?? []
+        #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")])
     }
 
@@ -560,7 +564,10 @@ struct ConnectionManagerTests {
         }
 
         #expect(outcome.winner?.host == "good.host")
-        #expect(outcome.mismatches == [
+        // The loser's mismatch lands after the winner settled the race, so it
+        // is reported by the background drain rather than the outcome itself.
+        let lateMismatches = await outcome.drain?.value ?? []
+        #expect(outcome.mismatches + lateMismatches == [
             HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")])
     }
 
@@ -1373,7 +1380,39 @@ struct ConnectionManagerTests {
         }
 
         #expect(outcome.winner?.host == "direct.host")
+        _ = await outcome.drain?.value
         #expect(tunnel.isClosed)
+    }
+
+    /// Regression: the race must settle as soon as a candidate wins instead of
+    /// waiting for every loser to finish. A loser that ignores cancellation
+    /// (a tunnel dial whose Go side does not abort promptly) must not delay
+    /// the connect, and must still be disconnected by the background drain.
+    @Test func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
+        let loserTunnel = FakeTunnelSession(localPort: 1)
+        let start = ContinuousClock.now
+        let outcome = await ConnectionManager.raceCandidates(
+            ["direct.host", ConnectionManager.tunnelCandidateLabel]
+        ) { host -> FakeTunnelRaceConnection in
+            if host == ConnectionManager.tunnelCandidateLabel {
+                // Sleeping in a detached task and awaiting its value is not
+                // interrupted by the candidate task's cancellation.
+                _ = await Task.detached {
+                    try? await Task.sleep(for: .seconds(2))
+                }.value
+                return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+            }
+            return FakeTunnelRaceConnection(host: host, tunnel: nil)
+        }
+        let elapsed = ContinuousClock.now - start
+
+        #expect(outcome.winner?.host == "direct.host")
+        #expect(outcome.failure == nil)
+        #expect(elapsed < .seconds(1), "race waited on the loser: \(elapsed)")
+        // The loser is still in flight; cleanup happens off the critical path.
+        #expect(!loserTunnel.isClosed)
+        _ = await outcome.drain?.value
+        #expect(loserTunnel.isClosed)
     }
 
     // MARK: - Pairing over a live connection (monorepo#4185)
@@ -1586,6 +1625,57 @@ struct ConnectionManagerTests {
         #expect(manager.token == "token-b")
         let result = try await manager.request("system.status")
         #expect(result is [String: Any])
+    }
+
+    /// A tunnel dialer that reports a certificate mismatch only after a delay
+    /// the race's loser cancellation cannot cut short, so a direct candidate
+    /// wins first and the mismatch is reported by the background drain.
+    private nonisolated struct SlowMismatchTunnelDialer: TunnelDialing {
+        let fingerprint: String
+        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+            _ = await Task.detached {
+                try? await Task.sleep(for: .milliseconds(300))
+            }.value
+            throw WebSocketTransportError.certificateMismatch(
+                host: ConnectionManager.tunnelCandidateLabel, fingerprint: fingerprint)
+        }
+    }
+
+    /// A preserving connect() retires the old connection — advancing the
+    /// connection generation — only AFTER its race is won. A slower losing
+    /// candidate's certificate mismatch, reported by the background drain,
+    /// must still reach `certMismatches`: the race was not superseded.
+    @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
+        let manager = ConnectionManager.shared
+        let serverA = try await LoopbackWebSocketServer.start()
+        let serverB = try await LoopbackWebSocketServer.start()
+        let originalDialer = manager.tunnelDialer
+        defer {
+            manager.tunnelDialer = originalDialer
+            manager.disconnect()
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+
+        manager.tunnelDialer = SlowMismatchTunnelDialer(fingerprint: "cc:dd")
+        try await manager.connect(
+            hosts: ["127.0.0.1"], port: serverB.port, token: "token-b",
+            tcAddress: "tc-slow")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        #expect(manager.token == "token-b")
+
+        let expected = [HostCertMismatch(
+            host: ConnectionManager.tunnelCandidateLabel, fingerprint: "cc:dd")]
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline, manager.certMismatches != expected {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(manager.certMismatches == expected)
     }
 
     /// Two overlapping pairing attempts over a live connection: the OLDER

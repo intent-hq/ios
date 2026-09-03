@@ -1,6 +1,7 @@
 import Foundation
 import TailcatKit
 import Testing
+@testable import Intent
 
 /// Smoke tests for the vendored TailcatKit.xcframework (gomobile bind
 /// of TailcatKit/, wrapping github.com/tailscale/tailcat).
@@ -61,5 +62,60 @@ struct TailcatKitSmokeTests {
             }
         }
         #expect(received == message)
+    }
+}
+
+/// Ordering logic of the dial-cancellation bridge. Uses an unused
+/// gomobile client (close on it is a no-op), so no network is involved.
+struct TailcatDialHandleTests {
+    @Test func registerAfterCancelIsRefused() throws {
+        let handle = TailcatTunnelDialer.DialHandle()
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+
+        #expect(!handle.isCancelled)
+        handle.cancel()
+        #expect(handle.isCancelled)
+        #expect(!handle.register(client))
+    }
+
+    @Test func registerBeforeCancelIsAccepted() throws {
+        let handle = TailcatTunnelDialer.DialHandle()
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+
+        #expect(handle.register(client))
+        #expect(handle.cancelledAt == nil)
+        handle.cancel()
+        #expect(handle.isCancelled)
+        #expect(handle.cancelledAt != nil)
+    }
+
+    @Test func cancelIsIdempotent() throws {
+        let handle = TailcatTunnelDialer.DialHandle()
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+
+        #expect(handle.register(client))
+        handle.cancel()
+        let first = try #require(handle.cancelledAt)
+        handle.cancel()
+        #expect(handle.cancelledAt == first)
+    }
+
+    @Test func cancelDoesNotBlockCaller() throws {
+        let handle = TailcatTunnelDialer.DialHandle()
+        let client = try #require(TailcatkitNewClient("tc-not-a-real-token"))
+        defer { try? client.close() }
+
+        #expect(handle.register(client))
+        let start = CFAbsoluteTimeGetCurrent()
+        handle.cancel()
+        // Smoke check only: an unused client's close is a no-op on the Go
+        // side, so this cannot tell a synchronous close from the off-thread
+        // dispatch `cancel()` performs — that guarantee is reviewable only by
+        // inspection (the gomobile client cannot be faked). It pins that
+        // `cancel()` is at least cheap in the no-op case.
+        #expect(CFAbsoluteTimeGetCurrent() - start < 1)
     }
 }
