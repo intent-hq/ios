@@ -67,7 +67,7 @@ struct DeepLinkPairingView: View {
                 }
             }
             .navigationTitle("Pair with Intent?")
-            .navigationBarTitleDisplayMode(.inline)
+            .toolbarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }

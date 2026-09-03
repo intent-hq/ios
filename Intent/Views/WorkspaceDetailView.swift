@@ -229,7 +229,7 @@ struct WorkspaceDetailView: View {
                 .environment(coordinator)
         }
         .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbarTitleDisplayMode(.inline)
 
     }
 
