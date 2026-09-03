@@ -29,7 +29,7 @@ struct MarkdownTextView: View {
                     lightboxItem = LightboxItem(image: image)
                 }
             }
-            .font(.system(size: CompactMarkdownStyle.baseFontSize))
+            .font(.body)
             .foregroundStyle(Theme.foreground(for: colorScheme))
             .frame(maxWidth: .infinity, alignment: .leading)
             .fullScreenCover(item: $lightboxItem) { item in

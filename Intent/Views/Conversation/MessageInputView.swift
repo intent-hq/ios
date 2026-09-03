@@ -46,6 +46,9 @@ struct MessageInputView: View {
                         Image(systemName: "stop.circle.fill")
                             .font(.title2)
                             .foregroundStyle(Theme.destructive(for: colorScheme))
+                            .frame(
+                                minWidth: Constants.Accessibility.minimumTapTarget,
+                                minHeight: Constants.Accessibility.minimumTapTarget)
                     }
                     .accessibilityLabel("Stop response")
                 } else {
@@ -65,6 +68,9 @@ struct MessageInputView: View {
                         Image(systemName: "plus.circle.fill")
                             .font(.title2)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .frame(
+                                minWidth: Constants.Accessibility.minimumTapTarget,
+                                minHeight: Constants.Accessibility.minimumTapTarget)
                     }
                     .accessibilityLabel("Add attachment")
                 }
@@ -119,6 +125,9 @@ struct MessageInputView: View {
                                         ? Theme.primary(for: colorScheme)
                                         : Theme.mutedForeground(for: colorScheme)
                                 )
+                                .frame(
+                                    minWidth: Constants.Accessibility.minimumTapTarget,
+                                    minHeight: Constants.Accessibility.minimumTapTarget)
                         }
                         .disabled(!hasContent)
                         .accessibilityLabel("Send message")
@@ -185,6 +194,11 @@ struct MessageInputView: View {
                                 .font(.caption)
                                 .foregroundStyle(.white)
                                 .background(Circle().fill(.black.opacity(0.5)))
+                                .frame(
+                                    minWidth: Constants.Accessibility.minimumTapTarget,
+                                    minHeight: Constants.Accessibility.minimumTapTarget,
+                                    alignment: .topTrailing)
+                                .contentShape(Rectangle())
                         }
                         .offset(x: 4, y: -4)
                         .accessibilityLabel("Remove image \(index + 1)")
@@ -244,6 +258,8 @@ struct MessageInputView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                    .contentShape(Rectangle().inset(
+                                        by: -Constants.Accessibility.minimumTapTarget / 2))
                             }
                             .accessibilityLabel("Remove \(file.displayName)")
                         }

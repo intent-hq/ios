@@ -8,6 +8,8 @@ import SwiftUI
 struct SystemNoticeBannerView: View {
     /// The system message text; empty falls back to the default restart notice.
     let message: String
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     static let defaultMessage = "This conversation was interrupted because intentd restarted."
 
@@ -24,19 +26,26 @@ struct SystemNoticeBannerView: View {
 
             Text(displayText)
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(.orange)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
                 .textSelection(.enabled)
         }
         .padding(.horizontal, Constants.Conversation.NoticeCard.horizontalPadding)
         .padding(.vertical, Constants.Conversation.NoticeCard.verticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(Constants.Conversation.NoticeCard.backgroundOpacity))
+        .background(Color.orange.opacity(
+            colorSchemeContrast == .increased
+                ? Constants.Conversation.NoticeCard.backgroundOpacity * 1.75
+                : Constants.Conversation.NoticeCard.backgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius)
                 .strokeBorder(
-                    Color.orange.opacity(Constants.Conversation.NoticeCard.borderOpacity),
-                    lineWidth: Constants.Conversation.NoticeCard.borderWidth)
+                    Color.orange.opacity(colorSchemeContrast == .increased
+                        ? 1
+                        : Constants.Conversation.NoticeCard.borderOpacity),
+                    lineWidth: colorSchemeContrast == .increased
+                        ? Constants.Conversation.NoticeCard.borderWidth * 2
+                        : Constants.Conversation.NoticeCard.borderWidth)
         )
     }
 }

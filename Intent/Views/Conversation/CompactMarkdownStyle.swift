@@ -1,12 +1,12 @@
 import SwiftUI
 import Textual
 
-/// Textual port of the app's previous compact markdown theme: same font sizes,
-/// weights, margins, and paddings, expressed as a `StructuredText.Style`.
+/// Textual port of the app's previous compact markdown theme: same relative font
+/// scales, weights, margins, and paddings, expressed as a `StructuredText.Style`.
 struct CompactMarkdownStyle: StructuredText.Style {
-    /// The body size the old theme was designed around; margins expressed in
+    /// The default point size of the `.body` base font; margins expressed in
     /// `em` in the old theme are computed against this size.
-    static let baseFontSize: CGFloat = 15
+    static let baseFontSize: CGFloat = 17
 
     /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
     static let codeForeground = DynamicColor(
@@ -39,11 +39,11 @@ extension StructuredText.Style where Self == CompactMarkdownStyle {
     static var compact: Self { .init() }
 }
 
-/// h1 17pt/semibold, h2 16pt/semibold, h3 15pt/semibold, h4-h6 15pt/medium,
-/// with the old 8/6/4pt top and 4pt bottom margins.
+/// At the default `.body` size: h1 19.27pt/semibold, h2 18.13pt/semibold,
+/// h3 17pt/semibold, h4-h6 17pt/medium, with 8/6/4pt top and 4pt bottom margins.
 struct CompactHeadingStyle: StructuredText.HeadingStyle {
     private static let fontScales: [CGFloat] = [
-        17 / CompactMarkdownStyle.baseFontSize, 16 / CompactMarkdownStyle.baseFontSize, 1, 1, 1, 1,
+        17 / 15, 16 / 15, 1, 1, 1, 1,
     ]
     private static let weights: [Font.Weight] = [
         .semibold, .semibold, .semibold, .medium, .medium, .medium,
@@ -97,7 +97,8 @@ struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     }
 }
 
-/// 15pt cells, semibold header row, the old 0.72em/0.35em cell padding.
+/// 17pt cells at the default `.body` size, semibold header row, and the old
+/// 0.72em/0.35em cell padding.
 struct CompactTableCellStyle: StructuredText.TableCellStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

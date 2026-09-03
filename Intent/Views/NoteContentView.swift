@@ -74,9 +74,13 @@ private struct PlainTaskRow: View {
             } label: {
                 TaskStatusIconView(status: line.markerStatus, size: Constants.Notes.Content.taskIconSize)
                     .padding(.top, Constants.Notes.Content.taskIconTopPadding)
+                    .contentShape(Rectangle().inset(by: -(
+                        Constants.Accessibility.minimumTapTarget
+                            - Constants.Notes.Content.taskIconSize) / 2))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Status for \(line.text): \(line.markerStatus.label)")
+            .accessibilityLabel("Change status for \(line.text)")
+            .accessibilityValue(line.markerStatus.label)
             MarkdownTextView(text: line.text)
         }
         .padding(.leading, indentPadding(line.indentColumns))
@@ -92,6 +96,7 @@ private struct LinkedTaskCardRow: View {
     let onOpen: () -> Void
     let onSetStatus: (String) -> Void
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// The 8 task-note statuses (PROTOCOL §5.4) offered by the status menu.
     private static let statusOptions: [(status: TaskDisplayStatus, wire: String)] = [
@@ -127,16 +132,31 @@ private struct LinkedTaskCardRow: View {
                 }
             } label: {
                 TaskStatusIconView(status: status, size: Constants.Notes.Content.taskIconSize)
+                    .frame(
+                        minWidth: Constants.Accessibility.minimumTapTarget,
+                        minHeight: Constants.Accessibility.minimumTapTarget)
             }
-            .accessibilityLabel("Status for \(title): \(status.label)")
-            Text(title)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .accessibilityLabel("Change status for \(title)")
+            .accessibilityValue(status.label)
+            Button(action: onOpen) {
+                HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: Constants.Accessibility.minimumTapTarget,
+                    alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open task \(title)")
         }
         .padding(.horizontal, Constants.Notes.Content.linkedTaskHorizontalPadding)
         .padding(.vertical, Constants.Notes.Content.linkedTaskVerticalPadding)
@@ -147,8 +167,6 @@ private struct LinkedTaskCardRow: View {
                 .stroke(Theme.border(for: colorScheme),
                         lineWidth: Constants.Notes.Content.linkedTaskBorderWidth)
         )
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onOpen)
         .padding(.leading, indentPadding(line.indentColumns))
     }
 }

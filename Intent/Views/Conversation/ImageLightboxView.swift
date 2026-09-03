@@ -25,9 +25,12 @@ struct ImageLightboxView: View {
 
     var body: some View {
         ZStack {
-            Color.black
-                .ignoresSafeArea()
-                .onTapGesture { dismiss() }
+            Button { dismiss() } label: {
+                Color.black
+                    .ignoresSafeArea()
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
 
             Image(uiImage: image)
                 .resizable()
@@ -35,6 +38,32 @@ struct ImageLightboxView: View {
                 .scaleEffect(scale * gestureScale)
                 .offset(x: offset.width + dragTranslation.width,
                         y: offset.height + dragTranslation.height)
+                .accessibilityLabel("Image preview")
+                .accessibilityValue("\(Int(scale * 100)) percent zoom")
+                .accessibilityAdjustableAction { direction in
+                    adjustZoom(direction, in: viewportSize)
+                }
+                .accessibilityActions {
+                    if scale > Self.minScale {
+                        Button("Pan left") {
+                            panImage(by: CGSize(width: -50, height: 0), in: viewportSize)
+                        }
+                        Button("Pan right") {
+                            panImage(by: CGSize(width: 50, height: 0), in: viewportSize)
+                        }
+                        Button("Pan up") {
+                            panImage(by: CGSize(width: 0, height: -50), in: viewportSize)
+                        }
+                        Button("Pan down") {
+                            panImage(by: CGSize(width: 0, height: 50), in: viewportSize)
+                        }
+                        Button("Reset zoom") {
+                            scale = Self.minScale
+                            gestureScale = 1
+                            offset = .zero
+                        }
+                    }
+                }
                 .gesture(doubleTapGesture)
                 .gesture(dragGesture(in: viewportSize))
                 .simultaneousGesture(magnifyGesture(in: viewportSize))
@@ -64,6 +93,9 @@ struct ImageLightboxView: View {
                 .foregroundStyle(.white)
                 .padding(10)
                 .background(.white.opacity(0.15), in: Circle())
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget)
         }
         .accessibilityLabel("Image actions")
     }
@@ -75,6 +107,9 @@ struct ImageLightboxView: View {
                 .foregroundStyle(.white)
                 .padding(10)
                 .background(.white.opacity(0.15), in: Circle())
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget)
         }
         .accessibilityLabel("Close image")
     }
@@ -92,6 +127,25 @@ struct ImageLightboxView: View {
                 }
             }
         }
+    }
+
+    private func adjustZoom(_ direction: AccessibilityAdjustmentDirection, in size: CGSize) {
+        let step: CGFloat = 0.5
+        switch direction {
+        case .increment:
+            scale = min(scale + step, Self.maxScale)
+        case .decrement:
+            scale = max(scale - step, Self.minScale)
+            offset = clampedOffset(offset, in: size)
+        @unknown default:
+            break
+        }
+    }
+
+    private func panImage(by delta: CGSize, in size: CGSize) {
+        offset = clampedOffset(
+            CGSize(width: offset.width + delta.width, height: offset.height + delta.height),
+            in: size)
     }
 
     private func magnifyGesture(in size: CGSize) -> some Gesture {

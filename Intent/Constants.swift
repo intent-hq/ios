@@ -3,6 +3,10 @@ import SwiftUI
 import UIKit
 
 enum Constants {
+    enum Accessibility {
+        static let minimumTapTarget: CGFloat = 44
+    }
+
     enum Conversation {
         enum Attribution {
             static let spacing: CGFloat = 6
@@ -63,7 +67,7 @@ enum Constants {
         }
 
         enum Composer {
-            static let minimumTextViewHeight: CGFloat = 36
+            static let minimumTextViewHeight = Constants.Accessibility.minimumTapTarget
             static let maximumTextViewHeight: CGFloat = 120
             static let maximumImageSelectionCount = 5
             static let draftSaveDebounceMilliseconds = 500
@@ -317,6 +321,9 @@ enum Constants {
         static let statusDotSize: CGFloat = 5
         static let statusDotOffset: CGFloat = 2
         static let unreadDotStackOffset: CGFloat = 5
+        static let differentiatedStatusCueSize: CGFloat = 12
+        static let differentiatedStatusCueOffset: CGFloat = 4
+        static let differentiatedUnreadStackOffset: CGFloat = 10
         static let titleSpacing: CGFloat = 4
         static let metadataSpacing: CGFloat = 8
         static let pillFontSize: CGFloat = 11
@@ -598,12 +605,22 @@ enum Constants {
                 Colors.resolvedColor(UIColor(resource: .themeMuted), for: scheme)
             }
 
-            static func mutedForeground(for scheme: ColorScheme) -> Color {
-                Colors.resolvedColor(UIColor(resource: .themeMutedForeground), for: scheme)
+            static func mutedForeground(
+                for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+            ) -> Color {
+                if contrast == .increased {
+                    return foreground(for: scheme).opacity(0.9)
+                }
+                return Colors.resolvedColor(UIColor(resource: .themeMutedForeground), for: scheme)
             }
 
-            static func border(for scheme: ColorScheme) -> Color {
-                Colors.resolvedColor(UIColor(resource: .themeBorder), for: scheme)
+            static func border(
+                for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+            ) -> Color {
+                if contrast == .increased {
+                    return foreground(for: scheme).opacity(0.55)
+                }
+                return Colors.resolvedColor(UIColor(resource: .themeBorder), for: scheme)
             }
 
             static func destructive(for scheme: ColorScheme) -> Color {

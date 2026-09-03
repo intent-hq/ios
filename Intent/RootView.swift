@@ -66,8 +66,6 @@ struct RootView: View {
     /// re-push dance, so the user-back onChange handler doesn't misfire.
     @State private var programmaticConversationDismiss = false
     @State private var noteStack = NavigationPath()
-    /// Parallel array tracking note titles pushed onto noteStack for iPad back-button labels.
-    @State private var stackTitles: [String] = []
 
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {
@@ -301,26 +299,6 @@ struct RootView: View {
                             agentName: conversationAgentName
                         )
                         .id(conversationAgentId)
-                        .navigationBarBackButtonHidden(sizeClass == .regular)
-                        .toolbar {
-                            if sizeClass == .regular {
-                                ToolbarItem(placement: .navigationBarLeading) {
-                                    Button {
-                                        // Pop directly so the back action works even if the
-                                        // coordinator is already on .workspaceDetail (no
-                                        // reliance on a screen-description change alone).
-                                        showingConversation = false
-                                        coordinator.onBackToWorkspaceDetail()
-                                    } label: {
-                                        HStack(spacing: Constants.Root.backButtonSpacing) {
-                                            Image(systemName: "chevron.left")
-                                            Text("Agents")
-                                        }
-                                        .font(.body)
-                                    }
-                                }
-                            }
-                        }
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
@@ -329,25 +307,8 @@ struct RootView: View {
                             noteTitle: dest.noteTitle,
                             onNavigateToNote: { noteId, wsId, title in
                                 noteStack.append(NoteDestination(noteId: noteId, workspaceId: wsId, noteTitle: title))
-                                stackTitles.append(title)
                             }
                         )
-                        .navigationBarBackButtonHidden(sizeClass == .regular)
-                        .toolbar {
-                            if sizeClass == .regular {
-                                ToolbarItem(placement: .navigationBarLeading) {
-                                    Button {
-                                        noteStack.removeLast()
-                                    } label: {
-                                        HStack(spacing: Constants.Root.backButtonSpacing) {
-                                            Image(systemName: "chevron.left")
-                                            Text(stackBackTitle())
-                                        }
-                                        .font(.body)
-                                    }
-                                }
-                            }
-                        }
                     }
             }
             .onAppear {
@@ -384,10 +345,6 @@ struct RootView: View {
                 if newStack.isEmpty, case .noteDetail = coordinator.currentScreen {
                     coordinator.onBackFromNote()
                 }
-                // Keep stackTitles in sync when items are popped
-                if stackTitles.count > newStack.count {
-                    stackTitles = Array(stackTitles.prefix(newStack.count))
-                }
             }
         } else {
             emptyDetailPlaceholder
@@ -399,29 +356,12 @@ struct RootView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            VStack(spacing: Constants.Root.emptyStateSpacing) {
-                Image(systemName: "sidebar.left")
-                    .font(.largeTitle)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                Text("Select a workspace")
-                    .font(.headline)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Text("Choose a workspace from the sidebar to see its agents and notes.")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, Constants.Root.emptyStateHorizontalPadding)
-            }
+            ContentUnavailableView(
+                "Select a Workspace",
+                systemImage: "sidebar.left",
+                description: Text("Choose a workspace from the sidebar to see its agents and notes.")
+            )
         }
-    }
-
-    /// Compute the back button title using the parallel stackTitles array.
-    /// Shows the previous item's title, or "Context" if this is the first item.
-    private func stackBackTitle() -> String {
-        if stackTitles.count >= 2 {
-            return stackTitles[stackTitles.count - 2]
-        }
-        return "Context"
     }
 
     private func syncNavigationState() {
@@ -430,7 +370,7 @@ struct RootView: View {
             conversationAgentId = agentId
             conversationWorkspaceId = workspaceId
             conversationAgentName = agentName
-            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+            if !noteStack.isEmpty { noteStack = NavigationPath() }
             if showingNoteDetail { showingNoteDetail = false }
 
             if !showingWorkspaceDetail {
@@ -489,7 +429,6 @@ struct RootView: View {
                 // up the new destination reliably.
                 if !noteStack.isEmpty {
                     noteStack = NavigationPath()
-                    stackTitles.removeAll()
                 }
                 let pendingNoteId = nId
                 let pendingWorkspaceId = wId
@@ -498,7 +437,6 @@ struct RootView: View {
                     if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
                         noteStack = NavigationPath()
                         noteStack.append(NoteDestination(noteId: pendingNoteId, workspaceId: pendingWorkspaceId, noteTitle: pendingTitle))
-                        stackTitles = [pendingTitle]
                     }
                 }
             }
@@ -506,12 +444,12 @@ struct RootView: View {
             if !showingWorkspaceDetail { showingWorkspaceDetail = true }
             if showingConversation { showingConversation = false }
             if showingNoteDetail { showingNoteDetail = false }
-            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+            if !noteStack.isEmpty { noteStack = NavigationPath() }
         } else {
             if showingWorkspaceDetail { showingWorkspaceDetail = false }
             if showingConversation { showingConversation = false }
             if showingNoteDetail { showingNoteDetail = false }
-            if !noteStack.isEmpty { noteStack = NavigationPath(); stackTitles.removeAll() }
+            if !noteStack.isEmpty { noteStack = NavigationPath() }
         }
     }
 

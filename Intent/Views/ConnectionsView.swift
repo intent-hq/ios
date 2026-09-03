@@ -155,7 +155,7 @@ struct ConnectionsView: View {
                                    height: Constants.Connections.statusDotSize)
                         Text("Connected")
                             .font(.caption)
-                            .foregroundStyle(.green)
+                            .foregroundStyle(.primary)
                     }
                 }
             }

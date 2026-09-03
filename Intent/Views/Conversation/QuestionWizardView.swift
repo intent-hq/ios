@@ -30,6 +30,9 @@ struct QuestionWizardView: View {
     var onDismiss: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @ScaledMetric(relativeTo: .caption) private var checkboxSide =
+        Constants.Conversation.QuestionWizard.checkboxSide
 
     private struct DraftAnswer {
         var sel: [Int] = []
@@ -101,11 +104,15 @@ struct QuestionWizardView: View {
                 footerRow
             }
         }
-        .background(Theme.muted(for: colorScheme).opacity(0.4))
+        .background(Theme.muted(for: colorScheme).opacity(
+            colorSchemeContrast == .increased ? 0.7 : 0.4))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Theme.border(for: colorScheme).opacity(0.3), lineWidth: 1)
+                .strokeBorder(
+                    Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
+                        colorSchemeContrast == .increased ? 1 : 0.3),
+                    lineWidth: colorSchemeContrast == .increased ? 2 : 1)
         )
         // Fill the full width of the conversation panel on all layouts,
         // matching the desktop FE's full-width question wizard.
@@ -204,7 +211,7 @@ struct QuestionWizardView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                     Text("\(questions.count)")
-                        .font(.caption2.weight(.medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 1)
@@ -215,14 +222,17 @@ struct QuestionWizardView: View {
                         )
                     Spacer(minLength: 8)
                     Text("Tap to expand")
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 }
                 .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
                 .padding(.vertical, 9)
+                .frame(minHeight: Constants.Accessibility.minimumTapTarget)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Expand questions")
+            .accessibilityValue("\(questions.count) questions")
             if onDismiss != nil {
                 dismissButton
                     .padding(.trailing, 8)
@@ -242,6 +252,9 @@ struct QuestionWizardView: View {
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -276,7 +289,7 @@ struct QuestionWizardView: View {
             }
             if isMulti {
                 Text("Select all that apply")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 1)
@@ -289,6 +302,9 @@ struct QuestionWizardView: View {
                 Text("Ignore")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .frame(
+                        minWidth: Constants.Accessibility.minimumTapTarget,
+                        minHeight: Constants.Accessibility.minimumTapTarget)
             }
             .buttonStyle(.plain)
             if onDismiss != nil {
@@ -300,9 +316,14 @@ struct QuestionWizardView: View {
     }
 
     private func segmentColor(_ i: Int) -> Color {
-        if i < idx { return Theme.primary(for: colorScheme).opacity(0.4) }
+        if i < idx {
+            return Theme.primary(for: colorScheme).opacity(
+                colorSchemeContrast == .increased ? 0.7 : 0.4)
+        }
         if i == idx { return Theme.primary(for: colorScheme) }
-        return Theme.mutedForeground(for: colorScheme).opacity(0.25)
+        return Theme.mutedForeground(
+            for: colorScheme, contrast: colorSchemeContrast).opacity(
+                colorSchemeContrast == .increased ? 0.55 : 0.25)
     }
 
     // MARK: - Step body
@@ -335,7 +356,7 @@ struct QuestionWizardView: View {
             VStack(alignment: .leading, spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(current.header.uppercased())
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .kerning(0.5)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .fixedSize(horizontal: false, vertical: true)
@@ -394,16 +415,20 @@ struct QuestionWizardView: View {
                 Spacer(minLength: 0)
                 if !isMulti {
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(
+                maxWidth: .infinity,
+                minHeight: Constants.Accessibility.minimumTapTarget,
+                alignment: .leading)
             .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
             .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
             .background(
                 selected
-                    ? Theme.primary(for: colorScheme).opacity(0.1)
+                    ? Theme.primary(for: colorScheme).opacity(
+                        colorSchemeContrast == .increased ? 0.2 : 0.1)
                     : Theme.background(for: colorScheme).opacity(0.6)
             )
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
@@ -412,13 +437,17 @@ struct QuestionWizardView: View {
                     .strokeBorder(
                         selected
                             ? Theme.primary(for: colorScheme)
-                            : Theme.border(for: colorScheme).opacity(0.4),
-                        lineWidth: 1
+                            : Theme.border(
+                                for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                    colorSchemeContrast == .increased ? 1 : 0.4),
+                        lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
                     )
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(option.label)
+        .accessibilityValue(selected ? "Selected" : "Not selected")
     }
 
     @ViewBuilder
@@ -426,21 +455,23 @@ struct QuestionWizardView: View {
         RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
             .fill(selected ? Theme.primary(for: colorScheme) : Color.clear)
             .frame(
-                width: Constants.Conversation.QuestionWizard.checkboxSide,
-                height: Constants.Conversation.QuestionWizard.checkboxSide)
+                width: checkboxSide,
+                height: checkboxSide)
             .overlay(
                 RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
                     .strokeBorder(
                         selected
                             ? Color.clear
-                            : Theme.mutedForeground(for: colorScheme).opacity(0.5),
-                        lineWidth: 1
+                            : Theme.mutedForeground(
+                                for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                    colorSchemeContrast == .increased ? 1 : 0.5),
+                        lineWidth: colorSchemeContrast == .increased ? 2 : 1
                     )
             )
             .overlay {
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
                 }
             }
@@ -451,21 +482,23 @@ struct QuestionWizardView: View {
     private var otherField: some View {
         HStack(spacing: 8) {
             Image(systemName: "pencil")
-                .font(.system(size: 11))
+                .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
             TextField("Type your own answer…", text: $drafts[idx].text)
                 .font(.body)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
+                .frame(minHeight: Constants.Accessibility.minimumTapTarget)
                 .onSubmit { handleNext() }
                 .onChange(of: drafts[idx].text) { _, _ in
                     drafts[idx].skipped = false
                 }
             Image(systemName: "return")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.5))
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
         .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
+        .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         .background(Theme.background(for: colorScheme).opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
     }
@@ -481,7 +514,7 @@ struct QuestionWizardView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                         Text("Back")
                             .font(.caption)
                     }
@@ -489,13 +522,16 @@ struct QuestionWizardView: View {
                         Theme.mutedForeground(for: colorScheme)
                             .opacity(idx == 0 ? 0.4 : 1)
                     )
+                    .frame(
+                        minWidth: Constants.Accessibility.minimumTapTarget,
+                        minHeight: Constants.Accessibility.minimumTapTarget)
                 }
                 .buttonStyle(.plain)
                 .disabled(idx == 0)
             }
             if !isMulti && !isLast {
                 Text("Selecting an option advances")
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
             }
             Spacer(minLength: 8)
@@ -505,6 +541,9 @@ struct QuestionWizardView: View {
                 Text("Skip")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .frame(
+                        minWidth: Constants.Accessibility.minimumTapTarget,
+                        minHeight: Constants.Accessibility.minimumTapTarget)
             }
             .buttonStyle(.plain)
             if showNext {
@@ -515,12 +554,16 @@ struct QuestionWizardView: View {
                         Text(isLast ? "Send" : "Next")
                             .font(.caption.weight(.semibold))
                         Image(systemName: isLast ? "arrow.up" : "arrow.right")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.caption.weight(.semibold))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Theme.primary(for: colorScheme)))
+                    .frame(
+                        minWidth: Constants.Accessibility.minimumTapTarget,
+                        minHeight: Constants.Accessibility.minimumTapTarget)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(nextDisabled || submitted || dismissed)

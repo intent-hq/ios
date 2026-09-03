@@ -7,8 +7,16 @@ import SwiftUI
 struct TaskProgressRingView: View {
     let stats: TaskStats
     var size: CGFloat = 14
+    @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
-    private var strokeWidth: CGFloat { size * 2.5 / 14 }
+    private var strokeWidth: CGFloat {
+        size * (colorSchemeContrast == .increased ? 3.25 : 2.5) / 14
+    }
+
+    private var trackColor: Color {
+        colorSchemeContrast == .increased ? .primary.opacity(0.65) : Palette.track
+    }
 
     private enum Palette {
         // Track: same muted gray as TaskStatusIconView outlines (#99999966).
@@ -26,12 +34,17 @@ struct TaskProgressRingView: View {
 
         ZStack {
             Circle()
-                .stroke(Palette.track, lineWidth: strokeWidth)
+                .stroke(trackColor, lineWidth: strokeWidth)
                 .frame(width: diameter, height: diameter)
             if stats.inProgress > 0 {
                 Circle()
                     .trim(from: completed, to: min(completed + inProgress, 1))
-                    .stroke(Palette.blue, style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round))
+                    .stroke(
+                        Palette.blue,
+                        style: StrokeStyle(
+                            lineWidth: strokeWidth,
+                            lineCap: .round,
+                            dash: differentiateWithoutColor ? [strokeWidth, strokeWidth * 1.5] : []))
                     .frame(width: diameter, height: diameter)
             }
             if stats.completed > 0 {

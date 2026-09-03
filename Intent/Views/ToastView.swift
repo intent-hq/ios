@@ -6,40 +6,45 @@ struct ToastView: View {
     var onDismiss: () -> Void
 
     @State private var dragOffset: CGFloat = 0
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: Constants.Toast.contentSpacing) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title2)
-                .foregroundStyle(.green)
+        Button(action: onTap) {
+            HStack(spacing: Constants.Toast.contentSpacing) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.green)
 
-            VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
-                Text(toast.agentName)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: Constants.Toast.textSpacing) {
+                    Text(toast.agentName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
 
-                Text(toast.workspaceName)
-                    .font(.caption)
+                    Text(toast.workspaceName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+
+                Spacer()
+
+                Text("Done")
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
-
-            Spacer()
-
-            Text("Done")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+            .padding(.horizontal, Constants.Toast.horizontalPadding)
+            .padding(.vertical, Constants.Toast.verticalPadding)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, Constants.Toast.horizontalPadding)
-        .padding(.vertical, Constants.Toast.verticalPadding)
+        .buttonStyle(.plain)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
         .shadow(color: .black.opacity(Constants.Toast.shadowOpacity),
                 radius: Constants.Toast.shadowRadius, x: 0, y: Constants.Toast.shadowYOffset)
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
-        .gesture(
+        .highPriorityGesture(
             DragGesture()
                 .onChanged { value in
                     dragOffset = value.translation.height
@@ -56,8 +61,10 @@ struct ToastView: View {
                     }
                 }
         )
-        .onTapGesture {
-            onTap()
+        .accessibilityLabel("\(toast.agentName) completed in \(toast.workspaceName)")
+        .accessibilityHint("Opens the completed conversation")
+        .accessibilityAction(named: "Dismiss") {
+            onDismiss()
         }
         .transition(.move(edge: .top).combined(with: .opacity))
     }
