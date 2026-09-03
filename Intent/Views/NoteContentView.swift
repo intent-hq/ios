@@ -74,9 +74,9 @@ private struct PlainTaskRow: View {
             } label: {
                 TaskStatusIconView(status: line.markerStatus, size: Constants.Notes.Content.taskIconSize)
                     .padding(.top, Constants.Notes.Content.taskIconTopPadding)
-                    .frame(
-                        minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                    .contentShape(Rectangle().inset(by: -(
+                        Constants.Accessibility.minimumTapTarget
+                            - Constants.Notes.Content.taskIconSize) / 2))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Change status for \(line.text)")

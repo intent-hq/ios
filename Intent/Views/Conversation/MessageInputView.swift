@@ -196,7 +196,9 @@ struct MessageInputView: View {
                                 .background(Circle().fill(.black.opacity(0.5)))
                                 .frame(
                                     minWidth: Constants.Accessibility.minimumTapTarget,
-                                    minHeight: Constants.Accessibility.minimumTapTarget)
+                                    minHeight: Constants.Accessibility.minimumTapTarget,
+                                    alignment: .topTrailing)
+                                .contentShape(Rectangle())
                         }
                         .offset(x: 4, y: -4)
                         .accessibilityLabel("Remove image \(index + 1)")
@@ -256,9 +258,8 @@ struct MessageInputView: View {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                    .frame(
-                                        minWidth: Constants.Accessibility.minimumTapTarget,
-                                        minHeight: Constants.Accessibility.minimumTapTarget)
+                                    .contentShape(Rectangle().inset(
+                                        by: -Constants.Accessibility.minimumTapTarget / 2))
                             }
                             .accessibilityLabel("Remove \(file.displayName)")
                         }

@@ -44,6 +44,7 @@ struct SpecialistPickerView: View {
                     }
                 }
         }
+        .interactiveDismissDisabled(isCreating)
         .onChange(of: agentName) {
             if isSettingNameFromSpecialist {
                 isSettingNameFromSpecialist = false

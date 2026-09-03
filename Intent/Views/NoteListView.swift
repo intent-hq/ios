@@ -141,10 +141,9 @@ struct NoteRowView: View {
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .frame(width: Constants.Notes.List.disclosureSize,
                                height: Constants.Notes.List.disclosureSize)
-                        .frame(
-                            minWidth: Constants.Accessibility.minimumTapTarget,
-                            minHeight: Constants.Accessibility.minimumTapTarget)
-                        .contentShape(Rectangle())
+                        .contentShape(Rectangle().inset(by: -(
+                            Constants.Accessibility.minimumTapTarget
+                                - Constants.Notes.List.disclosureSize) / 2))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Child notes for \(note.title)")
