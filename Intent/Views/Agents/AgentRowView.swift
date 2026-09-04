@@ -48,7 +48,7 @@ struct AgentRowView: View {
             // so Differentiate Without Color needs no extra branch here.
             ZStack(alignment: .topTrailing) {
                 AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.avatarSize,
-                                specialist: agent.specialist, isActive: agent.isActive,
+                                specialist: agent.specialist, isActive: avatarState == .running,
                                 state: avatarState)
 
                 if avatarState == .running {

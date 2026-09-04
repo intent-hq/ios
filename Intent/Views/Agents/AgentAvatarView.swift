@@ -54,6 +54,7 @@ struct AgentAvatarView: View {
                             .repeatForever(autoreverses: true),
                         value: isPulsing)
                     .onAppear { isPulsing = true }
+                    .onDisappear { isPulsing = false }
             }
         }
         .frame(width: size, height: size)
