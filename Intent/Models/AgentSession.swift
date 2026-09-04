@@ -28,6 +28,14 @@ struct AgentSession: Identifiable, Equatable {
     let attentionRequestKind: String?
     let attentionRequestReason: String?
     let attentionRequestTimestamp: String?
+    /// Pending structured-question markers (PROTOCOL §5.5 "Pending questions"),
+    /// lifted under `metadata` on the AgentLite projection. A non-empty
+    /// `pendingQuestionsMessageId` names the assistant message whose questions
+    /// are unanswered; the empty string is the authoritative "nothing pending"
+    /// clear, and both are omitted by legacy marker-less sessions. Defaulted so
+    /// existing memberwise construction sites keep compiling.
+    var pendingQuestionsMessageId: String? = nil
+    var dismissedQuestionsMessageId: String? = nil
 
     private static let activeStatuses: Set<String> = [
         "active", "pending", "processing",
@@ -85,6 +93,14 @@ struct AgentSession: Identifiable, Equatable {
 
     var hasPendingAttentionRequest: Bool {
         attentionRequestKind != nil
+    }
+
+    /// Questions are pending iff the pending marker is set (non-empty) and
+    /// differs from the dismissal marker — the same derivation the daemon uses
+    /// for the workspace `needs_attention` rollup (PROTOCOL §5.5).
+    var hasPendingQuestions: Bool {
+        guard let pending = pendingQuestionsMessageId, !pending.isEmpty else { return false }
+        return pending != dismissedQuestionsMessageId
     }
 
     /// Kind-flavored display treatment for the pending attention request, or
@@ -154,7 +170,9 @@ struct AgentSession: Identifiable, Equatable {
             createdByAgentId: createdByAgentId,
             attentionRequestKind: attentionRequestKind,
             attentionRequestReason: attentionRequestReason,
-            attentionRequestTimestamp: attentionRequestTimestamp
+            attentionRequestTimestamp: attentionRequestTimestamp,
+            pendingQuestionsMessageId: pendingQuestionsMessageId,
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
     }
 
@@ -184,7 +202,9 @@ struct AgentSession: Identifiable, Equatable {
             createdByAgentId: metadata?["createdByAgentId"] as? String,
             attentionRequestKind: attentionSurface?["attentionRequestKind"] as? String,
             attentionRequestReason: attentionSurface?["attentionRequestReason"] as? String,
-            attentionRequestTimestamp: attentionSurface?["attentionRequestTimestamp"] as? String
+            attentionRequestTimestamp: attentionSurface?["attentionRequestTimestamp"] as? String,
+            pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
+            dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String
         )
     }
 
@@ -255,6 +275,102 @@ enum AgentAttentionKind: Equatable {
         case .discussion: return "bubble.left.and.bubble.right.fill"
         case .blocker: return "exclamationmark.octagon.fill"
         }
+    }
+}
+
+/// Avatar display state derived from an `AgentSession`, mirroring
+/// cloudlands-fe `getAvatarState` (agent-avatar/avatar-state.ts) so both
+/// clients color an agent the same way. Precedence, highest first:
+/// completed (unless a turn is running) > failed > question >
+/// attention (blocker/discussion) > waiting > running > idle.
+enum AgentAvatarState: Equatable {
+    case idle
+    case running
+    case waiting
+    case failed
+    case completed
+    case question
+    case attentionDiscussion
+    case attentionBlocker
+
+    static func state(for session: AgentSession) -> AgentAvatarState {
+        let status = session.status.lowercased()
+        // A completed status yields to live work: a re-woken agent keeps its
+        // stale "completed" status until the turn settles.
+        if status == "completed" && !isRunning(session) {
+            return .completed
+        }
+        if session.isErrored {
+            return .failed
+        }
+        // An unanswered question needs a user response even while the agent
+        // does unrelated work.
+        if session.hasPendingQuestions {
+            return .question
+        }
+        if let request = session.pendingAttentionRequest {
+            switch request.kind {
+            case .blocker: return .attentionBlocker
+            case .discussion: return .attentionDiscussion
+            }
+        }
+        if isBlockedWaiting(session) {
+            return .waiting
+        }
+        if isRunning(session) {
+            return .running
+        }
+        return .idle
+    }
+
+    /// The state needs the user to act (answer, discuss, or unblock).
+    var needsUser: Bool {
+        switch self {
+        case .question, .attentionDiscussion, .attentionBlocker: return true
+        case .idle, .running, .waiting, .failed, .completed: return false
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .idle: return "Idle"
+        case .running: return "Running"
+        case .waiting: return "Waiting"
+        case .failed: return "Failed"
+        case .completed: return "Completed"
+        case .question: return "Question pending"
+        case .attentionDiscussion: return AgentAttentionKind.discussion.label
+        case .attentionBlocker: return AgentAttentionKind.blocker.label
+        }
+    }
+
+    private static let terminalStatuses: Set<String> = [
+        "completed", "error", "failed", "deleted"
+    ]
+
+    private static func isTerminal(_ session: AgentSession) -> Bool {
+        terminalStatuses.contains(session.status.lowercased())
+    }
+
+    /// Strong evidence that a turn is doing work right now.
+    private static func hasLiveTurnEvidence(_ session: AgentSession) -> Bool {
+        session.isStreaming || session.isProcessing || session.isResponding
+    }
+
+    /// Waiting requires an explicit wait and no live-turn evidence: a live
+    /// turn or a stale "waiting" status with activity flags stays running.
+    private static func isBlockedWaiting(_ session: AgentSession) -> Bool {
+        if isTerminal(session) || hasLiveTurnEvidence(session) { return false }
+        return session.isWaitingForOtherAgents || session.status.lowercased() == "waiting"
+    }
+
+    /// Live-turn evidence always counts as running (a stale terminal status is
+    /// overtaken by a re-woken turn); a bare activity status counts only when
+    /// the status is not terminal.
+    private static func isRunning(_ session: AgentSession) -> Bool {
+        if isBlockedWaiting(session) { return false }
+        if hasLiveTurnEvidence(session) { return true }
+        return !isTerminal(session) && session.isActive
     }
 }
 

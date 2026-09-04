@@ -478,6 +478,175 @@ struct AgentSessionTests {
         #expect(agent.isActive == false)
     }
 
+    // MARK: - pending-question markers (PROTOCOL §5.5)
+
+    @Test func parsePendingQuestionMarkersFromMetadata() {
+        let dict: [String: Any] = [
+            "id": "agent-q",
+            "name": "Asker",
+            "metadata": [
+                "pendingQuestionsMessageId": "msg-7",
+                "dismissedQuestionsMessageId": "msg-3"
+            ] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.pendingQuestionsMessageId == "msg-7")
+        #expect(agent?.dismissedQuestionsMessageId == "msg-3")
+        #expect(agent?.hasPendingQuestions == true)
+    }
+
+    @Test func pendingQuestionMarkerAloneIsPending() {
+        let dict: [String: Any] = [
+            "id": "agent-q",
+            "name": "Asker",
+            "metadata": ["pendingQuestionsMessageId": "msg-7"] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.dismissedQuestionsMessageId == nil)
+        #expect(agent?.hasPendingQuestions == true)
+    }
+
+    @Test func pendingMarkerEqualToDismissedIsNotPending() {
+        let dict: [String: Any] = [
+            "id": "agent-q",
+            "name": "Asker",
+            "metadata": [
+                "pendingQuestionsMessageId": "msg-7",
+                "dismissedQuestionsMessageId": "msg-7"
+            ] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.hasPendingQuestions == false)
+    }
+
+    @Test func absentPendingMarkerIsNotPending() {
+        let dict: [String: Any] = [
+            "id": "agent-q",
+            "name": "Asker",
+            "metadata": ["dismissedQuestionsMessageId": "msg-3"] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.pendingQuestionsMessageId == nil)
+        #expect(agent?.hasPendingQuestions == false)
+
+        let minimal = AgentSession.parseAgent(["id": "agent-q", "name": "Asker"])
+        #expect(minimal?.hasPendingQuestions == false)
+    }
+
+    @Test func emptyPendingMarkerIsAuthoritativeClear() {
+        // The daemon writes "" at turn end when nothing is pending.
+        let dict: [String: Any] = [
+            "id": "agent-q",
+            "name": "Asker",
+            "metadata": ["pendingQuestionsMessageId": ""] as [String: Any]
+        ]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.pendingQuestionsMessageId == "")
+        #expect(agent?.hasPendingQuestions == false)
+    }
+
+    @Test func applyingPreviewKeepsQuestionMarkers() {
+        let agent = makeAgent(
+            pendingQuestionsMessageId: "msg-7", dismissedQuestionsMessageId: "msg-3"
+        )
+        let updated = agent.applyingPreview(lastAgentResponse: "text", digest: nil)
+        #expect(updated.pendingQuestionsMessageId == "msg-7")
+        #expect(updated.dismissedQuestionsMessageId == "msg-3")
+        #expect(updated.hasPendingQuestions == true)
+    }
+
+    // MARK: - AgentAvatarState precedence (mirrors avatar-state.test.ts)
+
+    @Test func avatarStateIdleByDefault() {
+        #expect(AgentAvatarState.state(for: makeAgent(status: "Idle")) == .idle)
+    }
+
+    @Test func avatarStateRunningForLiveTurn() {
+        #expect(AgentAvatarState.state(for: makeAgent(status: "Active", isResponding: true)) == .running)
+        #expect(AgentAvatarState.state(for: makeAgent(status: "processing")) == .running)
+    }
+
+    @Test func avatarStateRunningWinsOverPeerWaitFlagDuringLiveTurn() {
+        let agent = makeAgent(
+            status: "processing", isResponding: true, isWaitingForOtherAgents: true
+        )
+        #expect(AgentAvatarState.state(for: agent) == .running)
+    }
+
+    @Test func avatarStateWaitingAfterLiveTurnEnds() {
+        #expect(AgentAvatarState.state(for: makeAgent(status: "Idle", isWaitingForOtherAgents: true)) == .waiting)
+        #expect(AgentAvatarState.state(for: makeAgent(status: "waiting")) == .waiting)
+    }
+
+    @Test func avatarStateFailedForErrorStatuses() {
+        #expect(AgentAvatarState.state(for: makeAgent(status: "error")) == .failed)
+        #expect(AgentAvatarState.state(for: makeAgent(status: "failed")) == .failed)
+    }
+
+    @Test func avatarStateQuestionBeatsOtherNonFailureStates() {
+        let agent = makeAgent(
+            status: "Active", isStreaming: true,
+            attentionRequestKind: "discussion",
+            pendingQuestionsMessageId: "msg-7"
+        )
+        #expect(AgentAvatarState.state(for: agent) == .question)
+        let failed = makeAgent(status: "error", pendingQuestionsMessageId: "msg-7")
+        #expect(AgentAvatarState.state(for: failed) == .failed)
+    }
+
+    @Test func avatarStateDismissedQuestionFallsThrough() {
+        let agent = makeAgent(
+            status: "Idle",
+            pendingQuestionsMessageId: "msg-7", dismissedQuestionsMessageId: "msg-7"
+        )
+        #expect(AgentAvatarState.state(for: agent) == .idle)
+    }
+
+    @Test func avatarStateMapsAttentionKinds() {
+        let discussion = makeAgent(status: "Idle", attentionRequestKind: "discussion")
+        #expect(AgentAvatarState.state(for: discussion) == .attentionDiscussion)
+        let blocker = makeAgent(status: "Idle", attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: blocker) == .attentionBlocker)
+    }
+
+    @Test func avatarStateCompletedAndFailedBeatAttention() {
+        let completed = makeAgent(status: "completed", attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: completed) == .completed)
+        let failed = makeAgent(status: "error", attentionRequestKind: "discussion")
+        #expect(AgentAvatarState.state(for: failed) == .failed)
+    }
+
+    @Test func avatarStateAttentionBeatsRunningAndWaiting() {
+        let running = makeAgent(status: "Active", isStreaming: true, attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: running) == .attentionBlocker)
+        let waiting = makeAgent(status: "waiting", attentionRequestKind: "discussion")
+        #expect(AgentAvatarState.state(for: waiting) == .attentionDiscussion)
+    }
+
+    @Test func avatarStateCompletedYieldsToLiveTurn() {
+        #expect(AgentAvatarState.state(for: makeAgent(status: "completed")) == .completed)
+        #expect(AgentAvatarState.state(for: makeAgent(status: "completed", isResponding: true)) == .running)
+        #expect(AgentAvatarState.state(for: makeAgent(status: "completed", isStreaming: true)) == .running)
+    }
+
+    @Test func avatarStateNeedsUserOnlyForAttentionStates() {
+        #expect(AgentAvatarState.question.needsUser == true)
+        #expect(AgentAvatarState.attentionDiscussion.needsUser == true)
+        #expect(AgentAvatarState.attentionBlocker.needsUser == true)
+        #expect(AgentAvatarState.idle.needsUser == false)
+        #expect(AgentAvatarState.running.needsUser == false)
+        #expect(AgentAvatarState.waiting.needsUser == false)
+        #expect(AgentAvatarState.failed.needsUser == false)
+        #expect(AgentAvatarState.completed.needsUser == false)
+    }
+
+    @Test func avatarStateAccessibilityLabels() {
+        #expect(AgentAvatarState.question.accessibilityLabel == "Question pending")
+        #expect(AgentAvatarState.attentionDiscussion.accessibilityLabel == "Discussion requested")
+        #expect(AgentAvatarState.attentionBlocker.accessibilityLabel == "Blocker reported")
+        #expect(AgentAvatarState.running.accessibilityLabel == "Running")
+    }
+
     // MARK: - Helpers
 
     private func makeAgent(
@@ -485,23 +654,29 @@ struct AgentSessionTests {
         isStreaming: Bool = false,
         isProcessing: Bool = false,
         isResponding: Bool = false,
+        isWaitingForOtherAgents: Bool = false,
         digest: String? = nil,
         lastAgentResponse: String? = nil,
         lastUserMessage: String? = nil,
-        lastMessageRole: String? = nil
+        lastMessageRole: String? = nil,
+        attentionRequestKind: String? = nil,
+        pendingQuestionsMessageId: String? = nil,
+        dismissedQuestionsMessageId: String? = nil
     ) -> AgentSession {
         AgentSession(
             id: "test", name: "Test", status: status,
             isBackground: false, isStreaming: isStreaming,
             isProcessing: isProcessing, isResponding: isResponding,
-            isWaitingForOtherAgents: false, waitingForAgentIds: [],
+            isWaitingForOtherAgents: isWaitingForOtherAgents, waitingForAgentIds: [],
             createdAt: nil, updatedAt: nil, lastActivity: nil,
             lastAgentResponse: lastAgentResponse,
             lastUserMessage: lastUserMessage,
             lastMessageRole: lastMessageRole,
             digest: digest, specialist: nil, createdByAgentId: nil,
-            attentionRequestKind: nil, attentionRequestReason: nil,
-            attentionRequestTimestamp: nil
+            attentionRequestKind: attentionRequestKind, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil,
+            pendingQuestionsMessageId: pendingQuestionsMessageId,
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
     }
 }
