@@ -8,7 +8,11 @@ import Observation
     var foregroundAgents: [AgentSession] {
         agents.filter { !$0.isBackground && $0.createdByAgentId == nil }
             .sorted { a, b in
-                // Coordinator (spec-writer) first
+                // Agents needing the user first (blocker, question, discussion)
+                let rankA = Self.attentionRank(a)
+                let rankB = Self.attentionRank(b)
+                if rankA != rankB { return rankA < rankB }
+                // Then coordinator (spec-writer) first
                 if a.specialist == "spec-writer" && b.specialist != "spec-writer" { return true }
                 if a.specialist != "spec-writer" && b.specialist == "spec-writer" { return false }
                 // Then by last activity (most recent first)
@@ -18,7 +22,7 @@ import Observation
 
     func delegatedAgents(for parentId: String) -> [AgentSession] {
         agents.filter { $0.createdByAgentId == parentId }
-            .sorted(by: Self.byLastActivity)
+            .sorted(by: Self.byAttentionThenLastActivity)
     }
 
     var standaloneBackgroundAgents: [AgentSession] {
@@ -34,7 +38,28 @@ import Observation
             !delegatedIds.contains($0.id) &&
             ($0.createdByAgentId == nil || !existingAgentIds.contains($0.createdByAgentId!))
         }
-        .sorted(by: Self.byLastActivity)
+        .sorted(by: Self.byAttentionThenLastActivity)
+    }
+
+    /// Sort rank for agents whose avatar state `needsUser`: blocker (0),
+    /// question (1), discussion (2); every other state ranks last (3), mirroring
+    /// the cloudlands hover card that groups attention rows above the rest.
+    private static func attentionRank(_ agent: AgentSession) -> Int {
+        let state = AgentAvatarState.state(for: agent)
+        guard state.needsUser else { return 3 }
+        switch state {
+        case .attentionBlocker: return 0
+        case .question: return 1
+        default: return 2
+        }
+    }
+
+    /// Floats agents needing the user first, then falls back to `byLastActivity`.
+    private static func byAttentionThenLastActivity(_ a: AgentSession, _ b: AgentSession) -> Bool {
+        let rankA = attentionRank(a)
+        let rankB = attentionRank(b)
+        if rankA != rankB { return rankA < rankB }
+        return byLastActivity(a, b)
     }
 
     /// Orders agents by `bestTimestamp` descending (most recent first),
