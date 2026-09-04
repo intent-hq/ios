@@ -282,7 +282,8 @@ enum AgentAttentionKind: Equatable {
 /// cloudlands-fe `getAvatarState` (agent-avatar/avatar-state.ts) so both
 /// clients color an agent the same way. Precedence, highest first:
 /// completed (unless a turn is running) > failed > question >
-/// attention (blocker/discussion) > waiting > running > idle.
+/// attention (blocker/discussion, unless a turn is live) > waiting >
+/// running > idle.
 enum AgentAvatarState: Equatable {
     case idle
     case running
@@ -308,7 +309,10 @@ enum AgentAvatarState: Equatable {
         if session.hasPendingQuestions {
             return .question
         }
-        if let request = session.pendingAttentionRequest {
+        // A pending discussion/blocker is suppressed while a turn is live
+        // (cloudlands `getAgentAttentionRequest`): a re-woken agent carrying a
+        // stale request renders as running until the turn ends.
+        if !isTurnLive(session), let request = session.pendingAttentionRequest {
             switch request.kind {
             case .blocker: return .attentionBlocker
             case .discussion: return .attentionDiscussion
@@ -355,6 +359,13 @@ enum AgentAvatarState: Equatable {
     /// Strong evidence that a turn is doing work right now.
     private static func hasLiveTurnEvidence(_ session: AgentSession) -> Bool {
         session.isStreaming || session.isProcessing || session.isResponding
+    }
+
+    /// A turn is in flight right now: live-turn evidence on a non-terminal
+    /// status (cloudlands `isAgentTurnLive`). Narrower than `isRunning` — a
+    /// bare activity status without evidence does not count.
+    private static func isTurnLive(_ session: AgentSession) -> Bool {
+        !isTerminal(session) && hasLiveTurnEvidence(session)
     }
 
     /// Waiting requires an explicit wait and no live-turn evidence: a live

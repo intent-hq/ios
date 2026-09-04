@@ -3,13 +3,15 @@ import SwiftUI
 /// Rounded-tile agent avatar with the desktop app's monochrome stroke glyphs.
 /// Ported from cloudlands-fe `AgentAvatar.svelte` + `AgentAvatarArt.svelte`:
 /// glyphs are stroked in a 16×16 art box (stroke width 1.33, round caps and
-/// joins) centered on a rounded neutral tile.
+/// joins) centered on a rounded tile whose surface is colored by `state`
+/// (`AgentAvatarWithState.svelte`); the default `.idle` keeps the neutral tile.
 struct AgentAvatarView: View {
     let agentId: String
     var size: CGFloat = 20
     var specialist: String? = nil
     var icon: String? = nil  // Specialist icon metadata (PROTOCOL §5.11)
     var isActive: Bool = false
+    var state: AgentAvatarState = .idle
 
     @State private var isPulsing = false
 
@@ -57,13 +59,28 @@ struct AgentAvatarView: View {
         .frame(width: size, height: size)
     }
 
-    /// Desktop neutral tile surface (`--agent-avatar-surface-neutral`):
-    /// hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
-    private var surfaceColor: Color { Constants.Colors.AgentAvatar.surface }
+    /// Desktop tile surface per state (`--agent-avatar-surface-*` tokens);
+    /// idle is the neutral hsl(145 14% 92%) light / hsl(145 12% 78%) dark.
+    private var surfaceColor: Color {
+        switch state {
+        case .idle: return Constants.Colors.AgentAvatar.surface
+        case .running: return Constants.Colors.AgentAvatar.surfaceActive
+        case .waiting: return Constants.Colors.AgentAvatar.surfaceWaiting
+        case .failed: return Constants.Colors.AgentAvatar.surfaceFailed
+        case .completed: return Constants.Colors.AgentAvatar.surfaceCompleted
+        case .question, .attentionDiscussion, .attentionBlocker:
+            return Constants.Colors.AgentAvatar.surfaceAttention
+        }
+    }
 
     /// Desktop glyph color: near-black (#080808) in both schemes — the tile
-    /// stays light, so the glyph stays dark.
-    private var glyphColor: Color { Constants.Colors.AgentAvatar.glyph }
+    /// stays light, so the glyph stays dark. The completed tile darkens in
+    /// dark mode, so it carries its own foreground token.
+    private var glyphColor: Color {
+        state == .completed
+            ? Constants.Colors.AgentAvatar.glyphCompleted
+            : Constants.Colors.AgentAvatar.glyph
+    }
 }
 
 private struct AgentAvatarStrokeShape: Shape {

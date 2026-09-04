@@ -20,7 +20,13 @@ extension Constants {
 
         enum AgentAvatar {
             static let surface = Color(.agentAvatarSurface)
+            static let surfaceActive = Color(.agentAvatarSurfaceActive)
+            static let surfaceAttention = Color(.agentAvatarSurfaceAttention)
+            static let surfaceFailed = Color(.agentAvatarSurfaceFailed)
+            static let surfaceWaiting = Color(.agentAvatarSurfaceWaiting)
+            static let surfaceCompleted = Color(.agentAvatarSurfaceCompleted)
             static let glyph = Color(.agentAvatarGlyph)
+            static let glyphCompleted = Color(.agentAvatarGlyphCompleted)
             static let activeStrokeWeak = Color(.agentAvatarActiveStrokeWeak)
             static let activeStrokeStrong = Color(.agentAvatarActiveStrokeStrong)
         }

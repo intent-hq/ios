@@ -616,11 +616,23 @@ struct AgentSessionTests {
         #expect(AgentAvatarState.state(for: failed) == .failed)
     }
 
-    @Test func avatarStateAttentionBeatsRunningAndWaiting() {
-        let running = makeAgent(status: "Active", isStreaming: true, attentionRequestKind: "blocker")
-        #expect(AgentAvatarState.state(for: running) == .attentionBlocker)
+    @Test func avatarStateAttentionSuppressedWhileTurnIsLive() {
+        // Mirrors cloudlands getAgentAttentionRequest: live-turn evidence hides
+        // a stale request until the turn ends.
+        let streaming = makeAgent(status: "Active", isStreaming: true, attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: streaming) == .running)
+        let responding = makeAgent(status: "Idle", isResponding: true, attentionRequestKind: "discussion")
+        #expect(AgentAvatarState.state(for: responding) == .running)
+        // A bare activity status without evidence is not a live turn.
+        let bareActive = makeAgent(status: "Active", attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: bareActive) == .attentionBlocker)
+    }
+
+    @Test func avatarStateAttentionBeatsWaiting() {
         let waiting = makeAgent(status: "waiting", attentionRequestKind: "discussion")
         #expect(AgentAvatarState.state(for: waiting) == .attentionDiscussion)
+        let peerWait = makeAgent(status: "Idle", isWaitingForOtherAgents: true, attentionRequestKind: "blocker")
+        #expect(AgentAvatarState.state(for: peerWait) == .attentionBlocker)
     }
 
     @Test func avatarStateCompletedYieldsToLiveTurn() {
