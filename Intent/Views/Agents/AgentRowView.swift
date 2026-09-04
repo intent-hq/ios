@@ -156,7 +156,8 @@ struct DelegatedAgentsRow: View {
                 HStack(spacing: Constants.AgentRow.avatarOverlap) {
                     ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
                         AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist)
+                                        specialist: agent.specialist,
+                                        state: AgentAvatarState.state(for: agent))
                     }
                 }
                 .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
@@ -189,7 +190,8 @@ struct BackgroundAgentsHeader: View {
                 HStack(spacing: Constants.AgentRow.avatarOverlap) {
                     ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
                         AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist)
+                                        specialist: agent.specialist,
+                                        state: AgentAvatarState.state(for: agent))
                     }
                 }
 
