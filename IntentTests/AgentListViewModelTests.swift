@@ -20,7 +20,10 @@ struct AgentListViewModelTests {
         lastAgentResponse: String? = nil,
         digest: String? = nil,
         specialist: String? = nil,
-        createdByAgentId: String? = nil
+        createdByAgentId: String? = nil,
+        attentionRequestKind: String? = nil,
+        pendingQuestionsMessageId: String? = nil,
+        dismissedQuestionsMessageId: String? = nil
     ) -> AgentSession {
         AgentSession(
             id: id, name: name, status: status,
@@ -33,9 +36,11 @@ struct AgentListViewModelTests {
             lastUserMessage: nil, lastMessageRole: nil, digest: digest,
             specialist: specialist,
             createdByAgentId: createdByAgentId,
-            attentionRequestKind: nil,
+            attentionRequestKind: attentionRequestKind,
             attentionRequestReason: nil,
-            attentionRequestTimestamp: nil
+            attentionRequestTimestamp: nil,
+            pendingQuestionsMessageId: pendingQuestionsMessageId,
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId
         )
     }
 
@@ -114,6 +119,75 @@ struct AgentListViewModelTests {
         #expect(ids == ["fractional", "whole"])
     }
 
+    // MARK: - Foreground agents: needs-user ordering
+
+    @Test @MainActor func foregroundAgents_needsUserBeatsCoordinator() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "coordinator", name: "Coordinator", updatedAt: "2026-03-15T12:00:00Z", specialist: "spec-writer"),
+            makeAgent(id: "blocked", name: "Blocked Worker", updatedAt: "2026-03-15T08:00:00Z", specialist: "implementor", attentionRequestKind: "blocker"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["blocked", "coordinator"])
+    }
+
+    @Test @MainActor func foregroundAgents_needsUserBeatsRecency() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "fresh-idle", name: "Fresh Idle", updatedAt: "2026-03-15T12:00:00Z"),
+            makeAgent(id: "stale-discussion", name: "Stale Discussion", updatedAt: "2026-03-15T08:00:00Z", attentionRequestKind: "discussion"),
+            makeAgent(id: "stale-question", name: "Stale Question", updatedAt: "2026-03-15T07:00:00Z", pendingQuestionsMessageId: "msg-1"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["stale-question", "stale-discussion", "fresh-idle"])
+    }
+
+    @Test @MainActor func foregroundAgents_needsUserOrder_blockerThenQuestionThenDiscussion() {
+        let vm = AgentListViewModel()
+        // Recency is inverted relative to the expected order so the kind
+        // ranking, not the timestamp, decides.
+        vm.agents = [
+            makeAgent(id: "discussion", name: "Discussion", updatedAt: "2026-03-15T12:00:00Z", attentionRequestKind: "discussion"),
+            makeAgent(id: "question", name: "Question", updatedAt: "2026-03-15T11:00:00Z", pendingQuestionsMessageId: "msg-1"),
+            makeAgent(id: "blocker", name: "Blocker", updatedAt: "2026-03-15T10:00:00Z", attentionRequestKind: "blocker"),
+            makeAgent(id: "idle", name: "Idle", updatedAt: "2026-03-15T13:00:00Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["blocker", "question", "discussion", "idle"])
+    }
+
+    @Test @MainActor func foregroundAgents_needsUserTies_fallBackToCoordinatorThenRecency() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "worker-old", name: "Worker Old", updatedAt: "2026-03-15T08:00:00Z", specialist: "implementor", attentionRequestKind: "discussion"),
+            makeAgent(id: "worker-new", name: "Worker New", updatedAt: "2026-03-15T11:00:00Z", specialist: "implementor", attentionRequestKind: "discussion"),
+            makeAgent(id: "coordinator", name: "Coordinator", updatedAt: "2026-03-15T09:00:00Z", specialist: "spec-writer", attentionRequestKind: "discussion"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["coordinator", "worker-new", "worker-old"])
+    }
+
+    @Test @MainActor func foregroundAgents_dismissedQuestionDoesNotFloat() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "dismissed", name: "Dismissed", updatedAt: "2026-03-15T08:00:00Z", pendingQuestionsMessageId: "msg-1", dismissedQuestionsMessageId: "msg-1"),
+            makeAgent(id: "cleared", name: "Cleared", updatedAt: "2026-03-15T09:00:00Z", pendingQuestionsMessageId: ""),
+            makeAgent(id: "fresh-idle", name: "Fresh Idle", updatedAt: "2026-03-15T12:00:00Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["fresh-idle", "cleared", "dismissed"])
+    }
+
+    @Test @MainActor func foregroundAgents_failedDoesNotFloat() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "failed", name: "Failed", status: "error", updatedAt: "2026-03-15T08:00:00Z"),
+            makeAgent(id: "fresh-idle", name: "Fresh Idle", updatedAt: "2026-03-15T12:00:00Z"),
+        ]
+        let ids = vm.foregroundAgents.map(\.id)
+        #expect(ids == ["fresh-idle", "failed"])
+    }
+
     // MARK: - Delegated agents
 
     @Test @MainActor func delegatedAgents_nestedUnderParent() {
@@ -140,6 +214,19 @@ struct AgentListViewModelTests {
         ]
         let ids = vm.delegatedAgents(for: "parent").map(\.id)
         #expect(ids == ["old-but-active", "new-but-idle", "no-timestamp"])
+    }
+
+    @Test @MainActor func delegatedAgents_needsUserFirstThenRecency() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "parent", name: "Parent"),
+            makeAgent(id: "fresh-idle", name: "Fresh Idle", updatedAt: "2026-03-15T12:00:00Z", createdByAgentId: "parent"),
+            makeAgent(id: "stale-discussion", name: "Stale Discussion", updatedAt: "2026-03-15T08:00:00Z", createdByAgentId: "parent", attentionRequestKind: "discussion"),
+            makeAgent(id: "stale-blocker", name: "Stale Blocker", updatedAt: "2026-03-15T07:00:00Z", createdByAgentId: "parent", attentionRequestKind: "blocker"),
+            makeAgent(id: "old-idle", name: "Old Idle", updatedAt: "2026-03-15T09:00:00Z", createdByAgentId: "parent"),
+        ]
+        let ids = vm.delegatedAgents(for: "parent").map(\.id)
+        #expect(ids == ["stale-blocker", "stale-discussion", "fresh-idle", "old-idle"])
     }
 
     // MARK: - Standalone background agents
@@ -181,6 +268,18 @@ struct AgentListViewModelTests {
         ]
         let ids = vm.standaloneBackgroundAgents.map(\.id)
         #expect(ids == ["bg-active", "bg-created", "bg-nil"])
+    }
+
+    @Test @MainActor func standaloneBackgroundAgents_needsUserFirstThenRecency() {
+        let vm = AgentListViewModel()
+        vm.agents = [
+            makeAgent(id: "bg-fresh", name: "BG Fresh", isBackground: true, updatedAt: "2026-03-15T12:00:00Z"),
+            makeAgent(id: "bg-question", name: "BG Question", isBackground: true, updatedAt: "2026-03-15T07:00:00Z", pendingQuestionsMessageId: "msg-1"),
+            makeAgent(id: "bg-old", name: "BG Old", isBackground: true, updatedAt: "2026-03-15T09:00:00Z"),
+            makeAgent(id: "bg-orphaned-blocker", name: "BG Orphaned Blocker", isBackground: true, updatedAt: "2026-03-15T06:00:00Z", createdByAgentId: "deleted-parent", attentionRequestKind: "blocker"),
+        ]
+        let ids = vm.standaloneBackgroundAgents.map(\.id)
+        #expect(ids == ["bg-orphaned-blocker", "bg-question", "bg-fresh", "bg-old"])
     }
 
     // MARK: - AgentSession computed properties

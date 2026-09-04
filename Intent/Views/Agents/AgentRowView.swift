@@ -10,6 +10,28 @@ extension AgentAttentionKind {
     }
 }
 
+extension AgentAvatarState {
+    /// Corner cue symbol for the needs-user states; nil for the others (the
+    /// running dot is drawn separately).
+    var cornerSymbol: String? {
+        switch self {
+        case .question: return "questionmark.bubble.fill"
+        case .attentionDiscussion: return AgentAttentionKind.discussion.systemImage
+        case .attentionBlocker: return AgentAttentionKind.blocker.systemImage
+        case .idle, .running, .waiting, .failed, .completed: return nil
+        }
+    }
+
+    /// Tint for the corner cue and the matching subtitle line.
+    var cornerColor: Color {
+        switch self {
+        case .attentionBlocker: return AgentAttentionKind.blocker.color
+        case .question, .attentionDiscussion: return AgentAttentionKind.discussion.color
+        case .idle, .running, .waiting, .failed, .completed: return .secondary
+        }
+    }
+}
+
 struct AgentRowView: View {
     let agent: AgentSession
     let colorScheme: ColorScheme
@@ -17,30 +39,35 @@ struct AgentRowView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
+
     var body: some View {
         HStack(spacing: Constants.AgentRow.rowSpacing) {
-            // Avatar with active indicator
+            // Avatar tile colored by state, with a state-driven corner cue. The
+            // needs-user states always keep their symbol (never color alone),
+            // so Differentiate Without Color needs no extra branch here.
             ZStack(alignment: .topTrailing) {
                 AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.avatarSize,
-                                specialist: agent.specialist, isActive: agent.isActive)
+                                specialist: agent.specialist, isActive: agent.isActive,
+                                state: avatarState)
 
-                if agent.isActive {
+                if avatarState == .running {
                     Circle()
                         .fill(.green)
                         .frame(width: Constants.AgentRow.activeDotSize,
                                height: Constants.AgentRow.activeDotSize)
                         .offset(x: Constants.AgentRow.activeDotOffset,
                                 y: -Constants.AgentRow.activeDotOffset)
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("Active agent")
-                } else if let attention = agent.pendingAttentionRequest {
-                    Image(systemName: attention.kind.systemImage)
+                } else if let symbol = avatarState.cornerSymbol {
+                    Image(systemName: symbol)
                         .font(.system(size: Constants.AgentRow.attentionIconSize))
-                        .foregroundStyle(attention.kind.color)
+                        .foregroundStyle(avatarState.cornerColor)
                         .offset(x: Constants.AgentRow.attentionIconOffset,
                                 y: -Constants.AgentRow.attentionIconOffset)
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(avatarState.accessibilityLabel)
 
             VStack(alignment: .leading, spacing: Constants.AgentRow.textSpacing) {
                 HStack(spacing: Constants.AgentRow.titleSpacing) {
@@ -79,7 +106,12 @@ struct AgentRowView: View {
                     }
                 }
 
-                if let attention = agent.pendingAttentionRequest {
+                if avatarState == .question {
+                    Text(avatarState.accessibilityLabel)
+                        .font(.subheadline)
+                        .foregroundStyle(avatarState.cornerColor)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                } else if avatarState != .running, let attention = agent.pendingAttentionRequest {
                     Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
                         .font(.subheadline)
                         .foregroundStyle(attention.kind.color)
@@ -124,7 +156,8 @@ struct DelegatedAgentsRow: View {
                 HStack(spacing: Constants.AgentRow.avatarOverlap) {
                     ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
                         AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist)
+                                        specialist: agent.specialist,
+                                        state: AgentAvatarState.state(for: agent))
                     }
                 }
                 .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
@@ -157,7 +190,8 @@ struct BackgroundAgentsHeader: View {
                 HStack(spacing: Constants.AgentRow.avatarOverlap) {
                     ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
                         AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist)
+                                        specialist: agent.specialist,
+                                        state: AgentAvatarState.state(for: agent))
                     }
                 }
 
