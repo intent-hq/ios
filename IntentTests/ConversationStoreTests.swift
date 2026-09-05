@@ -532,6 +532,192 @@ struct ConversationStoreTests {
         #expect(store.dismissedQuestionsMessageId == nil)
     }
 
+    // MARK: - Pending-questions marker (PROTOCOL §5.5 pendingQuestionsMessageId)
+
+    @Test func pendingMarkerStartsNil() {
+        let store = ConversationStore()
+        #expect(store.pendingQuestionsMessageId == nil)
+    }
+
+    @Test func fetchAgentStreamingStateRestoresPendingMarkerFromMetadata() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "Test",
+                "metadata": ["pendingQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+    }
+
+    @Test func fetchAgentStreamingStateRaiseOnlyStillAppliesPendingMarker() async {
+        // The agent:idle refresh runs raiseOnly — the marker must still land,
+        // since that refresh is what populates it when the asking turn ends.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "Test", "isStreaming": false,
+                "metadata": ["pendingQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ]
+        let store = ConversationStore(connectionManager: fake)
+
+        await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+    }
+
+    @Test func fetchAgentStreamingStatePreservesWrittenEmptyPendingMarker() async {
+        // Three-state rule: "" (nothing pending) must not be coerced to nil
+        // (legacy fallback), or a question-bearing tail would re-pend.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "Test",
+                "metadata": ["pendingQuestionsMessageId": ""],
+            ] as [String: Any]
+        ]
+        let store = ConversationStore(connectionManager: fake)
+        store.pendingQuestionsMessageId = "a1"
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.pendingQuestionsMessageId == "")
+    }
+
+    @Test func fetchAgentStreamingStateWithoutPendingMarkerLeavesItUntouched() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "Test",
+                "metadata": ["dismissedQuestionsMessageId": "a0"],
+            ] as [String: Any]
+        ]
+        let store = ConversationStore(connectionManager: fake)
+        store.pendingQuestionsMessageId = "a1"
+
+        await store.fetchAgentStreamingState(agentId: "a")
+
+        #expect(store.pendingQuestionsMessageId == "a1",
+                "an absent field is not a clear — only \"\" is")
+    }
+
+    @Test func agentUpdatedEventAppliesPendingMarkerPushStyle() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": "a1"]] as [String: Any]
+        ])
+        #expect(store.pendingQuestionsMessageId == "a1")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": ""]] as [String: Any]
+        ])
+        #expect(store.pendingQuestionsMessageId == "",
+                "the daemon clearing the marker to \"\" must land push-style")
+    }
+
+    @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        store.pendingQuestionsMessageId = "a1"
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "lastSeenMessageId": "m9"]] as [String: Any]
+        ])
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+    }
+
+    @Test func agentUpdatedEventForOtherAgentDoesNotMovePendingMarker() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "someone-else",
+                               "pendingQuestionsMessageId": "x1"]] as [String: Any]
+        ])
+
+        #expect(store.pendingQuestionsMessageId == nil)
+    }
+
+    @Test func resetClearsPendingMarker() {
+        let store = ConversationStore()
+        store.pendingQuestionsMessageId = "a1"
+        store.reset()
+        #expect(store.pendingQuestionsMessageId == nil)
+    }
+
+    @Test func sendMessageMirrorsMessageMetadataOntoOptimisticRow() async throws {
+        // The optimistic user row carries the answer tag so the wizard gate
+        // sees the set as answered before the daemon clears the marker.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.sendMessage(
+            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            messageMetadata: [
+                "type": "question_answers",
+                "answeredQuestionsMessageId": "msg-q1",
+            ])
+
+        let row = try #require(store.messages.last)
+        #expect(row.role == .user)
+        #expect(row.metadata?["type"]?.stringValue == "question_answers")
+        #expect(row.answeredQuestionsMessageId == "msg-q1")
+    }
+
+    @Test func sendMessageLeavesOptimisticRowMetadataNilWhenAbsent() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
+
+        let row = try #require(store.messages.last)
+        #expect(row.metadata == nil)
+        #expect(row.answeredQuestionsMessageId == nil)
+    }
+
+    @Test func rollbackFailedSendRemovesTaggedOptimisticRow() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        let store = ConversationStore(connectionManager: fake)
+
+        await #expect(throws: (any Error).self) {
+            try await store.sendMessage(
+                agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+                messageMetadata: [
+                    "type": "question_answers",
+                    "answeredQuestionsMessageId": "msg-q1",
+                ])
+        }
+        #expect(store.messages.last?.answeredQuestionsMessageId == "msg-q1")
+
+        store.rollbackFailedSend()
+
+        #expect(store.messages.isEmpty, "the tagged row is removed so the set re-pends")
+    }
+
     // MARK: - Seen marker (agent.markSeen, PROTOCOL §5.5)
 
     @Test func fetchAgentStreamingStateRestoresSeenMarkerFromMetadata() async {

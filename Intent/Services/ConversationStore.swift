@@ -59,6 +59,18 @@ import SwiftUI
     /// open agent. Transient transport errors never raise this. The view
     /// observes it to fall back to the agent list.
     var agentNotFound = false
+    /// The pending-questions marker (PROTOCOL §5.5): the daemon writes the id of
+    /// the question-bearing assistant message once the asking turn ends, and
+    /// `""` once the set is answered/dismissed/superseded. Three-state on the
+    /// client too — `nil` means the daemon never reported it (legacy
+    /// transcript-tail fallback). Refreshed from `agent.get` (the `agent:idle`
+    /// refresh is what raises it when the asking turn ends) and updated
+    /// push-style by `agent:updated`. Authoritative for the wizard gate when
+    /// present: the marked set stays pending across later turns.
+    var pendingQuestionsMessageId: String? {
+        get { commands.pendingQuestionsMessageId }
+        set { commands.pendingQuestionsMessageId = newValue }
+    }
     /// The question-dismissal marker (PROTOCOL §5.5): id of the question-bearing
     /// assistant message the user dismissed via `agent.dismissQuestions`.
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
@@ -182,6 +194,9 @@ import SwiftUI
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
+                if let pendingId = state.pendingQuestionsMessageId {
+                    pendingQuestionsMessageId = pendingId
+                }
                 if let dismissedId = state.dismissedQuestionsMessageId {
                     dismissedQuestionsMessageId = dismissedId
                 }
@@ -501,9 +516,13 @@ import SwiftUI
                 Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
             }
         case "agent:updated":
-            // Session-mutation invalidation (PROTOCOL §6.5). The dismissal
-            // marker persist carries it in the payload — apply push-style so
-            // a dismissal from another client retires the wizard here too.
+            // Session-mutation invalidation (PROTOCOL §6.5). The pending and
+            // dismissal marker persists carry the field in the payload — apply
+            // push-style so an answer/dismissal from another client (or the
+            // daemon clearing the marker to "") retires the wizard here too.
+            if let pendingId = data["pendingQuestionsMessageId"] as? String {
+                pendingQuestionsMessageId = pendingId
+            }
             if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
                 dismissedQuestionsMessageId = dismissedId
             }
@@ -605,6 +624,9 @@ import SwiftUI
     /// verbatim (PROTOCOL §5.5) — the Agent Q&A wizard tags its answer with
     /// `{ type: "question_answers", answeredQuestionsMessageId }` so the
     /// daemon retires the question hold. Plain sends omit the key entirely.
+    /// The optimistic user row mirrors the tag on its `metadata` so the wizard
+    /// gate sees the answer immediately (`PendingQuestionSet.isQuestionSetAnswered`)
+    /// instead of waiting for the daemon's `agent:updated` marker clear.
     func sendMessage(agentId: String, content: String, workspaceId: String,
                      imageBlocks: [[String: Any]]? = nil,
                      fileBlocks: [[String: Any]]? = nil,
@@ -625,7 +647,8 @@ import SwiftUI
         let userMessage = ConversationMessage(
             id: messageId,
             role: .user,
-            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
+            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)],
+            metadata: messageMetadata?.mapValues { AnyCodable($0) }
         )
         withAnimation(.spring(
             response: Constants.Conversation.Sending.messageAppendSpringResponse,

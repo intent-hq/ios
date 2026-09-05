@@ -548,6 +548,105 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions != nil, "questions re-pend after failure")
     }
 
+    // MARK: - Sticky wizard on the daemon marker (PROTOCOL §5.5 pendingQuestionsMessageId)
+
+    @Test func pendingQuestionsStaysWhileStreamingWhenMarkerNamesQuestionRow() throws {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.isStreaming = true
+
+        let set = try #require(vm.pendingQuestions,
+                               "the marked set stays pending while a later turn runs")
+        #expect(set.messageId == "a1")
+        #expect(vm.suggestedPrompts.isEmpty)
+    }
+
+    @Test func pendingQuestionsStaysAfterPlainUserMessageWhenMarkerSet() throws {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(id: "a1"),
+            textMessage(role: .user, text: "unrelated wake"),
+        ]
+        vm.store.pendingQuestionsMessageId = "a1"
+
+        let set = try #require(vm.pendingQuestions)
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func pendingQuestionsNilWhenMarkerCleared() {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = ""
+
+        #expect(vm.pendingQuestions == nil,
+                "a written-empty marker means nothing pends, even with a question-bearing tail")
+    }
+
+    @Test func submitQuestionAnswersHidesWizardBeforeDaemonClearsMarker() async throws {
+        // The optimistic answer row mirrors the question_answers tag, so the
+        // marker-authoritative gate hides the wizard on Send — before any
+        // agent:updated marker clear arrives — and never pops it back in.
+        let (vm, _) = makeFakeBackedVM()
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
+
+        let last = try #require(vm.messages.last)
+        #expect(last.role == .user)
+        #expect(last.answeredQuestionsMessageId == "a1")
+        #expect(vm.store.pendingQuestionsMessageId == "a1", "no daemon update has landed yet")
+        #expect(vm.pendingQuestions == nil)
+
+        vm.store.pendingQuestionsMessageId = ""
+        #expect(vm.pendingQuestions == nil, "the later marker clear keeps it hidden")
+    }
+
+    @Test func failedSubmitRePendsMarkedSetAfterRollback() async throws {
+        let (vm, _) = makeFakeBackedVM(
+            sendError: NSError(domain: "WebSocket", code: -32000))
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
+
+        #expect(vm.messages.count == 1, "the tagged optimistic row is rolled back")
+        #expect(vm.pendingQuestions?.messageId == "a1", "the marked set re-pends")
+    }
+
+    @Test func dismissRetiresMarkedSetWhileMarkerStillSet() async {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.isStreaming = true
+        #expect(vm.pendingQuestions != nil)
+
+        await vm.dismissQuestions(messageId: "a1")
+
+        #expect(vm.pendingQuestions == nil, "dismissal wins even while the marker still names the set")
+    }
+
+    @Test func newerMarkerReplacesWizardContent() throws {
+        let vm = makeVM()
+        vm.store.messages = [
+            questionMessage(id: "a1"),
+            textMessage(role: .user, text: "answered elsewhere"),
+            questionMessage(id: "a2"),
+        ]
+        vm.store.pendingQuestionsMessageId = "a1"
+        #expect(vm.pendingQuestions?.messageId == "a1")
+
+        vm.store.pendingQuestionsMessageId = "a2"
+
+        #expect(vm.pendingQuestions?.messageId == "a2", "a new marker id keys a new wizard mount")
+    }
+
     // MARK: - Suggested-prompt send (draft retention)
 
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {
