@@ -49,6 +49,27 @@ final class ConversationCommands {
         )
     }
 
+    /// Targeted seek for one message outside the loaded page
+    /// (`agent.getConversation` with `aroundMessageId` + `limit: 1`, PROTOCOL
+    /// §5.5). Returns the row when the page contains it, nil when the daemon
+    /// served a page without it. An unknown id surfaces as the daemon's
+    /// `-32602` (`unknown message id`) — the caller classifies it.
+    func fetchMessage(
+        agentId: String, messageId: String, workspaceId: String?
+    ) async throws -> ConversationMessage? {
+        var params: [String: Any] = [
+            "agentId": agentId,
+            "aroundMessageId": messageId,
+            "limit": 1,
+            "projection": "slim",
+        ]
+        if let workspaceId { params["workspaceId"] = workspaceId }
+        let result = try await connectionManager.request("agent.getConversation", params: params)
+        guard let response = result as? [String: Any],
+              let items = response["messages"] as? [[String: Any]] else { return nil }
+        return items.compactMap(ConversationMessage.parseMessage).first { $0.id == messageId }
+    }
+
     func subscribeToEvents(agentId: String, workspaceId: String) async throws -> String? {
         let result = try await connectionManager.request(
             "events.subscribe",
