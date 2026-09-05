@@ -125,8 +125,9 @@ import SwiftUI
     /// The in-flight marked-message seek (at most one; keyed by
     /// `pendingQuestionRecovery.messageId`).
     @ObservationIgnored private var pendingQuestionRecoveryTask: Task<Void, Never>?
-    /// FE parity: `MARKED_QUESTION_RETRY_DELAYS_MS = [250, 1_000]`.
-    static let markedQuestionRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(1000)]
+    /// FE parity: `MARKED_QUESTION_RETRY_DELAYS_MS = [250, 1_000]`. Instance
+    /// property so tests can shorten the retry schedule.
+    @ObservationIgnored var markedQuestionRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(1000)]
 
     /// Tracks the last failed send so retrying the same content reuses the messageId
     /// (preventing duplicate messages on the server).
@@ -154,6 +155,9 @@ import SwiftUI
         }
         liveTranscript.onFetchError = { [weak self] error in
             self?.raiseAgentNotFoundIfDefinitive(error)
+        }
+        liveTranscript.onTranscriptReplaced = { [weak self] in
+            self?.reconcilePendingQuestionRecovery()
         }
         observeConnection()
     }
@@ -316,7 +320,7 @@ import SwiftUI
     /// a marker change mid-flight drops the result instead of settling stale
     /// state.
     private func recoverMarkedQuestionMessage(agentId: String, messageId: String) async {
-        let delays = Self.markedQuestionRetryDelays
+        let delays = markedQuestionRetryDelays
         for attempt in 0...delays.count {
             do {
                 let message = try await commands.fetchMessage(
@@ -502,10 +506,11 @@ import SwiftUI
     }
 
     /// Internal (not private) so tests can drive the real ConnectionManager
-    /// registration/replay path into the store.
+    /// registration/replay path into the store. Recovery reconciliation runs
+    /// from `onTranscriptReplaced`, so the production handler registered by
+    /// `subscribeLiveChat` and this path behave identically.
     func handleChatSubscriptionPush(_ push: SubscriptionPush) {
         liveTranscript.handlePush(push)
-        reconcilePendingQuestionRecovery()
     }
 
     /// Unsubscribe the previous server-side event subscription to prevent duplicate event delivery.

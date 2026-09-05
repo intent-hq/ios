@@ -967,11 +967,12 @@ struct ConversationStoreTests {
         fake.errorMap["agent.getConversation"] = NSError(
             domain: "WebSocket", code: -2,
             userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 1_600_000_000)
+        try await Task.sleep(nanoseconds: 200_000_000)
 
-        #expect(seekRequests(fake).count == 3, "initial attempt + 250 ms + 1 s retries")
+        #expect(seekRequests(fake).count == 3, "initial attempt + two retries")
         #expect(store.pendingQuestionRecovery?.status == .error)
     }
 
@@ -1035,6 +1036,62 @@ struct ConversationStoreTests {
         #expect(store.messages.map(\.id) == ["q1"])
         #expect(store.pendingQuestionRecovery?.status == .found,
                 "the resident row settles the in-flight seek")
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func liveChatSnapshotThroughRegisteredHandlerSettlesInFlightSeek() async throws {
+        // Production path: chat.subscribe registers the push handler with the
+        // connection manager, and the snapshot arrives through that handler
+        // (not through handleStreamEvent).
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a")
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
+            snapshot: [questionRow(id: "q1")], delta: nil, snapshotMeta: ["agentId": "a"]))
+
+        #expect(store.messages.map(\.id) == ["q1"])
+        #expect(store.pendingQuestionRecovery?.status == .found,
+                "the live-channel snapshot settles the in-flight seek from the resident row")
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func liveChatDeltaThroughRegisteredHandlerSettlesInFlightSeek() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a")
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
+            snapshot: [], delta: nil, snapshotMeta: ["agentId": "a"]))
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .delta, seq: 1, snapshot: nil,
+            delta: .init(added: [[
+                "messageId": "q1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "streamingComplete": true,
+                "block": ["id": "q1:0", "type": "text", "text": "Which one?"] as [String: Any],
+            ] as [String: Any]], updated: [], removedIds: [])))
+
+        #expect(store.messages.map(\.id) == ["q1"])
+        #expect(store.pendingQuestionRecovery?.status == .found,
+                "a live-channel delta that materialises the row settles the in-flight seek")
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
     }
 
