@@ -105,6 +105,10 @@ import SwiftUI
     /// Buffer for stream events that arrive while the initial conversation fetch is in progress.
     /// This prevents lost deltas when subscribing before fetching.
     private var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
+    /// Bumped whenever an `agent:updated` push for our agent is applied, so an
+    /// `agent.get` reply that was in flight when the push landed can detect it
+    /// is stale and leave the pushed session-metadata markers alone.
+    @ObservationIgnored private var sessionMetadataGeneration = 0
 
     /// Tracks the last failed send so retrying the same content reuses the messageId
     /// (preventing duplicate messages on the server).
@@ -186,7 +190,11 @@ import SwiftUI
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
     /// The pending attention request is always taken from the server response
     /// (raise or clear) — it is server-authoritative with no optimistic state.
+    /// The session-metadata markers are skipped when an `agent:updated` push
+    /// landed while the request was in flight: the reply predates the push, so
+    /// applying it would revert the newer marker.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
+        let generation = sessionMetadataGeneration
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
                 if raiseOnly {
@@ -195,6 +203,7 @@ import SwiftUI
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
+                guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
                 }
@@ -549,6 +558,7 @@ import SwiftUI
     /// push-style so an answer/dismissal from another client (or the daemon
     /// clearing the marker to "") retires the wizard here too.
     private func handleAgentUpdated(_ data: [String: Any]) {
+        sessionMetadataGeneration += 1
         if let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }

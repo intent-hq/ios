@@ -662,6 +662,102 @@ struct ConversationStoreTests {
         #expect(store.lastSeenMessageId == "m9")
     }
 
+    @Test func staleAgentGetReplyDoesNotOverwriteMarkersPushedWhileInFlight() async throws {
+        // Regression: an agent.get reply applied unconditionally used to
+        // revert a marker that an agent:updated push moved after the request
+        // started (e.g. a newer question-bearing turn's marker replaced by the
+        // previous marker the daemon captured before it).
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": "a2",
+                               "dismissedQuestionsMessageId": "a1",
+                               "lastSeenMessageId": "m9"]] as [String: Any]
+        ])
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A", "isStreaming": true,
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a2",
+                "the stale reply must not revert the pushed pending marker")
+        #expect(store.dismissedQuestionsMessageId == "a1",
+                "the stale reply must not revert the pushed dismissal marker")
+        #expect(store.lastSeenMessageId == "m9",
+                "the stale reply must not revert the pushed seen marker")
+        #expect(store.isStreaming,
+                "streaming state is still applied from the reply")
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersWhenNoPushIntervened() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+        #expect(store.dismissedQuestionsMessageId == "a0")
+        #expect(store.lastSeenMessageId == "m3")
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersAfterUnrelatedAgentUpdated() async throws {
+        // An agent:updated for another agent is filtered out before the
+        // metadata handler, so it must not make our in-flight reply look stale.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "someone-else",
+                               "pendingQuestionsMessageId": "x1"]] as [String: Any]
+        ])
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+    }
+
     @Test func turnBoundaryBufferedDuringInitialFetchTriggersOneMarkerRefresh() async throws {
         // Regression (PR #210 review): agent:idle / agent:status-changed that
         // land while isLoading are buffered but never replayed, so the
