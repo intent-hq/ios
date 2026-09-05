@@ -213,26 +213,31 @@ import SwiftUI
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
     /// The pending attention request is always taken from the server response
     /// (raise or clear) — it is server-authoritative with no optimistic state.
-    /// The session-metadata markers are skipped when an `agent:updated` push
-    /// landed, or the bound agent changed (agent switch / `reset`), while the
-    /// request was in flight: the reply predates the change, so applying it
-    /// would revert the newer marker or leak the previous agent's markers into
-    /// the new conversation. As a second line of defence the reply is also
-    /// dropped when the store is bound to a different agent than the one the
-    /// request was issued for.
+    /// A reply (or error) that lands while the store is bound to a different
+    /// agent than the one the request was issued for — or unbound by a
+    /// `reset()` since the request was issued — is dropped entirely: it must
+    /// not touch the new conversation's streaming/attention state, nor mark
+    /// the new agent deleted on a not-found for the previous one. A request
+    /// issued while still unbound (view load, before `fetchConversation`
+    /// binds the same agent) stays valid.
+    /// The session-metadata markers are additionally skipped when an
+    /// `agent:updated` push landed, or the bound agent changed (agent switch /
+    /// `reset`), while the request was in flight: the reply predates the
+    /// change, so applying it would revert the newer marker or leak the
+    /// previous agent's markers into the new conversation.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
         let generation = sessionMetadataGeneration
+        let boundAtIssue = self.agentId
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
+                guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
                 if raiseOnly {
                     if state.isStreaming { isStreaming = true }
                 } else {
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
-                guard generation == sessionMetadataGeneration,
-                      self.agentId == nil || self.agentId == agentId
-                else { return }
+                guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
                 }
@@ -243,9 +248,18 @@ import SwiftUI
                 reconcilePendingQuestionRecovery()
             }
         } catch {
-            raiseAgentNotFoundIfDefinitive(error)
+            if isBound(to: agentId, boundAtIssue: boundAtIssue) {
+                raiseAgentNotFoundIfDefinitive(error)
+            }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
         }
+    }
+
+    /// Whether a reply for `agentId` may be applied: the store is bound to
+    /// that same agent, or is unbound and was already unbound when the request
+    /// was issued (so a `reset()` in between does not count as still valid).
+    private func isBound(to agentId: String, boundAtIssue: String?) -> Bool {
+        self.agentId == agentId || (self.agentId == nil && boundAtIssue == nil)
     }
 
     /// Raise `agentNotFound` only for a definitive not-found JSON-RPC error
