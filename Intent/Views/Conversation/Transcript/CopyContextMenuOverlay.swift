@@ -131,6 +131,17 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
             {
                 return textInput
             }
+            // Same skip can hide a pass-through marker (tappable image
+            // thumbnails, see `CopyContextMenuPassthroughMarker`) beneath a
+            // zero-framed wrapper; defer to it the same way so the touch
+            // reaches the SwiftUI Button above it instead of this overlay.
+            if let below, isDescendant(of: below),
+                let marker = below.passthroughMarkerDescendant(
+                    containing: convert(point, to: below), with: event, excluding: self
+                )
+            {
+                return marker
+            }
             return self
         }
     }
@@ -237,6 +248,40 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
     }
 }
 
+/// Transparent UIKit view placed behind tappable image thumbnails inside a
+/// `MessageCopyContextMenu` row. The copy overlay claims any touch whose
+/// probe resolves to plain SwiftUI content (an ancestor hosting view), which
+/// is why taps on an attached image never reached its `Button` or its
+/// `.contextMenu`. A UIKit view beneath the overlay is a sibling instead: the
+/// probe resolves to the marker, the overlay passes the touch through, and
+/// SwiftUI routes it to the gestures above the marker in its own tree — the
+/// Button's tap (lightbox) and the thumbnail's long-press (image Save/Copy
+/// menu). The cost is no message-copy long-press directly over a thumbnail;
+/// the bubble's text keeps it. The marker carries no gestures of its own.
+struct CopyContextMenuPassthroughMarker: UIViewRepresentable {
+    final class MarkerView: UIView {}
+
+    func makeUIView(context: Context) -> MarkerView {
+        let view = MarkerView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = true
+        return view
+    }
+
+    func updateUIView(_ uiView: MarkerView, context: Context) {}
+}
+
+extension View {
+    /// Lets taps and long-presses on this view reach its own SwiftUI
+    /// gestures through an enclosing `MessageCopyContextMenu` overlay (see
+    /// `CopyContextMenuPassthroughMarker`). Apply to the tappable content
+    /// itself (e.g. a Button's label) so the Button and any `.contextMenu`
+    /// on it are ancestors of the marker.
+    func copyContextMenuPassthrough() -> some View {
+        background { CopyContextMenuPassthroughMarker() }
+    }
+}
+
 extension UIView {
     /// Depth-first search for a visible `UITextInput`-conforming descendant
     /// (Textual's text-interaction view in transcript rows) that claims
@@ -249,6 +294,25 @@ extension UIView {
     func textInputDescendant(
         containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView
     ) -> UIView? {
+        passthroughDescendant(containing: point, with: event, excluding: excluded) {
+            $0 is UITextInput
+        }
+    }
+
+    /// Same walk as `textInputDescendant`, matching a
+    /// `CopyContextMenuPassthroughMarker` view (tappable image thumbnails).
+    func passthroughMarkerDescendant(
+        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView
+    ) -> UIView? {
+        passthroughDescendant(containing: point, with: event, excluding: excluded) {
+            $0 is CopyContextMenuPassthroughMarker.MarkerView
+        }
+    }
+
+    private func passthroughDescendant(
+        containing point: CGPoint, with event: UIEvent?, excluding excluded: UIView,
+        where matches: (UIView) -> Bool
+    ) -> UIView? {
         for subview in subviews.reversed() {
             guard
                 subview !== excluded,
@@ -258,11 +322,11 @@ extension UIView {
             else { continue }
 
             let localPoint = convert(point, to: subview)
-            if subview is UITextInput, subview.point(inside: localPoint, with: event) {
+            if matches(subview), subview.point(inside: localPoint, with: event) {
                 return subview
             }
-            if let match = subview.textInputDescendant(
-                containing: localPoint, with: event, excluding: excluded
+            if let match = subview.passthroughDescendant(
+                containing: localPoint, with: event, excluding: excluded, where: matches
             ) {
                 return match
             }

@@ -137,6 +137,7 @@ struct ContentBlockView: View {
             } label: {
                 SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
                     .opacity(isHydratingImage ? 0.6 : 1)
+                    .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(imageNeedsHydration ? "Load attached image" : "Attached image")
@@ -186,6 +187,7 @@ struct ContentBlockView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
             .disabled(!imageNeedsHydration || isHydratingImage)
@@ -293,6 +295,7 @@ struct ImageAttachmentThumbnail: View {
             let imageData = ContentBlockView.decodeImageData(block)
             Button { lightboxPresented = true } label: {
                 SquareImageThumbnail(image: uiImage, side: Self.side)
+                    .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -361,6 +364,7 @@ struct AttachmentReferenceImageView: View {
         if let image {
             Button { lightboxPresented = true } label: {
                 SquareImageThumbnail(image: image, side: side)
+                    .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -376,6 +380,7 @@ struct AttachmentReferenceImageView: View {
                     Image(systemName: "arrow.clockwise")
                     if style == .inline { Text("Tap to retry") }
                 }
+                .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Retry loading image")

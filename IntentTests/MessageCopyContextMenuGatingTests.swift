@@ -150,4 +150,32 @@ struct CopyContextMenuOverlayHitTestTests {
         #expect(fixture.overlay.isUserInteractionEnabled)
         #expect(wrapper.isUserInteractionEnabled)
     }
+
+    @Test func overlayPassesThroughToImagePassthroughMarker() {
+        // A pass-through marker (the background of a tappable image
+        // thumbnail) beneath the overlay: the probe resolves to the marker,
+        // so the touch reaches the SwiftUI Button above it instead of
+        // being claimed for the copy interaction. The rest of the row is
+        // still claimed.
+        let fixture = makeFixture(enabled: true)
+        let marker = CopyContextMenuPassthroughMarker.MarkerView(
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+        fixture.host.insertSubview(marker, belowSubview: fixture.overlay)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
+        #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
+    }
+
+    @Test func overlayFindsPassthroughMarkerUnderZeroFramedWrapper() {
+        // Regular hit-testing never descends into a zero-framed wrapper, so
+        // the probe resolves to the host (an ancestor); the overlay must
+        // still find the correctly-framed marker beneath it.
+        let fixture = makeFixture(enabled: true)
+        let wrapper = UIView(frame: .zero)
+        let marker = CopyContextMenuPassthroughMarker.MarkerView(
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+        wrapper.addSubview(marker)
+        fixture.host.insertSubview(wrapper, belowSubview: fixture.overlay)
+        #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
+        #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
+    }
 }
