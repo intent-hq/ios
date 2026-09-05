@@ -40,7 +40,9 @@ struct WorkspaceRowView: View {
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(
                                 for: colorScheme, contrast: colorSchemeContrast))
-                            .lineLimit(2)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .layoutPriority(-1)
                     }
 
                     if let pill = prIndicator.pill {
@@ -51,6 +53,8 @@ struct WorkspaceRowView: View {
                         }
                         .font(.caption.weight(.medium))
                         .foregroundStyle(pillColor)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
                         .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
                         .background(pillColor.opacity(Constants.WorkspaceRow.pillBackgroundOpacity))
@@ -68,6 +72,8 @@ struct WorkspaceRowView: View {
                             .font(.caption.weight(.medium))
                             .foregroundStyle(Theme.mutedForeground(
                                 for: colorScheme, contrast: colorSchemeContrast))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                             .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
                             .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
                             .background(Theme.mutedForeground(
@@ -77,6 +83,7 @@ struct WorkspaceRowView: View {
                     }
                 }
             }
+            .layoutPriority(1)
 
             Spacer()
 
@@ -85,6 +92,8 @@ struct WorkspaceRowView: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(
                         for: colorScheme, contrast: colorSchemeContrast))
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
         .contentShape(Rectangle())
