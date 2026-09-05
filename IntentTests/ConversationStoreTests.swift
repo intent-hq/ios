@@ -930,6 +930,56 @@ struct ConversationStoreTests {
                 "a not-found for the previous agent must not mark the current one deleted")
     }
 
+    @Test func staleAgentGetReplyAfterResetDoesNotRestoreStreamingOrAttention() async throws {
+        // Regression (PR #215 review): reset() unbinds the store, and an
+        // unbound store used to accept any reply — so an agent.get issued
+        // while bound to A restored A's isStreaming/attentionRequest into the
+        // store reset() had just cleared.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.reset()
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A", "isStreaming": true,
+                "attentionRequestKind": "blocker",
+                "attentionRequestReason": "a is stuck",
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(!store.isStreaming, "a stale reply must not restore streaming state after reset")
+        #expect(store.attentionRequest == nil, "a stale reply must not restore the attention request after reset")
+    }
+
+    @Test func staleNotFoundAfterResetDoesNotRaiseAgentNotFound() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.delayMap["agent.get"] = 150_000_000
+        fake.errorMap["agent.get"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: a",
+                       NSError.intentErrorDataCodeKey: "not-found"])
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.reset()
+        await refresh.value
+
+        #expect(!store.agentNotFound,
+                "a stale not-found must not mark the reset store as deleted")
+    }
+
     @Test func agentGetReplyAfterMarkerPushStillAppliesStreamingAndAttention() async throws {
         // Pins the split: a generation bump without an agent change (an
         // agent:updated push for the same agent) skips only the markers —
