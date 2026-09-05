@@ -3,8 +3,10 @@ import Foundation
 /// Agent Q&A question resource (PROTOCOL §7.1 standalone resource block).
 /// The daemon attaches one resource block per `ws.app.question.ask` call as a
 /// trailing block on the turn's final assistant message. There is NO
-/// questionId — pending vs. answered is derived purely from whether a later
-/// user message exists after the question-bearing assistant message.
+/// questionId — pending vs. answered is keyed on the question-bearing
+/// assistant message id via the daemon's session-metadata marker (PROTOCOL
+/// §5.5 `pendingQuestionsMessageId`), with a transcript-tail fallback for
+/// legacy sessions; see `PendingQuestionSet.derive`.
 ///
 /// Questions are WIZARD-ONLY: they never render in the conversation transcript
 /// (pending or resolved). Mirrors the cloudlands-fe contract in
@@ -133,11 +135,14 @@ struct Question: Equatable, Identifiable, Decodable {
     }
 }
 
-/// Pending Agent Q&A questions for the composer-slot wizard (wire contract:
-/// pending vs. answered is derived purely from the transcript — questions on
-/// the LAST assistant message with NO later user message are pending; ANY
-/// later user message supersedes them). Port of the FE's
-/// `derivePendingQuestions` in `chat/questions/pending-questions.ts`.
+/// Pending Agent Q&A questions for the composer-slot wizard. The daemon's
+/// three-state pending marker (PROTOCOL §5.5 `pendingQuestionsMessageId`) is
+/// authoritative when present: an empty string clears the slot, while a
+/// message id permits only that question-bearing row — and keeps it pending
+/// across later automatic/user turns until the daemon clears it (answer or
+/// dismissal). Legacy sessions without the marker use the daemon's
+/// transcript-tail fallback. Port of the FE's `derivePendingQuestions` in
+/// `chat/questions/pending-questions.ts`.
 struct PendingQuestionSet: Equatable {
     /// Id of the question-bearing assistant message (keys wizard remounts).
     let messageId: String
@@ -145,53 +150,134 @@ struct PendingQuestionSet: Equatable {
     /// `attachmentId` (first occurrence kept).
     let questions: [Question]
 
+    /// Daemon marker classification that keeps absent and written-empty
+    /// distinct (FE parity: `classifyPendingQuestionMarker`).
+    enum MarkerState: Equatable {
+        case absent
+        case cleared
+        case set(messageId: String)
+
+        init(_ pendingQuestionsMessageId: String?) {
+            guard let id = pendingQuestionsMessageId else {
+                self = .absent
+                return
+            }
+            self = id.isEmpty ? .cleared : .set(messageId: id)
+        }
+    }
+
     /// Derive the pending question set, or nil when there is none.
     ///
-    /// Nil whenever the agent's own turn is still active (`isTurnActive`), an
-    /// optimistic pending user bubble is shown, the last assistant message is
-    /// still streaming, or a user message trails the last assistant message
-    /// (superseded). Because this reads only the transcript, restored sessions
-    /// re-surface unanswered questions automatically.
+    /// With the daemon marker set, the marked question-bearing row stays
+    /// pending regardless of `isTurnActive`: the marker is only written once
+    /// the asking turn has ended, and later automatic/user turns must not hide
+    /// the wizard. It is nil only while that row is still streaming (or is
+    /// missing / not an assistant row / carries no valid question), once a
+    /// tagged answer row names it, or while an optimistic pending user bubble
+    /// is shown. A marker of `""` means nothing is pending.
     ///
-    /// A question set the user dismissed never pends: the daemon persists the
-    /// dismissed message id in session metadata (`agent.dismissQuestions`,
-    /// PROTOCOL §5.5 `dismissedQuestionsMessageId`), so when it matches the
-    /// question-bearing message the set is retired — survives reload, while a
-    /// NEWER question-bearing message (different id) pends normally (FE
-    /// parity: `wizard-gate.ts` / `isQuestionMessageDismissed`).
+    /// Without the marker (legacy daemon) the transcript-tail fallback applies
+    /// and is additionally nil whenever the agent's OWN turn is active
+    /// (`isTurnActive`): trailing system rows are transparent and only a
+    /// question-bearing assistant row at the non-system tail is pending — ANY
+    /// trailing user message supersedes it.
+    ///
+    /// In both paths a question set the user dismissed never pends: the daemon
+    /// persists the dismissed message id in session metadata
+    /// (`agent.dismissQuestions`, PROTOCOL §5.5 `dismissedQuestionsMessageId`),
+    /// so when it matches the question-bearing message the set is retired —
+    /// survives reload, while a NEWER question-bearing message (different id)
+    /// pends normally (FE parity: `wizard-gate.ts` /
+    /// `isQuestionMessageDismissed`).
     static func derive(
         messages: [ConversationMessage],
         isTurnActive: Bool,
         showingPendingUserMessage: Bool = false,
-        dismissedQuestionsMessageId: String? = nil
+        dismissedQuestionsMessageId: String? = nil,
+        pendingQuestionsMessageId: String? = nil
     ) -> PendingQuestionSet? {
-        if isTurnActive || showingPendingUserMessage || messages.isEmpty {
+        if showingPendingUserMessage || messages.isEmpty {
             return nil
         }
-        // Walk back to the last assistant message; a user message encountered
-        // first supersedes any questions (resolution is derivational, not id-keyed).
-        var lastAssistant: ConversationMessage?
-        for msg in messages.reversed() {
-            if msg.role == .user { return nil }
-            if msg.role == .assistant {
-                lastAssistant = msg
-                break
+        switch MarkerState(pendingQuestionsMessageId) {
+        case .cleared:
+            return nil
+        case .set(let markedId):
+            guard let marked = messages.first(where: { $0.id == markedId }),
+                  marked.role == .assistant, marked.isStreaming != true else {
+                return nil
             }
+            if isQuestionSetAnswered(messages: messages, messageId: markedId) {
+                return nil
+            }
+            return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+        case .absent:
+            if isTurnActive { return nil }
+            // Match the daemon's pre-marker fallback: trailing system rows are
+            // transparent, but the first non-system row must itself be a
+            // question-bearing assistant message (a user row supersedes).
+            for msg in messages.reversed() {
+                if msg.role == .system { continue }
+                guard msg.role == .assistant, msg.isStreaming != true else { return nil }
+                return questionSet(from: msg, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+            }
+            return nil
         }
-        guard let lastAssistant, lastAssistant.isStreaming != true else { return nil }
-        if let dismissedId = dismissedQuestionsMessageId, dismissedId == lastAssistant.id {
+    }
+
+    /// True when a user row in `messages` carries the wizard's answer tag
+    /// (`{ type: "question_answers", answeredQuestionsMessageId }`) naming
+    /// `messageId`. Bridges the window between the user hitting Send (the
+    /// optimistic row mirrors the tag) and the daemon's `agent:updated`
+    /// clearing the marker, so an answered set never pops back in (FE parity:
+    /// `isQuestionSetAnswered`).
+    static func isQuestionSetAnswered(
+        messages: [ConversationMessage], messageId: String
+    ) -> Bool {
+        messages.contains { $0.role == .user && $0.answeredQuestionsMessageId == messageId }
+    }
+
+    private static func questionSet(
+        from message: ConversationMessage, dismissedQuestionsMessageId: String?
+    ) -> PendingQuestionSet? {
+        if let dismissedId = dismissedQuestionsMessageId, dismissedId == message.id {
             return nil
         }
         var seenAttachmentIds = Set<String>()
         var questions: [Question] = []
-        for block in lastAssistant.contentBlocks ?? [] {
+        for block in message.contentBlocks ?? [] {
             guard let question = Question.question(from: block) else { continue }
             if seenAttachmentIds.insert(question.attachmentId).inserted {
                 questions.append(question)
             }
         }
         guard !questions.isEmpty else { return nil }
-        return PendingQuestionSet(messageId: lastAssistant.id, questions: questions)
+        return PendingQuestionSet(messageId: message.id, questions: questions)
+    }
+}
+
+extension ConversationMessage {
+    /// Id of the question set this user message answers, or nil for every
+    /// other message. Reads the row's `metadata` first, falling back to the
+    /// text blocks' `messageMetadata` (the same dual surface the daemon
+    /// persists a tagged message on — see `QuestionsDismissedNotice`; FE
+    /// parity: `getAnsweredQuestionsMessageId`).
+    var answeredQuestionsMessageId: String? {
+        if let answered = Self.answeredId(from: metadata) { return answered }
+        for block in contentBlocks ?? [] where block.type == .text {
+            if let answered = Self.answeredId(from: block.messageMetadata) { return answered }
+        }
+        return nil
+    }
+
+    private static func answeredId(from metadata: [String: AnyCodable]?) -> String? {
+        guard let metadata,
+              metadata["type"]?.value as? String == "question_answers",
+              let answered = metadata["answeredQuestionsMessageId"]?.value as? String,
+              !answered.isEmpty else {
+            return nil
+        }
+        return answered
     }
 }
 
