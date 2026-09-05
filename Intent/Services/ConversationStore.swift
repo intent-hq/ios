@@ -59,6 +59,19 @@ import SwiftUI
     /// open agent. Transient transport errors never raise this. The view
     /// observes it to fall back to the agent list.
     var agentNotFound = false
+    /// The pending-questions marker (PROTOCOL §5.5): the daemon writes the id of
+    /// the question-bearing assistant message once the asking turn ends, and
+    /// `""` once the set is answered or dismissed; a newer question-bearing
+    /// turn overwrites it with that message's id. Three-state on the
+    /// client too — `nil` means the daemon never reported it (legacy
+    /// transcript-tail fallback). Refreshed from `agent.get` (the `agent:idle`
+    /// refresh is what raises it when the asking turn ends) and updated
+    /// push-style by `agent:updated`. Authoritative for the wizard gate when
+    /// present: the marked set stays pending across later turns.
+    var pendingQuestionsMessageId: String? {
+        get { commands.pendingQuestionsMessageId }
+        set { commands.pendingQuestionsMessageId = newValue }
+    }
     /// The question-dismissal marker (PROTOCOL §5.5): id of the question-bearing
     /// assistant message the user dismissed via `agent.dismissQuestions`.
     /// Daemon-persisted in session metadata (survives restarts); refreshed from
@@ -182,6 +195,9 @@ import SwiftUI
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
+                if let pendingId = state.pendingQuestionsMessageId {
+                    pendingQuestionsMessageId = pendingId
+                }
                 if let dismissedId = state.dismissedQuestionsMessageId {
                     dismissedQuestionsMessageId = dismissedId
                 }
@@ -260,6 +276,19 @@ import SwiftUI
         let buffer = streamEventBuffer
         streamEventBuffer.removeAll()
         guard !buffer.isEmpty else { return }
+
+        // A turn boundary that landed mid-load is never replayed below, but its
+        // agent.get refresh is what raises the pending-questions marker (and
+        // the attention request) when the asking turn ends — and the load's own
+        // agent.get may have raced ahead of the daemon's marker write. Run ONE
+        // refresh regardless of how many boundaries were buffered, and before
+        // the firehose discard: the live channel covers transcript content only.
+        let hasTurnBoundary = buffer.contains {
+            $0.eventType == "agent:idle" || $0.eventType == "agent:status-changed"
+        }
+        if hasTurnBoundary, let agentId = self.agentId {
+            Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+        }
 
         // If the chat.subscribe channel went live while events were buffered, the
         // snapshot/deltas already cover this content — discard the firehose buffer.
@@ -456,6 +485,16 @@ import SwiftUI
             return
         }
 
+        // Session-metadata invalidation mutates no transcript state, so it is
+        // applied even while the initial fetch is in flight: the isLoading
+        // buffer below only replays user-message and stream events (and is
+        // discarded outright once the chat channel is live), so a marker
+        // change landing during the fetch would otherwise be dropped.
+        if eventType == "agent:updated" {
+            handleAgentUpdated(data)
+            return
+        }
+
         // Buffer stream events while the initial conversation fetch is in progress
         if isLoading {
             streamEventBuffer.append((eventType: eventType, data: data))
@@ -500,20 +539,26 @@ import SwiftUI
             if let agentId = self.agentId {
                 Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
             }
-        case "agent:updated":
-            // Session-mutation invalidation (PROTOCOL §6.5). The dismissal
-            // marker persist carries it in the payload — apply push-style so
-            // a dismissal from another client retires the wizard here too.
-            if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
-                dismissedQuestionsMessageId = dismissedId
-            }
-            // Seen-marker persist (agent.markSeen, PROTOCOL §5.5) — converge
-            // marker moves from other clients push-style.
-            if let seenId = data["lastSeenMessageId"] as? String {
-                lastSeenMessageId = seenId
-            }
         default:
             break
+        }
+    }
+
+    /// Session-mutation invalidation (PROTOCOL §6.5). The pending and
+    /// dismissal marker persists carry the field in the payload — apply
+    /// push-style so an answer/dismissal from another client (or the daemon
+    /// clearing the marker to "") retires the wizard here too.
+    private func handleAgentUpdated(_ data: [String: Any]) {
+        if let pendingId = data["pendingQuestionsMessageId"] as? String {
+            pendingQuestionsMessageId = pendingId
+        }
+        if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
+            dismissedQuestionsMessageId = dismissedId
+        }
+        // Seen-marker persist (agent.markSeen, PROTOCOL §5.5) — converge
+        // marker moves from other clients push-style.
+        if let seenId = data["lastSeenMessageId"] as? String {
+            lastSeenMessageId = seenId
         }
     }
 
@@ -605,6 +650,9 @@ import SwiftUI
     /// verbatim (PROTOCOL §5.5) — the Agent Q&A wizard tags its answer with
     /// `{ type: "question_answers", answeredQuestionsMessageId }` so the
     /// daemon retires the question hold. Plain sends omit the key entirely.
+    /// The optimistic user row mirrors the tag on its `metadata` so the wizard
+    /// gate sees the answer immediately (`PendingQuestionSet.isQuestionSetAnswered`)
+    /// instead of waiting for the daemon's `agent:updated` marker clear.
     func sendMessage(agentId: String, content: String, workspaceId: String,
                      imageBlocks: [[String: Any]]? = nil,
                      fileBlocks: [[String: Any]]? = nil,
@@ -625,7 +673,8 @@ import SwiftUI
         let userMessage = ConversationMessage(
             id: messageId,
             role: .user,
-            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)]
+            contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)],
+            metadata: messageMetadata?.mapValues { AnyCodable($0) }
         )
         withAnimation(.spring(
             response: Constants.Conversation.Sending.messageAppendSpringResponse,

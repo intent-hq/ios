@@ -7,6 +7,10 @@ final class ConversationCommands {
     struct AgentState {
         let isStreaming: Bool
         let attentionRequest: PendingAttentionRequest?
+        /// PROTOCOL §5.5 three-state marker: `nil` when absent from the
+        /// response (legacy daemon), `""` when written-empty (nothing
+        /// pending), else the question-bearing message id. Never coerced.
+        let pendingQuestionsMessageId: String?
         let dismissedQuestionsMessageId: String?
         let lastSeenMessageId: String?
     }
@@ -17,6 +21,7 @@ final class ConversationCommands {
     }
 
     var queuedMessages: [QueuedMessage] = []
+    var pendingQuestionsMessageId: String?
     var dismissedQuestionsMessageId: String?
     var lastSeenMessageId: String?
 
@@ -38,6 +43,7 @@ final class ConversationCommands {
                 || (agent["isResponding"] as? Bool ?? false)
                 || (agent["turnInFlight"] as? Bool ?? false),
             attentionRequest: AgentSession.parsePendingAttentionRequest(agent),
+            pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String,
             lastSeenMessageId: metadata?["lastSeenMessageId"] as? String
         )
@@ -84,7 +90,18 @@ final class ConversationCommands {
         if let fileBlocks { params["fileBlocks"] = fileBlocks }
         if let messageMetadata { params["messageMetadata"] = messageMetadata }
         let result = try await connectionManager.request("agent.sendMessage", params: params)
-        return (result as? [String: Any])?["queued"] as? Bool == true
+        guard let response = result as? [String: Any],
+              response["queued"] as? Bool == true else { return false }
+        // Seed the local queue from the auto-queued result so the entry (and
+        // its `question_answers` tag) is visible before `agent:queue:updated`
+        // lands; the event's authoritative snapshot then replaces it.
+        if let dictionary = response["queuedMessage"] as? [String: Any],
+           let data = try? JSONSerialization.data(withJSONObject: dictionary),
+           let message = try? JSONDecoder().decode(QueuedMessage.self, from: data),
+           !queuedMessages.contains(where: { $0.id == message.id }) {
+            queuedMessages.append(message)
+        }
+        return true
     }
 
     func dismissQuestions(
@@ -283,6 +300,7 @@ final class ConversationCommands {
 
     func reset() {
         queuedMessages = []
+        pendingQuestionsMessageId = nil
         dismissedQuestionsMessageId = nil
         lastSeenMessageId = nil
         lastMarkSeenSentId = nil

@@ -532,19 +532,28 @@ import SwiftUI
 
     // MARK: - Agent Q&A pending questions
 
-    /// Pending Agent Q&A question set for the composer-slot wizard, derived
-    /// purely from the transcript (nil while streaming/turn-active or once a
-    /// later user message supersedes the questions). The optimistic user
-    /// message appended by `sendMessage` supersedes derivationally — and the
-    /// store raises `isStreaming` optimistically — so the wizard also hides
-    /// while a send is in flight. A failed wizard send is rolled back
-    /// (`ConversationStore.rollbackFailedSend`) so unanswered questions
-    /// re-pend instead of being permanently superseded. A set the user
-    /// dismissed (`agent.dismissQuestions` marker, PROTOCOL §5.5) never pends.
+    /// Pending Agent Q&A question set for the composer-slot wizard. When the
+    /// daemon's `pendingQuestionsMessageId` marker is present (PROTOCOL §5.5)
+    /// it is authoritative: the marked set appears once the asking turn ends
+    /// and stays STICKY across later turns — automatic deliveries or a plain
+    /// user message do not hide it. It hides only once a user row carries the
+    /// `question_answers` tag naming it (the optimistic answer row appended by
+    /// `submitQuestionAnswers` mirrors the tag, so Send hides it immediately;
+    /// when the daemon auto-queues that answer mid-turn the tag lives on the
+    /// queue entry instead, which counts the same), once it is dismissed
+    /// (`agent.dismissQuestions` marker), or once the
+    /// daemon clears the marker to `""`. Against a legacy daemon (marker
+    /// absent) the transcript-tail fallback applies: nil while the turn is
+    /// active (`isStreaming`) or once a later user message supersedes it. A
+    /// failed wizard send is rolled back (`ConversationStore.rollbackFailedSend`)
+    /// so unanswered questions re-pend in both paths.
     var pendingQuestions: PendingQuestionSet? {
         PendingQuestionSet.derive(
             messages: messages, isTurnActive: isStreaming,
-            dismissedQuestionsMessageId: store.dismissedQuestionsMessageId)
+            dismissedQuestionsMessageId: store.dismissedQuestionsMessageId,
+            pendingQuestionsMessageId: store.pendingQuestionsMessageId,
+            queuedAnsweredQuestionsMessageIds: Set(
+                store.queuedMessages.compactMap(\.answeredQuestionsMessageId)))
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of

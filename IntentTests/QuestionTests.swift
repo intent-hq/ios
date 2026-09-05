@@ -233,6 +233,22 @@ struct PendingQuestionDerivationTests {
         ConversationMessage(id: id, role: .user, contentBlocks: [ContentBlock(type: .text, text: "hi")])
     }
 
+    /// A user row carrying the wizard's answer tag on the row `metadata`
+    /// (the shape the optimistic send row and the persisted row share).
+    private func answerRow(id: String = "u-ans", answering messageId: String) -> ConversationMessage {
+        ConversationMessage(
+            id: id, role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "Q: Which auth method?\nA: OAuth")],
+            metadata: [
+                "type": AnyCodable("question_answers"),
+                "answeredQuestionsMessageId": AnyCodable(messageId),
+            ])
+    }
+
+    private func questionAssistant(id: String = "a1", isStreaming: Bool? = nil) -> ConversationMessage {
+        assistant(id: id, blocks: [questionBlock(text: questionJSON())], isStreaming: isStreaming)
+    }
+
     @Test func derivesPendingSetFromLastAssistant() throws {
         let messages = [
             user(),
@@ -333,6 +349,220 @@ struct PendingQuestionDerivationTests {
             messages: messages, isTurnActive: false,
             dismissedQuestionsMessageId: nil))
         #expect(set.messageId == "a1")
+    }
+
+    // MARK: - Pending marker (FE `classifyPendingQuestionMarker` / marker authority parity)
+
+    @Test func markerSetPendsWhileTurnActive() throws {
+        let messages = [user(), questionAssistant(id: "a1")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+        #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"])
+    }
+
+    @Test func markerSetPendsDespiteLaterPlainUserMessage() throws {
+        let messages = [questionAssistant(id: "a1"), user(id: "u2")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func markerSetPendsDespiteLaterAssistantTurn() throws {
+        let messages = [
+            questionAssistant(id: "a1"),
+            user(id: "u2"),
+            assistant(id: "a2", blocks: [ContentBlock(type: .text, text: "later turn")], isStreaming: true),
+            ConversationMessage(id: "s1", role: .system, contentBlocks: []),
+        ]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func markerSetSelectsMarkedRowOverQuestionBearingTail() throws {
+        let messages = [
+            questionAssistant(id: "a1"),
+            user(id: "u2"),
+            assistant(id: "a2", blocks: [
+                questionBlock(text: questionJSON(attachmentId: "tar-ba9876543210", header: "Newer")),
+            ]),
+        ]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+        #expect(set.questions.map(\.header) == ["Auth method"])
+    }
+
+    @Test func markerClearedIsNilEvenWithQuestionBearingTail() {
+        let messages = [user(), questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "") == nil)
+    }
+
+    @Test func markerSetNilOnceTaggedAnswerRowNamesIt() {
+        let messages = [questionAssistant(id: "a1"), answerRow(answering: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetNilWhenAnswerTagRidesTextBlockMessageMetadata() {
+        let tagged = ConversationMessage(
+            id: "u-ans", role: .user,
+            contentBlocks: [ContentBlock(
+                type: .text, text: "Q: Which auth method?\nA: OAuth",
+                messageMetadata: [
+                    "type": AnyCodable("question_answers"),
+                    "answeredQuestionsMessageId": AnyCodable("a1"),
+                ])])
+        let messages = [questionAssistant(id: "a1"), tagged]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetIgnoresAnswerRowNamingAnotherSet() throws {
+        let messages = [questionAssistant(id: "a1"), answerRow(answering: "a0")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func markerSetNilWhenQueuedAnswerNamesIt() {
+        // The daemon auto-queued the tagged answer mid-turn: the optimistic
+        // row is gone and the only local tag lives on the queue entry.
+        let messages = [questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1",
+            queuedAnsweredQuestionsMessageIds: ["a1"]) == nil)
+    }
+
+    @Test func markerSetPendsWhenQueuedAnswerNamesAnotherSet() throws {
+        let messages = [questionAssistant(id: "a1")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1",
+            queuedAnsweredQuestionsMessageIds: ["a0"]))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func queuedMessageAnsweredQuestionsMessageIdReadsTagOnly() {
+        func queued(_ metadata: [String: AnyCodable]?) -> QueuedMessage {
+            QueuedMessage(id: "q", content: "x", queuedAt: "t", position: 0,
+                          imageBlocks: nil, messageMetadata: metadata)
+        }
+        #expect(queued([
+            "type": AnyCodable("question_answers"),
+            "answeredQuestionsMessageId": AnyCodable("a1"),
+        ]).answeredQuestionsMessageId == "a1")
+        #expect(queued(nil).answeredQuestionsMessageId == nil)
+        #expect(queued([
+            "type": AnyCodable("agent_message"),
+            "answeredQuestionsMessageId": AnyCodable("a1"),
+        ]).answeredQuestionsMessageId == nil)
+        #expect(queued([
+            "type": AnyCodable("question_answers"),
+            "answeredQuestionsMessageId": AnyCodable(""),
+        ]).answeredQuestionsMessageId == nil)
+    }
+
+    @Test func markerSetIgnoresAnswerTagOnNonUserRow() throws {
+        let taggedAssistant = ConversationMessage(
+            id: "a2", role: .assistant,
+            contentBlocks: [ContentBlock(type: .text, text: "echo")],
+            metadata: [
+                "type": AnyCodable("question_answers"),
+                "answeredQuestionsMessageId": AnyCodable("a1"),
+            ])
+        let messages = [questionAssistant(id: "a1"), taggedAssistant]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1"))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func markerSetNilWhenDismissalMarkerMatches() {
+        let messages = [questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false,
+            dismissedQuestionsMessageId: "a1", pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetPendsWhenDismissalMarkerNamesOlderSet() throws {
+        let messages = [questionAssistant(id: "a2")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false,
+            dismissedQuestionsMessageId: "a1", pendingQuestionsMessageId: "a2"))
+        #expect(set.messageId == "a2")
+    }
+
+    @Test func markerSetNilWhileMarkedRowStreaming() {
+        let messages = [questionAssistant(id: "a1", isStreaming: true)]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetNilWhenMarkedRowMissing() {
+        let messages = [questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a-gone") == nil)
+    }
+
+    @Test func markerSetNilWhenMarkedRowIsNotAssistant() {
+        let messages = [
+            ConversationMessage(id: "u1", role: .user, contentBlocks: [questionBlock(text: questionJSON())]),
+        ]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "u1") == nil)
+    }
+
+    @Test func markerSetNilWhenMarkedRowHasNoValidQuestions() {
+        let messages = [assistant(id: "a1", blocks: [
+            ContentBlock(type: .text, text: "plain"),
+            questionBlock(text: "garbage"),
+        ])]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetNilWhileShowingPendingUserMessage() {
+        let messages = [questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, showingPendingUserMessage: true,
+            pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetNilOnEmptyTranscript() {
+        #expect(PendingQuestionSet.derive(
+            messages: [], isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetDedupesByAttachmentId() {
+        let messages = [assistant(id: "a1", blocks: [
+            questionBlock(text: questionJSON(header: "First")),
+            questionBlock(text: questionJSON(header: "Duplicate")),
+            questionBlock(text: questionJSON(attachmentId: "tar-ba9876543210", header: "Second")),
+        ])]
+        let set = PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1")
+        #expect(set?.questions.map(\.header) == ["First", "Second"])
+    }
+
+    @Test func markerStateClassification() {
+        #expect(PendingQuestionSet.MarkerState(nil) == .absent)
+        #expect(PendingQuestionSet.MarkerState("") == .cleared)
+        #expect(PendingQuestionSet.MarkerState("a1") == .set(messageId: "a1"))
+    }
+
+    @Test func answeredQuestionsMessageIdRejectsWrongTypeOrEmptyId() {
+        let wrongType = ConversationMessage(
+            id: "u1", role: .user,
+            metadata: ["type": AnyCodable("questions_dismissed"),
+                       "answeredQuestionsMessageId": AnyCodable("a1")])
+        let emptyId = ConversationMessage(
+            id: "u2", role: .user,
+            metadata: ["type": AnyCodable("question_answers"),
+                       "answeredQuestionsMessageId": AnyCodable("")])
+        #expect(wrongType.answeredQuestionsMessageId == nil)
+        #expect(emptyId.answeredQuestionsMessageId == nil)
+        #expect(answerRow(answering: "a1").answeredQuestionsMessageId == "a1")
     }
 }
 
