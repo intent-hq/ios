@@ -176,6 +176,15 @@ struct PendingQuestionSet: Equatable {
     /// tagged answer row names it, or while an optimistic pending user bubble
     /// is shown. A marker of `""` means nothing is pending.
     ///
+    /// `queuedAnsweredQuestionsMessageIds` are the question sets answered by
+    /// sends that are not in the transcript yet — the daemon auto-queued the
+    /// tagged answer during an active turn, so the only local `question_answers`
+    /// tag lives on the queue entry (`QueuedMessage.answeredQuestionsMessageId`).
+    /// A marked set named there is treated as answered exactly like a tagged
+    /// user row, so the wizard cannot pop back in (and take a duplicate
+    /// submission) before the queued answer is delivered. Callers pass the ids
+    /// in rather than this helper reading the store.
+    ///
     /// Without the marker (legacy daemon) the transcript-tail fallback applies
     /// and is additionally nil whenever the agent's OWN turn is active
     /// (`isTurnActive`): trailing system rows are transparent and only a
@@ -194,7 +203,8 @@ struct PendingQuestionSet: Equatable {
         isTurnActive: Bool,
         showingPendingUserMessage: Bool = false,
         dismissedQuestionsMessageId: String? = nil,
-        pendingQuestionsMessageId: String? = nil
+        pendingQuestionsMessageId: String? = nil,
+        queuedAnsweredQuestionsMessageIds: Set<String> = []
     ) -> PendingQuestionSet? {
         if showingPendingUserMessage || messages.isEmpty {
             return nil
@@ -207,7 +217,8 @@ struct PendingQuestionSet: Equatable {
                   marked.role == .assistant, marked.isStreaming != true else {
                 return nil
             }
-            if isQuestionSetAnswered(messages: messages, messageId: markedId) {
+            if queuedAnsweredQuestionsMessageIds.contains(markedId)
+                || isQuestionSetAnswered(messages: messages, messageId: markedId) {
                 return nil
             }
             return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
@@ -263,22 +274,36 @@ extension ConversationMessage {
     /// persists a tagged message on — see `QuestionsDismissedNotice`; FE
     /// parity: `getAnsweredQuestionsMessageId`).
     var answeredQuestionsMessageId: String? {
-        if let answered = Self.answeredId(from: metadata) { return answered }
+        if let answered = questionAnswersTaggedMessageId(metadata) { return answered }
         for block in contentBlocks ?? [] where block.type == .text {
-            if let answered = Self.answeredId(from: block.messageMetadata) { return answered }
+            if let answered = questionAnswersTaggedMessageId(block.messageMetadata) { return answered }
         }
         return nil
     }
+}
 
-    private static func answeredId(from metadata: [String: AnyCodable]?) -> String? {
-        guard let metadata,
-              metadata["type"]?.value as? String == "question_answers",
-              let answered = metadata["answeredQuestionsMessageId"]?.value as? String,
-              !answered.isEmpty else {
-            return nil
-        }
-        return answered
+extension QueuedMessage {
+    /// Id of the question set this queued entry answers, or nil for every
+    /// other entry. The wizard's tagged answer is auto-queued by the daemon
+    /// when it is sent during an active turn, and until it is delivered the
+    /// queue entry's `messageMetadata` is the only local copy of the
+    /// `question_answers` tag (the optimistic transcript row is removed on
+    /// `queued: true`).
+    var answeredQuestionsMessageId: String? {
+        questionAnswersTaggedMessageId(messageMetadata)
     }
+}
+
+/// The `answeredQuestionsMessageId` of a `{ type: "question_answers",
+/// answeredQuestionsMessageId }` tag, or nil when `metadata` is not that tag.
+private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]?) -> String? {
+    guard let metadata,
+          metadata["type"]?.value as? String == "question_answers",
+          let answered = metadata["answeredQuestionsMessageId"]?.value as? String,
+          !answered.isEmpty else {
+        return nil
+    }
+    return answered
 }
 
 /// Answer flattening for the Agent Q&A wizard (wire contract): all answers of

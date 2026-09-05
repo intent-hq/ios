@@ -604,6 +604,42 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions == nil, "the later marker clear keeps it hidden")
     }
 
+    @Test func submitQuestionAnswersStaysHiddenWhenDaemonAutoQueuesAnswer() async throws {
+        // Regression (PR #210 review): when the tagged answer is auto-queued
+        // (agent busy / turn startup), the optimistic tagged row is removed
+        // from the transcript while the daemon still names the set in
+        // pendingQuestionsMessageId — the wizard must not pop back in and
+        // invite a duplicate submission. The queue entry's tag counts as the
+        // answer until the drain lands the user row / clears the marker.
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.sendMessage"] = [
+            "success": true, "queued": true,
+            "queuedMessage": [
+                "id": "q-1", "content": "Q: Which auth method?\nA: OAuth",
+                "queuedAt": "2026-01-01T00:00:00Z", "position": 0,
+                "messageMetadata": [
+                    "type": "question_answers", "answeredQuestionsMessageId": "a1",
+                ],
+            ] as [String: Any],
+        ] as [String: Any]
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.isStreaming = true
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
+
+        #expect(vm.messages.count == 1, "the optimistic row moved to the queue panel")
+        #expect(vm.store.queuedMessages.map(\.id) == ["q-1"])
+        #expect(vm.store.pendingQuestionsMessageId == "a1", "no daemon update has landed yet")
+        #expect(vm.pendingQuestions == nil, "the queued tagged answer keeps the wizard hidden")
+
+        // The drain delivers the row and the daemon clears the marker.
+        vm.store.queuedMessages = []
+        vm.store.pendingQuestionsMessageId = ""
+        #expect(vm.pendingQuestions == nil)
+    }
+
     @Test func failedSubmitRePendsMarkedSetAfterRollback() async throws {
         let (vm, _) = makeFakeBackedVM(
             sendError: NSError(domain: "WebSocket", code: -32000))

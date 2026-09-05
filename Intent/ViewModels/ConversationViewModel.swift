@@ -538,8 +538,10 @@ import SwiftUI
     /// and stays STICKY across later turns — automatic deliveries or a plain
     /// user message do not hide it. It hides only once a user row carries the
     /// `question_answers` tag naming it (the optimistic answer row appended by
-    /// `submitQuestionAnswers` mirrors the tag, so Send hides it immediately),
-    /// once it is dismissed (`agent.dismissQuestions` marker), or once the
+    /// `submitQuestionAnswers` mirrors the tag, so Send hides it immediately;
+    /// when the daemon auto-queues that answer mid-turn the tag lives on the
+    /// queue entry instead, which counts the same), once it is dismissed
+    /// (`agent.dismissQuestions` marker), or once the
     /// daemon clears the marker to `""`. Against a legacy daemon (marker
     /// absent) the transcript-tail fallback applies: nil while the turn is
     /// active (`isStreaming`) or once a later user message supersedes it. A
@@ -549,7 +551,9 @@ import SwiftUI
         PendingQuestionSet.derive(
             messages: messages, isTurnActive: isStreaming,
             dismissedQuestionsMessageId: store.dismissedQuestionsMessageId,
-            pendingQuestionsMessageId: store.pendingQuestionsMessageId)
+            pendingQuestionsMessageId: store.pendingQuestionsMessageId,
+            queuedAnsweredQuestionsMessageIds: Set(
+                store.queuedMessages.compactMap(\.answeredQuestionsMessageId)))
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of

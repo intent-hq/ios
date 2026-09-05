@@ -628,6 +628,40 @@ struct ConversationStoreTests {
                 "the daemon clearing the marker to \"\" must land push-style")
     }
 
+    @Test func agentUpdatedEventDuringInitialFetchIsAppliedNotDropped() async throws {
+        // Regression (PR #210 review): the isLoading buffer only replays
+        // user-message/stream events, so a marker clear pushed while the
+        // initial agent.getConversation was in flight used to be dropped —
+        // the wizard then re-pended on the stale agent.get marker. Session
+        // metadata pushes bypass the buffer and land immediately.
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.getConversation")
+        let store = ConversationStore(connectionManager: fake)
+        store.pendingQuestionsMessageId = "a1"
+
+        let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(store.isLoading)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": "",
+                               "lastSeenMessageId": "m9"]] as [String: Any]
+        ])
+        #expect(store.pendingQuestionsMessageId == "",
+                "the marker clear lands while the fetch is still in flight")
+        #expect(store.lastSeenMessageId == "m9")
+
+        fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
+        await fetch.value
+
+        #expect(!store.isLoading)
+        #expect(store.pendingQuestionsMessageId == "",
+                "settling the fetch does not revert the pushed marker")
+        #expect(store.lastSeenMessageId == "m9")
+    }
+
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
@@ -696,6 +730,46 @@ struct ConversationStoreTests {
         let row = try #require(store.messages.last)
         #expect(row.metadata == nil)
         #expect(row.answeredQuestionsMessageId == nil)
+    }
+
+    @Test func queuedSendSeedsLocalQueueWithTaggedEntry() async throws {
+        // When the daemon auto-queues the wizard's answer (turn-startup race),
+        // the optimistic tagged row is removed; the queued entry — carrying
+        // the same question_answers tag — must be visible locally from the
+        // send result, before any agent:queue:updated lands, so the wizard
+        // gate still sees the marked set as answered.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = [
+            "success": true, "queued": true,
+            "queuedMessage": [
+                "id": "q-1", "content": "Q: x\nA: y", "queuedAt": "2026-01-01T00:00:00Z",
+                "position": 0,
+                "messageMetadata": [
+                    "type": "question_answers", "answeredQuestionsMessageId": "msg-q1",
+                ],
+            ] as [String: Any],
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        try await store.sendMessage(
+            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            messageMetadata: [
+                "type": "question_answers",
+                "answeredQuestionsMessageId": "msg-q1",
+            ])
+
+        #expect(store.messages.isEmpty, "the optimistic row moves to the queue panel")
+        #expect(store.queuedMessages.map(\.id) == ["q-1"])
+        #expect(store.queuedMessages.first?.answeredQuestionsMessageId == "msg-q1")
+
+        // An agent:queue:updated that raced ahead of the result is not duplicated.
+        try await store.sendMessage(
+            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            messageMetadata: [
+                "type": "question_answers",
+                "answeredQuestionsMessageId": "msg-q1",
+            ])
+        #expect(store.queuedMessages.count == 1)
     }
 
     @Test func rollbackFailedSendRemovesTaggedOptimisticRow() async {

@@ -471,6 +471,16 @@ import SwiftUI
             return
         }
 
+        // Session-metadata invalidation mutates no transcript state, so it is
+        // applied even while the initial fetch is in flight: the isLoading
+        // buffer below only replays user-message and stream events (and is
+        // discarded outright once the chat channel is live), so a marker
+        // change landing during the fetch would otherwise be dropped.
+        if eventType == "agent:updated" {
+            handleAgentUpdated(data)
+            return
+        }
+
         // Buffer stream events while the initial conversation fetch is in progress
         if isLoading {
             streamEventBuffer.append((eventType: eventType, data: data))
@@ -515,24 +525,26 @@ import SwiftUI
             if let agentId = self.agentId {
                 Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
             }
-        case "agent:updated":
-            // Session-mutation invalidation (PROTOCOL §6.5). The pending and
-            // dismissal marker persists carry the field in the payload — apply
-            // push-style so an answer/dismissal from another client (or the
-            // daemon clearing the marker to "") retires the wizard here too.
-            if let pendingId = data["pendingQuestionsMessageId"] as? String {
-                pendingQuestionsMessageId = pendingId
-            }
-            if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
-                dismissedQuestionsMessageId = dismissedId
-            }
-            // Seen-marker persist (agent.markSeen, PROTOCOL §5.5) — converge
-            // marker moves from other clients push-style.
-            if let seenId = data["lastSeenMessageId"] as? String {
-                lastSeenMessageId = seenId
-            }
         default:
             break
+        }
+    }
+
+    /// Session-mutation invalidation (PROTOCOL §6.5). The pending and
+    /// dismissal marker persists carry the field in the payload — apply
+    /// push-style so an answer/dismissal from another client (or the daemon
+    /// clearing the marker to "") retires the wizard here too.
+    private func handleAgentUpdated(_ data: [String: Any]) {
+        if let pendingId = data["pendingQuestionsMessageId"] as? String {
+            pendingQuestionsMessageId = pendingId
+        }
+        if let dismissedId = data["dismissedQuestionsMessageId"] as? String {
+            dismissedQuestionsMessageId = dismissedId
+        }
+        // Seen-marker persist (agent.markSeen, PROTOCOL §5.5) — converge
+        // marker moves from other clients push-style.
+        if let seenId = data["lastSeenMessageId"] as? String {
+            lastSeenMessageId = seenId
         }
     }
 

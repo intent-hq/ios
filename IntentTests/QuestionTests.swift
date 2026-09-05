@@ -427,6 +427,43 @@ struct PendingQuestionDerivationTests {
         #expect(set.messageId == "a1")
     }
 
+    @Test func markerSetNilWhenQueuedAnswerNamesIt() {
+        // The daemon auto-queued the tagged answer mid-turn: the optimistic
+        // row is gone and the only local tag lives on the queue entry.
+        let messages = [questionAssistant(id: "a1")]
+        #expect(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: true, pendingQuestionsMessageId: "a1",
+            queuedAnsweredQuestionsMessageIds: ["a1"]) == nil)
+    }
+
+    @Test func markerSetPendsWhenQueuedAnswerNamesAnotherSet() throws {
+        let messages = [questionAssistant(id: "a1")]
+        let set = try #require(PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1",
+            queuedAnsweredQuestionsMessageIds: ["a0"]))
+        #expect(set.messageId == "a1")
+    }
+
+    @Test func queuedMessageAnsweredQuestionsMessageIdReadsTagOnly() {
+        func queued(_ metadata: [String: AnyCodable]?) -> QueuedMessage {
+            QueuedMessage(id: "q", content: "x", queuedAt: "t", position: 0,
+                          imageBlocks: nil, messageMetadata: metadata)
+        }
+        #expect(queued([
+            "type": AnyCodable("question_answers"),
+            "answeredQuestionsMessageId": AnyCodable("a1"),
+        ]).answeredQuestionsMessageId == "a1")
+        #expect(queued(nil).answeredQuestionsMessageId == nil)
+        #expect(queued([
+            "type": AnyCodable("agent_message"),
+            "answeredQuestionsMessageId": AnyCodable("a1"),
+        ]).answeredQuestionsMessageId == nil)
+        #expect(queued([
+            "type": AnyCodable("question_answers"),
+            "answeredQuestionsMessageId": AnyCodable(""),
+        ]).answeredQuestionsMessageId == nil)
+    }
+
     @Test func markerSetIgnoresAnswerTagOnNonUserRow() throws {
         let taggedAssistant = ConversationMessage(
             id: "a2", role: .assistant,
