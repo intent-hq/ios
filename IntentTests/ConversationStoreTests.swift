@@ -729,6 +729,96 @@ struct ConversationStoreTests {
         #expect(store.lastSeenMessageId == "m3")
     }
 
+    @Test func staleAgentGetReplyFromPreviousAgentDoesNotLeakMarkersIntoSwitchedAgent() async throws {
+        // Regression: the generation was bumped only on agent:updated, so an
+        // agent.get for A that completed after the store started loading B
+        // (no push in between) wrote A's pending/dismissed/seen markers into B.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        await store.fetchConversation(agentId: "b", workspaceId: "w")
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == nil,
+                "A's pending marker must not land in B's conversation")
+        #expect(store.dismissedQuestionsMessageId == nil,
+                "A's dismissal marker must not land in B's conversation")
+        #expect(store.lastSeenMessageId == nil,
+                "A's seen marker must not land in B's conversation")
+        #expect(store.pendingQuestionRecovery == nil,
+                "no recovery seek may be started for A's marker against B")
+    }
+
+    @Test func staleAgentGetReplyAfterResetDoesNotRestoreMarkers() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.reset()
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == nil)
+        #expect(store.dismissedQuestionsMessageId == nil)
+        #expect(store.lastSeenMessageId == nil)
+        #expect(store.pendingQuestionRecovery == nil)
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersWhenConversationBindsSameAgentWhileInFlight() async throws {
+        // View load issues fetchConversation and the raise-only agent.get
+        // concurrently: binding the same agent from nil must not make the
+        // reply look stale.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+        #expect(store.lastSeenMessageId == "m3")
+    }
+
     @Test func agentGetReplyStillAppliesMarkersAfterUnrelatedAgentUpdated() async throws {
         // An agent:updated for another agent is filtered out before the
         // metadata handler, so it must not make our in-flight reply look stale.

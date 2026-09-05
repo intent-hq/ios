@@ -118,9 +118,10 @@ import SwiftUI
     /// Buffer for stream events that arrive while the initial conversation fetch is in progress.
     /// This prevents lost deltas when subscribing before fetching.
     private var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
-    /// Bumped whenever an `agent:updated` push for our agent is applied, so an
-    /// `agent.get` reply that was in flight when the push landed can detect it
-    /// is stale and leave the pushed session-metadata markers alone.
+    /// Bumped whenever an `agent:updated` push for our agent is applied, and
+    /// whenever the bound agent changes (`bindAgent`: agent switch or `reset`),
+    /// so an `agent.get` reply that was in flight when either happened can
+    /// detect it is stale and leave the session-metadata markers alone.
     @ObservationIgnored private var sessionMetadataGeneration = 0
     /// The in-flight marked-message seek (at most one; keyed by
     /// `pendingQuestionRecovery.messageId`).
@@ -213,8 +214,12 @@ import SwiftUI
     /// The pending attention request is always taken from the server response
     /// (raise or clear) — it is server-authoritative with no optimistic state.
     /// The session-metadata markers are skipped when an `agent:updated` push
-    /// landed while the request was in flight: the reply predates the push, so
-    /// applying it would revert the newer marker.
+    /// landed, or the bound agent changed (agent switch / `reset`), while the
+    /// request was in flight: the reply predates the change, so applying it
+    /// would revert the newer marker or leak the previous agent's markers into
+    /// the new conversation. As a second line of defence the reply is also
+    /// dropped when the store is bound to a different agent than the one the
+    /// request was issued for.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
         let generation = sessionMetadataGeneration
         do {
@@ -225,7 +230,9 @@ import SwiftUI
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
-                guard generation == sessionMetadataGeneration else { return }
+                guard generation == sessionMetadataGeneration,
+                      self.agentId == nil || self.agentId == agentId
+                else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
                 }
@@ -264,8 +271,21 @@ import SwiftUI
 
     // MARK: - Fetch conversation
 
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+    /// Bind the store to `agentId`. Switching away from a previously bound
+    /// agent (to another agent, or to `nil` on `reset`) invalidates any
+    /// in-flight `agent.get` so its session-metadata markers cannot land in
+    /// the new conversation. The first bind from `nil` does not bump: an
+    /// `agent.get` issued before the conversation fetch bound the same agent
+    /// is still authoritative.
+    private func bindAgent(_ agentId: String?) {
+        if let bound = self.agentId, bound != agentId {
+            sessionMetadataGeneration += 1
+        }
         self.agentId = agentId
+    }
+
+    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+        bindAgent(agentId)
         if let workspaceId = workspaceId {
             self.workspaceId = workspaceId
         }
@@ -471,7 +491,7 @@ import SwiftUI
         isSubscribing = true
         defer { isSubscribing = false }
 
-        self.agentId = agentId
+        bindAgent(agentId)
         self.workspaceId = workspaceId
 
         // Unsubscribe any previous server-side subscription to prevent duplicate events
@@ -993,7 +1013,7 @@ import SwiftUI
         liveTranscript.reset()
         commands.reset()
         watchedAgentCoordinator.reset()
-        agentId = nil
+        bindAgent(nil)
         workspaceId = nil
         subscriptionId = nil
         currentStreamId = nil
