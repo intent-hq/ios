@@ -13,8 +13,6 @@ struct AgentAvatarView: View {
     var isActive: Bool = false
     var state: AgentAvatarState = .idle
 
-    @State private var isPulsing = false
-
     private var design: AgentAvatarDesign {
         AgentAvatarDesign.design(agentId: agentId, specialist: specialist, icon: icon)
     }
@@ -41,23 +39,25 @@ struct AgentAvatarView: View {
                 .fill(glyphColor)
                 .frame(width: artSize, height: artSize)
 
-            // Active pulsing indicator
+            // Active pulsing indicator. Each phase is a finite ease-in-out
+            // animation on the stroke color only — a `repeatForever` implicit
+            // animation here leaked into the ring's geometry whenever the row
+            // moved in a reordering list, leaving rings oscillating between rows.
             if isActive {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
-                        isPulsing
-                            ? Constants.Colors.AgentAvatar.activeStrokeStrong
-                            : Constants.Colors.AgentAvatar.activeStrokeWeak,
-                        lineWidth: Constants.AgentAvatar.activeStrokeWidth)
-                    .animation(
-                        .easeInOut(duration: Constants.AgentAvatar.pulseAnimationDuration)
-                            .repeatForever(autoreverses: true),
-                        value: isPulsing)
-                    .onAppear { isPulsing = true }
-                    .onDisappear { isPulsing = false }
+                PhaseAnimator([false, true]) { strong in
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(
+                            strong
+                                ? Constants.Colors.AgentAvatar.activeStrokeStrong
+                                : Constants.Colors.AgentAvatar.activeStrokeWeak,
+                            lineWidth: Constants.AgentAvatar.activeStrokeWidth)
+                } animation: { _ in
+                    .easeInOut(duration: Constants.AgentAvatar.pulseAnimationDuration)
+                }
             }
         }
         .frame(width: size, height: size)
+        .geometryGroup()
     }
 
     /// Desktop tile surface per state (`--agent-avatar-surface-*` tokens);
