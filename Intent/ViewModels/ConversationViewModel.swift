@@ -547,13 +547,62 @@ import SwiftUI
     /// active (`isStreaming`) or once a later user message supersedes it. A
     /// failed wizard send is rolled back (`ConversationStore.rollbackFailedSend`)
     /// so unanswered questions re-pend in both paths.
+    ///
+    /// When the marked row is outside the loaded page, the copy recovered by
+    /// the store's targeted seek (`pendingQuestionRecovery`, status `found`)
+    /// is prepended to the transcript for the derivation, so the marker path
+    /// finds it while the tail is still scanned for the tagged answer row and
+    /// the queued-answer / dismissal bridges apply unchanged. A resident row
+    /// always wins over the recovered copy (FE parity: `wizard-gate.ts`
+    /// `deriveWizardPendingQuestions`).
     var pendingQuestions: PendingQuestionSet? {
-        PendingQuestionSet.derive(
-            messages: messages, isTurnActive: isStreaming,
+        var derivationMessages = messages
+        if let recovered = recoveredMarkedMessage {
+            derivationMessages.insert(recovered, at: 0)
+        }
+        return PendingQuestionSet.derive(
+            messages: derivationMessages, isTurnActive: isStreaming,
             dismissedQuestionsMessageId: store.dismissedQuestionsMessageId,
             pendingQuestionsMessageId: store.pendingQuestionsMessageId,
             queuedAnsweredQuestionsMessageIds: Set(
                 store.queuedMessages.compactMap(\.answeredQuestionsMessageId)))
+    }
+
+    /// The marker's id when it names a row that is NOT in the loaded
+    /// transcript, else nil. Both recovery-aware derivations key off this.
+    private var nonResidentMarkedMessageId: String? {
+        guard case .set(let markedId) = PendingQuestionSet.MarkerState(store.pendingQuestionsMessageId),
+              !messages.contains(where: { $0.id == markedId }) else { return nil }
+        return markedId
+    }
+
+    /// The recovered copy of the marked row (store seek settled `found` for
+    /// the CURRENT marker id) while that row is not resident, else nil. A
+    /// stale recovery for another id, or one superseded by the row arriving
+    /// in the transcript, is ignored.
+    private var recoveredMarkedMessage: ConversationMessage? {
+        guard let markedId = nonResidentMarkedMessageId,
+              let recovery = store.pendingQuestionRecovery,
+              recovery.messageId == markedId, recovery.status == .found else { return nil }
+        return recovery.message
+    }
+
+    /// Fail-closed gate for the composer slot: true while the marker names a
+    /// row that is not resident and no recovered wizard can be rendered from
+    /// it — the seek is in flight, settled `notFound`/`error`, or found a row
+    /// without a valid question set. Exhausted retries end the network
+    /// attempts, not marker authority: the ordinary composer and suggested
+    /// prompts stay withheld until the daemon clears or replaces the marker
+    /// (FE parity: `deriveMarkedQuestionRecoveryState` + ChatPanel's
+    /// `pendingQuestionRecoveryLoading`). False until the initial transcript
+    /// fetch has settled — the row may simply not have loaded yet — and false
+    /// once a recovered wizard exists, even if it is answered or dismissed.
+    var isPendingQuestionRecoveryLoading: Bool {
+        guard !isLoading, let markedId = nonResidentMarkedMessageId else { return false }
+        guard let recovered = recoveredMarkedMessage else { return true }
+        return PendingQuestionSet.derive(
+            messages: [recovered], isTurnActive: false,
+            pendingQuestionsMessageId: markedId) == nil
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of
@@ -616,9 +665,11 @@ import SwiftUI
 
     var suggestedPrompts: [String] {
         // Suggested prompts stay hidden whenever the turn has pending Agent
-        // Q&A questions — including while the wizard is Ignore-collapsed.
-        // Only answering (or any superseding user message) brings them back.
-        guard pendingQuestions == nil else { return [] }
+        // Q&A questions — including while the wizard is Ignore-collapsed —
+        // and while the marked question row is still being recovered
+        // (fail-closed, like the composer). Only answering (or any
+        // superseding user message) brings them back.
+        guard pendingQuestions == nil, !isPendingQuestionRecoveryLoading else { return [] }
         guard let lastMessage = messages.last,
               lastMessage.role == .assistant else { return [] }
         // The same message-level scan the views use for stripping (empty

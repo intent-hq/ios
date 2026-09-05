@@ -662,6 +662,192 @@ struct ConversationStoreTests {
         #expect(store.lastSeenMessageId == "m9")
     }
 
+    @Test func staleAgentGetReplyDoesNotOverwriteMarkersPushedWhileInFlight() async throws {
+        // Regression: an agent.get reply applied unconditionally used to
+        // revert a marker that an agent:updated push moved after the request
+        // started (e.g. a newer question-bearing turn's marker replaced by the
+        // previous marker the daemon captured before it).
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": "a2",
+                               "dismissedQuestionsMessageId": "a1",
+                               "lastSeenMessageId": "m9"]] as [String: Any]
+        ])
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A", "isStreaming": true,
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a2",
+                "the stale reply must not revert the pushed pending marker")
+        #expect(store.dismissedQuestionsMessageId == "a1",
+                "the stale reply must not revert the pushed dismissal marker")
+        #expect(store.lastSeenMessageId == "m9",
+                "the stale reply must not revert the pushed seen marker")
+        #expect(store.isStreaming,
+                "streaming state is still applied from the reply")
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersWhenNoPushIntervened() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+        #expect(store.dismissedQuestionsMessageId == "a0")
+        #expect(store.lastSeenMessageId == "m3")
+    }
+
+    @Test func staleAgentGetReplyFromPreviousAgentDoesNotLeakMarkersIntoSwitchedAgent() async throws {
+        // Regression: the generation was bumped only on agent:updated, so an
+        // agent.get for A that completed after the store started loading B
+        // (no push in between) wrote A's pending/dismissed/seen markers into B.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        await store.fetchConversation(agentId: "b", workspaceId: "w")
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == nil,
+                "A's pending marker must not land in B's conversation")
+        #expect(store.dismissedQuestionsMessageId == nil,
+                "A's dismissal marker must not land in B's conversation")
+        #expect(store.lastSeenMessageId == nil,
+                "A's seen marker must not land in B's conversation")
+        #expect(store.pendingQuestionRecovery == nil,
+                "no recovery seek may be started for A's marker against B")
+    }
+
+    @Test func staleAgentGetReplyAfterResetDoesNotRestoreMarkers() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.reset()
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "dismissedQuestionsMessageId": "a0",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == nil)
+        #expect(store.dismissedQuestionsMessageId == nil)
+        #expect(store.lastSeenMessageId == nil)
+        #expect(store.pendingQuestionRecovery == nil)
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersWhenConversationBindsSameAgentWhileInFlight() async throws {
+        // View load issues fetchConversation and the raise-only agent.get
+        // concurrently: binding the same agent from nil must not make the
+        // reply look stale.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1",
+                             "lastSeenMessageId": "m3"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+        #expect(store.lastSeenMessageId == "m3")
+    }
+
+    @Test func agentGetReplyStillAppliesMarkersAfterUnrelatedAgentUpdated() async throws {
+        // An agent:updated for another agent is filtered out before the
+        // metadata handler, so it must not make our in-flight reply look stale.
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.pendingMethods.insert("agent.get")
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "someone-else",
+                               "pendingQuestionsMessageId": "x1"]] as [String: Any]
+        ])
+
+        fake.resolvePending("agent.get", with: [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ] as [String: Any])
+        await refresh.value
+
+        #expect(store.pendingQuestionsMessageId == "a1")
+    }
+
     @Test func turnBoundaryBufferedDuringInitialFetchTriggersOneMarkerRefresh() async throws {
         // Regression (PR #210 review): agent:idle / agent:status-changed that
         // land while isLoading are buffered but never replayed, so the
@@ -739,6 +925,319 @@ struct ConversationStoreTests {
         store.pendingQuestionsMessageId = "a1"
         store.reset()
         #expect(store.pendingQuestionsMessageId == nil)
+    }
+
+    // MARK: - Marked question recovery (aroundMessageId seek, Phase 2)
+
+    /// A question-bearing assistant row as the daemon serves it.
+    private func questionRow(id: String) -> [String: Any] {
+        [
+            "id": id, "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [["type": "text", "id": "\(id):0", "text": "Which one?"]],
+        ]
+    }
+
+    private func pushMarker(_ store: ConversationStore, _ markerId: String) {
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "a",
+                               "pendingQuestionsMessageId": markerId]] as [String: Any]
+        ])
+    }
+
+    private func seekRequests(_ fake: FakeConnectionManager) -> [[String: Any]] {
+        fake.paramsForMethod("agent.getConversation").filter { $0["aroundMessageId"] != nil }
+    }
+
+    @Test func markerNamingMissingRowIssuesOneAroundMessageIdSeek() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseQueueMap["agent.getConversation"] = [
+            ["messages": []] as [String: Any],
+            ["messages": [questionRow(id: "q1")]] as [String: Any],
+        ]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        #expect(store.pendingQuestionRecovery == nil)
+
+        pushMarker(store, "q1")
+        #expect(store.pendingQuestionRecovery?.status == .loading,
+                "fails closed while the seek is in flight")
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let seeks = seekRequests(fake)
+        #expect(seeks.count == 1, "exactly one seek per marker id")
+        #expect(seeks.first?["aroundMessageId"] as? String == "q1")
+        #expect(seeks.first?["limit"] as? Int == 1)
+        #expect(seeks.first?["projection"] as? String == "slim")
+        #expect(seeks.first?["agentId"] as? String == "a")
+        #expect(seeks.first?["workspaceId"] as? String == "w")
+        #expect(store.pendingQuestionRecovery?.messageId == "q1")
+        #expect(store.pendingQuestionRecovery?.status == .found)
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+
+        // A later reconcile for the same marker never re-seeks.
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(seekRequests(fake).count == 1)
+    }
+
+    @Test func markerNamingResidentRowIssuesNoSeek() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(seekRequests(fake).isEmpty, "a resident row is never seeked")
+        #expect(store.pendingQuestionRecovery == nil)
+    }
+
+    @Test func seekPageWithoutTheRowSettlesNotFound() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(store.pendingQuestionRecovery?.status == .notFound)
+        #expect(store.pendingQuestionRecovery?.message == nil)
+    }
+
+    @Test func seekUnknownMessageId32602SettlesNotFoundWithoutRetry() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        // PROTOCOL §5.5: an unknown aroundMessageId is -32602 naming the id
+        // (no data.code == "not-found" — the agent itself exists).
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"])
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        #expect(seekRequests(fake).count == 1, "-32602 is terminal — no retry")
+        #expect(store.pendingQuestionRecovery?.status == .notFound)
+        #expect(!store.agentNotFound, "an unknown message id is not a deleted agent")
+    }
+
+    @Test func seekTransportErrorRetriesThenSettlesFound() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.errorQueueMap["agent.getConversation"] = [
+            NSError(domain: "WebSocket", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]),
+        ]
+        fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(seekRequests(fake).count == 1)
+        #expect(store.pendingQuestionRecovery?.status == .loading,
+                "still loading while waiting for the 250 ms retry")
+
+        try await Task.sleep(nanoseconds: 500_000_000)
+        #expect(seekRequests(fake).count == 2, "one retry after the transport error")
+        #expect(store.pendingQuestionRecovery?.status == .found)
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func seekExhaustedRetriesSettlesError() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.errorMap["agent.getConversation"] = NSError(
+            domain: "WebSocket", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+        store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        #expect(seekRequests(fake).count == 3, "initial attempt + two retries")
+        #expect(store.pendingQuestionRecovery?.status == .error)
+    }
+
+    @Test func markerClearedMidFlightCancelsSeekAndDropsState() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(seekRequests(fake).count == 1)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        pushMarker(store, "")
+        #expect(store.pendingQuestionRecovery == nil, "the marker clear drops the state")
+
+        fake.resolvePending("agent.getConversation",
+                            with: ["messages": [questionRow(id: "q1")]] as [String: Any])
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery == nil,
+                "a late reply for the cancelled seek never settles state")
+    }
+
+    @Test func markerReplacedMidFlightRestartsSeekForTheNewId() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        pushMarker(store, "q2")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let seeks = seekRequests(fake)
+        #expect(seeks.map { $0["aroundMessageId"] as? String } == ["q1", "q2"])
+        #expect(store.pendingQuestionRecovery?.messageId == "q2")
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+    }
+
+    @Test func rowArrivingInTranscriptWhileSeekInFlightSettlesFoundFromResidentRow() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        store.setTestChatChannel(subscriptionId: "sub-chat")
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        store.handleStreamEvent("subscription.push", params: [
+            "subscriptionId": "sub-chat", "kind": "snapshot", "seq": 0,
+            "snapshot": ["agentId": "a", "messages": [questionRow(id: "q1")]] as [String: Any],
+        ] as [String: Any])
+
+        #expect(store.messages.map(\.id) == ["q1"])
+        #expect(store.pendingQuestionRecovery?.status == .found,
+                "the resident row settles the in-flight seek")
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func liveChatSnapshotThroughRegisteredHandlerSettlesInFlightSeek() async throws {
+        // Production path: chat.subscribe registers the push handler with the
+        // connection manager, and the snapshot arrives through that handler
+        // (not through handleStreamEvent).
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a")
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
+            snapshot: [questionRow(id: "q1")], delta: nil, snapshotMeta: ["agentId": "a"]))
+
+        #expect(store.messages.map(\.id) == ["q1"])
+        #expect(store.pendingQuestionRecovery?.status == .found,
+                "the live-channel snapshot settles the in-flight seek from the resident row")
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func liveChatDeltaThroughRegisteredHandlerSettlesInFlightSeek() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat"]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        await store.subscribeLiveChat(agentId: "a")
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
+            snapshot: [], delta: nil, snapshotMeta: ["agentId": "a"]))
+        fake.pendingMethods.insert("agent.getConversation")
+
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery?.status == .loading)
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-chat", kind: .delta, seq: 1, snapshot: nil,
+            delta: .init(added: [[
+                "messageId": "q1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+                "streamingComplete": true,
+                "block": ["id": "q1:0", "type": "text", "text": "Which one?"] as [String: Any],
+            ] as [String: Any]], updated: [], removedIds: [])))
+
+        #expect(store.messages.map(\.id) == ["q1"])
+        #expect(store.pendingQuestionRecovery?.status == .found,
+                "a live-channel delta that materialises the row settles the in-flight seek")
+        #expect(store.pendingQuestionRecovery?.message?.id == "q1")
+    }
+
+    @Test func markerPushedDuringInitialFetchSeeksOnceTheFetchSettles() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.getConversation")
+        let store = ConversationStore(connectionManager: fake)
+
+        let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.isLoading)
+
+        pushMarker(store, "q1")
+        #expect(store.pendingQuestionRecovery == nil, "no seek while the initial fetch is in flight")
+
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
+        fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
+        await fetch.value
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(seekRequests(fake).count == 1)
+        #expect(store.pendingQuestionRecovery?.status == .found)
+    }
+
+    @Test func resetClearsPendingQuestionRecovery() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.pendingMethods.insert("agent.getConversation")
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery != nil)
+
+        store.reset()
+
+        #expect(store.pendingQuestionRecovery == nil)
+    }
+
+    @Test func agentDeletedEventDropsPendingQuestionRecovery() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.getConversation"] = ["messages": []]
+        let store = ConversationStore(connectionManager: fake)
+        await store.fetchConversation(agentId: "a", workspaceId: "w")
+        fake.pendingMethods.insert("agent.getConversation")
+        pushMarker(store, "q1")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.pendingQuestionRecovery != nil)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:deleted", "data": ["agentId": "a"]] as [String: Any]
+        ])
+
+        #expect(store.agentNotFound)
+        #expect(store.pendingQuestionRecovery == nil)
     }
 
     @Test func sendMessageMirrorsMessageMetadataOntoOptimisticRow() async throws {

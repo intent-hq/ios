@@ -90,6 +90,19 @@ import SwiftUI
         get { commands.lastSeenMessageId }
         set { commands.lastSeenMessageId = newValue }
     }
+    /// Recovery of the marked question-bearing message when it is outside the
+    /// loaded page (iOS loads only the most-recent page). Non-nil exactly while
+    /// `pendingQuestionsMessageId` names a row that was not resident when the
+    /// marker was reconciled: `loading` while the `aroundMessageId` seek is in
+    /// flight, `found` with the recovered row, `notFound` when the daemon does
+    /// not know the id, `error` after the bounded retries are exhausted. Cleared
+    /// when the marker changes (`""`, nil, another id), on reset, or once the
+    /// agent is known to be gone. Port of cloudlands-fe `chat-scrollback-saga.ts`
+    /// `recoverPendingQuestionWorker` / `wizard-gate.ts`
+    /// `deriveMarkedQuestionRecoveryState`. The view model prepends the
+    /// recovered row to the transcript-derived question set and fails closed
+    /// (composer withheld) while no recovered wizard exists.
+    var pendingQuestionRecovery: PendingQuestionRecovery?
 
     private let connectionManager: ConnectionManagerRouting
     @ObservationIgnored private let liveTranscript: ConversationLiveTranscript
@@ -105,6 +118,17 @@ import SwiftUI
     /// Buffer for stream events that arrive while the initial conversation fetch is in progress.
     /// This prevents lost deltas when subscribing before fetching.
     private var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
+    /// Bumped whenever an `agent:updated` push for our agent is applied, and
+    /// whenever the bound agent changes (`bindAgent`: agent switch or `reset`),
+    /// so an `agent.get` reply that was in flight when either happened can
+    /// detect it is stale and leave the session-metadata markers alone.
+    @ObservationIgnored private var sessionMetadataGeneration = 0
+    /// The in-flight marked-message seek (at most one; keyed by
+    /// `pendingQuestionRecovery.messageId`).
+    @ObservationIgnored private var pendingQuestionRecoveryTask: Task<Void, Never>?
+    /// FE parity: `MARKED_QUESTION_RETRY_DELAYS_MS = [250, 1_000]`. Instance
+    /// property so tests can shorten the retry schedule.
+    @ObservationIgnored var markedQuestionRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(1000)]
 
     /// Tracks the last failed send so retrying the same content reuses the messageId
     /// (preventing duplicate messages on the server).
@@ -132,6 +156,9 @@ import SwiftUI
         }
         liveTranscript.onFetchError = { [weak self] error in
             self?.raiseAgentNotFoundIfDefinitive(error)
+        }
+        liveTranscript.onTranscriptReplaced = { [weak self] in
+            self?.reconcilePendingQuestionRecovery()
         }
         observeConnection()
     }
@@ -186,7 +213,15 @@ import SwiftUI
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
     /// The pending attention request is always taken from the server response
     /// (raise or clear) — it is server-authoritative with no optimistic state.
+    /// The session-metadata markers are skipped when an `agent:updated` push
+    /// landed, or the bound agent changed (agent switch / `reset`), while the
+    /// request was in flight: the reply predates the change, so applying it
+    /// would revert the newer marker or leak the previous agent's markers into
+    /// the new conversation. As a second line of defence the reply is also
+    /// dropped when the store is bound to a different agent than the one the
+    /// request was issued for.
     func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
+        let generation = sessionMetadataGeneration
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
                 if raiseOnly {
@@ -195,6 +230,9 @@ import SwiftUI
                     isStreaming = state.isStreaming
                 }
                 attentionRequest = state.attentionRequest
+                guard generation == sessionMetadataGeneration,
+                      self.agentId == nil || self.agentId == agentId
+                else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
                 }
@@ -202,6 +240,7 @@ import SwiftUI
                     dismissedQuestionsMessageId = dismissedId
                 }
                 if let seenId = state.lastSeenMessageId { lastSeenMessageId = seenId }
+                reconcilePendingQuestionRecovery()
             }
         } catch {
             raiseAgentNotFoundIfDefinitive(error)
@@ -232,12 +271,137 @@ import SwiftUI
 
     // MARK: - Fetch conversation
 
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+    /// Bind the store to `agentId`. Switching away from a previously bound
+    /// agent (to another agent, or to `nil` on `reset`) invalidates any
+    /// in-flight `agent.get` so its session-metadata markers cannot land in
+    /// the new conversation. The first bind from `nil` does not bump: an
+    /// `agent.get` issued before the conversation fetch bound the same agent
+    /// is still authoritative.
+    private func bindAgent(_ agentId: String?) {
+        if let bound = self.agentId, bound != agentId {
+            sessionMetadataGeneration += 1
+        }
         self.agentId = agentId
+    }
+
+    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+        bindAgent(agentId)
         if let workspaceId = workspaceId {
             self.workspaceId = workspaceId
         }
         await liveTranscript.fetchConversation(agentId: agentId, workspaceId: workspaceId)
+        reconcilePendingQuestionRecovery()
+    }
+
+    // MARK: - Marked question recovery (aroundMessageId seek, PROTOCOL §5.5)
+
+    /// Reconcile `pendingQuestionRecovery` against the marker and the loaded
+    /// transcript. Runs whenever the marker changes (`agent.get` reply,
+    /// `agent:updated` push), a fetch completes, or the live channel replaces/
+    /// merges the transcript. Marker set + row not resident + not loading ⇒
+    /// exactly one seek per marker id; a resident row never issues a request
+    /// (an in-flight seek for it is settled `found` from the resident row);
+    /// any other marker value drops the state and cancels the seek.
+    private func reconcilePendingQuestionRecovery() {
+        guard case .set(let markedId) = PendingQuestionSet.MarkerState(pendingQuestionsMessageId),
+              let agentId, !agentNotFound else {
+            clearPendingQuestionRecovery()
+            return
+        }
+        if let recovery = pendingQuestionRecovery, recovery.messageId != markedId {
+            clearPendingQuestionRecovery()
+        }
+        if let resident = messages.first(where: { $0.id == markedId }) {
+            if pendingQuestionRecovery?.status == .loading {
+                pendingQuestionRecoveryTask?.cancel()
+                pendingQuestionRecoveryTask = nil
+                pendingQuestionRecovery = PendingQuestionRecovery(
+                    messageId: markedId, status: .found, message: resident)
+            }
+            return
+        }
+        guard !isLoading, pendingQuestionRecovery == nil else { return }
+        pendingQuestionRecovery = PendingQuestionRecovery(messageId: markedId, status: .loading)
+        pendingQuestionRecoveryTask = Task { [weak self] in
+            await self?.recoverMarkedQuestionMessage(agentId: agentId, messageId: markedId)
+        }
+    }
+
+    private func clearPendingQuestionRecovery() {
+        pendingQuestionRecoveryTask?.cancel()
+        pendingQuestionRecoveryTask = nil
+        if pendingQuestionRecovery != nil { pendingQuestionRecovery = nil }
+    }
+
+    /// The seek worker: `agent.getConversation(aroundMessageId, limit: 1)`,
+    /// retried after 250 ms / 1 s on transport errors; `-32602` (the daemon
+    /// does not know the id) settles `notFound` without retry; exhausted
+    /// retries settle `error`. Every await is followed by a currency check so
+    /// a marker change mid-flight drops the result instead of settling stale
+    /// state.
+    private func recoverMarkedQuestionMessage(agentId: String, messageId: String) async {
+        let delays = markedQuestionRetryDelays
+        for attempt in 0...delays.count {
+            do {
+                let message = try await commands.fetchMessage(
+                    agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+                guard isPendingQuestionRecoveryCurrent(messageId) else { return }
+                if let message {
+                    settlePendingQuestionRecovery(messageId, status: .found, message: message)
+                } else {
+                    settlePendingQuestionRecovery(messageId, status: .notFound)
+                }
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                guard isPendingQuestionRecoveryCurrent(messageId) else { return }
+                let nsError = error as NSError
+                if nsError.domain == "WebSocket" && nsError.code == -32602 {
+                    if nsError.isEntityNotFound {
+                        raiseAgentNotFoundIfDefinitive(error)
+                        clearPendingQuestionRecovery()
+                        return
+                    }
+                    AppLog.conversation.warning(
+                        "[ConversationStore] marked question message \(messageId) unknown to the daemon: "
+                            + nsError.localizedDescription)
+                    settlePendingQuestionRecovery(messageId, status: .notFound)
+                    return
+                }
+                guard attempt < delays.count else {
+                    AppLog.conversation.error(
+                        "[ConversationStore] Failed to recover marked question message \(messageId) "
+                            + "after bounded retries: \(error)")
+                    settlePendingQuestionRecovery(messageId, status: .error)
+                    return
+                }
+                AppLog.conversation.warning(
+                    "[ConversationStore] Retrying marked question recovery for \(messageId) "
+                        + "(attempt \(attempt + 1)): \(error)")
+                do {
+                    try await Task.sleep(for: delays[attempt])
+                } catch {
+                    return
+                }
+                guard isPendingQuestionRecoveryCurrent(messageId) else { return }
+            }
+        }
+    }
+
+    private func isPendingQuestionRecoveryCurrent(_ messageId: String) -> Bool {
+        !Task.isCancelled
+            && pendingQuestionRecovery?.messageId == messageId
+            && pendingQuestionRecovery?.status == .loading
+    }
+
+    private func settlePendingQuestionRecovery(
+        _ messageId: String, status: PendingQuestionRecovery.Status,
+        message: ConversationMessage? = nil
+    ) {
+        pendingQuestionRecoveryTask = nil
+        pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: messageId, status: status, message: message)
     }
 
     // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
@@ -327,7 +491,7 @@ import SwiftUI
         isSubscribing = true
         defer { isSubscribing = false }
 
-        self.agentId = agentId
+        bindAgent(agentId)
         self.workspaceId = workspaceId
 
         // Unsubscribe any previous server-side subscription to prevent duplicate events
@@ -362,7 +526,9 @@ import SwiftUI
     }
 
     /// Internal (not private) so tests can drive the real ConnectionManager
-    /// registration/replay path into the store.
+    /// registration/replay path into the store. Recovery reconciliation runs
+    /// from `onTranscriptReplaced`, so the production handler registered by
+    /// `subscribeLiveChat` and this path behave identically.
     func handleChatSubscriptionPush(_ push: SubscriptionPush) {
         liveTranscript.handlePush(push)
     }
@@ -434,6 +600,7 @@ import SwiftUI
             // isLoading buffer so a deletion during the initial fetch is not lost.
             if let myAgentId = agentId, eventAgentId == myAgentId {
                 agentNotFound = true
+                clearPendingQuestionRecovery()
             }
             return
         case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
@@ -549,6 +716,7 @@ import SwiftUI
     /// push-style so an answer/dismissal from another client (or the daemon
     /// clearing the marker to "") retires the wizard here too.
     private func handleAgentUpdated(_ data: [String: Any]) {
+        sessionMetadataGeneration += 1
         if let pendingId = data["pendingQuestionsMessageId"] as? String {
             pendingQuestionsMessageId = pendingId
         }
@@ -560,6 +728,7 @@ import SwiftUI
         if let seenId = data["lastSeenMessageId"] as? String {
             lastSeenMessageId = seenId
         }
+        reconcilePendingQuestionRecovery()
     }
 
     private func handleStreamStart(_ data: [String: Any]) {
@@ -844,7 +1013,7 @@ import SwiftUI
         liveTranscript.reset()
         commands.reset()
         watchedAgentCoordinator.reset()
-        agentId = nil
+        bindAgent(nil)
         workspaceId = nil
         subscriptionId = nil
         currentStreamId = nil
@@ -853,5 +1022,31 @@ import SwiftUI
         lastFailedSend = nil
         attentionRequest = nil
         agentNotFound = false
+        clearPendingQuestionRecovery()
+    }
+}
+
+/// Recovery state for the marked question-bearing message when it is outside
+/// the loaded page (`ConversationStore.pendingQuestionRecovery`). FE parity:
+/// `chatState.pendingQuestionRecovery` (`loading | found | not-found | error`);
+/// the FE's `cancelled` is represented here by the state being dropped (nil).
+struct PendingQuestionRecovery {
+    enum Status: Equatable {
+        case loading
+        case found
+        case notFound
+        case error
+    }
+
+    /// The marker id this recovery is for (`pendingQuestionsMessageId`).
+    let messageId: String
+    let status: Status
+    /// The recovered row; non-nil only when `status == .found`.
+    let message: ConversationMessage?
+
+    init(messageId: String, status: Status, message: ConversationMessage? = nil) {
+        self.messageId = messageId
+        self.status = status
+        self.message = message
     }
 }

@@ -20,6 +20,9 @@ final class ConversationLiveTranscript {
     @ObservationIgnored var onStreamingChanged: (@MainActor (Bool) -> Void)?
     @ObservationIgnored var onInitialLoadCompleted: (@MainActor () -> Void)?
     @ObservationIgnored var onFetchError: (@MainActor (Error) -> Void)?
+    /// Fired after the live chat channel replaced (snapshot) or merged (delta)
+    /// the transcript, so the owner can reconcile state keyed on row residency.
+    @ObservationIgnored var onTranscriptReplaced: (@MainActor () -> Void)?
 
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
@@ -295,6 +298,7 @@ final class ConversationLiveTranscript {
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
         AppLog.conversation.debug(
             "[ConversationStore] Applied chat snapshot with \(items.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
+        onTranscriptReplaced?()
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
@@ -325,6 +329,7 @@ final class ConversationLiveTranscript {
         }
         AppLog.conversation.debug(
             "[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
+        onTranscriptReplaced?()
     }
 
     private func upsertBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
