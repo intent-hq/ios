@@ -61,7 +61,8 @@ import SwiftUI
     var agentNotFound = false
     /// The pending-questions marker (PROTOCOL §5.5): the daemon writes the id of
     /// the question-bearing assistant message once the asking turn ends, and
-    /// `""` once the set is answered/dismissed/superseded. Three-state on the
+    /// `""` once the set is answered or dismissed; a newer question-bearing
+    /// turn overwrites it with that message's id. Three-state on the
     /// client too — `nil` means the daemon never reported it (legacy
     /// transcript-tail fallback). Refreshed from `agent.get` (the `agent:idle`
     /// refresh is what raises it when the asking turn ends) and updated
@@ -275,6 +276,19 @@ import SwiftUI
         let buffer = streamEventBuffer
         streamEventBuffer.removeAll()
         guard !buffer.isEmpty else { return }
+
+        // A turn boundary that landed mid-load is never replayed below, but its
+        // agent.get refresh is what raises the pending-questions marker (and
+        // the attention request) when the asking turn ends — and the load's own
+        // agent.get may have raced ahead of the daemon's marker write. Run ONE
+        // refresh regardless of how many boundaries were buffered, and before
+        // the firehose discard: the live channel covers transcript content only.
+        let hasTurnBoundary = buffer.contains {
+            $0.eventType == "agent:idle" || $0.eventType == "agent:status-changed"
+        }
+        if hasTurnBoundary, let agentId = self.agentId {
+            Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+        }
 
         // If the chat.subscribe channel went live while events were buffered, the
         // snapshot/deltas already cover this content — discard the firehose buffer.

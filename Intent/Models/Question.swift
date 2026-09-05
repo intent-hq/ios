@@ -213,8 +213,15 @@ struct PendingQuestionSet: Equatable {
         case .cleared:
             return nil
         case .set(let markedId):
-            guard let marked = messages.first(where: { $0.id == markedId }),
-                  marked.role == .assistant, marked.isStreaming != true else {
+            guard let marked = messages.first(where: { $0.id == markedId }) else {
+                // Fails open (no wizard, plain composer): the marked row is not
+                // in the loaded window (slim transcript truncation). Recovery is
+                // a follow-up; log so the case is diagnosable in the field.
+                AppLog.conversation.debug(
+                    "[PendingQuestionSet] marker \(markedId) set but row not loaded")
+                return nil
+            }
+            guard marked.role == .assistant, marked.isStreaming != true else {
                 return nil
             }
             if queuedAnsweredQuestionsMessageIds.contains(markedId)
@@ -298,8 +305,8 @@ extension QueuedMessage {
 /// answeredQuestionsMessageId }` tag, or nil when `metadata` is not that tag.
 private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]?) -> String? {
     guard let metadata,
-          metadata["type"]?.value as? String == "question_answers",
-          let answered = metadata["answeredQuestionsMessageId"]?.value as? String,
+          metadata["type"]?.stringValue == "question_answers",
+          let answered = metadata["answeredQuestionsMessageId"]?.stringValue,
           !answered.isEmpty else {
         return nil
     }

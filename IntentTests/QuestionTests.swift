@@ -522,11 +522,14 @@ struct PendingQuestionDerivationTests {
             messages: messages, isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
     }
 
-    @Test func markerSetStillNilWhileShowingPendingUserMessageOrEmpty() {
+    @Test func markerSetNilWhileShowingPendingUserMessage() {
         let messages = [questionAssistant(id: "a1")]
         #expect(PendingQuestionSet.derive(
             messages: messages, isTurnActive: false, showingPendingUserMessage: true,
             pendingQuestionsMessageId: "a1") == nil)
+    }
+
+    @Test func markerSetNilOnEmptyTranscript() {
         #expect(PendingQuestionSet.derive(
             messages: [], isTurnActive: false, pendingQuestionsMessageId: "a1") == nil)
     }

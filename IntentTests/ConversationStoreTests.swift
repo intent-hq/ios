@@ -662,6 +662,47 @@ struct ConversationStoreTests {
         #expect(store.lastSeenMessageId == "m9")
     }
 
+    @Test func turnBoundaryBufferedDuringInitialFetchTriggersOneMarkerRefresh() async throws {
+        // Regression (PR #210 review): agent:idle / agent:status-changed that
+        // land while isLoading are buffered but never replayed, so the
+        // raiseOnly agent.get that raises the pending-questions marker at the
+        // asking turn's end was skipped for a turn ending mid-load — the marker
+        // stayed nil (legacy fallback) and the wizard was not sticky.
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.getConversation")
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "a", "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1"],
+            ] as [String: Any]
+        ] as [String: Any]
+        let store = ConversationStore(connectionManager: fake)
+
+        let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(store.isLoading)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:status-changed",
+                      "data": ["agentId": "a", "status": "idle"]] as [String: Any]
+        ])
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:idle", "data": ["agentId": "a"]] as [String: Any]
+        ])
+        #expect(store.pendingQuestionsMessageId == nil,
+                "turn boundaries are buffered while the fetch is in flight")
+
+        fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
+        await fetch.value
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!store.isLoading)
+        #expect(store.pendingQuestionsMessageId == "a1",
+                "the buffered turn boundary still refreshes the marker after load")
+        #expect(fake.requestLog.filter { $0.method == "agent.get" }.count == 1,
+                "one refresh regardless of how many boundaries were buffered")
+    }
+
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
