@@ -683,6 +683,275 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions?.messageId == "a2", "a new marker id keys a new wizard mount")
     }
 
+    // MARK: - Marked question recovery (row outside the loaded page, Phase 2)
+
+    /// A loaded page that does NOT contain the marked row `a1`.
+    private func offPageTranscript() -> [ConversationMessage] {
+        [
+            textMessage(id: "u9", role: .user, text: "later wake"),
+            textMessage(id: "a9", role: .assistant,
+                        text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+        ]
+    }
+
+    @Test func recoveredMarkedSetRendersWhenRowIsOffPage() throws {
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+
+        let set = try #require(vm.pendingQuestions, "the recovered row feeds the wizard")
+        #expect(set.messageId == "a1")
+        #expect(set.questions.count == 1)
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+        #expect(vm.suggestedPrompts.isEmpty, "prompts stay hidden while the wizard pends")
+    }
+
+    @Test func recoveredMarkedSetStaysWhileStreaming() {
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+        vm.store.isStreaming = true
+
+        #expect(vm.pendingQuestions?.messageId == "a1", "marker authority applies to the recovered copy")
+    }
+
+    @Test func recoveredMarkedSetAnswersLikeResidentOne() async throws {
+        let (vm, fake) = makeFakeBackedVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+        let answers = try firstAnswer(vm)
+
+        await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
+
+        let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
+        let metadata = try #require(sent.params["messageMetadata"] as? [String: Any])
+        #expect(metadata["answeredQuestionsMessageId"] as? String == "a1")
+        #expect(vm.messages.last?.answeredQuestionsMessageId == "a1")
+        #expect(vm.pendingQuestions == nil, "the tagged optimistic row hides the recovered wizard")
+        #expect(vm.isPendingQuestionRecoveryLoading == false,
+                "an answered recovered set does not fail closed")
+        #expect(vm.store.pendingQuestionsMessageId == "a1", "no daemon update has landed yet")
+
+        vm.store.pendingQuestionsMessageId = ""
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+    }
+
+    @Test func recoveredMarkedSetHiddenByQueuedTaggedAnswer() {
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+        vm.store.queuedMessages = [
+            queuedEntry(id: "q-1", metadata: [
+                "type": AnyCodable("question_answers"),
+                "answeredQuestionsMessageId": AnyCodable("a1"),
+            ]),
+        ]
+
+        #expect(vm.pendingQuestions == nil, "the queued tagged answer bridge applies to the recovered copy")
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+    }
+
+    @Test func recoveredMarkedSetDismissesLikeResidentOne() async {
+        let (vm, fake) = makeFakeBackedVM()
+        fake.responseMap["agent.dismissQuestions"] = [
+            "success": true, "dismissedQuestionsMessageId": "a1",
+        ] as [String: Any]
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+        #expect(vm.pendingQuestions != nil)
+
+        await vm.dismissQuestions(messageId: "a1")
+
+        #expect(vm.pendingQuestions == nil, "the dismissed recovered set never re-pends")
+        #expect(vm.isPendingQuestionRecoveryLoading == false,
+                "a dismissed recovered set does not fail closed")
+        #expect(vm.suggestedPrompts == ["Run tests"], "the ordinary composer slot is back")
+    }
+
+    @Test func recoveryLoadingHidesPromptsAndFailsClosed() {
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(messageId: "a1", status: .loading)
+
+        #expect(vm.pendingQuestions == nil, "nothing to render yet")
+        #expect(vm.isPendingQuestionRecoveryLoading, "composer withheld while the seek is in flight")
+        #expect(vm.suggestedPrompts.isEmpty, "prompts withheld while the seek is in flight")
+    }
+
+    @Test func recoveryNotFoundStaysFailClosedUntilMarkerCleared() {
+        // Exhaustion ends the network retries, not marker authority: the
+        // composer stays withheld until the daemon clears/replaces the marker.
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(messageId: "a1", status: .notFound)
+
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.isPendingQuestionRecoveryLoading, "not-found still fails closed")
+        #expect(vm.suggestedPrompts.isEmpty)
+
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(messageId: "a1", status: .error)
+        #expect(vm.isPendingQuestionRecoveryLoading, "exhausted retries still fail closed")
+
+        vm.store.pendingQuestionsMessageId = ""
+        vm.store.pendingQuestionRecovery = nil
+        #expect(vm.isPendingQuestionRecoveryLoading == false, "the marker clear reopens the composer")
+        #expect(vm.suggestedPrompts == ["Run tests"])
+    }
+
+    @Test func recoveryFailsClosedBeforeStoreSeekStarts() {
+        // Marker set, row not resident, store has not started a seek — still
+        // fail closed (the store issues the seek on its next reconcile).
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = nil
+
+        #expect(vm.isPendingQuestionRecoveryLoading, "marker authority fails closed even before the seek starts")
+    }
+
+    @Test func recoveryLoadingFalseWhileInitialFetchInFlight() {
+        // The row may simply not have loaded yet: no fail-closed gate (and no
+        // placeholder) until the initial transcript fetch has settled.
+        let vm = makeVM()
+        vm.store.messages = []
+        vm.store.isLoading = true
+        vm.store.pendingQuestionsMessageId = "a1"
+
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+
+        vm.store.isLoading = false
+        #expect(vm.isPendingQuestionRecoveryLoading, "settled fetch without the row fails closed")
+    }
+
+    @Test func recoveryLoadingFalseWhenMarkedRowIsResident() {
+        let vm = makeVM()
+        vm.store.messages = [questionMessage(id: "a1")]
+        vm.store.pendingQuestionsMessageId = "a1"
+
+        #expect(vm.pendingQuestions?.messageId == "a1")
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+    }
+
+    @Test func recoveryLoadingFalseWithoutMarker() {
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        #expect(vm.isPendingQuestionRecoveryLoading == false, "legacy path: no marker, no gate")
+        #expect(vm.suggestedPrompts == ["Run tests"])
+
+        vm.store.pendingQuestionsMessageId = ""
+        #expect(vm.isPendingQuestionRecoveryLoading == false, "cleared marker: no gate")
+    }
+
+    @Test func residentRowPreferredOverStaleRecoveredCopy() throws {
+        // The recovered copy is superseded once the row is in the transcript:
+        // the resident row (with its current content) drives the wizard.
+        let vm = makeVM()
+        let staleCopy = ConversationMessage(
+            id: "a1", role: .assistant,
+            contentBlocks: [questionResourceBlock(attachmentId: "tar-stale00000000", question: "Stale?")])
+        vm.store.messages = [
+            questionMessage(id: "a1"),
+            textMessage(id: "u9", role: .user, text: "later wake"),
+        ]
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: staleCopy)
+
+        let set = try #require(vm.pendingQuestions)
+        #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"], "the resident row wins")
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+    }
+
+    @Test func recoveredCopyForAnotherMarkerIdIsIgnored() {
+        // A recovery that settled for a previous marker id must not render
+        // under a newer marker (the store drops it on reconcile; the view
+        // model never trusts a mismatched id either).
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a2"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.isPendingQuestionRecoveryLoading, "the new marker fails closed until its own seek settles")
+    }
+
+    @Test func recoveredRowWithoutQuestionsStaysFailClosed() {
+        // Found, but the row carries no valid question set: nothing can
+        // render, so the composer stays withheld under marker authority.
+        let vm = makeVM()
+        vm.store.messages = offPageTranscript()
+        vm.store.pendingQuestionsMessageId = "a1"
+        vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
+            messageId: "a1", status: .found,
+            message: textMessage(id: "a1", role: .assistant, text: "no questions here"))
+
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.isPendingQuestionRecoveryLoading)
+    }
+
+    @Test func recoveredSetRendersThroughStoreSeek() async throws {
+        // End to end through the store: the marker push names an off-page
+        // row, the seek recovers it, and the wizard renders from the copy.
+        let vm = makeVM()
+        let fake = FakeConnectionManager()
+        let questionJSON = """
+        {"attachmentId": "tar-0123456789ab", "header": "Auth", \
+        "question": "Which auth method?", \
+        "options": [{"label": "OAuth"}, {"label": "API key"}]}
+        """
+        let resourceBlock: [String: Any] = [
+            "type": "resource",
+            "resource": [
+                "uri": "intent-question://q",
+                "mimeType": Question.resourceMimeType,
+                "text": questionJSON,
+            ] as [String: Any],
+        ]
+        let pageRow: [String: Any] = [
+            "id": "u9", "role": "user", "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [["type": "text", "id": "u9:0", "text": "later wake"] as [String: Any]],
+        ]
+        let markedRow: [String: Any] = [
+            "id": "a1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [resourceBlock],
+        ]
+        fake.responseQueueMap["agent.getConversation"] = [
+            ["messages": [pageRow]] as [String: Any],
+            ["messages": [markedRow]] as [String: Any],
+        ]
+        vm.store = ConversationStore(connectionManager: fake)
+        await vm.store.fetchConversation(agentId: "test-agent", workspaceId: "test-ws")
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+
+        vm.store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:updated",
+                      "data": ["agentId": "test-agent",
+                               "pendingQuestionsMessageId": "a1"]] as [String: Any]
+        ])
+        #expect(vm.pendingQuestions == nil)
+        #expect(vm.isPendingQuestionRecoveryLoading, "fails closed while the seek is in flight")
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let set = try #require(vm.pendingQuestions, "the recovered row renders the wizard")
+        #expect(set.messageId == "a1")
+        #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"])
+        #expect(vm.isPendingQuestionRecoveryLoading == false)
+    }
+
     // MARK: - Suggested-prompt send (draft retention)
 
     @Test func sendSuggestedPromptDoesNotAttachPendingImages() async throws {

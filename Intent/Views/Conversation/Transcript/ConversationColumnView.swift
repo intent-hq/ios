@@ -124,9 +124,36 @@ struct ConversationColumnView: View {
             .padding(.bottom, questionWizardCollapsed ? 4 : 8)
         }
 
-        if viewModel.pendingQuestions == nil || questionWizardCollapsed {
+        // Fail closed while the marked question row is being recovered from
+        // outside the loaded page: no composer until the wizard can render
+        // or the daemon clears/replaces the marker (FE parity: ChatPanel's
+        // `pendingQuestionRecoveryLoading`). Collapse still reveals the
+        // composer, as with a rendered wizard.
+        if viewModel.isPendingQuestionRecoveryLoading && !questionWizardCollapsed {
+            PendingQuestionRecoveryPlaceholder()
+        }
+
+        if (viewModel.pendingQuestions == nil && !viewModel.isPendingQuestionRecoveryLoading)
+            || questionWizardCollapsed {
             MessageInputView(viewModel: viewModel, store: viewModel.store)
         }
+    }
+}
+
+private struct PendingQuestionRecoveryPlaceholder: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Loading questions...")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .accessibilityElement(children: .combine)
     }
 }
 
