@@ -14,9 +14,11 @@ only in the files that already carry it: `App/IntentApp.swift`, `DesignSystem/La
 `Views/Conversation/Composer/MessageInputView.swift`,
 `Views/Conversation/Composer/SubmittableTextView.swift`,
 `Views/Conversation/Transcript/ConversationColumnView.swift`,
+`Views/Conversation/Transcript/ConversationTranscriptView.swift`,
 `Views/Onboarding/ManualTokenEntryView.swift`, `Views/Onboarding/PairingView.swift`,
 `Views/Onboarding/QRScannerView.swift`, `Views/Workspaces/WorkspaceAttentionCue.swift`,
-`Views/Workspaces/WorkspaceDetailView.swift` (plus `IntentTests/PairingOptionTests.swift`);
+`Views/Workspaces/WorkspaceDetailView.swift`, `Views/Workspaces/WorkspaceListSidebar.swift`,
+`Views/Workspaces/WorkspaceListView.swift` (plus `IntentTests/PairingOptionTests.swift`);
 `#if canImport(TailcatKit)` only in `Services/ConnectionManager.swift`,
 `Services/TailcatTunnel.swift`, and `IntentTests/TailcatKitSmokeTests.swift`. Every
 visionOS branch must leave an iOS branch identical to the prior behaviour. Verify with
