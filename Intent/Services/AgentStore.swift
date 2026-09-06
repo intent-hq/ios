@@ -82,7 +82,7 @@ extension SpecialistInfo {
     /// false so views keep the loading placeholder instead of "No agents".
     var hasLoaded = false
 
-    private let connectionManager: ConnectionManagerRouting
+    let connectionManager: ConnectionManagerRouting
     private var workspaceId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
     private var fetchDebounceTask: Task<Void, Never>?

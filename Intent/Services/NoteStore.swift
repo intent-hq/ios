@@ -13,7 +13,7 @@ import Observation
 
     private var workspaceId: String?
     @ObservationIgnored private var eventHandlerId: UUID?
-    private let connectionManager: ConnectionManagerRouting
+    let connectionManager: ConnectionManagerRouting
 
     // Live-state tracking (subscription.push)
     private var noteLive = false
