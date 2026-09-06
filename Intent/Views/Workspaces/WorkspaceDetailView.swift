@@ -269,7 +269,6 @@ struct WorkspaceDetailView: View {
             tabOrnament
         }
         #endif
-
     }
 
     #if os(visionOS)
