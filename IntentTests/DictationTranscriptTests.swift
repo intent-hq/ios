@@ -104,22 +104,97 @@ struct DictationTranscriptTests {
         #expect(fresh.apply(transcription: "hi", to: "draft edited") == .diverged)
     }
 
+    /// Regression: a restored draft never fires a selection change, so no
+    /// caret has been observed (`nil`) — dictation must insert at the end of
+    /// the draft, not at offset 0.
+    @Test func nilCaretInsertsAtEndOfRestoredDraft() {
+        var session = DictationSession(baseText: "restored draft", insertionOffset: nil)
+        #expect(session.apply(transcription: "hello", to: "restored draft")
+            == .merged("restored draft hello"))
+        // A nil caret over an empty composer behaves like a fresh session.
+        var empty = DictationSession(baseText: "", insertionOffset: nil)
+        #expect(empty.apply(transcription: "hi", to: "") == .merged("hi"))
+    }
+
     // MARK: - Stop actions (stop-after-stop window)
 
     @Test func activeSessionStopsFollowReason() {
-        #expect(DictationStopAction.action(for: .userTapped, isRecording: true) == .finish)
-        #expect(DictationStopAction.action(for: .send, isRecording: true) == .cancelAndSever)
-        #expect(DictationStopAction.action(for: .textEdited, isRecording: true) == .cancelAndSever)
+        #expect(DictationStopAction.action(for: .userTapped, phase: .recording) == .finish)
+        #expect(DictationStopAction.action(for: .send, phase: .recording) == .cancelAndSever)
+        #expect(DictationStopAction.action(for: .textEdited, phase: .recording) == .cancelAndSever)
     }
 
     /// Regression: a send in the graceful-stop→final-result window
-    /// (isRecording already false) must still sever the transcript callback
+    /// (no longer recording) must still sever the transcript callback
     /// so the late final cannot resurrect the sent text.
     @Test func sendAfterGracefulStopStillSevers() {
-        #expect(DictationStopAction.action(for: .send, isRecording: false) == .severOnly)
-        #expect(DictationStopAction.action(for: .viewDisappeared, isRecording: false) == .severOnly)
+        #expect(DictationStopAction.action(for: .send, phase: .idle) == .severOnly)
+        #expect(DictationStopAction.action(for: .viewDisappeared, phase: .idle) == .severOnly)
         // Graceful reasons with no active session remain a no-op.
-        #expect(DictationStopAction.action(for: .userTapped, isRecording: false) == .ignore)
-        #expect(DictationStopAction.action(for: .recognizerFinished, isRecording: false) == .ignore)
+        #expect(DictationStopAction.action(for: .userTapped, phase: .idle) == .ignore)
+        #expect(DictationStopAction.action(for: .recognizerFinished, phase: .idle) == .ignore)
+    }
+
+    // MARK: - Start window (authorization race)
+
+    /// Regression: any stop while `startRecording()` is awaiting permission
+    /// prompts (second tap, disappear, scene-inactive, send) must cancel the
+    /// pending start so `begin` never runs a second engine or resumes capture
+    /// after the composer is gone.
+    @Test func stopDuringStartWindowCancelsPendingStart() {
+        for reason: DictationStopReason in [.userTapped, .viewDisappeared, .sceneInactive, .send] {
+            #expect(DictationStopAction.action(for: reason, phase: .starting) == .cancelStart)
+        }
+
+        var state = DictationStartState()
+        let token = state.requestStart()
+        #expect(token != nil)
+        // Stop lands while authorization is pending.
+        state.stopped()
+        // The awaited start may not proceed and cannot reach recording.
+        #expect(!state.canProceed(token!))
+        let reachedRecording = state.started(token!)
+        #expect(!reachedRecording)
+        #expect(state.phase == .idle)
+    }
+
+    /// A second start during the starting window is refused, and a cancelled
+    /// token stays stale even after a fresh start begins.
+    @Test func startWindowTokensAreGenerationScoped() {
+        var state = DictationStartState()
+        let first = state.requestStart()
+        #expect(first != nil)
+        let reentrant = state.requestStart()
+        #expect(reentrant == nil)
+
+        state.stopped()
+        let second = state.requestStart()
+        #expect(second != nil)
+        // The older attempt stays cancelled; the fresh one proceeds.
+        #expect(!state.canProceed(first!))
+        #expect(state.canProceed(second!))
+        let reachedRecording = state.started(second!)
+        #expect(reachedRecording)
+        #expect(state.phase == .recording)
+        // While recording, another start is still refused.
+        let whileRecording = state.requestStart()
+        #expect(whileRecording == nil)
+    }
+
+    /// An uncancelled start completes; a failed one returns to idle.
+    @Test func startWindowCompletesOrAborts() {
+        var state = DictationStartState()
+        let token = state.requestStart()!
+        let reachedRecording = state.started(token)
+        #expect(reachedRecording)
+        #expect(state.phase == .recording)
+
+        var failing = DictationStartState()
+        let failToken = failing.requestStart()!
+        failing.abort(failToken)
+        #expect(failing.phase == .idle)
+        // Idle again: a new start is allowed.
+        let restarted = failing.requestStart()
+        #expect(restarted != nil)
     }
 }

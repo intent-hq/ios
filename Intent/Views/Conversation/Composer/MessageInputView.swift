@@ -16,7 +16,10 @@ struct MessageInputView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
     @State private var dictationSession: DictationSession?
-    @State private var caretOffset: Int = 0
+    /// Last caret offset observed from the text view; `nil` until a selection
+    /// change fires (a programmatically restored draft never fires one), which
+    /// dictation treats as end-of-text.
+    @State private var caretOffset: Int?
     #endif
 
     // Local text state to decouple TextField from viewModel updates.
@@ -338,10 +341,10 @@ struct MessageInputView: View {
         Button {
             toggleDictation()
         } label: {
-            Image(systemName: dictation.isRecording ? "stop.circle.fill" : "mic.fill")
+            Image(systemName: dictation.isActive ? "stop.circle.fill" : "mic.fill")
                 .font(.title2)
                 .foregroundStyle(
-                    dictation.isRecording
+                    dictation.isActive
                         ? Theme.destructive(for: colorScheme)
                         : Theme.primary(for: colorScheme)
                 )
@@ -349,12 +352,14 @@ struct MessageInputView: View {
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget)
         }
-        .accessibilityLabel(dictation.isRecording ? "Stop dictation" : "Dictate")
+        .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
     }
 
     private func toggleDictation() {
         HapticManager.impact(.light)
-        if dictation.isRecording {
+        // isActive covers the starting window too: a second tap while the
+        // permission prompts are pending cancels the start before any audio.
+        if dictation.isActive {
             dictation.stop(reason: .userTapped)
             return
         }

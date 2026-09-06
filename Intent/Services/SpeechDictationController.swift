@@ -32,13 +32,67 @@ enum DictationStopReason {
     }
 }
 
+/// Lifecycle phase of the dictation controller. `starting` covers the window
+/// between the mic tap and the audio engine actually running, while
+/// `startRecording()` awaits the permission prompts.
+enum DictationPhase: Equatable {
+    case idle
+    case starting
+    case recording
+}
+
+/// Pure start-window state for `SpeechDictationController`, extracted so the
+/// authorization race is unit-testable without Speech. `startRecording()`
+/// awaits permission prompts before any audio starts; a stop during that
+/// window (second tap, view disappeared, scene inactive, send) must cancel
+/// the pending start so `begin` never runs. Each start carries a generation
+/// token: it may only proceed past an await while the machine is still
+/// starting *that same attempt* — a cancel followed by a fresh start
+/// invalidates the older pending one.
+struct DictationStartState: Equatable {
+    private(set) var phase: DictationPhase = .idle
+    private(set) var generation = 0
+
+    /// Begins a new start attempt (idle → starting) and returns its token;
+    /// `nil` when a session is already starting or recording.
+    mutating func requestStart() -> Int? {
+        guard phase == .idle else { return nil }
+        generation += 1
+        phase = .starting
+        return generation
+    }
+
+    /// Whether the start attempt `token` may proceed past an await.
+    func canProceed(_ token: Int) -> Bool {
+        phase == .starting && generation == token
+    }
+
+    /// The attempt `token` reached recording; false if it was cancelled.
+    mutating func started(_ token: Int) -> Bool {
+        guard canProceed(token) else { return false }
+        phase = .recording
+        return true
+    }
+
+    /// The attempt `token` failed (permission denied, engine error).
+    mutating func abort(_ token: Int) {
+        if canProceed(token) { phase = .idle }
+    }
+
+    /// A stop arrived: back to idle from any phase.
+    mutating func stopped() {
+        phase = .idle
+    }
+}
+
 /// Pure decision table for `SpeechDictationController.stop(reason:)`,
 /// extracted so the stop-after-stop window is unit-testable without Speech.
 /// After a graceful stop (`userTapped`) the session is no longer recording
 /// but the recognizer may still deliver its final result; a stop request in
 /// that window whose reason rejects final results (e.g. `send`) must still
 /// sever the transcript callback so the late final cannot resurrect
-/// already-consumed text.
+/// already-consumed text. A stop while a start is pending (awaiting
+/// permissions) cancels the start before any audio begins.
 enum DictationStopAction: Equatable {
     /// No active session and the reason keeps final results flowing: no-op.
     case ignore
@@ -49,13 +103,17 @@ enum DictationStopAction: Equatable {
     /// No active session, but the transcript callback must still be severed
     /// and any lingering recognition task cancelled.
     case severOnly
+    /// A start is pending: cancel it so `begin` never runs, and sever any
+    /// recognition lingering from an earlier graceful stop.
+    case cancelStart
 
-    static func action(for reason: DictationStopReason, isRecording: Bool) -> DictationStopAction {
-        switch (isRecording, reason.acceptsFinalResult) {
-        case (true, true): return .finish
-        case (true, false): return .cancelAndSever
-        case (false, true): return .ignore
-        case (false, false): return .severOnly
+    static func action(for reason: DictationStopReason, phase: DictationPhase) -> DictationStopAction {
+        switch (phase, reason.acceptsFinalResult) {
+        case (.starting, _): return .cancelStart
+        case (.recording, true): return .finish
+        case (.recording, false): return .cancelAndSever
+        case (.idle, true): return .ignore
+        case (.idle, false): return .severOnly
         }
     }
 }
@@ -105,8 +163,13 @@ struct DictationSession: Equatable {
     /// Text produced by the last applied merge; `nil` before the first one.
     private(set) var lastMergedText: String?
 
-    init(baseText: String, insertionOffset: Int) {
-        self.transcript = DictationTranscript(baseText: baseText, insertionOffset: insertionOffset)
+    /// `insertionOffset: nil` means no caret has been observed yet (a
+    /// programmatically restored draft never fires a selection change) and
+    /// inserts at the end of `baseText`.
+    init(baseText: String, insertionOffset: Int?) {
+        self.transcript = DictationTranscript(
+            baseText: baseText,
+            insertionOffset: insertionOffset ?? baseText.utf16.count)
     }
 
     enum MergeOutcome: Equatable {
@@ -140,8 +203,15 @@ import Speech
 /// and hop back to the main actor with only Sendable values.
 @Observable
 final class SpeechDictationController {
-    /// True while a dictation session is active.
-    private(set) var isRecording = false
+    /// Start-window state machine (idle / starting / recording).
+    private var startState = DictationStartState()
+
+    /// True while audio is actually being captured and recognized.
+    var isRecording: Bool { startState.phase == .recording }
+    /// True from the mic tap on — including the starting window while
+    /// permission prompts are pending. The mic button shows this as active
+    /// so a second tap during the window cancels the pending start.
+    var isActive: Bool { startState.phase != .idle }
     /// Inline hint shown in the composer when dictation is unavailable
     /// (permissions denied, recognizer unavailable, audio failure).
     private(set) var unavailabilityHint: String?
@@ -157,20 +227,29 @@ final class SpeechDictationController {
 
     /// Requests permissions and starts a dictation session. Sets
     /// `unavailabilityHint` instead of throwing when dictation cannot start.
+    /// The starting phase is entered synchronously before the first await;
+    /// after each await the start proceeds only while its token is still
+    /// current — a `stop(reason:)` during the window cancels it and `begin`
+    /// never runs.
     func startRecording() async {
-        guard !isRecording else { return }
+        guard let token = startState.requestStart() else { return }
 
         let speechStatus = await Self.requestSpeechAuthorization()
+        guard startState.canProceed(token) else { return }
         guard speechStatus == .authorized else {
+            startState.abort(token)
             unavailabilityHint = "Dictation needs Speech Recognition access. Enable it in Settings > Privacy & Security."
             return
         }
         let micGranted = await AVAudioApplication.requestRecordPermission()
+        guard startState.canProceed(token) else { return }
         guard micGranted else {
+            startState.abort(token)
             unavailabilityHint = "Dictation needs Microphone access. Enable it in Settings > Privacy & Security."
             return
         }
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+            startState.abort(token)
             unavailabilityHint = "Speech recognition is currently unavailable."
             return
         }
@@ -178,8 +257,9 @@ final class SpeechDictationController {
         unavailabilityHint = nil
         do {
             try begin(with: recognizer)
-            isRecording = true
+            _ = startState.started(token)
         } catch {
+            startState.abort(token)
             teardownAudio()
             recognitionRequest = nil
             recognitionTask = nil
@@ -194,7 +274,7 @@ final class SpeechDictationController {
     /// final arrived) still severs the callback and cancels the lingering
     /// task so the late final cannot resurrect consumed text.
     func stop(reason: DictationStopReason) {
-        switch DictationStopAction.action(for: reason, isRecording: isRecording) {
+        switch DictationStopAction.action(for: reason, phase: startState.phase) {
         case .ignore:
             return
         case .severOnly:
@@ -203,13 +283,24 @@ final class SpeechDictationController {
             recognitionTask = nil
             recognitionRequest = nil
             return
+        case .cancelStart:
+            // No engine or recognizer exists yet for the pending start; the
+            // phase change makes its token stale so begin never runs. Sever
+            // anything lingering from an earlier graceful stop.
+            startState.stopped()
+            onTranscriptChange = nil
+            recognitionTask?.cancel()
+            recognitionTask = nil
+            recognitionRequest = nil
+            onDidStop?(reason)
+            return
         case .finish:
-            isRecording = false
+            startState.stopped()
             teardownAudio()
             recognitionRequest?.endAudio()
             recognitionTask?.finish()
         case .cancelAndSever:
-            isRecording = false
+            startState.stopped()
             teardownAudio()
             onTranscriptChange = nil
             recognitionTask?.cancel()
