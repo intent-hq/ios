@@ -45,6 +45,13 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     var remoteImage: @Sendable (URL) async throws -> UIImage = { url in
         try await RemoteImageLoader.shared.image(for: url)
     }
+    /// Fetches an intent-file image from the daemon; injectable so a window
+    /// routes through its session's `WorkspaceFileImageLoader` instead of the
+    /// shared (default-backend) loader.
+    var fileImage: @Sendable (_ workspaceId: String, _ path: String) async throws -> UIImage = {
+        workspaceId, path in
+        try await WorkspaceFileImageLoader.shared.image(workspaceId: workspaceId, path: path)
+    }
 
     func attachment(
         for url: URL,
@@ -79,8 +86,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
                     IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
             }
             do {
-                let image = try await WorkspaceFileImageLoader.shared.image(
-                    workspaceId: ws, path: link.path)
+                let image = try await fileImage(ws, link.path)
                 return AnyAttachment(
                     IntentFileImageAttachment(image: image, altText: text)
                         as any Textual.Attachment)

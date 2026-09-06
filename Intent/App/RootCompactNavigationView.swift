@@ -7,13 +7,13 @@ extension RootView {
             WorkspaceListView(workspaceStore: session.workspaceStore)
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
-                        WorkspaceDetailView(workspaceId: workspaceId)
+                        WorkspaceDetailView(workspaceId: workspaceId, session: session)
                             .navigationDestination(isPresented: $showingConversation) {
                                 ConversationView(
                                     agentId: conversationAgentId,
                                     workspaceId: conversationWorkspaceId,
                                     agentName: conversationAgentName,
-                                    connection: session.connection
+                                    session: session
                                 )
                                 .id(conversationAgentId)
                             }
@@ -22,6 +22,7 @@ extension RootView {
                                     noteId: noteDetailNoteId,
                                     workspaceId: noteDetailWorkspaceId,
                                     noteTitle: noteDetailNoteTitle,
+                                    session: session,
                                     onNavigateToNote: { noteId, wsId, title in
                                         noteDetailNoteId = noteId
                                         noteDetailWorkspaceId = wsId

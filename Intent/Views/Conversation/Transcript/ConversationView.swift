@@ -6,13 +6,14 @@ struct ConversationView: View {
 
     init(
         agentId: String, workspaceId: String, agentName: String,
-        connection: any ConnectionManagerRouting
+        session: BackendSession
     ) {
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
-            connection: connection
+            connection: session.connection,
+            uploadService: session.attachmentUploadService
         ))
     }
 
@@ -57,7 +58,7 @@ private struct ConversationViewContent: View {
                     agentId: dest.agentId,
                     workspaceId: dest.workspaceId,
                     agentName: dest.agentName,
-                    connection: session.connection
+                    session: session
                 )
                 .id(dest.agentId)
             }
@@ -241,7 +242,8 @@ private struct ConversationViewContent: View {
             NoteDetailView(
                 noteId: noteInfo.noteId,
                 workspaceId: noteInfo.workspaceId,
-                noteTitle: noteInfo.noteTitle
+                noteTitle: noteInfo.noteTitle,
+                session: session
             )
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

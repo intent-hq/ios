@@ -91,7 +91,7 @@ import SwiftUI
     var specialistName: String?
     var specialistDescription: String?
 
-    private let attachmentPipeline = ConversationAttachmentPipeline()
+    private let attachmentPipeline: ConversationAttachmentPipeline
     var pendingImages: [UIImage] {
         get { attachmentPipeline.pendingImages }
         set { attachmentPipeline.pendingImages = newValue }
@@ -127,7 +127,8 @@ import SwiftUI
 
     init(
         agentId: String, workspaceId: String, agentName: String,
-        connection: any ConnectionManagerRouting
+        connection: any ConnectionManagerRouting,
+        uploadService: AttachmentUploadService
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
@@ -136,6 +137,7 @@ import SwiftUI
         self.store = ConversationStore(connectionManager: connection)
         self.hookStore = BackgroundHookStore(connectionManager: connection)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
 
         // Restore saved draft
         self.messageText = PersistenceManager.shared.loadDraft(

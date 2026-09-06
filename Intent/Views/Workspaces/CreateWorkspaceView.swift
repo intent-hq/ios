@@ -7,12 +7,15 @@ struct CreateWorkspaceView: View {
     }
 
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(BackendSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
 
+    /// The presenting window's session; all daemon requests (repo/branch
+    /// listing, specialist/provider/model options, workspace.create) go
+    /// through its connection so pinned windows never hit the default backend.
+    private let session: BackendSession
     @State private var navigationPath: [Route] = []
-    @State private var githubStore = GitHubRepoStore()
+    @State private var githubStore: GitHubRepoStore
     @State private var selectedRepo: GitHubRepo?
     @State private var remoteBranches: [String] = []
     @State private var defaultBranch: String?
@@ -36,6 +39,11 @@ struct CreateWorkspaceView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var idempotencyKey = UUID().uuidString
+
+    init(session: BackendSession) {
+        self.session = session
+        _githubStore = State(initialValue: GitHubRepoStore(connectionManager: session.connection))
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -144,7 +152,7 @@ struct CreateWorkspaceView: View {
 
     private func fetchSpecialists() async {
         isLoadingSpecialists = true
-        let agentStore = AgentStore()
+        let agentStore = AgentStore(connectionManager: session.connection)
         var fetched = await agentStore.fetchSpecialists().modalPickable
         let orchestratorId = fetched.orchestrator?.id
         fetched.sort { a, b in
@@ -169,7 +177,7 @@ struct CreateWorkspaceView: View {
     private func fetchProviders() async {
         isLoadingProviders = true
         defer { isLoadingProviders = false }
-        let agentStore = AgentStore()
+        let agentStore = AgentStore(connectionManager: session.connection)
         providers = await agentStore.fetchProviders()
         let selectable = providers.filter { $0.authenticated != false }
         let currentStillSelectable = selectedProvider.map { current in
@@ -197,7 +205,7 @@ struct CreateWorkspaceView: View {
     }
 
     private func fetchModels(providerId: String) async {
-        let agentStore = AgentStore()
+        let agentStore = AgentStore(connectionManager: session.connection)
         let fetched = await agentStore.fetchModels(providerId: providerId)
         guard let outcome = Self.modelFetchOutcome(
             fetched: fetched,

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct WorkspaceListView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     private let workspaceStore: WorkspaceStore
     @State private var viewModel: WorkspaceListViewModel
@@ -75,7 +76,7 @@ struct WorkspaceListView: View {
             }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView()
+            CreateWorkspaceView(session: session)
                 .environment(coordinator)
         }
         .sheet(isPresented: $showingConnections) {

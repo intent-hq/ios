@@ -10,13 +10,27 @@ struct MarkdownTextView: View {
     /// workspace ID (long form).
     var workspaceId: String?
     @Environment(\.colorScheme) var colorScheme
+    /// The window's session, when present: intent-file images then load over
+    /// its backend connection rather than the shared (default) loader.
+    @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
+
+    /// Intent-file image fetcher bound to the session's loader when one is in
+    /// the environment, else the shared (default-backend) loader.
+    private var fileImageFetcher: @Sendable (String, String) async throws -> UIImage {
+        let fileLoader = session?.workspaceFileImageLoader ?? .shared
+        return { workspaceId, path in
+            try await fileLoader.image(workspaceId: workspaceId, path: path)
+        }
+    }
 
     var body: some View {
         let markdownView = StructuredText(markdown: Self.replacingTaskListMarkers(text))
             .textual.structuredTextStyle(.compact)
             .textual.imageAttachmentLoader(
-                IntentFileAttachmentLoader(workspaceId: workspaceId, fallback: .image())
+                IntentFileAttachmentLoader(
+                    workspaceId: workspaceId, fallback: .image(),
+                    fileImage: fileImageFetcher)
             )
             .textual.listItemSpacing(
                 .fontScaled(

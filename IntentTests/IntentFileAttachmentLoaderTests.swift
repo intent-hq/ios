@@ -55,6 +55,37 @@ struct IntentFileAttachmentLoaderTests {
         #expect(route("images/pic.png") == .fallback)
     }
 
+    // MARK: - Intent-file fetcher injection
+
+    @MainActor private final class FileImageFetchLog {
+        var entries: [(workspaceId: String, path: String)] = []
+        func record(_ workspaceId: String, _ path: String) {
+            entries.append((workspaceId, path))
+        }
+    }
+
+    @Test func intentFileLinkUsesInjectedFileImageFetcher() async throws {
+        let image = UIImage()
+        let log = FileImageFetchLog()
+        var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
+        loader.fileImage = { workspaceId, path in
+            await log.record(workspaceId, path)
+            return image
+        }
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/pic.png")!, text: "alt"
+        ) {
+            Issue.record("intent-file links must not consult the fallback loader")
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(log.entries.count == 1)
+        #expect(log.entries.first?.workspaceId == "ws-1")
+        #expect(log.entries.first?.path == "pic.png")
+        #expect((attachment.base as? IntentFileImageAttachment)?.image === image)
+    }
+
     // MARK: - Remote attachment path
 
     private static let remoteURL = URL(string: "https://example.com/pic.png")!

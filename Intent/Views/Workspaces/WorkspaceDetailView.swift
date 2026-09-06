@@ -3,7 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
-    @State private var agentStore = AgentStore()
+    @State private var agentStore: AgentStore
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -14,8 +14,14 @@ struct WorkspaceDetailView: View {
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var progressWidth: CGFloat = 0
-    @State private var noteStore = NoteStore()
+    @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
+
+    init(workspaceId: String, session: BackendSession) {
+        self.workspaceId = workspaceId
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+        _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
+    }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
 

@@ -91,22 +91,40 @@ extension View {
         #endif
     }
 
-    /// Feeds workspace snapshots to the shared cue center so a short system
-    /// sound plays once per workspace that newly needs input (visionOS
-    /// only). Attach to each workspace list surface. No-op on other
-    /// platforms.
+    /// Feeds workspace snapshots to the window session's cue center so a
+    /// short system sound plays once per workspace that newly needs input
+    /// (visionOS only). Attach to each workspace list surface. No-op on
+    /// other platforms.
     @ViewBuilder
     func visionWorkspaceAttentionSound(_ workspaces: [Workspace]) -> some View {
         #if os(visionOS)
-        self
-            .onAppear {
-                WorkspaceAttentionCueCenter.shared.observe(workspaces: workspaces)
-            }
-            .onChange(of: workspaces) { _, newWorkspaces in
-                WorkspaceAttentionCueCenter.shared.observe(workspaces: newWorkspaces)
-            }
+        self.modifier(VisionWorkspaceAttentionSoundModifier(workspaces: workspaces))
         #else
         self
         #endif
     }
 }
+
+#if os(visionOS)
+/// Routes workspace snapshots to the session's cue center so pinned windows
+/// chime for their own backend; falls back to the shared center when no
+/// session is in the environment (previews/tests).
+private struct VisionWorkspaceAttentionSoundModifier: ViewModifier {
+    let workspaces: [Workspace]
+    @Environment(BackendSession.self) private var session: BackendSession?
+
+    private var center: WorkspaceAttentionCueCenter {
+        session?.attentionCueCenter ?? .shared
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear {
+                center.observe(workspaces: workspaces)
+            }
+            .onChange(of: workspaces) { _, newWorkspaces in
+                center.observe(workspaces: newWorkspaces)
+            }
+    }
+}
+#endif

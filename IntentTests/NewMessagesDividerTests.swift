@@ -133,7 +133,7 @@ struct ConversationViewModelDividerLatchTests {
     private func makeVM() -> ConversationViewModel {
         ConversationViewModel(
             agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared)
+            connection: ConnectionManager.shared, uploadService: .shared)
     }
 
     private func message(_ id: String, role: MessageRole = .assistant) -> ConversationMessage {
