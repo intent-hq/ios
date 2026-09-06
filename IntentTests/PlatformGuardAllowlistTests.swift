@@ -49,8 +49,16 @@ struct PlatformGuardAllowlistTests {
     /// whose contents contain `pattern`.
     private func filesContaining(_ pattern: String) throws -> Set<String> {
         var matches: Set<String> = []
+        let rootPrefix = Self.repoRoot.standardizedFileURL.path + "/"
         for directory in ["Intent", "IntentTests"] {
             let root = Self.repoRoot.appendingPathComponent(directory)
+            var isDirectory: ObjCBool = false
+            try #require(
+                FileManager.default.fileExists(
+                    atPath: root.path, isDirectory: &isDirectory)
+                    && isDirectory.boolValue,
+                "scan root \(directory)/ is missing or not a directory at \(root.path)"
+            )
             let enumerator = try #require(
                 FileManager.default.enumerator(
                     at: root,
@@ -62,10 +70,12 @@ struct PlatformGuardAllowlistTests {
                 guard url.pathExtension == "swift" else { continue }
                 let contents = try String(contentsOf: url, encoding: .utf8)
                 guard contents.contains(pattern) else { continue }
-                let relative = url.standardizedFileURL.path
-                    .replacingOccurrences(
-                        of: Self.repoRoot.standardizedFileURL.path + "/", with: "")
-                matches.insert(relative)
+                let absolute = url.standardizedFileURL.path
+                try #require(
+                    absolute.hasPrefix(rootPrefix),
+                    "scanned file \(absolute) is not under repo root \(rootPrefix)"
+                )
+                matches.insert(String(absolute.dropFirst(rootPrefix.count)))
             }
         }
         return matches
