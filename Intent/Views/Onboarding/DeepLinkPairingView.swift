@@ -32,9 +32,9 @@ struct DeepLinkPairingView: View {
                     }
                     if let tcAddress = payload.tcAddress {
                         Label {
-                            Text(tcAddress)
+                            Text(TcAddressDisplay.truncated(tcAddress))
                                 .lineLimit(1)
-                                .truncationMode(.middle)
+                                .accessibilityLabel(tcAddress)
                         } icon: {
                             Image(systemName: "point.3.connected.trianglepath.dotted")
                         }
