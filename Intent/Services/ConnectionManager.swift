@@ -137,8 +137,14 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// The tunnel session carrying the live socket (nil when a direct host
     /// won the race); closed on teardown.
     @ObservationIgnored private var activeTunnel: (any TunnelSession)?
-    /// Injectable for tests; defaults to the real TailcatKit-backed dialer.
+    /// Injectable for tests; defaults to the real TailcatKit-backed dialer
+    /// where the xcframework links (iOS), and to the always-failing stub on
+    /// visionOS (no xros TailcatKit slice yet).
+    #if canImport(TailcatKit)
     @ObservationIgnored var tunnelDialer: any TunnelDialing = TailcatTunnelDialer()
+    #else
+    @ObservationIgnored var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
+    #endif
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
     /// The candidate label the tunnel route races under (also the host shown

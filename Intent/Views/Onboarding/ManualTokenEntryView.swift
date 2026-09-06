@@ -80,6 +80,21 @@ struct ManualTokenEntryView: View {
 
                         VStack(spacing: Constants.ManualTokenEntry.formSpacing) {
                             VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
+                                #if os(visionOS)
+                                // No TailcatKit build for visionOS yet, so tunnel
+                                // addresses are not offered: LAN pairing only.
+                                Text("Host")
+                                    .font(.caption.weight(.medium))
+                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                TextField("192.168.1.42", text: $host)
+                                    .textFieldStyle(.roundedBorder)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                    .keyboardType(.URL)
+                                Text("Tailcat addresses aren't supported on visionOS yet — pair over your local network.")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                #else
                                 Text("Host / Tailcat Address")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -88,6 +103,7 @@ struct ManualTokenEntryView: View {
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
                                     .keyboardType(.URL)
+                                #endif
                             }
 
                             VStack(alignment: .leading, spacing: Constants.ManualTokenEntry.fieldSpacing) {
@@ -184,6 +200,14 @@ struct ManualTokenEntryView: View {
             return
         }
         let input = ManualConnectionInput.classify(host)
+        #if os(visionOS)
+        // Belt-and-braces behind the field explanation above: a pasted tc
+        // address fails fast here instead of spinning through the dialer.
+        if case .tailcat = input {
+            errorMessage = "Tailcat addresses aren't supported on visionOS yet — pair over your local network."
+            return
+        }
+        #endif
 
         isValidating = true
         errorMessage = nil
