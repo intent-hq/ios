@@ -179,10 +179,10 @@ struct WorkspaceStoreAgentParsingTests {
     }
 }
 
-// MARK: - lastActivityHighWaterMark regression tests
+// MARK: - lastActivity mirrors intentd (no client-side bumping)
 
 @MainActor
-struct WorkspaceStoreHighWaterMarkTests {
+struct WorkspaceStoreLastActivityTests {
 
     private func makeWorkspace(id: String, lastActivity: String?) -> Workspace {
         Workspace(
@@ -196,104 +196,83 @@ struct WorkspaceStoreHighWaterMarkTests {
         )
     }
 
-    // MARK: - updateLocalLastActivity stores max timestamp
+    private func workspaceUpdatedEvent(workspaceId: String, lastActivity: String) -> [String: Any] {
+        [
+            "event": [
+                "type": "workspace:updated",
+                "workspaceId": workspaceId,
+                "timestamp": lastActivity,
+                "data": [
+                    "workspaceId": workspaceId,
+                    "changes": ["lastActivity": lastActivity]
+                ] as [String: Any]
+            ] as [String: Any]
+        ]
+    }
 
-    @Test func newerTimestampUpdatesHighWaterMark() async throws {
+    // MARK: - workspace:updated { changes.lastActivity } patches the row in place
+
+    @Test func workspaceUpdatedDeltaPatchesLastActivityInPlace() async throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
 
-        // First update sets the HWM
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T12:00:00Z")
+        store.handleEvent("event", params: workspaceUpdatedEvent(
+            workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z"))
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
-
-        // Newer timestamp updates the HWM
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T14:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
-        #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
     }
 
-    @Test func olderTimestampIsIgnoredByHighWaterMark() async throws {
+    @Test func workspaceUpdatedDeltaIsAppliedVerbatimWithoutMonotonicGuard() async throws {
+        // intentd guarantees monotonicity; the client applies whatever it sent.
         let store = WorkspaceStore(forTesting: true)
-        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T14:00:00Z")]
 
-        // Set a HWM with a recent timestamp
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T14:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
-
-        // Older timestamp should NOT overwrite the HWM
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T14:00:00Z")
-        // Workspace should still show the newer timestamp
-        #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
+        store.handleEvent("event", params: workspaceUpdatedEvent(
+            workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z"))
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 
-    // MARK: - _fetchAll merges HWM so timestamps never regress
-
-    @Test func fetchAllMergesHighWaterMarkPreventingRegression() async throws {
-        let store = WorkspaceStore(forTesting: true)
-        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
-
-        // Simulate an optimistic event-driven update with a future timestamp
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T16:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-1"] == "2026-03-01T16:00:00Z")
-
-        // Simulate what _fetchAll does: parse workspaces with older server data,
-        // then apply HWM merge
-        var parsed = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T12:00:00Z")]
-        store.applyHighWaterMarks(to: &parsed)
-        store.workspaces = parsed
-
-        // The HWM timestamp should win over the stale server data
-        #expect(store.workspaces[0].lastActivity == "2026-03-01T16:00:00Z")
-    }
-
-    @Test func fetchAllUsesServerTimestampWhenNewerThanHWM() async throws {
-        let store = WorkspaceStore(forTesting: true)
-        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
-
-        // Set a modest HWM
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
-
-        // Server returns a newer timestamp — applyHighWaterMarks should preserve it
-        var parsed = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T18:00:00Z")]
-        store.applyHighWaterMarks(to: &parsed)
-        store.workspaces = parsed
-
-        // Server's newer timestamp should be preserved
-        #expect(store.workspaces[0].lastActivity == "2026-03-01T18:00:00Z")
-    }
-
-    // MARK: - Multiple workspaces maintain independent HWMs
-
-    @Test func multipleWorkspacesMaintainIndependentHighWaterMarks() async throws {
+    @Test func workspaceUpdatedDeltaLeavesOtherWorkspacesUntouched() async throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [
             makeWorkspace(id: "ws-A", lastActivity: "2026-03-01T10:00:00Z"),
             makeWorkspace(id: "ws-B", lastActivity: "2026-03-01T10:00:00Z"),
-            makeWorkspace(id: "ws-C", lastActivity: "2026-03-01T10:00:00Z"),
         ]
 
-        // Update each workspace with different timestamps
-        store.updateLocalLastActivity(workspaceId: "ws-A", timestamp: "2026-03-01T14:00:00Z")
-        store.updateLocalLastActivity(workspaceId: "ws-B", timestamp: "2026-03-01T16:00:00Z")
-        store.updateLocalLastActivity(workspaceId: "ws-C", timestamp: "2026-03-01T12:00:00Z")
-
-        // Each workspace should have its own independent HWM
-        #expect(store.lastActivityHighWaterMark["ws-A"] == "2026-03-01T14:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-B"] == "2026-03-01T16:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-C"] == "2026-03-01T12:00:00Z")
-
-        // Verify the workspace lastActivity values match
+        store.handleEvent("event", params: workspaceUpdatedEvent(
+            workspaceId: "ws-A", lastActivity: "2026-03-01T14:00:00Z"))
         #expect(store.workspaces[0].lastActivity == "2026-03-01T14:00:00Z")
-        #expect(store.workspaces[1].lastActivity == "2026-03-01T16:00:00Z")
-        #expect(store.workspaces[2].lastActivity == "2026-03-01T12:00:00Z")
+        #expect(store.workspaces[1].lastActivity == "2026-03-01T10:00:00Z")
+    }
 
-        // Update ws-A with older timestamp — should not affect ws-A or others
-        store.updateLocalLastActivity(workspaceId: "ws-A", timestamp: "2026-03-01T11:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-A"] == "2026-03-01T14:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-B"] == "2026-03-01T16:00:00Z")
-        #expect(store.lastActivityHighWaterMark["ws-C"] == "2026-03-01T12:00:00Z")
+    @Test func updateLastActivityUnknownWorkspaceIsNoOp() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+        store.updateLastActivity(workspaceId: "ws-other", lastActivity: "2026-03-01T12:00:00Z")
+        #expect(store.workspaces.count == 1)
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T10:00:00Z")
+    }
+
+    // MARK: - Fetched rows are published exactly as received
+
+    @Test func fetchedRowsAreNotOverriddenByEarlierDelta() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+        store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T16:00:00Z")
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T16:00:00Z")
+
+        // A later workspace.list / snapshot carrying an older value is the
+        // daemon's truth — no high-water mark is applied on top of it.
+        store.publishFetchedWorkspaces([makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T12:00:00Z")])
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
+    }
+
+    @Test func addOrUpdatePublishesRowAsReceived() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T16:00:00Z")]
+
+        store.addOrUpdate(makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T12:00:00Z"))
+        #expect(store.workspaces.count == 1)
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
     }
 }
 
@@ -351,7 +330,7 @@ struct WorkspaceStoreAttentionTests {
     @Test func attentionSurvivesLastActivityRebuild() async throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z")
         #expect(store.workspaces[0].attention == "unread",
                 "The lastActivity rebuild must carry the attention flag through")
     }
@@ -440,21 +419,9 @@ struct WorkspaceStoreWaitingTests {
     @Test func waitingSurvivesLastActivityRebuild() async throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T12:00:00Z")
+        store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T12:00:00Z")
         #expect(store.workspaces[0].waiting == true,
                 "The lastActivity rebuild must carry the waiting flag through")
-    }
-
-    @Test func waitingSurvivesHighWaterMarkMerge() async throws {
-        let store = WorkspaceStore(forTesting: true)
-        store.updateLocalLastActivity(workspaceId: "ws-1", timestamp: "2026-03-01T16:00:00Z")
-
-        var parsed = [WorkspaceStore.parseWorkspace(
-            ["id": "ws-1", "title": "T", "waiting": true, "lastActivity": "2026-03-01T12:00:00Z"])!]
-        store.applyHighWaterMarks(to: &parsed)
-        #expect(parsed[0].lastActivity == "2026-03-01T16:00:00Z")
-        #expect(parsed[0].waiting == true,
-                "The HWM rebuild must carry the waiting flag through")
     }
 
     @Test func waitingSurvivesClearUnreadAttention() async throws {
@@ -472,8 +439,7 @@ struct WorkspaceStoreWaitingTests {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]
 
-        var parsed = [WorkspaceStore.parseWorkspace(["id": "ws-1", "title": "T"])!]
-        store.applyHighWaterMarks(to: &parsed)
+        let parsed = [WorkspaceStore.parseWorkspace(["id": "ws-1", "title": "T"])!]
         store.publishFetchedWorkspaces(parsed)
         #expect(store.workspaces[0].waiting == false)
     }

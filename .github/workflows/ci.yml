@@ -25,6 +25,10 @@ jobs:
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
+      # Knobs for scripts/xcodebuild.sh: pin SPM clones to the cached path
+      # and write the test result bundle where the artifact upload expects it.
+      SPM_CLONE_DIR: build/SourcePackages
+      RESULT_BUNDLE: TestResults
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -48,27 +52,11 @@ jobs:
             xcodebuild -version
           fi
 
-      # Prefer the iPhone 16 simulator, else any available iPhone on this
-      # runner; fail early with a clear message if there is none. Select by
-      # UDID: it keeps parenthesized names (e.g. "iPhone SE (3rd generation)")
-      # intact, disambiguates duplicate names across runtimes, and pins the
-      # destination to one concrete device. tail -n 1 prefers the newest
-      # installed runtime (simctl groups devices by runtime, oldest first).
+      # Device selection lives in scripts/xcodebuild.sh (pick-simulator).
+      # Export the UDID so the pre-boot step and every later script
+      # invocation share one concrete device.
       - name: Pick simulator device
-        run: |
-          devices=$(xcrun simctl list devices available)
-          line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone 16 \(' | tail -n 1 || true)
-          if [ -z "$line" ]; then
-            line=$(echo "$devices" | grep -E '^[[:space:]]+iPhone' | tail -n 1 || true)
-          fi
-          udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
-          if [ -z "$udid" ]; then
-            echo "No available iPhone simulator on this runner" >&2
-            exit 1
-          fi
-          name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
-          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
-          echo "Selected simulator: $name ($udid)"
+        run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
@@ -130,9 +118,10 @@ jobs:
           echo "::add-mask::$token"
           echo "TAILCAT_SMOKE_TOKEN=$token" >> "$GITHUB_ENV"
 
-      # Ephemeral runner: cache SPM checkouts across runs. The xcodebuild
-      # invocations pin -clonedSourcePackagesDirPath to the cached path so
-      # the cache key actually covers what gets written.
+      # Ephemeral runner: cache SPM checkouts across runs. SPM_CLONE_DIR
+      # (job env above) makes scripts/xcodebuild.sh pin
+      # -clonedSourcePackagesDirPath to the cached path so the cache key
+      # actually covers what gets written.
       - name: Cache SPM packages
         uses: actions/cache@v6
         with:
@@ -142,40 +131,20 @@ jobs:
             ${{ runner.os }}-spm-
 
       - name: Resolve SPM packages
-        run: >
-          xcodebuild -resolvePackageDependencies
-          -project Intent.xcodeproj
-          -scheme Intent
-          -clonedSourcePackagesDirPath build/SourcePackages
+        run: scripts/xcodebuild.sh resolve
 
       - name: Build for testing
-        run: >
-          xcodebuild build-for-testing
-          -project Intent.xcodeproj
-          -scheme Intent
-          -destination "platform=iOS Simulator,id=$SIM_UDID"
-          -clonedSourcePackagesDirPath build/SourcePackages
-          CODE_SIGN_IDENTITY=""
-          CODE_SIGNING_REQUIRED=NO
-          CODE_SIGNING_ALLOWED=NO
+        run: scripts/xcodebuild.sh build-for-testing
 
-      # rm keeps the step independent of checkout's clean setting:
-      # xcodebuild refuses an existing result bundle path. xcodebuild
-      # forwards its TEST_RUNNER_-prefixed environment variables into
-      # the test process (minus the prefix), carrying the tcecho token
-      # to the TailcatKit smoke test.
+      # The script removes any existing result bundle at RESULT_BUNDLE
+      # (xcodebuild refuses an existing path). xcodebuild forwards its
+      # TEST_RUNNER_-prefixed environment variables into the test process
+      # (minus the prefix), carrying the tcecho token to the TailcatKit
+      # smoke test.
       - name: Run unit tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
-        run: |
-          rm -rf TestResults
-          xcodebuild test-without-building \
-            -project Intent.xcodeproj \
-            -scheme Intent \
-            -destination "platform=iOS Simulator,id=$SIM_UDID" \
-            -clonedSourcePackagesDirPath build/SourcePackages \
-            -parallel-testing-enabled NO \
-            -resultBundlePath TestResults
+        run: scripts/xcodebuild.sh test-without-building
 
       - name: Upload test results
         if: failure()
@@ -193,6 +162,8 @@ jobs:
     timeout-minutes: 45
     env:
       GIT_TERMINAL_PROMPT: '0'
+      # Knob for scripts/xcodebuild.sh: pin SPM clones to the cached path.
+      SPM_CLONE_DIR: build/SourcePackages
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -225,21 +196,6 @@ jobs:
             xcrun simctl list runtimes | grep '^visionOS '
           fi
 
-      # Pick an available Apple Vision Pro simulator by UDID (same rationale
-      # as the iOS job's device selection).
-      - name: Pick simulator device
-        run: |
-          devices=$(xcrun simctl list devices available)
-          line=$(echo "$devices" | grep -E '^[[:space:]]+Apple Vision' | tail -n 1 || true)
-          udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
-          if [ -z "$udid" ]; then
-            echo "No available Apple Vision Pro simulator on this runner" >&2
-            exit 1
-          fi
-          name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
-          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
-          echo "Selected simulator: $name ($udid)"
-
       - name: Cache SPM packages
         uses: actions/cache@v6
         with:
@@ -249,22 +205,13 @@ jobs:
             ${{ runner.os }}-spm-
 
       - name: Resolve SPM packages
-        run: >
-          xcodebuild -resolvePackageDependencies
-          -project Intent.xcodeproj
-          -scheme Intent
-          -clonedSourcePackagesDirPath build/SourcePackages
+        run: scripts/xcodebuild.sh resolve
 
+      # build-visionos uses the generic visionOS Simulator destination, so
+      # no concrete Vision Pro device pick is needed; the script fails fast
+      # if the visionOS platform is not installed.
       - name: Build
-        run: >
-          xcodebuild build
-          -project Intent.xcodeproj
-          -scheme Intent
-          -destination "platform=visionOS Simulator,id=$SIM_UDID"
-          -clonedSourcePackagesDirPath build/SourcePackages
-          CODE_SIGN_IDENTITY=""
-          CODE_SIGNING_REQUIRED=NO
-          CODE_SIGNING_ALLOWED=NO
+        run: scripts/xcodebuild.sh build-visionos
 
   pr-title:
     runs-on: ubuntu-latest

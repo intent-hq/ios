@@ -12,6 +12,8 @@ struct WorkspaceParsingTests {
             "baseRef": "main",
             "status": "Active",
             "lastActivity": "2026-03-15T10:00:00Z",
+            "createdAt": "2026-03-01T09:00:00Z",
+            "updatedAt": "2026-03-15T10:30:00Z",
             "repositoryOwner": "acme",
             "repositoryName": "app",
             "prStatus": "Open",
@@ -30,6 +32,8 @@ struct WorkspaceParsingTests {
         #expect(ws?.baseRef == "main")
         #expect(ws?.status == "Active")
         #expect(ws?.lastActivity == "2026-03-15T10:00:00Z")
+        #expect(ws?.createdAt == "2026-03-01T09:00:00Z")
+        #expect(ws?.updatedAt == "2026-03-15T10:30:00Z")
         #expect(ws?.repositoryOwner == "acme")
         #expect(ws?.repositoryName == "app")
         #expect(ws?.prStatus == "Open")
@@ -70,6 +74,7 @@ struct WorkspaceParsingTests {
         #expect(ws?.id == "ws-2")
         #expect(ws?.title == "Minimal")
         #expect(ws?.branch == nil)
+        #expect(ws?.createdAt == nil)
         #expect(ws?.displayStatus == nil)
         #expect(ws?.attention == nil)
         #expect(ws?.waiting == false)
@@ -110,6 +115,20 @@ struct WorkspaceParsingTests {
             Workspace.self,
             from: Data(#"{"id": "ws-d2", "title": "W", "waiting": true}"#.utf8))
         #expect(present.waiting == true)
+    }
+
+    @Test func decodeCreatedAtViaJSONDecoder() async throws {
+        let decoder = JSONDecoder()
+
+        let present = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-c1", "title": "W", "createdAt": "2026-03-01T09:00:00Z"}"#.utf8))
+        #expect(present.createdAt == "2026-03-01T09:00:00Z")
+
+        let absent = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-c2", "title": "W"}"#.utf8))
+        #expect(absent.createdAt == nil)
     }
 
     @Test func parsePullRequests() async throws {

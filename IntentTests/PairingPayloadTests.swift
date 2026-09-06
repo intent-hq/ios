@@ -147,4 +147,25 @@ struct PairingPayloadTests {
         #expect(PairingPayload.parse("intent://pair?host=&port=1&token=t") == nil)
         #expect(PairingPayload.parse("not a uri") == nil)
     }
+
+    // MARK: - Display truncation
+
+    @Test func truncatesLongTcAddressToTenCharsPlusEllipsis() {
+        let shown = TcAddressDisplay.truncated("tc-abcdefghijklmnop")
+        #expect(shown == "tc-abcdefg\u{2026}")
+        #expect(shown.count == 11)
+    }
+
+    @Test func leavesExactlyTenCharTcAddressUnchanged() {
+        #expect(TcAddressDisplay.truncated("tc-abcdefg") == "tc-abcdefg")
+    }
+
+    @Test func leavesShortTcAddressUnchanged() {
+        #expect(TcAddressDisplay.truncated("tc-abc") == "tc-abc")
+        #expect(TcAddressDisplay.truncated("") == "")
+    }
+
+    @Test func truncatesElevenCharTcAddress() {
+        #expect(TcAddressDisplay.truncated("tc-abcdefgh") == "tc-abcdefg\u{2026}")
+    }
 }
