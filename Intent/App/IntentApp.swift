@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct IntentApp: App {
@@ -124,11 +125,15 @@ struct SessionWindowRoot: View {
 /// a restored window whose saved record no longer exists — the session is
 /// released immediately (dropping the connection via the normal detach path)
 /// and the window dismisses itself via `dismissWindow(value:)`. If the
-/// dismissal cannot be delivered, the "connection removed" placeholder
-/// remains with a manual Close Window button.
+/// dismissal cannot be delivered (e.g. this is the app's last window, where
+/// `dismissWindow` is a no-op), the "connection removed" placeholder remains
+/// with a manual Close Window button that itself must work in the last-window
+/// case: it dismisses when other windows exist, otherwise the window adopts
+/// the default session and lands on a usable surface.
 struct PinnedBackendWindowRoot: View {
     let backendID: BackendID
     @State private var session: BackendSession?
+    @State private var showsDefaultSession = false
     @Environment(\.dismissWindow) private var dismissWindow
 
     private var isRemoved: Bool {
@@ -137,8 +142,10 @@ struct PinnedBackendWindowRoot: View {
 
     var body: some View {
         Group {
-            if isRemoved {
-                RemovedBackendPlaceholderView()
+            if showsDefaultSession {
+                SessionWindowRoot(session: BackendSessionRegistry.shared.defaultSession)
+            } else if isRemoved {
+                RemovedBackendPlaceholderView(onClose: closeRemovedWindow)
             } else if let session {
                 SessionWindowRoot(session: session)
             } else {
@@ -161,12 +168,27 @@ struct PinnedBackendWindowRoot: View {
         // initial: true covers a mark set before this window ever rendered
         // (removal racing a window that is still opening or being restored).
         .onChange(of: isRemoved, initial: true) { _, removed in
-            guard removed else { return }
+            guard removed, !showsDefaultSession else { return }
             releaseSession()
             dismissWindow(value: backendID)
         }
         .onDisappear {
             releaseSession()
+        }
+    }
+
+    /// The placeholder's Close Window action. With other windows open the
+    /// programmatic dismissal works; as the last window it is a no-op, so
+    /// the window adopts the default session instead (spec decision 2).
+    private func closeRemovedWindow() {
+        let windowScenes = UIApplication.shared.connectedScenes
+            .filter { $0 is UIWindowScene }
+            .count
+        switch RemovedWindowCloseAction.forOpenWindowCount(windowScenes) {
+        case .dismiss:
+            dismissWindow(value: backendID)
+        case .adoptDefaultSession:
+            showsDefaultSession = true
         }
     }
 
@@ -177,11 +199,27 @@ struct PinnedBackendWindowRoot: View {
     }
 }
 
+/// What the removed-backend placeholder's Close Window button does (spec
+/// decision 2): with other windows open, `dismissWindow(value:)` closes this
+/// window; when it is the app's last window that dismissal is a no-op, so
+/// the window adopts the default session instead — routing to a usable
+/// surface rather than silently doing nothing.
+enum RemovedWindowCloseAction: Equatable {
+    case dismiss
+    case adoptDefaultSession
+
+    /// `count` is the number of window scenes connected to the app,
+    /// including the removed window itself.
+    static func forOpenWindowCount(_ count: Int) -> RemovedWindowCloseAction {
+        count > 1 ? .dismiss : .adoptDefaultSession
+    }
+}
+
 /// Fallback surface for a pinned window whose backend was removed but whose
 /// programmatic dismissal could not be delivered (spec decision 2): names
-/// the state and offers a manual close.
+/// the state and offers a manual close that works even as the last window.
 private struct RemovedBackendPlaceholderView: View {
-    @Environment(\.dismissWindow) private var dismissWindow
+    let onClose: () -> Void
 
     var body: some View {
         VStack(spacing: Constants.Root.reconnectPanelSpacing) {
@@ -194,7 +232,7 @@ private struct RemovedBackendPlaceholderView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Close Window") { dismissWindow() }
+            Button("Close Window") { onClose() }
                 .buttonStyle(.bordered)
         }
         .padding()

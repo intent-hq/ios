@@ -409,6 +409,87 @@ final class AppCoordinatorTests {
         #expect(!coordinator.pairingShowsSavedConnections)
     }
 
+    // MARK: - Backend removal routing (spec lifecycle decision 2)
+
+    /// Removal-mark routing runs on a MainActor task scheduled by the
+    /// registry observation; yield until the coordinator lands on .pairing
+    /// (bounded so a failure still reports promptly).
+    @MainActor private static func waitForPairing(_ coordinator: AppCoordinator) async {
+        for _ in 0..<100 {
+            if case .pairing = coordinator.currentScreen { return }
+            await Task.yield()
+        }
+    }
+
+    @Test @MainActor func removalMarkForCurrentBackendRoutesDefaultWindowOut() async {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        _ = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        persistence.setActiveConnection(id: stored.id)
+
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+        coordinator.onConnectionSuccess()
+
+        // Another window (e.g. a pinned window's Log Off) deletes the
+        // backend; this coordinator only sees the registry's removal mark.
+        persistence.deleteConnection(id: stored.id)
+        registry.markBackendRemoved(BackendID(stored.id))
+
+        await Self.waitForPairing(coordinator)
+        if case .pairing = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .pairing after removal mark, got \(coordinator.currentScreen)")
+        }
+        #expect(coordinator.pairingShowsSavedConnections,
+                "The remaining saved connection should be offered")
+    }
+
+    @Test @MainActor func removalMarkForOtherBackendLeavesDefaultWindowAlone() async {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let other = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        persistence.setActiveConnection(id: stored.id)
+
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+        coordinator.onConnectionSuccess()
+
+        registry.markBackendRemoved(BackendID(other.id))
+        for _ in 0..<20 { await Task.yield() }
+
+        if case .workspaceList = coordinator.currentScreen {
+            // pass — a mark for a backend this window does not show is ignored
+        } else {
+            Issue.record("Expected .workspaceList, got \(coordinator.currentScreen)")
+        }
+    }
+
+    // MARK: - Removed pinned window close fallback (spec decision 2)
+
+    @Test func removedWindowCloseDismissesWhenOtherWindowsExist() {
+        #expect(RemovedWindowCloseAction.forOpenWindowCount(2) == .dismiss)
+        #expect(RemovedWindowCloseAction.forOpenWindowCount(3) == .dismiss)
+    }
+
+    @Test func removedWindowCloseAdoptsDefaultSessionAsLastWindow() {
+        #expect(RemovedWindowCloseAction.forOpenWindowCount(1) == .adoptDefaultSession)
+        #expect(RemovedWindowCloseAction.forOpenWindowCount(0) == .adoptDefaultSession)
+    }
+
     // MARK: - Deep-link URL routing (intent://)
 
     @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
