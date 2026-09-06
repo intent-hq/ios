@@ -408,6 +408,17 @@ class AppCoordinator {
         pinnedBackendID?.connectionID ?? persistence.activeConnection()?.id
     }
 
+    /// The saved connection record this window shows: the pinned backend's
+    /// record for pinned windows, else the active connection. Settings
+    /// renders it and Log Off forgets it (spec lifecycle decision 2a) —
+    /// never the global active connection from a pinned window.
+    var windowConnection: StoredConnection? {
+        if let pinned = pinnedBackendID {
+            return persistence.loadConnections().first { $0.id == pinned.connectionID }
+        }
+        return persistence.activeConnection()
+    }
+
     /// Routes notification taps immediately once the connected UI is stable,
     /// or stashes them until cold-start connection routing completes. Taps
     /// for a backend this window doesn't show are dropped (the multi-window
@@ -444,29 +455,32 @@ class AppCoordinator {
     /// Merges the iCloud-synced backend registry into the saved connections
     /// (see `SyncedBackendConnectionMerge`). An unavailable registry read
     /// (locked keychain, missing entitlement) is a no-op — existing local
-    /// knowledge is kept. When a tombstone removes the active connection,
-    /// disconnects and routes to the pairing surface like Log Off. When the
-    /// merge rewrote the active connection's record (rotated token, new
-    /// routes), the live ConnectionManager cache adopts the new fields so
-    /// the next reconnect uses them.
+    /// knowledge is kept. When a tombstone removes this window's connection
+    /// (the pinned backend, else the active connection), disconnects and
+    /// routes away like Log Off. When the merge rewrote this window's
+    /// record (rotated token, new routes), the live ConnectionManager cache
+    /// adopts the new fields so the next reconnect uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
         guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
+        // Captured before the merge: a tombstone on the active connection
+        // clears the active pointer during the merge.
+        let windowID = windowConnectionID
         let outcome = persistence.mergeSyncedBackends(records: records)
         // Tombstones close pinned windows on the removed backends; a re-added
         // record (same id resurrected from another device) clears its mark.
         sessionRegistry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))
         sessionRegistry.clearRemovedMarks(outcome.addedIds.map(BackendID.init))
-        if outcome.removedActiveConnection {
+        if let windowID, outcome.removedIds.contains(windowID) {
             exitRemovedBackend()
         } else if outcome.changed {
-            if let active = persistence.activeConnection(),
-                outcome.updatedIds.contains(active.id)
+            if let record = windowConnection,
+                outcome.updatedIds.contains(record.id)
             {
                 connection.updateCachedCredentials(
-                    hosts: active.server.hosts, port: active.server.port,
-                    token: active.token, certFingerprint: active.server.certFingerprint,
-                    tcAddress: active.server.tcAddress)
+                    hosts: record.server.hosts, port: record.server.port,
+                    token: record.token, certFingerprint: record.server.certFingerprint,
+                    tcAddress: record.server.tcAddress)
             }
             // A merge while the pairing surface is up must (un)offer the
             // saved connections it added/removed.
@@ -581,7 +595,12 @@ class AppCoordinator {
         isDisconnected = false
         connection.disconnect()
         resetWorkspaceStore()
-        persistence.clearLastScreen()
+        // The saved last screen belongs to the default session (spec decision
+        // 1b); a pinned window logging off must not wipe the default window's
+        // restoration state (decision 2a).
+        if pinnedBackendID == nil {
+            persistence.clearLastScreen()
+        }
         selectedWorkspaceId = nil
         currentBackendID = nil
         pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
@@ -604,15 +623,16 @@ class AppCoordinator {
         currentScreen = .connecting
     }
 
-    /// Delete a saved connection. Deleting the active one disconnects and routes
-    /// like Log Off: pairing surface, with the remaining saved connections
-    /// offered when any are left. Any pinned window on the deleted backend
-    /// auto-closes via the registry's removal mark (spec decision 2).
+    /// Delete a saved connection. Deleting this window's connection (pinned
+    /// backend, else the active one) disconnects and routes like Log Off:
+    /// pairing surface, with the remaining saved connections offered when
+    /// any are left. Any pinned window on the deleted backend auto-closes
+    /// via the registry's removal mark (spec decision 2).
     func onDeleteConnection(id: UUID) {
-        let wasActive = persistence.activeConnection()?.id == id
+        let wasThisWindows = windowConnectionID == id
         persistence.deleteConnection(id: id)
         sessionRegistry.markBackendRemoved(BackendID(id))
-        if wasActive {
+        if wasThisWindows {
             exitRemovedBackend()
         } else if persistence.loadConnections().isEmpty {
             pairingShowsSavedConnections = false
@@ -623,14 +643,16 @@ class AppCoordinator {
         currentScreen = .settings
     }
 
-    /// Log Off forgets the active connection only. If other saved connections
-    /// remain, the pairing surface is shown with those connections available;
-    /// otherwise it behaves like first-run pairing. Any pinned window on the
-    /// forgotten backend auto-closes via the registry's removal mark.
+    /// Log Off forgets this window's connection only — the pinned backend
+    /// for pinned windows, else the active connection (spec lifecycle
+    /// decision 2a). If other saved connections remain, the pairing surface
+    /// is shown with those connections available; otherwise it behaves like
+    /// first-run pairing. Any other window on the forgotten backend leaves
+    /// it via the registry's removal mark (pinned windows auto-close).
     func onLogOff() {
-        if let active = persistence.activeConnection() {
-            persistence.deleteConnection(id: active.id)
-            sessionRegistry.markBackendRemoved(BackendID(active.id))
+        if let record = windowConnection {
+            persistence.deleteConnection(id: record.id)
+            sessionRegistry.markBackendRemoved(BackendID(record.id))
         }
         exitRemovedBackend()
     }

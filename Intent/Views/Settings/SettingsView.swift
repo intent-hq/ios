@@ -20,7 +20,9 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                if let connection = PersistenceManager.shared.activeConnection() {
+                // Window-scoped: a pinned window shows (and logs off) its own
+                // backend, never the default session's active connection.
+                if let connection = coordinator.windowConnection {
                     Section("Connected To") {
                         HStack(spacing: Constants.Settings.connectionRowSpacing) {
                             Image(systemName: "desktopcomputer")

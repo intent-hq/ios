@@ -402,6 +402,62 @@ final class AppCoordinatorTests {
         }
     }
 
+    // MARK: - Window-scoped Settings / Log Off (spec lifecycle decision 2a)
+
+    @Test @MainActor func windowConnection_pinnedCoordinatorShowsPinnedRecordNotActive() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let pinnedRecord = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let active = persistence.upsertConnection(Self.makeConnection(port: 2))
+        persistence.setActiveConnection(id: active.id)
+
+        // Settings' "Connected To" section renders windowConnection: a pinned
+        // window must show its own backend, not the default session's active.
+        let pinned = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            pinnedBackendID: BackendID(pinnedRecord.id),
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        #expect(pinned.windowConnection?.id == pinnedRecord.id)
+
+        let defaultCoordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        #expect(defaultCoordinator.windowConnection?.id == active.id)
+    }
+
+    @Test @MainActor func onLogOff_pinnedWindow_forgetsPinnedBackendOnly() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let pinnedRecord = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let active = persistence.upsertConnection(Self.makeConnection(port: 2))
+        persistence.setActiveConnection(id: active.id)
+        persistence.saveLastScreen(PersistenceManager.SavedScreen(
+            screen: "workspaceList", workspaceId: nil, agentId: nil,
+            agentName: nil, noteId: nil, noteTitle: nil))
+
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            pinnedBackendID: BackendID(pinnedRecord.id),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLogOff()
+
+        #expect(persistence.loadConnections().map(\.id) == [active.id],
+                "Log Off in a pinned window must forget only that window's backend")
+        #expect(persistence.activeConnection()?.id == active.id,
+                "The default session's active connection must survive")
+        #expect(registry.isBackendRemoved(BackendID(pinnedRecord.id)))
+        #expect(!registry.isBackendRemoved(BackendID(active.id)))
+        #expect(persistence.loadLastScreen() != nil,
+                "A pinned window's Log Off must not clear the default window's saved screen")
+    }
+
     @Test @MainActor func onPaired_resetsPairingShowsSavedConnections() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.pairingShowsSavedConnections = true
@@ -783,6 +839,46 @@ final class AppCoordinatorTests {
                 "The remaining saved connection must be offered on the pairing surface")
         if case .pairing = coordinator.currentScreen {
             // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func refreshSyncedBackends_tombstoneOnPinnedBackendExitsWindow() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        let active = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: active.id)
+
+        let clock = Date().timeIntervalSince1970 * 1000
+        let tombstone = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+            + #""updatedAt": \#(clock), "deleted": true}"#
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            pinnedBackendID: BackendID(doomed.id),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+        let outcome = coordinator.refreshSyncedBackends()
+
+        // The tombstone removed this window's pinned backend — not the
+        // active one — so the pinned coordinator must still route out.
+        #expect(outcome?.removedIds == [doomed.id])
+        #expect(outcome?.removedActiveConnection == false)
+        #expect(persistence.activeConnection()?.id == active.id)
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)))
+        if case .pairing = coordinator.currentScreen {
+            // pass — exitRemovedBackend ran for the pinned backend's removal
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
