@@ -243,6 +243,18 @@ struct WorkspaceDetailView: View {
         .navigationTitle(workspaceTitle)
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
+            #if os(visionOS)
+            // The Agents/Context switcher lives in the detail's top toolbar
+            // on visionOS instead of the in-window segmented control, so it
+            // visibly belongs to the workspace rather than the sidebar.
+            ToolbarItem(placement: .topBarTrailing) {
+                Picker("Workspace Content", selection: $selectedTab) {
+                    Label("Agents", systemImage: "person.2").tag(0)
+                    Label("Context", systemImage: "doc.text").tag(1)
+                }
+                .pickerStyle(.segmented)
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -265,44 +277,7 @@ struct WorkspaceDetailView: View {
                 .accessibilityLabel("Workspace actions")
             }
         }
-        #if os(visionOS)
-        // The Agents/Context switcher lives in a leading-edge ornament on
-        // visionOS instead of the in-window segmented control.
-        .ornament(attachmentAnchor: .scene(.leading), contentAlignment: .center) {
-            tabOrnament
-        }
-        #endif
     }
-
-    #if os(visionOS)
-    private var tabOrnament: some View {
-        VStack(spacing: Constants.WorkspaceDetail.ornamentButtonSpacing) {
-            ornamentTabButton("Agents", systemImage: "person.2", tag: 0)
-            ornamentTabButton("Context", systemImage: "doc.text", tag: 1)
-        }
-        .padding(Constants.WorkspaceDetail.ornamentPadding)
-        .glassBackgroundEffect()
-    }
-
-    /// 44 pt circular buttons spaced so adjacent centers sit 60 pt apart.
-    private func ornamentTabButton(_ title: String, systemImage: String, tag: Int) -> some View {
-        Button {
-            selectedTab = tag
-        } label: {
-            Label(title, systemImage: systemImage)
-                .labelStyle(.iconOnly)
-                .frame(width: Constants.WorkspaceDetail.ornamentButtonSize,
-                       height: Constants.WorkspaceDetail.ornamentButtonSize)
-        }
-        .buttonStyle(.borderless)
-        .buttonBorderShape(.circle)
-        .background(
-            selectedTab == tag ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(.clear),
-            in: Circle())
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(selectedTab == tag ? [.isSelected] : [])
-    }
-    #endif
 
     @ViewBuilder
     private var agentListContent: some View {

@@ -310,9 +310,6 @@ extension Constants.WorkspaceDetail {
     static let progressBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
-    static let ornamentButtonSize: CGFloat = 44
-    static let ornamentButtonSpacing: CGFloat = 16
-    static let ornamentPadding: CGFloat = 8
     // visionOS deliberate confirmation sheets for destructive/irreversible
     // workspace actions (archive, delete).
     #if os(visionOS)
