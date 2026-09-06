@@ -99,11 +99,15 @@ struct ToastInfo: Equatable {
         }
     }
 
+    // Taps are forwarded for any connection-scoped notification: the
+    // selection handler (RootView) decides per window whether to navigate or
+    // to open the source backend's pinned window (`tapRoute`), and the
+    // coordinator drops taps for backends its window doesn't show — so on
+    // iPhone, non-active-connection taps are ignored exactly as before.
     func handleNotificationResponse(_ response: LocalNotificationService.Response) {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
               response.agentId != nil, response.workspaceId != nil, response.agentName != nil,
-              let connectionId = response.connectionId,
-              connectionId == activeConnectionId()
+              response.connectionId != nil
         else { return }
 
         guard agentSelectionHandler != nil else {
@@ -117,10 +121,48 @@ struct ToastInfo: Equatable {
         guard let agentId = response.agentId,
               let workspaceId = response.workspaceId,
               let agentName = response.agentName,
-              let connectionId = response.connectionId,
-              connectionId == activeConnectionId()
+              let connectionId = response.connectionId
         else { return }
         agentSelectionHandler?(agentId, workspaceId, agentName, connectionId)
+    }
+
+    // MARK: - Tap routing (spec decision 5)
+
+    /// Where a tapped agent alert should land.
+    enum TapRoute: Equatable {
+        /// Navigate in the tapping window (today's single-window semantics).
+        case navigateInCurrentWindow
+        /// Focus — or open — the source backend's pinned window via
+        /// `openWindow(value:)`.
+        case openPinnedWindow(BackendID)
+    }
+
+    /// Pure routing decision for a tapped alert (toast or system
+    /// notification). Where multiple windows are supported (visionOS, iPad),
+    /// an alert from a pinned backend routes to that backend's own window —
+    /// unless the tapping window already shows it, which navigates in place.
+    /// Everything else (iPhone, default-session alerts) navigates in the
+    /// tapping window, whose coordinator drops cross-backend taps.
+    nonisolated static func tapRoute(
+        sourceBackendID: BackendID?,
+        windowBackendID: BackendID?,
+        supportsMultipleWindows: Bool
+    ) -> TapRoute {
+        guard supportsMultipleWindows,
+              let source = sourceBackendID,
+              source != windowBackendID
+        else { return .navigateInCurrentWindow }
+        return .openPinnedWindow(source)
+    }
+
+    /// The source backend of a tapped system notification: notifications are
+    /// posted with the connection id of the session that observed the event,
+    /// so an id other than the active connection can only come from a pinned
+    /// session. The active connection's alerts map to nil (default session).
+    nonisolated static func sourceBackendID(
+        connectionId: UUID, activeConnectionId: UUID?
+    ) -> BackendID? {
+        connectionId == activeConnectionId ? nil : BackendID(connectionId)
     }
 
     private func handleForegroundNotification(_ response: LocalNotificationService.Response) {

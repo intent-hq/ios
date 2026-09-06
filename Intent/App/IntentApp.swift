@@ -118,26 +118,85 @@ struct SessionWindowRoot: View {
 /// session down when the last window closes. Guards keep the attach/detach
 /// pair balanced if either callback fires more than once. Navigation is per
 /// window via SessionWindowRoot once the session is attached.
+///
+/// Backend removal (spec decision 2): when the registry marks this window's
+/// backend removed — user delete, log off, synced tombstone, or (on appear)
+/// a restored window whose saved record no longer exists — the session is
+/// released immediately (dropping the connection via the normal detach path)
+/// and the window dismisses itself via `dismissWindow(value:)`. If the
+/// dismissal cannot be delivered, the "connection removed" placeholder
+/// remains with a manual Close Window button.
 struct PinnedBackendWindowRoot: View {
     let backendID: BackendID
     @State private var session: BackendSession?
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    private var isRemoved: Bool {
+        BackendSessionRegistry.shared.isBackendRemoved(backendID)
+    }
 
     var body: some View {
         Group {
-            if let session {
+            if isRemoved {
+                RemovedBackendPlaceholderView()
+            } else if let session {
                 SessionWindowRoot(session: session)
             } else {
                 Color.clear
             }
         }
         .onAppear {
-            guard session == nil else { return }
+            // A window restored after its backend was removed while the app
+            // was not running: mark it so the shared auto-close path below
+            // takes over.
+            if !isRemoved,
+               !PersistenceManager.shared.loadConnections()
+                   .contains(where: { $0.id == backendID.connectionID }) {
+                BackendSessionRegistry.shared.markBackendRemoved(backendID)
+                return
+            }
+            guard !isRemoved, session == nil else { return }
             session = BackendSessionRegistry.shared.attach(backendID)
         }
-        .onDisappear {
-            guard session != nil else { return }
-            session = nil
-            BackendSessionRegistry.shared.detach(backendID)
+        // initial: true covers a mark set before this window ever rendered
+        // (removal racing a window that is still opening or being restored).
+        .onChange(of: isRemoved, initial: true) { _, removed in
+            guard removed else { return }
+            releaseSession()
+            dismissWindow(value: backendID)
         }
+        .onDisappear {
+            releaseSession()
+        }
+    }
+
+    private func releaseSession() {
+        guard session != nil else { return }
+        session = nil
+        BackendSessionRegistry.shared.detach(backendID)
+    }
+}
+
+/// Fallback surface for a pinned window whose backend was removed but whose
+/// programmatic dismissal could not be delivered (spec decision 2): names
+/// the state and offers a manual close.
+private struct RemovedBackendPlaceholderView: View {
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        VStack(spacing: Constants.Root.reconnectPanelSpacing) {
+            Image(systemName: "desktopcomputer.trianglebadge.exclamationmark")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text("Connection Removed")
+                .font(.headline)
+            Text("This connection is no longer saved.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Close Window") { dismissWindow() }
+                .buttonStyle(.bordered)
+        }
+        .padding()
     }
 }

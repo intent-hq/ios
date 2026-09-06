@@ -278,7 +278,12 @@ struct NotificationManagerTests {
         #expect(routedValues?.2 == "Build Agent")
     }
 
-    @Test @MainActor func notificationTapFromDifferentConnectionIsIgnored() {
+    @Test @MainActor func notificationTapFromDifferentConnectionForwardsForWindowRouting() {
+        // A non-active connectionId can only come from a pinned session's
+        // notification: the tap is forwarded so the selection handler can
+        // route it to that backend's window (tapRoute). On iPhone the
+        // coordinator's window guard still drops it — same visible behavior
+        // as the old manager-level filter.
         let (manager, _) = makeNotificationManager(state: .inactive)
         let otherConnectionId = UUID()
         let response = LocalNotificationService.response(
@@ -289,12 +294,14 @@ struct NotificationManagerTests {
                 "agentName": "Build Agent",
                 "connectionId": otherConnectionId.uuidString,
             ])
-        var didRoute = false
-        manager.setAgentSelectionHandler { _, _, _, _ in didRoute = true }
+        var routedConnectionId: UUID?
+        manager.setAgentSelectionHandler { _, _, _, connectionId in
+            routedConnectionId = connectionId
+        }
 
         manager.handleNotificationResponse(response)
 
-        #expect(!didRoute)
+        #expect(routedConnectionId == otherConnectionId)
     }
 
     @Test @MainActor func notificationTapWithoutConnectionScopeIsIgnored() {
@@ -322,6 +329,57 @@ struct NotificationManagerTests {
         #expect(center.removedNotificationIdentifiers == [[
             "agent-idle-\(Self.connectionId.uuidString)-agent-1"
         ]])
+    }
+
+    // MARK: - Multi-window tap routing (spec decision 5)
+
+    private static let pinnedBackend = BackendID(UUID(
+        uuidString: "22222222-2222-2222-2222-222222222222")!)
+
+    @Test func tapWithoutMultiWindowSupportNavigatesInPlace() {
+        #expect(NotificationManager.tapRoute(
+            sourceBackendID: Self.pinnedBackend, windowBackendID: nil,
+            supportsMultipleWindows: false) == .navigateInCurrentWindow)
+    }
+
+    @Test func defaultSessionTapNavigatesInPlace() {
+        #expect(NotificationManager.tapRoute(
+            sourceBackendID: nil, windowBackendID: nil,
+            supportsMultipleWindows: true) == .navigateInCurrentWindow)
+    }
+
+    @Test func pinnedSourceTapOpensItsPinnedWindow() {
+        #expect(NotificationManager.tapRoute(
+            sourceBackendID: Self.pinnedBackend, windowBackendID: nil,
+            supportsMultipleWindows: true)
+            == .openPinnedWindow(Self.pinnedBackend))
+    }
+
+    @Test func pinnedSourceTapInAnotherPinnedWindowOpensTheSourceWindow() {
+        #expect(NotificationManager.tapRoute(
+            sourceBackendID: Self.pinnedBackend, windowBackendID: BackendID(UUID()),
+            supportsMultipleWindows: true)
+            == .openPinnedWindow(Self.pinnedBackend))
+    }
+
+    @Test func pinnedSourceTapInItsOwnWindowNavigatesInPlace() {
+        #expect(NotificationManager.tapRoute(
+            sourceBackendID: Self.pinnedBackend, windowBackendID: Self.pinnedBackend,
+            supportsMultipleWindows: true) == .navigateInCurrentWindow)
+    }
+
+    @Test func activeConnectionNotificationHasNoSourceBackend() {
+        let active = UUID()
+        #expect(NotificationManager.sourceBackendID(
+            connectionId: active, activeConnectionId: active) == nil)
+    }
+
+    @Test func nonActiveConnectionNotificationMapsToPinnedSource() {
+        let pinned = UUID()
+        #expect(NotificationManager.sourceBackendID(
+            connectionId: pinned, activeConnectionId: UUID()) == BackendID(pinned))
+        #expect(NotificationManager.sourceBackendID(
+            connectionId: pinned, activeConnectionId: nil) == BackendID(pinned))
     }
 }
 

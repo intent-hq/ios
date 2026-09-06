@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Process-global map of `BackendID` → `BackendSession`.
 ///
@@ -6,7 +7,12 @@ import Foundation
 /// (one attach per window showing the backend), and torn down — disconnect
 /// + release — when the last window detaches. The default session is
 /// created on first access and persists for the app's lifetime.
+///
+/// Observable so pinned windows can react to `removedBackendIDs`: backends
+/// whose saved connection was deleted this run (spec decision 2) auto-close
+/// their windows.
 @MainActor
+@Observable
 final class BackendSessionRegistry {
     static let shared = BackendSessionRegistry()
 
@@ -14,18 +20,24 @@ final class BackendSessionRegistry {
     /// tests inject a factory producing sessions over fakes.
     typealias SessionFactory = @MainActor (BackendSession.Kind) -> BackendSession
 
-    private let makeSession: SessionFactory
-    private var pinned: [BackendID: BackendSession] = [:]
-    private var attachCounts: [BackendID: Int] = [:]
-    private var defaultSessionStorage: BackendSession?
+    @ObservationIgnored private let makeSession: SessionFactory
+    @ObservationIgnored private var pinned: [BackendID: BackendSession] = [:]
+    @ObservationIgnored private var attachCounts: [BackendID: Int] = [:]
+    @ObservationIgnored private var defaultSessionStorage: BackendSession?
+
+    /// Backends whose saved connection was removed while the app runs (user
+    /// delete, log off, or a synced tombstone). Pinned windows observe this
+    /// to auto-close (spec decision 2); marking never tears a session down
+    /// by itself — the closing window's detach drives the normal teardown.
+    private(set) var removedBackendIDs: Set<BackendID> = []
 
     /// Called after a session is created (default or pinned) so process-wide
     /// aggregators (e.g. `NotificationManager`) can observe its connection.
-    var onSessionCreated: ((BackendSession) -> Void)?
+    @ObservationIgnored var onSessionCreated: ((BackendSession) -> Void)?
 
     /// Called when a pinned session is released on last detach, before its
     /// connection is torn down. Never called for the default session.
-    var onSessionTeardown: ((BackendSession) -> Void)?
+    @ObservationIgnored var onSessionTeardown: ((BackendSession) -> Void)?
 
     init(makeSession: @escaping SessionFactory = BackendSessionRegistry.makeLiveSession) {
         self.makeSession = makeSession
@@ -90,6 +102,33 @@ final class BackendSessionRegistry {
     /// Backends that currently have a live pinned session.
     var pinnedBackendIDs: [BackendID] {
         Array(pinned.keys)
+    }
+
+    // MARK: - Removed backends (spec decision 2)
+
+    /// Whether `id`'s saved connection was removed this run.
+    func isBackendRemoved(_ id: BackendID) -> Bool {
+        removedBackendIDs.contains(id)
+    }
+
+    /// Marks a backend's saved connection as removed so any pinned window on
+    /// it auto-closes. Idempotent.
+    func markBackendRemoved(_ id: BackendID) {
+        removedBackendIDs.insert(id)
+    }
+
+    /// Marks several backends removed at once (synced-merge tombstones).
+    func markBackendsRemoved(_ ids: [BackendID]) {
+        guard !ids.isEmpty else { return }
+        removedBackendIDs.formUnion(ids)
+    }
+
+    /// Clears removal marks for backends whose saved connection reappeared
+    /// (a synced merge re-added the same record id), so a later pinned
+    /// window on the resurrected backend is not closed on sight.
+    func clearRemovedMarks(_ ids: [BackendID]) {
+        guard !ids.isEmpty else { return }
+        removedBackendIDs.subtract(ids)
     }
 
     // MARK: - Live composition

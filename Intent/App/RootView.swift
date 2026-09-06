@@ -5,6 +5,10 @@ struct RootView: View {
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.colorScheme) var colorScheme
+    // Multi-window tap routing (spec decision 5): false on iPhone, so alert
+    // taps there always navigate in place — unchanged semantics.
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
     @State private var notificationManager = NotificationManager.shared
     @State var showingWorkspaceDetail = false
     @State var showingConversation = false
@@ -103,11 +107,20 @@ struct RootView: View {
                     toast: toast,
                     onTap: {
                         notificationManager.dismissToast()
-                        coordinator.onSelectAgent(
-                            toast.agentId,
-                            workspaceId: toast.workspaceId,
-                            agentName: toast.agentName
-                        )
+                        switch NotificationManager.tapRoute(
+                            sourceBackendID: toast.sourceBackendID,
+                            windowBackendID: coordinator.pinnedBackendID,
+                            supportsMultipleWindows: supportsMultipleWindows)
+                        {
+                        case .openPinnedWindow(let target):
+                            openWindow(value: target)
+                        case .navigateInCurrentWindow:
+                            coordinator.onSelectAgent(
+                                toast.agentId,
+                                workspaceId: toast.workspaceId,
+                                agentName: toast.agentName
+                            )
+                        }
                     },
                     onDismiss: {
                         notificationManager.dismissToast()
@@ -169,14 +182,28 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
+            let supportsMultipleWindows = supportsMultipleWindows
+            let openWindow = openWindow
             notificationManager.setAgentSelectionHandler {
                 [weak coordinator] agentId, workspaceId, agentName, connectionId in
-                coordinator?.handleNotificationSelection(
-                    agentId: agentId,
-                    workspaceId: workspaceId,
-                    agentName: agentName,
-                    connectionId: connectionId
-                )
+                let source = NotificationManager.sourceBackendID(
+                    connectionId: connectionId,
+                    activeConnectionId: PersistenceManager.shared.activeConnection()?.id)
+                switch NotificationManager.tapRoute(
+                    sourceBackendID: source,
+                    windowBackendID: coordinator?.pinnedBackendID,
+                    supportsMultipleWindows: supportsMultipleWindows)
+                {
+                case .openPinnedWindow(let target):
+                    openWindow(value: target)
+                case .navigateInCurrentWindow:
+                    coordinator?.handleNotificationSelection(
+                        agentId: agentId,
+                        workspaceId: workspaceId,
+                        agentName: agentName,
+                        connectionId: connectionId
+                    )
+                }
             }
         }
     }

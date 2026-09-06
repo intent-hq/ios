@@ -14,6 +14,7 @@ extension AppCoordinator {
     @MainActor
     convenience init(
         persistence: PersistenceManager = PersistenceManager.shared,
+        sessionRegistry: BackendSessionRegistry = .shared,
         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}
@@ -22,6 +23,7 @@ extension AppCoordinator {
             workspaceStore: WorkspaceStore.shared,
             connection: ConnectionManager.shared,
             persistence: persistence,
+            sessionRegistry: sessionRegistry,
             syncedRegistry: syncedRegistry,
             backgroundTaskManager: backgroundTaskManager,
             reconnectLoadingObservationDidChange: reconnectLoadingObservationDidChange)
@@ -971,6 +973,92 @@ final class AppCoordinatorTests {
         #expect(persistence.loadConnections().isEmpty)
         #expect(!coordinator.pairingShowsSavedConnections,
                 "Flag must clear once no saved connections remain")
+    }
+
+    // MARK: - Backend removal marks pinned windows for auto-close (spec decision 2)
+
+    /// Registry whose session factory must never run: these tests only assert
+    /// removal marks, which never create or tear down sessions.
+    @MainActor private static func markOnlySessionRegistry() -> BackendSessionRegistry {
+        BackendSessionRegistry { kind in
+            fatalError("Removal marks must not build sessions (got \(kind))")
+        }
+    }
+
+    @Test @MainActor func onDeleteConnection_marksBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence, sessionRegistry: registry)
+
+        coordinator.onDeleteConnection(id: doomed.id)
+
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
+                "Deleting a saved connection must auto-close its pinned windows")
+    }
+
+    @Test @MainActor func onLogOff_marksActiveBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let active = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: active.id)
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence, sessionRegistry: registry)
+
+        coordinator.onLogOff()
+
+        #expect(registry.isBackendRemoved(BackendID(active.id)),
+                "Log Off forgets the active connection; its pinned windows must close")
+    }
+
+    @Test @MainActor func refreshSyncedBackends_tombstoneMarksBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+
+        let clock = Date().timeIntervalSince1970 * 1000
+        let tombstone = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+            + #""updatedAt": \#(clock), "deleted": true}"#
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.removedIds == [doomed.id])
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
+                "A synced tombstone must auto-close the removed backend's pinned windows")
+    }
+
+    @Test @MainActor func refreshSyncedBackends_mergeAddNeverMarksBackendsRemoved() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.addedIds.count == 1)
+        #expect(registry.removedBackendIDs.isEmpty,
+                "A merge that only adds must not mark anything removed")
     }
 
     @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {

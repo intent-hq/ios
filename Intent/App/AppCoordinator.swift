@@ -80,6 +80,7 @@ class AppCoordinator {
     /// and dial this backend's saved connection instead of the active one.
     @ObservationIgnored let pinnedBackendID: BackendID?
     @ObservationIgnored private let persistence: PersistenceManager
+    @ObservationIgnored private let sessionRegistry: BackendSessionRegistry
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
     @ObservationIgnored private let claimScreenRestoration: @MainActor () -> Bool
@@ -101,6 +102,7 @@ class AppCoordinator {
          connection: any SessionConnectionManaging,
          pinnedBackendID: BackendID? = nil,
          persistence: PersistenceManager = PersistenceManager.shared,
+         sessionRegistry: BackendSessionRegistry = .shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
          backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
          reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
@@ -109,6 +111,7 @@ class AppCoordinator {
         self.connection = connection
         self.pinnedBackendID = pinnedBackendID
         self.persistence = persistence
+        self.sessionRegistry = sessionRegistry
         self.syncedRegistry = syncedRegistry
         self.backgroundTaskManager = backgroundTaskManager
         self.reconnectLoadingObservationDidChange = reconnectLoadingObservationDidChange
@@ -330,8 +333,27 @@ class AppCoordinator {
     /// same as a successful QR scan; from anywhere else (already connected
     /// to another daemon, connecting, failed) it routes through
     /// onSwitchConnection so state from the previous daemon is fully reset.
+    ///
+    /// Pinned windows never switch backends in place (their window value is
+    /// fixed, and PairingFlow already connected the default session and made
+    /// the new backend active there — the default window adopts it). A
+    /// re-pair of the pinned window's own backend (same record id, e.g. a
+    /// rotated token) restarts this window's attempt so it dials the
+    /// refreshed record.
     func onDeepLinkPaired(_ connection: StoredConnection) {
         pendingDeepLinkPairing = nil
+        if let pinned = pinnedBackendID {
+            if pinned.connectionID == connection.id {
+                self.connection.updateCachedCredentials(
+                    hosts: connection.server.hosts, port: connection.server.port,
+                    token: connection.token,
+                    certFingerprint: connection.server.certFingerprint,
+                    tcAddress: connection.server.tcAddress)
+                connectionAttemptId += 1
+                currentScreen = .connecting
+            }
+            return
+        }
         if case .pairing = currentScreen {
             pairingShowsSavedConnections = false
             onConnectionSuccess()
@@ -340,15 +362,23 @@ class AppCoordinator {
         }
     }
 
+    /// The connection identity this window shows: the pinned backend for
+    /// pinned windows, else the active connection.
+    private var windowConnectionID: UUID? {
+        pinnedBackendID?.connectionID ?? persistence.activeConnection()?.id
+    }
+
     /// Routes notification taps immediately once the connected UI is stable,
-    /// or stashes them until cold-start connection routing completes.
+    /// or stashes them until cold-start connection routing completes. Taps
+    /// for a backend this window doesn't show are dropped (the multi-window
+    /// tap route opens the source backend's own window instead).
     func handleNotificationSelection(
         agentId: String,
         workspaceId: String,
         agentName: String,
         connectionId: UUID
     ) {
-        guard persistence.activeConnection()?.id == connectionId else { return }
+        guard windowConnectionID == connectionId else { return }
         switch currentScreen {
         case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
             pendingNotificationSelection = (agentId, workspaceId, agentName, connectionId)
@@ -383,6 +413,10 @@ class AppCoordinator {
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
         guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
         let outcome = persistence.mergeSyncedBackends(records: records)
+        // Tombstones close pinned windows on the removed backends; a re-added
+        // record (same id resurrected from another device) clears its mark.
+        sessionRegistry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))
+        sessionRegistry.clearRemovedMarks(outcome.addedIds.map(BackendID.init))
         if outcome.removedActiveConnection {
             hasEverConnected = false
             isDisconnected = false
@@ -413,7 +447,7 @@ class AppCoordinator {
     func onConnectionSuccess() {
         if let selection = pendingNotificationSelection {
             pendingNotificationSelection = nil
-            if persistence.activeConnection()?.id == selection.connectionId {
+            if windowConnectionID == selection.connectionId {
                 onSelectAgent(
                     selection.agentId,
                     workspaceId: selection.workspaceId,
@@ -521,10 +555,12 @@ class AppCoordinator {
 
     /// Delete a saved connection. Deleting the active one disconnects and routes
     /// like Log Off: pairing surface, with the remaining saved connections
-    /// offered when any are left.
+    /// offered when any are left. Any pinned window on the deleted backend
+    /// auto-closes via the registry's removal mark (spec decision 2).
     func onDeleteConnection(id: UUID) {
         let wasActive = persistence.activeConnection()?.id == id
         persistence.deleteConnection(id: id)
+        sessionRegistry.markBackendRemoved(BackendID(id))
         let hasRemaining = !persistence.loadConnections().isEmpty
         if wasActive {
             hasEverConnected = false
@@ -546,7 +582,8 @@ class AppCoordinator {
 
     /// Log Off forgets the active connection only. If other saved connections
     /// remain, the pairing surface is shown with those connections available;
-    /// otherwise it behaves like first-run pairing.
+    /// otherwise it behaves like first-run pairing. Any pinned window on the
+    /// forgotten backend auto-closes via the registry's removal mark.
     func onLogOff() {
         hasEverConnected = false
         isDisconnected = false
@@ -554,6 +591,7 @@ class AppCoordinator {
         resetWorkspaceStore()
         if let active = persistence.activeConnection() {
             persistence.deleteConnection(id: active.id)
+            sessionRegistry.markBackendRemoved(BackendID(active.id))
         }
         persistence.clearLastScreen()
         selectedWorkspaceId = nil

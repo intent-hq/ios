@@ -350,6 +350,58 @@ final class BackendSessionRegistryTests {
         #expect(!session.claimScreenRestoration())
     }
 
+    // MARK: - Removed backends (spec decision 2)
+
+    @Test func markBackendRemovedIsObservableAndIdempotent() {
+        let registry = makeRegistry()
+        let id = BackendID(UUID())
+
+        #expect(!registry.isBackendRemoved(id))
+        registry.markBackendRemoved(id)
+        registry.markBackendRemoved(id)
+
+        #expect(registry.isBackendRemoved(id))
+        #expect(registry.removedBackendIDs == [id])
+    }
+
+    @Test func markBackendsRemovedMarksAllAtOnce() {
+        let registry = makeRegistry()
+        let a = BackendID(UUID())
+        let b = BackendID(UUID())
+
+        registry.markBackendsRemoved([a, b])
+
+        #expect(registry.isBackendRemoved(a))
+        #expect(registry.isBackendRemoved(b))
+    }
+
+    @Test func clearRemovedMarksUnmarksOnlyTheGivenBackends() {
+        let registry = makeRegistry()
+        let removed = BackendID(UUID())
+        let resurrected = BackendID(UUID())
+
+        registry.markBackendsRemoved([removed, resurrected])
+        registry.clearRemovedMarks([resurrected])
+
+        #expect(registry.isBackendRemoved(removed))
+        #expect(!registry.isBackendRemoved(resurrected))
+    }
+
+    @Test func markingRemovedDoesNotTearDownTheSession() {
+        let registry = makeRegistry()
+        let id = BackendID(UUID())
+
+        let session = registry.attach(id)
+        registry.markBackendRemoved(id)
+
+        #expect(registry.pinnedSession(for: id) === session)
+        #expect(createdConnections[0].disconnectCallCount == 0,
+                "Marking drives window close; the window's detach tears down")
+
+        registry.detach(id)
+        #expect(createdConnections[0].disconnectCallCount == 1)
+    }
+
     // MARK: - Live composition
 
     @Test func liveDefaultSessionWrapsSharedInstances() {
