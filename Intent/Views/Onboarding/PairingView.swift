@@ -171,5 +171,6 @@ struct PairingOptionButton: View {
                     .stroke(Theme.border(for: colorScheme), lineWidth: Constants.Pairing.optionBorderWidth)
             )
         }
+        .visionCardRowButton(cornerRadius: Constants.Pairing.optionCornerRadius)
     }
 }

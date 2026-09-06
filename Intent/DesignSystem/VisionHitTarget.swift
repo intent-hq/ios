@@ -21,4 +21,21 @@ extension View {
         return self
         #endif
     }
+
+    /// visionOS treatment for buttons whose label already draws its own rounded
+    /// card: drop the automatic bordered capsule (`.plain` style) and give the
+    /// gaze hover highlight the card's rounded-rectangle shape, keeping the
+    /// 60 pt minimum row height. No-op on iOS so the existing layout and the
+    /// default button style are untouched.
+    func visionCardRowButton(cornerRadius: CGFloat) -> some View {
+        #if os(visionOS)
+        return self
+            .buttonStyle(.plain)
+            .frame(minHeight: Constants.Accessibility.visionListRowMinimumHeight)
+            .contentShape(.hoverEffect, .rect(cornerRadius: cornerRadius))
+            .hoverEffect()
+        #else
+        return self
+        #endif
+    }
 }
