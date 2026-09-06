@@ -4,7 +4,7 @@ extension RootView {
     @ViewBuilder
     var compactNavigationView: some View {
         NavigationStack(path: $noteStack) {
-            WorkspaceListView()
+            WorkspaceListView(workspaceStore: session.workspaceStore)
                 .navigationDestination(isPresented: $showingWorkspaceDetail) {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId)
@@ -12,7 +12,8 @@ extension RootView {
                                 ConversationView(
                                     agentId: conversationAgentId,
                                     workspaceId: conversationWorkspaceId,
-                                    agentName: conversationAgentName
+                                    agentName: conversationAgentName,
+                                    connection: session.connection
                                 )
                                 .id(conversationAgentId)
                             }

@@ -3,10 +3,16 @@ import SwiftUI
 struct WorkspaceListView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
-    @State private var viewModel = WorkspaceListViewModel()
+    private let workspaceStore: WorkspaceStore
+    @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @FocusState private var searchFocused: Bool
+
+    init(workspaceStore: WorkspaceStore) {
+        self.workspaceStore = workspaceStore
+        _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,7 +83,7 @@ struct WorkspaceListView: View {
                 .environment(coordinator)
         }
         .refreshable {
-            await WorkspaceStore.shared.fetchAll()
+            await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }

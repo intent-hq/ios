@@ -64,6 +64,7 @@ enum PairingFlow {
             hosts: payload.hosts, port: payload.port, name: "Intent",
             pairedAt: Date(), certFingerprint: certFingerprint,
             tcAddress: payload.tcAddress)
-        return await ConnectionPairing.finalize(server: server, token: payload.token)
+        return await ConnectionPairing.finalize(
+            server: server, token: payload.token, connection: connectionManager)
     }
 }

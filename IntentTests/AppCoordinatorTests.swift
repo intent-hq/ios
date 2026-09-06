@@ -6,6 +6,28 @@ import Testing
 import UIKit
 @testable import Intent
 
+/// `AppCoordinator` takes its workspace store and connection explicitly (they
+/// come from the owning `BackendSession`). Tests that only care about
+/// navigation keep using the process-wide instances the default session is
+/// composed over, which is what these cases asserted before the split.
+extension AppCoordinator {
+    @MainActor
+    convenience init(
+        persistence: PersistenceManager = PersistenceManager.shared,
+        syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
+        backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
+        reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}
+    ) {
+        self.init(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            persistence: persistence,
+            syncedRegistry: syncedRegistry,
+            backgroundTaskManager: backgroundTaskManager,
+            reconnectLoadingObservationDidChange: reconnectLoadingObservationDidChange)
+    }
+}
+
 @Suite(.serialized)
 final class AppCoordinatorTests {
 

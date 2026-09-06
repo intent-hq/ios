@@ -2,7 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.colorScheme) var colorScheme
     @State private var notificationManager = NotificationManager.shared
@@ -53,7 +53,7 @@ struct RootView: View {
                 } else {
                     // iPad: NavigationSplitView with sidebar selection
                     NavigationSplitView {
-                        WorkspaceListSidebar()
+                        WorkspaceListSidebar(workspaceStore: session.workspaceStore)
                             .navigationSplitViewColumnWidth(
                                 min: Constants.Root.sidebarMinimumWidth,
                                 ideal: Constants.Root.sidebarIdealWidth,
@@ -141,8 +141,9 @@ struct RootView: View {
                         // Passive per-host cert-mismatch list: hosts that
                         // presented a wrong certificate during the reconnect
                         // race, while retries continue on the remaining hosts.
-                        if !connectionManager.certMismatches.isEmpty {
-                            CertMismatchListView(mismatches: connectionManager.certMismatches)
+                        if !session.connection.certMismatches.isEmpty {
+                            CertMismatchListView(
+                                mismatches: session.connection.certMismatches)
                                 .frame(maxWidth: 320)
                         }
 

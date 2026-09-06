@@ -14,7 +14,7 @@ import SwiftUI
 struct MonitoredPrsRow: View {
     let viewModel: ConversationViewModel
     private let monitoredPrStore: MonitoredPrStore
-    private let workspaceStore = WorkspaceStore.shared
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
@@ -110,7 +110,8 @@ struct MonitoredPrsRow: View {
     }
 
     private var workspaceRepo: String? {
-        guard let workspace = workspaceStore.workspaces.first(where: { $0.id == viewModel.workspaceId }),
+        guard let workspace = session.workspaceStore.workspaces.first(
+                where: { $0.id == viewModel.workspaceId }),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"

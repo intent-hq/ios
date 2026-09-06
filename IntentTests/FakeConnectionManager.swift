@@ -3,22 +3,75 @@ import Combine
 @testable import Intent
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
-/// to ConnectionManagerRouting for testing purposes. It provides full control over connection
+/// to SessionConnectionManaging for testing purposes. It provides full control over connection
 /// state, request responses, and subscription push delivery.
 @MainActor
-class FakeConnectionManager: ConnectionManagerRouting {
+class FakeConnectionManager: SessionConnectionManaging {
     // MARK: - Published State
-    
+
     private let _connectionState = CurrentValueSubject<ConnectionState, Never>(.disconnected)
     var connectionState: ConnectionState {
         get { _connectionState.value }
         set { _connectionState.send(newValue) }
     }
-    
+
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
         _connectionState.eraseToAnyPublisher()
     }
-    
+
+    // MARK: - Session Connection Surface
+
+    private let _certMismatchDetected = CurrentValueSubject<Bool, Never>(false)
+    var certMismatchDetected: Bool {
+        get { _certMismatchDetected.value }
+        set { _certMismatchDetected.send(newValue) }
+    }
+
+    var certMismatchPublisher: AnyPublisher<Bool, Never> {
+        _certMismatchDetected.eraseToAnyPublisher()
+    }
+
+    var certMismatches: [HostCertMismatch] = []
+
+    var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
+
+    /// Recorded `connect` calls, and the error to throw instead of connecting.
+    var connectLog: [(hosts: [String], port: Int, token: String,
+                      certFingerprint: String?, tcAddress: String?)] = []
+    var connectError: Error?
+
+    /// Recorded `updateCachedCredentials` calls.
+    var updateCachedCredentialsLog: [(hosts: [String], port: Int, token: String,
+                                      certFingerprint: String?, tcAddress: String?)] = []
+
+    private(set) var disconnectCallCount = 0
+    private(set) var refreshHostRoutesCallCount = 0
+
+    func connect(
+        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        tcAddress: String?
+    ) async throws {
+        connectLog.append((hosts, port, token, certFingerprint, tcAddress))
+        if let connectError { throw connectError }
+        connectionState = .connected
+    }
+
+    func updateCachedCredentials(
+        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        tcAddress: String?
+    ) {
+        updateCachedCredentialsLog.append((hosts, port, token, certFingerprint, tcAddress))
+    }
+
+    func refreshHostRoutes() async {
+        refreshHostRoutesCallCount += 1
+    }
+
+    func disconnect() {
+        disconnectCallCount += 1
+        simulateDisconnect()
+    }
+
     // MARK: - Request/Response Mocking
     
     /// Map of method names to response values. If a method is not in this map, request() throws.

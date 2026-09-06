@@ -7,6 +7,7 @@ struct CreateWorkspaceView: View {
     }
 
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
 
@@ -225,13 +226,13 @@ struct CreateWorkspaceView: View {
                     message: messageText
                 )
 
-                let result = try await ConnectionManager.shared.request(
+                let result = try await session.connection.request(
                     "workspace.create", params: params, timeout: Self.createRequestTimeout)
 
                 if let dict = result as? [String: Any],
                    let wsDict = dict["workspace"] as? [String: Any],
                    let workspace = WorkspaceStore.parseWorkspace(wsDict) {
-                    WorkspaceStore.shared.addOrUpdate(workspace)
+                    session.workspaceStore.addOrUpdate(workspace)
                     HapticManager.notification(.success)
                     idempotencyKey = UUID().uuidString
                     dismiss()

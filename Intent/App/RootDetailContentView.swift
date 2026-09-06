@@ -10,7 +10,8 @@ extension RootView {
                         ConversationView(
                             agentId: conversationAgentId,
                             workspaceId: conversationWorkspaceId,
-                            agentName: conversationAgentName
+                            agentName: conversationAgentName,
+                            connection: session.connection
                         )
                         .id(conversationAgentId)
                     }

@@ -74,13 +74,13 @@ class AppCoordinator {
     @ObservationIgnored private let reconnectLoadingObservationDidChange: @Sendable () -> Void
 
     @ObservationIgnored private let workspaceStore: WorkspaceStore
-    @ObservationIgnored private let connection: ConnectionManagerRouting
+    @ObservationIgnored private let connection: any SessionConnectionManaging
     @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
 
-    init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
-         connection: ConnectionManagerRouting = ConnectionManager.shared,
+    init(workspaceStore: WorkspaceStore,
+         connection: any SessionConnectionManaging,
          persistence: PersistenceManager = PersistenceManager.shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
          backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
@@ -209,13 +209,13 @@ class AppCoordinator {
 
 
     private func startObservingCertMismatch() {
-        certMismatchObserver = ConnectionManager.shared.certMismatchPublisher
+        certMismatchObserver = connection.certMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
                 guard let self = self, mismatch else { return }
                 self.currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
                 // Reset the flag so it doesn't re-trigger
-                ConnectionManager.shared.certMismatchDetected = false
+                self.connection.certMismatchDetected = false
             }
     }
 
@@ -363,7 +363,7 @@ class AppCoordinator {
         if outcome.removedActiveConnection {
             hasEverConnected = false
             isDisconnected = false
-            ConnectionManager.shared.disconnect()
+            connection.disconnect()
             resetWorkspaceStore()
             persistence.clearLastScreen()
             selectedWorkspaceId = nil
@@ -373,7 +373,7 @@ class AppCoordinator {
             if let active = persistence.activeConnection(),
                 outcome.updatedIds.contains(active.id)
             {
-                ConnectionManager.shared.updateCachedCredentials(
+                connection.updateCachedCredentials(
                     hosts: active.server.hosts, port: active.server.port,
                     token: active.token, certFingerprint: active.server.certFingerprint,
                     tcAddress: active.server.tcAddress)
@@ -476,8 +476,8 @@ class AppCoordinator {
     /// after reconnecting, and so ConnectingView's waitForWorkspaceData
     /// (which polls lastUpdated == nil) genuinely waits for the new daemon.
     private func resetWorkspaceStore() {
-        WorkspaceStore.shared.workspaces = []
-        WorkspaceStore.shared.lastUpdated = nil
+        workspaceStore.workspaces = []
+        workspaceStore.lastUpdated = nil
     }
 
     /// Switch to another saved connection: drop the live connection, clear the
@@ -485,7 +485,7 @@ class AppCoordinator {
     func onSwitchConnection(id: UUID) {
         hasEverConnected = false
         isDisconnected = false
-        ConnectionManager.shared.disconnect()
+        connection.disconnect()
         resetWorkspaceStore()
         persistence.clearLastScreen()
         persistence.setActiveConnection(id: id)
@@ -505,7 +505,7 @@ class AppCoordinator {
         if wasActive {
             hasEverConnected = false
             isDisconnected = false
-            ConnectionManager.shared.disconnect()
+            connection.disconnect()
             resetWorkspaceStore()
             persistence.clearLastScreen()
             selectedWorkspaceId = nil
@@ -526,7 +526,7 @@ class AppCoordinator {
     func onLogOff() {
         hasEverConnected = false
         isDisconnected = false
-        ConnectionManager.shared.disconnect()
+        connection.disconnect()
         resetWorkspaceStore()
         if let active = persistence.activeConnection() {
             persistence.deleteConnection(id: active.id)

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ConnectionFailureView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     let errorMessage: String
     var isCertMismatch: Bool = false
@@ -47,8 +47,8 @@ struct ConnectionFailureView: View {
                     // path this lists all mismatching hosts (not just one);
                     // during auto-retry it is the passive list while retries
                     // continue on the remaining hosts.
-                    if !connectionManager.certMismatches.isEmpty {
-                        CertMismatchListView(mismatches: connectionManager.certMismatches)
+                    if !session.connection.certMismatches.isEmpty {
+                        CertMismatchListView(mismatches: session.connection.certMismatches)
                     }
 
                     // Auto-retry progress
@@ -209,7 +209,7 @@ struct ConnectionFailureView: View {
                 }
 
                 do {
-                    try await ConnectionManager.shared.connect(
+                    try await session.connection.connect(
                         hosts: pairing.server.hosts,
                         port: pairing.server.port,
                         token: pairing.token,
@@ -233,15 +233,17 @@ struct ConnectionFailureView: View {
 }
 
 #Preview("Connection Failed") {
+    let session = BackendSessionRegistry.shared.defaultSession
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.coordinator)
 }
 
 #Preview("Connection Failed - Dark") {
+    let session = BackendSessionRegistry.shared.defaultSession
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.coordinator)
         .preferredColorScheme(.dark)
 }
 

@@ -2,7 +2,10 @@ import SwiftUI
 
 @main
 struct IntentApp: App {
-    @State private var coordinator = AppCoordinator()
+    /// The default window's session: the registry's default session, whose
+    /// objects every view and view model below reads from the environment.
+    /// This is the app's single root injection site for session state.
+    @State private var session = BackendSessionRegistry.shared.defaultSession
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
@@ -33,17 +36,17 @@ struct IntentApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environment(coordinator)
-                .environment(ConnectionManager.shared)
+                .environment(session)
+                .environment(session.coordinator)
                 .preferredColorScheme(resolvedColorScheme)
                 .onOpenURL { url in
-                    coordinator.handleIncomingURL(url)
+                    session.coordinator.handleIncomingURL(url)
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
-                        coordinator.onScenePhaseActive()
+                        session.coordinator.onScenePhaseActive()
                     } else {
-                        coordinator.onScenePhaseNotActive()
+                        session.coordinator.onScenePhaseNotActive()
                     }
                 }
                 #if os(visionOS)

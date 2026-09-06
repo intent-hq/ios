@@ -21,10 +21,14 @@ enum ConnectionPairing {
         return nil
     }
 
+    /// `connection` is the session connection the pairing was established
+    /// over, so a pinned session names and refreshes its own backend.
     @discardableResult
-    static func finalize(server: PairedServer, token: String) async -> StoredConnection {
+    static func finalize(
+        server: PairedServer, token: String, connection: any SessionConnectionManaging
+    ) async -> StoredConnection {
         var displayName: String?
-        if let result = try? await ConnectionManager.shared.request("host.status") {
+        if let result = try? await connection.request("host.status") {
             displayName = Self.displayName(fromHostStatus: result)
         }
         let stored = PersistenceManager.shared.upsertConnection(
@@ -35,7 +39,7 @@ enum ConnectionPairing {
         // Re-trigger the post-connect route refresh now that the record exists:
         // the refresh fired by connect() may have run before the upsert above
         // and found no stored record to persist the daemon-reported IPs into.
-        Task { await ConnectionManager.shared.refreshHostRoutes() }
+        Task { await connection.refreshHostRoutes() }
         return stored
     }
 }

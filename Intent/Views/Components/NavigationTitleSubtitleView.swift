@@ -57,11 +57,11 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
     /// The navigation title the fallback principal item re-renders.
     let title: String
     let workspaceId: String
-    private let workspaceStore = WorkspaceStore.shared
+    @Environment(BackendSession.self) private var session
 
     private var subtitle: String? {
         WorkspaceSubtitleResolver.subtitle(
-            forWorkspaceId: workspaceId, in: workspaceStore.workspaces)
+            forWorkspaceId: workspaceId, in: session.workspaceStore.workspaces)
     }
 
     @ViewBuilder
@@ -100,6 +100,7 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
 
     /// Cold start / deep link: the store may not have fetched yet.
     private func fetchWorkspacesIfNeeded() async {
+        let workspaceStore = session.workspaceStore
         if workspaceStore.workspaces.isEmpty && !workspaceStore.isLoading {
             await workspaceStore.fetchAll()
         }

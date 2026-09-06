@@ -15,7 +15,9 @@ struct WorkspaceDetailView: View {
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var progressWidth: CGFloat = 0
     @State private var noteStore = NoteStore()
-    private let workspaceStore = WorkspaceStore.shared
+    @Environment(BackendSession.self) private var session
+
+    private var workspaceStore: WorkspaceStore { session.workspaceStore }
 
     private var workspace: Workspace? {
         workspaceStore.workspaces.first { $0.id == workspaceId }
@@ -357,10 +359,10 @@ struct WorkspaceDetailView: View {
     private func deleteWorkspace() {
         Task {
             do {
-                let _ = try await ConnectionManager.shared.request(
+                let _ = try await session.connection.request(
                     "workspace.delete", params: ["workspaceId": workspaceId])
                 coordinator.onBackToWorkspaceList()
-                await WorkspaceStore.shared.fetchAll()
+                await workspaceStore.fetchAll()
             } catch {
                 AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
             }
@@ -370,10 +372,10 @@ struct WorkspaceDetailView: View {
     private func archiveWorkspace() {
         Task {
             do {
-                let _ = try await ConnectionManager.shared.request(
+                let _ = try await session.connection.request(
                     "workspace.archive", params: ["workspaceId": workspaceId])
                 coordinator.onBackToWorkspaceList()
-                await WorkspaceStore.shared.fetchAll()
+                await workspaceStore.fetchAll()
             } catch {
                 AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
             }

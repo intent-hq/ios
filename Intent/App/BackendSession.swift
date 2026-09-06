@@ -1,11 +1,34 @@
+import Combine
 import Foundation
 import Observation
 
 /// The connection surface a `BackendSession` owns: the routing seam the
-/// stores already depend on, plus explicit teardown for session release.
+/// stores already depend on, plus the lifecycle, credential and certificate
+/// surfaces the coordinator and the connection views drive on their own
+/// session instead of a process-wide singleton.
 /// `ConnectionManager` conforms as-is; tests inject fakes.
 @MainActor
 protocol SessionConnectionManaging: ConnectionManagerRouting {
+    /// Settable so demo mode can mark the session connected without a socket.
+    var connectionState: ConnectionState { get set }
+    /// Per-host certificate mismatches observed by the current race.
+    var certMismatches: [HostCertMismatch] { get }
+    /// Raised when a pinned certificate changed; the coordinator clears it
+    /// once it has routed to the failure screen.
+    var certMismatchDetected: Bool { get set }
+    var certMismatchPublisher: AnyPublisher<Bool, Never> { get }
+    /// Dialer used to probe a server certificate over a Tailcat tunnel.
+    var tunnelDialer: any TunnelDialing { get }
+
+    func connect(
+        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        tcAddress: String?
+    ) async throws
+    func updateCachedCredentials(
+        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        tcAddress: String?
+    )
+    func refreshHostRoutes() async
     func disconnect()
 }
 

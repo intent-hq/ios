@@ -13,7 +13,9 @@ struct ConversationViewModelTests {
     // MARK: - Helpers
 
     private func makeVM() -> ConversationViewModel {
-        ConversationViewModel(agentId: "test-agent", workspaceId: "test-ws", agentName: "Test")
+        ConversationViewModel(
+            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
+            connection: ConnectionManager.shared)
     }
 
     private func textMessage(id: String = UUID().uuidString, role: MessageRole, text: String,

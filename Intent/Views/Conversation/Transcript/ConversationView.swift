@@ -4,11 +4,15 @@ import UIKit
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
 
-    init(agentId: String, workspaceId: String, agentName: String) {
+    init(
+        agentId: String, workspaceId: String, agentName: String,
+        connection: any ConnectionManagerRouting
+    ) {
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
-            agentName: agentName
+            agentName: agentName,
+            connection: connection
         ))
     }
 
@@ -20,6 +24,7 @@ struct ConversationView: View {
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
@@ -51,7 +56,8 @@ private struct ConversationViewContent: View {
                 ConversationView(
                     agentId: dest.agentId,
                     workspaceId: dest.workspaceId,
-                    agentName: dest.agentName
+                    agentName: dest.agentName,
+                    connection: session.connection
                 )
                 .id(dest.agentId)
             }
@@ -253,7 +259,7 @@ private struct ConversationViewContent: View {
         selfInitiatedDelete = true
         Task {
             do {
-                let _ = try await ConnectionManager.shared.request(
+                let _ = try await session.connection.request(
                     "agent.delete",
                     params: [
                         "agentId": viewModel.agentId,

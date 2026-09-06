@@ -2,17 +2,9 @@ import Foundation
 import Testing
 @testable import Intent
 
-/// Session-connection fake: `FakeConnectionManager` plus the explicit
-/// teardown surface `BackendSession` owns, recording disconnects.
-@MainActor
-final class SessionFakeConnectionManager: FakeConnectionManager, SessionConnectionManaging {
-    private(set) var disconnectCallCount = 0
-
-    func disconnect() {
-        disconnectCallCount += 1
-        simulateDisconnect()
-    }
-}
+/// Session-connection fake: `FakeConnectionManager` already implements the
+/// session surface `BackendSession` owns (including disconnect recording).
+typealias SessionFakeConnectionManager = FakeConnectionManager
 
 /// Registry create/reuse/teardown semantics over a fake session factory —
 /// pure unit tests, no sockets.
