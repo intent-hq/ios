@@ -15,7 +15,7 @@ struct MessageInputView: View {
     #if os(visionOS)
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = SpeechDictationController()
-    @State private var dictationTranscript: DictationTranscript?
+    @State private var dictationSession: DictationSession?
     @State private var caretOffset: Int = 0
     #endif
 
@@ -359,14 +359,24 @@ struct MessageInputView: View {
             return
         }
 
-        let transcript = DictationTranscript(baseText: localText, insertionOffset: caretOffset)
-        dictationTranscript = transcript
+        dictationSession = DictationSession(baseText: localText, insertionOffset: caretOffset)
         dictation.onTranscriptChange = { transcription, _ in
-            localText = transcript.merged(with: transcription)
+            guard var session = dictationSession else { return }
+            switch session.apply(transcription: transcription, to: localText) {
+            case .merged(let text):
+                localText = text
+                dictationSession = session
+            case .diverged:
+                // The composer text was edited outside dictation (typed, or
+                // replaced by the view model — e.g. a send cleared it). The
+                // edit wins: stop dictation instead of clobbering it.
+                dictationSession = nil
+                dictation.stop(reason: .textEdited)
+            }
         }
         dictation.onDidStop = { reason in
             if !reason.acceptsFinalResult {
-                dictationTranscript = nil
+                dictationSession = nil
             }
         }
         Task { await dictation.startRecording() }

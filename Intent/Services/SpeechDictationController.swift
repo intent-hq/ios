@@ -15,6 +15,9 @@ enum DictationStopReason {
     case recognitionError
     /// The recognizer delivered a final result on its own (e.g. after silence).
     case recognizerFinished
+    /// The composer text was edited outside dictation (typed, or replaced by
+    /// the view model). The edit wins; a late final must not clobber it.
+    case textEdited
 
     /// Whether a final transcription arriving after this stop should still
     /// replace the partial text. Deliberate endings keep the (usually more
@@ -23,8 +26,36 @@ enum DictationStopReason {
         switch self {
         case .userTapped, .recognizerFinished:
             return true
-        case .send, .viewDisappeared, .sceneInactive, .recognitionError:
+        case .send, .viewDisappeared, .sceneInactive, .recognitionError, .textEdited:
             return false
+        }
+    }
+}
+
+/// Pure decision table for `SpeechDictationController.stop(reason:)`,
+/// extracted so the stop-after-stop window is unit-testable without Speech.
+/// After a graceful stop (`userTapped`) the session is no longer recording
+/// but the recognizer may still deliver its final result; a stop request in
+/// that window whose reason rejects final results (e.g. `send`) must still
+/// sever the transcript callback so the late final cannot resurrect
+/// already-consumed text.
+enum DictationStopAction: Equatable {
+    /// No active session and the reason keeps final results flowing: no-op.
+    case ignore
+    /// End the active session, letting the recognizer deliver its final.
+    case finish
+    /// End the active session, cancel outright and sever the callback.
+    case cancelAndSever
+    /// No active session, but the transcript callback must still be severed
+    /// and any lingering recognition task cancelled.
+    case severOnly
+
+    static func action(for reason: DictationStopReason, isRecording: Bool) -> DictationStopAction {
+        switch (isRecording, reason.acceptsFinalResult) {
+        case (true, true): return .finish
+        case (true, false): return .cancelAndSever
+        case (false, true): return .ignore
+        case (false, false): return .severOnly
         }
     }
 }
@@ -60,6 +91,38 @@ struct DictationTranscript: Equatable {
             + transcription
             + (needsTrailingSpace ? " " : "")
             + suffix
+    }
+}
+
+/// Pure merge state for a live dictation session: each transcription applies
+/// only while the composer text is exactly what the previous merge produced
+/// (or the untouched base before the first one). Any other text means the
+/// user typed — or the view model replaced the text — during dictation; the
+/// session reports `.diverged` without touching the text so the caller can
+/// stop dictation instead of clobbering the edit.
+struct DictationSession: Equatable {
+    let transcript: DictationTranscript
+    /// Text produced by the last applied merge; `nil` before the first one.
+    private(set) var lastMergedText: String?
+
+    init(baseText: String, insertionOffset: Int) {
+        self.transcript = DictationTranscript(baseText: baseText, insertionOffset: insertionOffset)
+    }
+
+    enum MergeOutcome: Equatable {
+        /// Replace the composer text with the merged value.
+        case merged(String)
+        /// `currentText` was edited outside dictation; nothing was applied.
+        case diverged
+    }
+
+    mutating func apply(transcription: String, to currentText: String) -> MergeOutcome {
+        guard currentText == (lastMergedText ?? transcript.baseText) else {
+            return .diverged
+        }
+        let merged = transcript.merged(with: transcription)
+        lastMergedText = merged
+        return .merged(merged)
     }
 }
 
@@ -125,15 +188,27 @@ final class SpeechDictationController {
     /// Ends the active session. Graceful reasons (`acceptsFinalResult`) let
     /// the recognizer deliver its final transcription; interruptions cancel
     /// outright and sever the transcript callback so late results are dropped.
+    /// After a graceful stop, an interrupting stop (e.g. `send` before the
+    /// final arrived) still severs the callback and cancels the lingering
+    /// task so the late final cannot resurrect consumed text.
     func stop(reason: DictationStopReason) {
-        guard isRecording else { return }
-        isRecording = false
-        teardownAudio()
-
-        if reason.acceptsFinalResult {
+        switch DictationStopAction.action(for: reason, isRecording: isRecording) {
+        case .ignore:
+            return
+        case .severOnly:
+            onTranscriptChange = nil
+            recognitionTask?.cancel()
+            recognitionTask = nil
+            recognitionRequest = nil
+            return
+        case .finish:
+            isRecording = false
+            teardownAudio()
             recognitionRequest?.endAudio()
             recognitionTask?.finish()
-        } else {
+        case .cancelAndSever:
+            isRecording = false
+            teardownAudio()
             onTranscriptChange = nil
             recognitionTask?.cancel()
         }

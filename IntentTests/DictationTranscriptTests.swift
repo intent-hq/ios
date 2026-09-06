@@ -78,5 +78,48 @@ struct DictationTranscriptTests {
         #expect(!DictationStopReason.viewDisappeared.acceptsFinalResult)
         #expect(!DictationStopReason.sceneInactive.acceptsFinalResult)
         #expect(!DictationStopReason.recognitionError.acceptsFinalResult)
+        #expect(!DictationStopReason.textEdited.acceptsFinalResult)
+    }
+
+    // MARK: - Session merge state (typing during dictation)
+
+    @Test func sessionMergesWhileTextUntouched() {
+        var session = DictationSession(baseText: "note:", insertionOffset: 5)
+        #expect(session.apply(transcription: "hello", to: "note:") == .merged("note: hello"))
+        // Next partial applies over the text the previous merge produced.
+        #expect(session.apply(transcription: "hello there", to: "note: hello")
+            == .merged("note: hello there"))
+    }
+
+    /// Regression: text typed (or synced from the view model) during
+    /// dictation must never be clobbered by the next partial — the session
+    /// reports divergence instead of merging over the edit.
+    @Test func sessionRefusesToClobberTextTypedDuringDictation() {
+        var session = DictationSession(baseText: "", insertionOffset: 0)
+        #expect(session.apply(transcription: "hello", to: "") == .merged("hello"))
+        // The user typed "!" after the partial landed.
+        #expect(session.apply(transcription: "hello world", to: "hello!") == .diverged)
+        // Divergence applies before the first partial too.
+        var fresh = DictationSession(baseText: "draft", insertionOffset: 5)
+        #expect(fresh.apply(transcription: "hi", to: "draft edited") == .diverged)
+    }
+
+    // MARK: - Stop actions (stop-after-stop window)
+
+    @Test func activeSessionStopsFollowReason() {
+        #expect(DictationStopAction.action(for: .userTapped, isRecording: true) == .finish)
+        #expect(DictationStopAction.action(for: .send, isRecording: true) == .cancelAndSever)
+        #expect(DictationStopAction.action(for: .textEdited, isRecording: true) == .cancelAndSever)
+    }
+
+    /// Regression: a send in the graceful-stop→final-result window
+    /// (isRecording already false) must still sever the transcript callback
+    /// so the late final cannot resurrect the sent text.
+    @Test func sendAfterGracefulStopStillSevers() {
+        #expect(DictationStopAction.action(for: .send, isRecording: false) == .severOnly)
+        #expect(DictationStopAction.action(for: .viewDisappeared, isRecording: false) == .severOnly)
+        // Graceful reasons with no active session remain a no-op.
+        #expect(DictationStopAction.action(for: .userTapped, isRecording: false) == .ignore)
+        #expect(DictationStopAction.action(for: .recognizerFinished, isRecording: false) == .ignore)
     }
 }
