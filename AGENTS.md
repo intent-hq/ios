@@ -7,21 +7,10 @@ monorepo bump, conventional commits).
 
 ## Platform guards
 
-visionOS is a destination of the single `Intent` target. `#if os(visionOS)` is allowed
-only in the files that already carry it: `App/IntentApp.swift`, `DesignSystem/Layout.swift`,
-`DesignSystem/VisionHitTarget.swift`, `Services/SpeechDictationController.swift`,
-`Utils/HapticManager.swift`,
-`Views/Components/NavigationTitleSubtitleView.swift`,
-`Views/Conversation/Composer/MessageInputView.swift`,
-`Views/Conversation/Composer/SubmittableTextView.swift`,
-`Views/Conversation/Transcript/ConversationColumnView.swift`,
-`Views/Conversation/Transcript/ConversationTranscriptView.swift`,
-`Views/Onboarding/ManualTokenEntryView.swift`, `Views/Onboarding/PairingView.swift`,
-`Views/Onboarding/QRScannerView.swift`, `Views/Workspaces/WorkspaceAttentionCue.swift`,
-`Views/Workspaces/WorkspaceDetailView.swift`, `Views/Workspaces/WorkspaceListSidebar.swift`,
-`Views/Workspaces/WorkspaceListView.swift` (plus `IntentTests/PairingOptionTests.swift`);
-`#if canImport(TailcatKit)` only in `Services/ConnectionManager.swift`,
-`Services/TailcatTunnel.swift`, and `IntentTests/TailcatKitSmokeTests.swift`. Every
+visionOS is a destination of the single `Intent` target. `#if os(visionOS)` and
+`#if canImport(TailcatKit)` are restricted to an allowlist enforced by
+`IntentTests/PlatformGuardAllowlistTests.swift` — the source of truth for which files
+may carry each guard; extend the allowlist there when a new guard is deliberate. Every
 visionOS branch must leave an iOS branch identical to the prior behaviour. Verify with
 `-destination 'generic/platform=visionOS Simulator'` — never `-sdk xros`, which silently
 falls back to iphoneos when the visionOS platform component is not installed.
