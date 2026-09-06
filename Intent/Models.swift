@@ -122,6 +122,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let attention: String?     // "none" | "unread" | "review_required"; nil on older daemons
     let waiting: Bool          // orthogonal waiting flag (protocol 6.17); omitted on the wire when false
     let lastActivity: String?
+    let createdAt: String?
     let updatedAt: String?
     let repositoryOwner: String?
     let repositoryName: String?
@@ -136,13 +137,14 @@ struct Workspace: Codable, Identifiable, Equatable {
     let pullRequests: [WorkspacePullRequest]?  // detected-PR pool (§5.1); nil on older daemons
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
 
-    /// Explicit initializer so `attention` / `waiting` / `pullRequests` /
-    /// `activePullRequest` can default — existing call sites (and test
-    /// fixtures) that predate the fields stay valid.
+    /// Explicit initializer so `attention` / `waiting` / `createdAt` /
+    /// `pullRequests` / `activePullRequest` can default — existing call sites
+    /// (and test fixtures) that predate the fields stay valid.
     init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
          activity: String?, displayStatus: String?, attention: String? = nil,
          waiting: Bool = false,
-         lastActivity: String?, updatedAt: String?, repositoryOwner: String?,
+         lastActivity: String?, createdAt: String? = nil, updatedAt: String?,
+         repositoryOwner: String?,
          repositoryName: String?, prStatus: String?, prNumber: Int?,
          diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
          taskStatsInProgress: Int?, agentSummaryCount: Int?,
@@ -159,6 +161,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.attention = attention
         self.waiting = waiting
         self.lastActivity = lastActivity
+        self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.repositoryOwner = repositoryOwner
         self.repositoryName = repositoryName
@@ -189,6 +192,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         attention = try c.decodeIfPresent(String.self, forKey: .attention)
         waiting = try c.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
         lastActivity = try c.decodeIfPresent(String.self, forKey: .lastActivity)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
         updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
         repositoryOwner = try c.decodeIfPresent(String.self, forKey: .repositoryOwner)
         repositoryName = try c.decodeIfPresent(String.self, forKey: .repositoryName)
