@@ -44,9 +44,11 @@ final class BackendSessionRegistryTests {
             kind: kind,
             connection: connection,
             workspaceStore: workspaceStore,
-            coordinator: AppCoordinator(
-                workspaceStore: workspaceStore, connection: connection,
-                persistence: persistence),
+            coordinatorFactory: { [persistence] claim in
+                AppCoordinator(
+                    workspaceStore: workspaceStore, connection: connection,
+                    persistence: persistence, claimScreenRestoration: claim)
+            },
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,
@@ -101,7 +103,6 @@ final class BackendSessionRegistryTests {
         #expect(sessionA !== sessionB)
         #expect(sessionA.connection !== sessionB.connection)
         #expect(sessionA.workspaceStore !== sessionB.workspaceStore)
-        #expect(sessionA.coordinator !== sessionB.coordinator)
         #expect(Set(registry.pinnedBackendIDs) == [a, b])
     }
 
@@ -245,6 +246,108 @@ final class BackendSessionRegistryTests {
         #expect(tornDown.first === session)
         #expect(disconnectCountAtTeardown == 0,
                 "Teardown callback must run before the connection is dropped")
+    }
+
+    // MARK: - Per-window coordinators (spec decision 1b)
+
+    @Test func coordinatorsOverOneSessionNavigateIndependently() {
+        let registry = makeRegistry()
+        let session = registry.attach(BackendID(UUID()))
+
+        let first = session.makeCoordinator()
+        let second = session.makeCoordinator()
+        #expect(first !== second)
+
+        first.onConnectionSuccess()
+        second.onConnectionSuccess()
+        first.onSelectWorkspace("ws-1")
+
+        if case .workspaceDetail(let wId) = first.currentScreen {
+            #expect(wId == "ws-1")
+        } else {
+            Issue.record("Expected .workspaceDetail on the navigating window, got \(first.currentScreen)")
+        }
+        if case .workspaceList = second.currentScreen {
+            // pass — the sibling window over the same session is unaffected
+        } else {
+            Issue.record("Expected .workspaceList on the sibling window, got \(second.currentScreen)")
+        }
+        #expect(first.selectedWorkspaceId == "ws-1")
+        #expect(second.selectedWorkspaceId == nil)
+    }
+
+    @Test func onlyFirstDefaultWindowRestoresLastScreen() {
+        let registry = makeRegistry()
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: "ws-restore",
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+
+        let session = registry.defaultSession
+        let first = session.makeCoordinator()
+        let second = session.makeCoordinator()
+
+        first.onConnectionSuccess()
+        second.onConnectionSuccess()
+
+        if case .workspaceDetail(let wId) = first.currentScreen {
+            #expect(wId == "ws-restore")
+        } else {
+            Issue.record("Expected the first default window to restore, got \(first.currentScreen)")
+        }
+        if case .workspaceList = second.currentScreen {
+            // pass — extra default windows start at the workspace list
+        } else {
+            Issue.record("Expected .workspaceList on the extra window, got \(second.currentScreen)")
+        }
+    }
+
+    @Test func nonClaimingWindowDoesNotOverwriteSavedScreen() {
+        let registry = makeRegistry()
+        let session = registry.defaultSession
+        let first = session.makeCoordinator()
+        let second = session.makeCoordinator()
+
+        first.onConnectionSuccess()
+        second.onConnectionSuccess()
+        first.onSelectWorkspace("ws-first")
+        second.onSelectWorkspace("ws-second")
+
+        #expect(persistence.loadLastScreen()?.workspaceId == "ws-first",
+                "A window without the restoration claim must not write last-screen state")
+    }
+
+    @Test func pinnedSessionCoordinatorNeverRestoresLastScreen() {
+        let registry = makeRegistry()
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: "ws-restore",
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+
+        let session = registry.attach(BackendID(UUID()))
+        let coordinator = session.makeCoordinator()
+        coordinator.onConnectionSuccess()
+
+        if case .workspaceList = coordinator.currentScreen {
+            // pass — pinned windows never restore the default window's screen
+        } else {
+            Issue.record("Pinned windows must start at the workspace list, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test func defaultSessionGrantsRestorationClaimOnce() {
+        let registry = makeRegistry()
+        let session = registry.defaultSession
+
+        #expect(session.claimScreenRestoration())
+        #expect(!session.claimScreenRestoration())
+    }
+
+    @Test func pinnedSessionNeverGrantsRestorationClaim() {
+        let registry = makeRegistry()
+        let session = registry.attach(BackendID(UUID()))
+
+        #expect(!session.claimScreenRestoration())
     }
 
     // MARK: - Live composition

@@ -236,14 +236,14 @@ struct ConnectionFailureView: View {
     let session = BackendSessionRegistry.shared.defaultSession
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
         .environment(session)
-        .environment(session.coordinator)
+        .environment(session.makeCoordinator())
 }
 
 #Preview("Connection Failed - Dark") {
     let session = BackendSessionRegistry.shared.defaultSession
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
         .environment(session)
-        .environment(session.coordinator)
+        .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
 

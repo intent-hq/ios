@@ -78,19 +78,35 @@ class AppCoordinator {
     @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
+    @ObservationIgnored private let claimScreenRestoration: @MainActor () -> Bool
+    @ObservationIgnored private var claimedScreenRestoration: Bool?
+
+    /// Whether this coordinator owns last-screen persistence. Only one window
+    /// per app may restore and save the last screen (spec decision 1b: the
+    /// first default window; duplicated/pinned windows start at the workspace
+    /// list). The claim is consumed lazily on first use so coordinators built
+    /// for discarded SwiftUI view constructions never spend it.
+    private var restoresLastScreen: Bool {
+        if let claimed = claimedScreenRestoration { return claimed }
+        let claimed = claimScreenRestoration()
+        claimedScreenRestoration = claimed
+        return claimed
+    }
 
     init(workspaceStore: WorkspaceStore,
          connection: any SessionConnectionManaging,
          persistence: PersistenceManager = PersistenceManager.shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
          backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
-         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}) {
+         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
+         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }) {
         self.workspaceStore = workspaceStore
         self.connection = connection
         self.persistence = persistence
         self.syncedRegistry = syncedRegistry
         self.backgroundTaskManager = backgroundTaskManager
         self.reconnectLoadingObservationDidChange = reconnectLoadingObservationDidChange
+        self.claimScreenRestoration = claimScreenRestoration
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -403,8 +419,9 @@ class AppCoordinator {
         // Try to restore last viewed screen. Restoring into a workspace counts
         // as viewing it, so it marks the workspace seen — mirroring the FE,
         // where the workspace surface marks seen whenever it becomes active
-        // (including cold-start restore).
-        if let saved = persistence.loadLastScreen() {
+        // (including cold-start restore). Only the window holding the
+        // restoration claim restores; other windows land on the workspace list.
+        if restoresLastScreen, let saved = persistence.loadLastScreen() {
             switch saved.screen {
             case "workspaceDetail":
                 if let workspaceId = saved.workspaceId {
@@ -604,6 +621,7 @@ class AppCoordinator {
     func onBackToWorkspaceList() {
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
+        guard restoresLastScreen else { return }
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceList", workspaceId: nil,
@@ -656,6 +674,9 @@ class AppCoordinator {
     // MARK: - Screen Persistence
 
     private func saveCurrentScreen() {
+        // Windows without the restoration claim must not overwrite the
+        // restoring window's saved navigation (spec decision 1b).
+        guard restoresLastScreen else { return }
         let saved: PersistenceManager.SavedScreen
         switch currentScreen {
         case .workspaceDetail(let workspaceId):

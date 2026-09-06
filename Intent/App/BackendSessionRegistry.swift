@@ -106,8 +106,11 @@ final class BackendSessionRegistry {
                 kind: kind,
                 connection: connection,
                 workspaceStore: workspaceStore,
-                coordinator: AppCoordinator(
-                    workspaceStore: workspaceStore, connection: connection),
+                coordinatorFactory: { claim in
+                    AppCoordinator(
+                        workspaceStore: workspaceStore, connection: connection,
+                        claimScreenRestoration: claim)
+                },
                 prMonitorsStore: .shared,
                 attachmentUploadService: .shared,
                 workspaceFileImageLoader: .shared,
@@ -121,8 +124,11 @@ final class BackendSessionRegistry {
                 kind: kind,
                 connection: connection,
                 workspaceStore: workspaceStore,
-                coordinator: AppCoordinator(
-                    workspaceStore: workspaceStore, connection: connection),
+                coordinatorFactory: { claim in
+                    AppCoordinator(
+                        workspaceStore: workspaceStore, connection: connection,
+                        claimScreenRestoration: claim)
+                },
                 prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
                 attachmentUploadService: AttachmentUploadService(connection: connection),
                 workspaceFileImageLoader: fileLoader,

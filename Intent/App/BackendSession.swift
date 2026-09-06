@@ -54,15 +54,23 @@ final class BackendSession {
         case pinned(BackendID)
     }
 
+    /// Builds a per-window coordinator bound to this session's connection and
+    /// stores. `claimScreenRestoration` is the coordinator's lazy hook into
+    /// `claimScreenRestoration()` below.
+    typealias CoordinatorFactory =
+        @MainActor (_ claimScreenRestoration: @escaping @MainActor () -> Bool) -> AppCoordinator
+
     let kind: Kind
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
-    let coordinator: AppCoordinator
     let prMonitorsStore: WorkspacePrMonitorsStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
     let attachmentImageLoader: AttachmentImageLoader
     let attentionCueCenter: WorkspaceAttentionCueCenter
+
+    private let coordinatorFactory: CoordinatorFactory
+    private var screenRestorationClaimed = false
 
     /// The backend this session is pinned to; nil for the default session.
     var pinnedBackendID: BackendID? {
@@ -74,7 +82,7 @@ final class BackendSession {
         kind: Kind,
         connection: any SessionConnectionManaging,
         workspaceStore: WorkspaceStore,
-        coordinator: AppCoordinator,
+        coordinatorFactory: @escaping CoordinatorFactory,
         prMonitorsStore: WorkspacePrMonitorsStore,
         attachmentUploadService: AttachmentUploadService,
         workspaceFileImageLoader: WorkspaceFileImageLoader,
@@ -84,12 +92,31 @@ final class BackendSession {
         self.kind = kind
         self.connection = connection
         self.workspaceStore = workspaceStore
-        self.coordinator = coordinator
+        self.coordinatorFactory = coordinatorFactory
         self.prMonitorsStore = prMonitorsStore
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader
         self.attachmentImageLoader = attachmentImageLoader
         self.attentionCueCenter = attentionCueCenter
+    }
+
+    /// A fresh coordinator for one window over this session. Windows sharing
+    /// the session share connection + stores but navigate independently
+    /// (spec "State split"); the coordinator claims last-screen restoration
+    /// lazily via `claimScreenRestoration()`.
+    func makeCoordinator() -> AppCoordinator {
+        coordinatorFactory { [weak self] in
+            self?.claimScreenRestoration() ?? false
+        }
+    }
+
+    /// Grants last-screen restoration to the first default-session claimant
+    /// only (spec decision 1b): duplicated default windows and pinned windows
+    /// start at the workspace list and never write last-screen state.
+    func claimScreenRestoration() -> Bool {
+        guard kind == .defaultSession, !screenRestorationClaimed else { return false }
+        screenRestorationClaimed = true
+        return true
     }
 
     /// Disconnects the backend connection. Called by the registry when the

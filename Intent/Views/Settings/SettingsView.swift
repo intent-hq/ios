@@ -94,14 +94,14 @@ struct SettingsView: View {
     let session = BackendSessionRegistry.shared.defaultSession
     SettingsView()
         .environment(session)
-        .environment(session.coordinator)
+        .environment(session.makeCoordinator())
 }
 
 #Preview("Settings - Dark") {
     let session = BackendSessionRegistry.shared.defaultSession
     SettingsView()
         .environment(session)
-        .environment(session.coordinator)
+        .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
 
