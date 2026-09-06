@@ -22,7 +22,18 @@ struct NavigationTitleSubtitleView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(spacing: 0) {
+        #if os(visionOS)
+        // The principal item sits leading-aligned next to the back button on
+        // visionOS; left-align the two lines so they start on the same x.
+        titleStack(alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        titleStack(alignment: .center)
+        #endif
+    }
+
+    private func titleStack(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 0) {
             Text(title)
                 .font(.headline)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
