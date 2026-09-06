@@ -76,6 +76,7 @@ struct WorkspaceListSidebar: View {
         .refreshable {
             await WorkspaceStore.shared.fetchAll()
         }
+        .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
     private var emptyState: some View {

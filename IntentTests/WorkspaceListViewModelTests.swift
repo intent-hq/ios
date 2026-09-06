@@ -235,3 +235,96 @@ struct WorkspaceListViewModelTests {
     }
 }
 
+@Suite struct WorkspaceAttentionCueTests {
+
+    private func makeWorkspace(
+        id: String, displayStatus: String? = nil, attention: String? = nil
+    ) -> Workspace {
+        Workspace(id: id, title: "Test", branch: nil, baseRef: nil, status: nil,
+                  activity: nil, displayStatus: displayStatus, attention: attention,
+                  lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
+                  repositoryName: nil, prStatus: nil, prNumber: nil,
+                  diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+                  taskStatsCompleted: nil, taskStatsInProgress: nil,
+                  agentSummaryCount: nil, agentSummaryAgents: nil)
+    }
+
+    // MARK: - workspaceNeedsInput
+
+    @Test func needsInput_attentionStatusesAndUnreadFlag() {
+        #expect(workspaceNeedsInput(makeWorkspace(id: "1", displayStatus: "blocked")))
+        #expect(workspaceNeedsInput(makeWorkspace(id: "2", displayStatus: "needs_attention")))
+        #expect(workspaceNeedsInput(makeWorkspace(id: "3", attention: "unread")))
+        #expect(!workspaceNeedsInput(makeWorkspace(id: "4", displayStatus: "in_progress")))
+        #expect(!workspaceNeedsInput(makeWorkspace(id: "5", attention: "review_required")))
+        #expect(!workspaceNeedsInput(makeWorkspace(id: "6")))
+    }
+
+    // MARK: - WorkspaceAttentionCueTracker
+
+    @Test func tracker_emptyUniverseNeverPrimes() {
+        var tracker = WorkspaceAttentionCueTracker()
+        let cued = tracker.observe(universe: [], attention: [])
+        #expect(!cued)
+        #expect(!tracker.primed)
+    }
+
+    @Test func tracker_firstSnapshotPrimesSilently() {
+        var tracker = WorkspaceAttentionCueTracker()
+        let primingCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
+        #expect(!primingCue)
+        #expect(tracker.primed)
+        // Same set after priming: still no cue.
+        let repeatCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
+        #expect(!repeatCue)
+    }
+
+    @Test func tracker_newAttentionCuesOnce() {
+        var tracker = WorkspaceAttentionCueTracker()
+        _ = tracker.observe(universe: ["a", "b"], attention: [])
+        let newCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
+        #expect(newCue)
+        // Persisting attention does not re-cue.
+        let persistingCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
+        #expect(!persistingCue)
+    }
+
+    @Test func tracker_clearedThenRaisedAgainRecues() {
+        var tracker = WorkspaceAttentionCueTracker()
+        _ = tracker.observe(universe: ["a"], attention: ["a"])
+        let clearedCue = tracker.observe(universe: ["a"], attention: [])
+        #expect(!clearedCue)
+        let raisedAgainCue = tracker.observe(universe: ["a"], attention: ["a"])
+        #expect(raisedAgainCue)
+    }
+
+    // MARK: - WorkspaceAttentionCueCenter
+
+    @Test @MainActor func cueCenter_soundsOncePerNewAttentionBatch() {
+        var sounds = 0
+        let center = WorkspaceAttentionCueCenter(playSound: { sounds += 1 })
+
+        // Priming snapshot with pre-existing attention: silent.
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"), makeWorkspace(id: "b")
+        ])
+        #expect(sounds == 0)
+
+        // One batch with two new attention items: one sound.
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"),
+            makeWorkspace(id: "b", displayStatus: "blocked"),
+            makeWorkspace(id: "c", displayStatus: "needs_attention")
+        ])
+        #expect(sounds == 1)
+
+        // Unchanged snapshot (idempotent re-observation): no extra sound.
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"),
+            makeWorkspace(id: "b", displayStatus: "blocked"),
+            makeWorkspace(id: "c", displayStatus: "needs_attention")
+        ])
+        #expect(sounds == 1)
+    }
+}
+

@@ -257,6 +257,14 @@ extension Constants.WorkspaceRow {
     static let statusGlyphScale: CGFloat = 0.5
     static let statusStrokeWidth: CGFloat = 1.5
     static let inactiveStatusOpacity: Double = 0.4
+    // visionOS attention cue: single-step z-lift + scale on rows needing
+    // input, plus a brighter status chip. No continuous animation (HIG).
+    #if os(visionOS)
+    static let attentionCueZOffset: CGFloat = 12
+    static let attentionCueScale: CGFloat = 1.02
+    static let attentionCueAnimationDuration: Double = 0.25
+    static let attentionChipBrightness: Double = 0.2
+    #endif
 }
 
 extension Constants.WorkspaceList {
@@ -296,6 +304,13 @@ extension Constants.WorkspaceDetail {
     static let ornamentButtonSize: CGFloat = 44
     static let ornamentButtonSpacing: CGFloat = 16
     static let ornamentPadding: CGFloat = 8
+    // visionOS deliberate confirmation sheets for destructive/irreversible
+    // workspace actions (archive, delete).
+    #if os(visionOS)
+    static let confirmationSheetSpacing: CGFloat = 16
+    static let confirmationSheetPadding: CGFloat = 32
+    static let confirmationSheetWidth: CGFloat = 380
+    #endif
 }
 
 extension Constants.ModalPicker {

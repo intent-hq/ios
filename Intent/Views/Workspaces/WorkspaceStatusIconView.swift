@@ -43,6 +43,7 @@ struct WorkspaceStatusIconView: View {
                     .offset(x: statusCueOffset, y: -statusCueOffset)
             }
         }
+        .visionAttentionChipBrightness(workspaceNeedsInput(workspace))
         .accessibilityElement(children: .combine)
     }
 

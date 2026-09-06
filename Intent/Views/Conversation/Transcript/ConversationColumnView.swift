@@ -9,6 +9,11 @@ struct ConversationColumnView: View {
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
+    #if os(visionOS)
+    // visionOS presents structured questions as a deliberate sheet instead
+    // of the inline composer-slot wizard; the inline slot shows an opener.
+    @State private var questionSheetPresented = false
+    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -21,9 +26,22 @@ struct ConversationColumnView: View {
         } action: { height in
             conversationHeight = height
         }
-        .onChange(of: viewModel.pendingQuestions?.messageId) { _, _ in
+        .onChange(of: viewModel.pendingQuestions?.messageId) { _, newId in
             questionWizardCollapsed = false
+            #if os(visionOS)
+            // Auto-present on a new question set; close when the set clears
+            // (answered/dismissed elsewhere, or superseded).
+            questionSheetPresented = newId != nil
+            #endif
         }
+        #if os(visionOS)
+        .onAppear {
+            questionSheetPresented = viewModel.pendingQuestions != nil
+        }
+        .sheet(isPresented: $questionSheetPresented) {
+            questionSheet
+        }
+        #endif
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
@@ -100,6 +118,21 @@ struct ConversationColumnView: View {
         }
 
         if let pendingSet = viewModel.pendingQuestions {
+            #if os(visionOS)
+            // Deliberate sheet presentation on visionOS: the inline slot is
+            // only the opener banner; the wizard itself lives in the sheet.
+            QuestionWizardCollapsedBanner(
+                questionCount: pendingSet.questions.count,
+                showsDismiss: false,
+                dismissed: false,
+                onExpand: { questionSheetPresented = true },
+                onDismiss: {}
+            )
+            .background(Theme.muted(for: colorScheme).opacity(0.4))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            #else
             QuestionWizardView(
                 questions: pendingSet.questions,
                 collapsed: $questionWizardCollapsed,
@@ -122,6 +155,7 @@ struct ConversationColumnView: View {
             .padding(.horizontal, 8)
             .padding(.top, 8)
             .padding(.bottom, questionWizardCollapsed ? 4 : 8)
+            #endif
         }
 
         // Fail closed while the marked question row is being recovered from
@@ -133,11 +167,57 @@ struct ConversationColumnView: View {
             PendingQuestionRecoveryPlaceholder()
         }
 
-        if (viewModel.pendingQuestions == nil && !viewModel.isPendingQuestionRecoveryLoading)
-            || questionWizardCollapsed {
+        if composerVisible {
             MessageInputView(viewModel: viewModel, store: viewModel.store)
         }
     }
+
+    /// On visionOS the wizard is a sheet, so the composer stays available
+    /// under the opener banner; elsewhere pending questions occupy the
+    /// composer slot until collapsed.
+    private var composerVisible: Bool {
+        #if os(visionOS)
+        return viewModel.pendingQuestions != nil
+            || !viewModel.isPendingQuestionRecoveryLoading
+            || questionWizardCollapsed
+        #else
+        return (viewModel.pendingQuestions == nil && !viewModel.isPendingQuestionRecoveryLoading)
+            || questionWizardCollapsed
+        #endif
+    }
+
+    #if os(visionOS)
+    @ViewBuilder
+    private var questionSheet: some View {
+        if let pendingSet = viewModel.pendingQuestions {
+            QuestionWizardView(
+                questions: pendingSet.questions,
+                collapsed: Binding(
+                    get: { false },
+                    set: { if $0 { questionSheetPresented = false } }
+                ),
+                onComplete: { answers in
+                    let answeredId = pendingSet.messageId
+                    questionSheetPresented = false
+                    Task {
+                        await viewModel.submitQuestionAnswers(
+                            answers, answeredQuestionsMessageId: answeredId)
+                    }
+                },
+                onDismiss: {
+                    let dismissedId = pendingSet.messageId
+                    questionSheetPresented = false
+                    Task {
+                        await viewModel.dismissQuestions(messageId: dismissedId)
+                    }
+                }
+            )
+            .id(pendingSet.messageId)
+            .padding(24)
+            .presentationDetents([.medium, .large])
+        }
+    }
+    #endif
 }
 
 private struct PendingQuestionRecoveryPlaceholder: View {
