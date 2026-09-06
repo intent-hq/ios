@@ -2,8 +2,9 @@ import Foundation
 import Testing
 @testable import Intent
 
-/// All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS)
-private let agentLifecycleEventTypes = [
+/// All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
+/// `nonisolated`: the `@Test(arguments:)` expansion reads this outside the main actor.
+private nonisolated let agentLifecycleEventTypes = [
     "agent:started", "agent:completed", "agent:failed", "agent:created",
     "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
 ]
