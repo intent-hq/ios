@@ -1,5 +1,8 @@
 import Foundation
+
+#if canImport(TailcatKit)
 import TailcatKit
+#endif
 
 /// A live tailcat tunnel session: a loopback forwarder piping
 /// 127.0.0.1:`localPort` to the daemon's WSS port over the tunnel.
@@ -15,6 +18,22 @@ nonisolated protocol TunnelDialing: Sendable {
     /// piping to `remotePort` on the daemon.
     func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession
 }
+
+/// Dialer for platforms without a TailcatKit build (visionOS has no xros
+/// slice yet — see TailcatKit/build_xcframework.sh): every dial fails fast
+/// with a clear error, so a tunnel candidate degrades gracefully instead of
+/// crashing. Compiled on every platform for test visibility.
+nonisolated struct UnavailableTunnelDialer: TunnelDialing {
+    static let unavailableMessage = "Tailcat tunnels are not supported on this platform"
+
+    func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+        throw WebSocketTransportError.failed(
+            host: ConnectionManager.tunnelCandidateLabel,
+            message: Self.unavailableMessage)
+    }
+}
+
+#if canImport(TailcatKit)
 
 /// TailcatKit-backed session: owns the gomobile client and its loopback
 /// forwarder. `@unchecked Sendable`: the gomobile projections are thread-safe
@@ -185,3 +204,5 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
         }
     }
 }
+
+#endif

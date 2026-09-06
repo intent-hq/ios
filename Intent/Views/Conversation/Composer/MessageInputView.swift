@@ -12,6 +12,16 @@ struct MessageInputView: View {
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
 
+    #if os(visionOS)
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var dictation = SpeechDictationController()
+    @State private var dictationSession: DictationSession?
+    /// Last caret offset observed from the text view; `nil` until a selection
+    /// change fires (a programmatically restored draft never fires one), which
+    /// dictation treats as end-of-text.
+    @State private var caretOffset: Int?
+    #endif
+
     // Local text state to decouple TextField from viewModel updates.
     // This prevents typing lag when the viewModel is rapidly updating
     // during streaming (every legacy-store publication triggers a re-render).
@@ -24,6 +34,19 @@ struct MessageInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(visionOS)
+            // Suggested prompts as large gaze-targetable chips above the field
+            if !viewModel.suggestedPrompts.isEmpty && !store.isStreaming {
+                suggestedPromptChipsRow
+            }
+
+            // Inline hint when dictation is unavailable (permissions denied,
+            // recognizer unavailable) — no alert, just guidance.
+            if let hint = dictation.unavailabilityHint {
+                dictationHintRow(hint)
+            }
+            #endif
+
             // Pending image thumbnails
             if !viewModel.pendingImages.isEmpty {
                 pendingImagesRow
@@ -47,8 +70,8 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.destructive(for: colorScheme))
                             .frame(
-                                minWidth: Constants.Accessibility.minimumTapTarget,
-                                minHeight: Constants.Accessibility.minimumTapTarget)
+                                minWidth: Constants.Conversation.Composer.controlTarget,
+                                minHeight: Constants.Conversation.Composer.controlTarget)
                     }
                     .accessibilityLabel("Stop response")
                 } else {
@@ -69,15 +92,15 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             .frame(
-                                minWidth: Constants.Accessibility.minimumTapTarget,
-                                minHeight: Constants.Accessibility.minimumTapTarget)
+                                minWidth: Constants.Conversation.Composer.controlTarget,
+                                minHeight: Constants.Conversation.Composer.controlTarget)
                     }
                     .accessibilityLabel("Add attachment")
                 }
 
                 // Text editor — bound to localText to avoid lag during streaming
                 // Uses SubmittableTextView so hardware Enter sends, Shift+Enter inserts newline
-                ZStack(alignment: .topLeading) {
+                ZStack(alignment: placeholderAlignment) {
                     SubmittableTextView(
                         text: $localText,
                         isFocused: $isFocused,
@@ -86,10 +109,17 @@ struct MessageInputView: View {
                             textViewHeight = min(
                                 max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
                                 Constants.Conversation.Composer.maximumTextViewHeight)
+                        },
+                        onCaretChange: { offset in
+                            #if os(visionOS)
+                            caretOffset = offset
+                            #else
+                            _ = offset
+                            #endif
                         }
                     )
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
                     .frame(height: textViewHeight)
 
                     // Placeholder (UITextView has no built-in placeholder)
@@ -103,7 +133,11 @@ struct MessageInputView: View {
                     }
                 }
                 .background(Theme.muted(for: colorScheme).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+
+                #if os(visionOS)
+                dictationButton
+                #endif
 
                 // Send button (right side)
                 VStack(spacing: 4) {
@@ -126,8 +160,8 @@ struct MessageInputView: View {
                                         : Theme.mutedForeground(for: colorScheme)
                                 )
                                 .frame(
-                                    minWidth: Constants.Accessibility.minimumTapTarget,
-                                    minHeight: Constants.Accessibility.minimumTapTarget)
+                                    minWidth: Constants.Conversation.Composer.controlTarget,
+                                    minHeight: Constants.Conversation.Composer.controlTarget)
                         }
                         .disabled(!hasContent)
                         .accessibilityLabel("Send message")
@@ -169,6 +203,26 @@ struct MessageInputView: View {
                 localText = newValue
             }
         }
+        #if os(visionOS)
+        .onDisappear {
+            dictation.stop(reason: .viewDisappeared)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                dictation.stop(reason: .sceneInactive)
+            }
+        }
+        #endif
+    }
+
+    /// visionOS centers the placeholder vertically in the 60 pt field;
+    /// iOS keeps the original top-leading placement.
+    private var placeholderAlignment: Alignment {
+        #if os(visionOS)
+        return .leading
+        #else
+        return .topLeading
+        #endif
     }
 
     // MARK: - Pending images
@@ -195,8 +249,8 @@ struct MessageInputView: View {
                                 .foregroundStyle(.white)
                                 .background(Circle().fill(.black.opacity(0.5)))
                                 .frame(
-                                    minWidth: Constants.Accessibility.minimumTapTarget,
-                                    minHeight: Constants.Accessibility.minimumTapTarget,
+                                    minWidth: Constants.Conversation.Composer.controlTarget,
+                                    minHeight: Constants.Conversation.Composer.controlTarget,
                                     alignment: .topTrailing)
                                 .contentShape(Rectangle())
                         }
@@ -259,7 +313,7 @@ struct MessageInputView: View {
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     .contentShape(Rectangle().inset(
-                                        by: -Constants.Accessibility.minimumTapTarget / 2))
+                                        by: -Constants.Conversation.Composer.controlTarget / 2))
                             }
                             .accessibilityLabel("Remove \(file.displayName)")
                         }
@@ -277,9 +331,121 @@ struct MessageInputView: View {
         .scrollIndicators(.hidden)
     }
 
+    #if os(visionOS)
+    // MARK: - visionOS dictation & suggested prompts
+
+    /// Dictation toggle: starts a live Speech-framework session that inserts
+    /// transcriptions at the caret; tapping again stops and keeps the final
+    /// result.
+    private var dictationButton: some View {
+        Button {
+            toggleDictation()
+        } label: {
+            Image(systemName: dictation.isActive ? "stop.circle.fill" : "mic.fill")
+                .font(.title2)
+                .foregroundStyle(
+                    dictation.isActive
+                        ? Theme.destructive(for: colorScheme)
+                        : Theme.primary(for: colorScheme)
+                )
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget)
+        }
+        .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
+    }
+
+    private func toggleDictation() {
+        HapticManager.impact(.light)
+        // isActive covers the starting window too: a second tap while the
+        // permission prompts are pending cancels the start before any audio.
+        if dictation.isActive {
+            dictation.stop(reason: .userTapped)
+            return
+        }
+
+        dictationSession = DictationSession(baseText: localText, insertionOffset: caretOffset)
+        dictation.onTranscriptChange = { transcription, _ in
+            guard var session = dictationSession else { return }
+            switch session.apply(transcription: transcription, to: localText) {
+            case .merged(let text):
+                localText = text
+                dictationSession = session
+            case .diverged:
+                // The composer text was edited outside dictation (typed, or
+                // replaced by the view model — e.g. a send cleared it). The
+                // edit wins: stop dictation instead of clobbering it.
+                dictationSession = nil
+                dictation.stop(reason: .textEdited)
+            }
+        }
+        dictation.onDidStop = { reason in
+            if !reason.acceptsFinalResult {
+                dictationSession = nil
+            }
+        }
+        Task { await dictation.startRecording() }
+    }
+
+    private func dictationHintRow(_ hint: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.slash")
+                .font(.caption)
+            Text(hint)
+                .font(.caption)
+        }
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+    }
+
+    /// Suggested prompts as large chips directly above the field, sized for
+    /// gaze targeting (≥60 pt). The transcript's inline prompt list is
+    /// disabled on visionOS in favor of these.
+    @ViewBuilder
+    private var suggestedPromptChipsRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Constants.Conversation.Composer.suggestedPromptChipSpacing) {
+                ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
+                    Button {
+                        Task { await viewModel.sendSuggestedPrompt(prompt) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "paperplane")
+                                .font(.callout)
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            Text(prompt)
+                                .font(.body)
+                                .lineLimit(2)
+                                .foregroundStyle(Theme.foreground(for: colorScheme))
+                        }
+                        .padding(.horizontal, 20)
+                        .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
+                        .background(Theme.muted(for: colorScheme).opacity(0.4))
+                        .clipShape(Capsule())
+                        .contentShape(.hoverEffect, Capsule())
+                        .hoverEffect(.highlight)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+        .scrollIndicators(.hidden)
+    }
+    #endif
+
     // MARK: - Actions
 
     private func sendCurrentMessage() {
+        #if os(visionOS)
+        // Stop app dictation before the text is consumed; a late final
+        // result must not resurrect the sent text (.send cancels outright).
+        dictation.stop(reason: .send)
+        #endif
+
         // Check if dictation is active — only resign focus if so.
         // This prevents keyboard users from seeing a focus flicker.
         let isDictating = UITextInputMode.activeInputModes.contains { $0.primaryLanguage == "dictation" }

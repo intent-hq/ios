@@ -124,6 +124,7 @@ struct WorkspaceDetailView: View {
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
 
+                #if !os(visionOS)
                 Picker("Workspace Content", selection: $selectedTab) {
                     Text("Agents").tag(0)
                     Text("Context").tag(1)
@@ -131,6 +132,7 @@ struct WorkspaceDetailView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                 .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
+                #endif
 
                 // Tab content
                 if selectedTab == 0 {
@@ -199,38 +201,41 @@ struct WorkspaceDetailView: View {
                 coordinator.handleMissingWorkspace(workspaceId: workspaceId)
             }
         }
+        #if os(visionOS)
+        // Deliberate confirmation sheets (HIG): destructive/irreversible
+        // workspace actions get a focused sheet with one primary action.
+        .sheet(isPresented: $showDeleteConfirmation) {
+            WorkspaceActionConfirmationSheet(
+                title: "Delete Workspace",
+                message: "Are you sure you want to delete this workspace? This cannot be undone.",
+                actionLabel: "Delete",
+                isDestructive: true,
+                onConfirm: deleteWorkspace
+            )
+        }
+        .sheet(isPresented: $showArchiveConfirmation) {
+            WorkspaceActionConfirmationSheet(
+                title: "Archive Workspace",
+                message: "Archive this workspace? You can unarchive it later.",
+                actionLabel: "Archive",
+                isDestructive: false,
+                onConfirm: archiveWorkspace
+            )
+        }
+        #else
         .alert("Delete Workspace", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
-                Task {
-                    do {
-                        let _ = try await ConnectionManager.shared.request("workspace.delete", params: ["workspaceId": workspaceId])
-                        coordinator.onBackToWorkspaceList()
-                        await WorkspaceStore.shared.fetchAll()
-                    } catch {
-                        AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
-                    }
-                }
-            }
+            Button("Delete", role: .destructive, action: deleteWorkspace)
         } message: {
             Text("Are you sure you want to delete this workspace? This cannot be undone.")
         }
         .alert("Archive Workspace", isPresented: $showArchiveConfirmation) {
             Button("Cancel", role: .cancel) {}
-            Button("Archive") {
-                Task {
-                    do {
-                        let _ = try await ConnectionManager.shared.request("workspace.archive", params: ["workspaceId": workspaceId])
-                        coordinator.onBackToWorkspaceList()
-                        await WorkspaceStore.shared.fetchAll()
-                    } catch {
-                        AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
-                    }
-                }
-            }
+            Button("Archive", action: archiveWorkspace)
         } message: {
             Text("Archive this workspace? You can unarchive it later.")
         }
+        #endif
         .sheet(isPresented: $showSpecialistPicker) {
             SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore)
                 .environment(coordinator)
@@ -238,6 +243,18 @@ struct WorkspaceDetailView: View {
         .navigationTitle(workspaceTitle)
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
+            #if os(visionOS)
+            // The Agents/Context switcher lives in the detail's top toolbar
+            // on visionOS instead of the in-window segmented control, so it
+            // visibly belongs to the workspace rather than the sidebar.
+            ToolbarItem(placement: .topBarTrailing) {
+                Picker("Workspace Content", selection: $selectedTab) {
+                    Label("Agents", systemImage: "person.2").tag(0)
+                    Label("Context", systemImage: "doc.text").tag(1)
+                }
+                .pickerStyle(.segmented)
+            }
+            #endif
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -260,7 +277,6 @@ struct WorkspaceDetailView: View {
                 .accessibilityLabel("Workspace actions")
             }
         }
-
     }
 
     @ViewBuilder
@@ -276,6 +292,7 @@ struct WorkspaceDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .visionListRowHitTarget()
 
                     let delegates = viewModel.delegatedAgents(for: agent.id)
                     if !delegates.isEmpty {
@@ -294,6 +311,7 @@ struct WorkspaceDetailView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contentShape(Rectangle())
+                                .visionListRowHitTarget()
                             }
                         }
                     }
@@ -316,6 +334,7 @@ struct WorkspaceDetailView: View {
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())
+                            .visionListRowHitTarget()
                         }
                     }
                 }
@@ -334,7 +353,76 @@ struct WorkspaceDetailView: View {
             expandedDelegates.insert(agentId)
         }
     }
+
+    private func deleteWorkspace() {
+        Task {
+            do {
+                let _ = try await ConnectionManager.shared.request(
+                    "workspace.delete", params: ["workspaceId": workspaceId])
+                coordinator.onBackToWorkspaceList()
+                await WorkspaceStore.shared.fetchAll()
+            } catch {
+                AppLog.workspace.error("[WorkspaceDetail] Delete failed: \(error)")
+            }
+        }
+    }
+
+    private func archiveWorkspace() {
+        Task {
+            do {
+                let _ = try await ConnectionManager.shared.request(
+                    "workspace.archive", params: ["workspaceId": workspaceId])
+                coordinator.onBackToWorkspaceList()
+                await WorkspaceStore.shared.fetchAll()
+            } catch {
+                AppLog.workspace.error("[WorkspaceDetail] Archive failed: \(error)")
+            }
+        }
+    }
 }
+
+#if os(visionOS)
+/// Deliberate confirmation sheet for destructive/irreversible workspace
+/// actions: title, consequence copy, one primary action, and a plain
+/// cancel — replacing inline alerts per the visionOS HIG.
+struct WorkspaceActionConfirmationSheet: View {
+    let title: String
+    let message: String
+    let actionLabel: String
+    let isDestructive: Bool
+    let onConfirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(spacing: Constants.WorkspaceDetail.confirmationSheetSpacing) {
+            Text(title)
+                .font(.title2.weight(.semibold))
+            Text(message)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            Button(role: isDestructive ? .destructive : nil) {
+                dismiss()
+                onConfirm()
+            } label: {
+                Text(actionLabel)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            Button {
+                dismiss()
+            } label: {
+                Text("Cancel")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(Constants.WorkspaceDetail.confirmationSheetPadding)
+        .frame(width: Constants.WorkspaceDetail.confirmationSheetWidth)
+    }
+}
+#endif
 
 struct WorkspaceTaskProgressLayout: Equatable {
     let total: Int

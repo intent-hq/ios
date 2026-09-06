@@ -1327,6 +1327,27 @@ struct ConnectionManagerTests {
         }
     }
 
+    /// Platforms without a TailcatKit build (visionOS) default to
+    /// `UnavailableTunnelDialer`: a tunnel candidate fails with the clear
+    /// unavailable error, labeled to the tunnel route, instead of crashing.
+    @Test func unavailableTunnelDialerFailsWithClearError() async {
+        do {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: UnavailableTunnelDialer(), tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: nil)
+            Issue.record("expected connectViaTunnel to throw")
+        } catch let error as WebSocketTransportError {
+            guard case .failed(let host, let message) = error else {
+                Issue.record("unexpected transport error: \(error)")
+                return
+            }
+            #expect(host == ConnectionManager.tunnelCandidateLabel)
+            #expect(message == UnavailableTunnelDialer.unavailableMessage)
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
     /// A failed tunnel dial surfaces as a candidate failure with the tunnel
     /// label (not a raw loopback host).
     @Test func tunnelDialFailurePropagates() async {

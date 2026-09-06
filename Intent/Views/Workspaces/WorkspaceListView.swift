@@ -79,6 +79,7 @@ struct WorkspaceListView: View {
         .refreshable {
             await WorkspaceStore.shared.fetchAll()
         }
+        .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
     private var emptyState: some View {
@@ -103,6 +104,7 @@ struct WorkspaceListView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .visionListRowHitTarget()
                 }
             case .repo:
                 ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
@@ -116,6 +118,7 @@ struct WorkspaceListView: View {
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())
+                            .visionListRowHitTarget()
                         }
                     }
                 }
@@ -138,7 +141,10 @@ struct WorkspaceListView: View {
         }
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
+        #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
+        #endif
     }
 }
 

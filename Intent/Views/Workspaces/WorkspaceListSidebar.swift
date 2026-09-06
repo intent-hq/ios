@@ -76,6 +76,7 @@ struct WorkspaceListSidebar: View {
         .refreshable {
             await WorkspaceStore.shared.fetchAll()
         }
+        .visionWorkspaceAttentionSound(viewModel.workspaces)
     }
 
     private var emptyState: some View {
@@ -149,7 +150,10 @@ struct WorkspaceListSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
+        #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
     }
 }

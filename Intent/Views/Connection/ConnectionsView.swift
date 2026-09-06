@@ -64,15 +64,22 @@ struct ConnectionsView: View {
                 }
 
                 Section("Pair New") {
-                    Button {
-                        showQRScanner = true
-                    } label: {
-                        Label("Scan QR Code", systemImage: "camera.fill")
+                    // Same platform-filtered options as PairingView: QR scanning
+                    // is excluded on visionOS, which exposes no camera.
+                    let options = PairingOption.available(showsSavedConnections: false)
+                    if options.contains(.qrScan) {
+                        Button {
+                            showQRScanner = true
+                        } label: {
+                            Label("Scan QR Code", systemImage: "camera.fill")
+                        }
                     }
-                    Button {
-                        showManualEntry = true
-                    } label: {
-                        Label("Manual Connection", systemImage: "keyboard")
+                    if options.contains(.manualEntry) {
+                        Button {
+                            showManualEntry = true
+                        } label: {
+                            Label("Manual Connection", systemImage: "keyboard")
+                        }
                     }
                 }
             }

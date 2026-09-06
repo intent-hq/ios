@@ -1,3 +1,7 @@
+// TailcatKit only links on iOS (no xros slice; platformFilters in the
+// project) — compile these smoke tests out where it is absent.
+#if canImport(TailcatKit)
+
 import Foundation
 import TailcatKit
 import Testing
@@ -119,3 +123,5 @@ struct TailcatDialHandleTests {
         #expect(CFAbsoluteTimeGetCurrent() - start < 1)
     }
 }
+
+#endif

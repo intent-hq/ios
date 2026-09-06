@@ -7,8 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
-		AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit.xcframework */; };
+		AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
+		AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -30,7 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		AB000001AAAA000000000001 /* TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = "TailcatKit/build/TailcatKit.xcframework"; sourceTree = "<group>"; };
+		AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = TailcatKit/build/TailcatKit.xcframework; sourceTree = "<group>"; };
 		EB655EC92F669E6B00176730 /* Intent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Intent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EDA2F669E6C00176730 /* IntentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EB655EE42F669E6C00176730 /* IntentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = IntentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -73,7 +73,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */,
-				AB000004AAAA000000000004 /* TailcatKit.xcframework in Frameworks */,
+				AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,7 +81,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AB000003AAAA000000000003 /* TailcatKit.xcframework in Frameworks */,
+				AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,7 +101,7 @@
 				EB655ECB2F669E6B00176730 /* Intent */,
 				EB655EDD2F669E6C00176730 /* IntentTests */,
 				EB655EE72F669E6C00176730 /* IntentUITests */,
-				AB000001AAAA000000000001 /* TailcatKit.xcframework */,
+				AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */,
 				EB655ECA2F669E6B00176730 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -313,6 +313,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Intent/Info.plist;
+				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
+				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
@@ -330,13 +332,15 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Debug;
 		};
@@ -356,6 +360,8 @@
 				);
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Intent/Info.plist;
+				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
+				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
@@ -373,13 +379,15 @@
 				PRODUCT_BUNDLE_IDENTIFIER = dev.intentapp.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator xros xrsimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 2.0;
 			};
 			name = Release;
 		};

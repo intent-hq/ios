@@ -1,5 +1,24 @@
+import GameController
 import SwiftUI
 import UIKit
+
+/// Decides whether bare Return submits the composer message (Shift+Return
+/// always inserts a newline).
+///
+/// - visionOS: dictation-first — Return submits only while a hardware
+///   keyboard is connected (`GCKeyboard.coalesced`); the virtual keyboard's
+///   Return inserts a newline so the composer sends via the button.
+/// - iPad: Return always submits.
+/// - iPhone: Return always inserts a newline (send via button only).
+enum ComposerSubmitPolicy {
+    static func returnSubmits(
+        isVisionOS: Bool,
+        idiom: UIUserInterfaceIdiom,
+        hasHardwareKeyboard: Bool
+    ) -> Bool {
+        isVisionOS ? hasHardwareKeyboard : idiom == .pad
+    }
+}
 
 /// A UITextView subclass that intercepts hardware keyboard Return to submit,
 /// while letting Shift+Return insert a newline.
@@ -14,13 +33,58 @@ class KeyCommandTextView: UITextView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        #if os(visionOS)
+        centerShortContent()
+        #endif
         onLayoutChange?()
     }
 
+    /// Content height measured with the base container inset, independent of
+    /// any live vertical-centering inset (visionOS), so the SwiftUI height
+    /// clamp sees a stable value. On iOS the insets always equal the base,
+    /// so this matches `sizeThatFits` exactly.
+    var naturalHeight: CGFloat {
+        let fitting = sizeThatFits(
+            CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
+        ).height
+        let base = Constants.Conversation.Composer.textContainerInset
+        return fitting - textContainerInset.top - textContainerInset.bottom + base * 2
+    }
+
+    #if os(visionOS)
+    /// Vertically centers short content inside the fixed 60 pt minimum field
+    /// height by widening the vertical container insets symmetrically.
+    private func centerShortContent() {
+        let base = Constants.Conversation.Composer.textContainerInset
+        let contentHeight = naturalHeight - base * 2
+        let inset = contentHeight + base * 2 >= bounds.height
+            ? base
+            : (bounds.height - contentHeight) / 2
+        guard abs(textContainerInset.top - inset) > 0.5 else { return }
+        textContainerInset = UIEdgeInsets(top: inset, left: base, bottom: inset, right: base)
+    }
+    #endif
+
+    #if os(visionOS)
+    private static let isVisionOS = true
+    #else
+    private static let isVisionOS = false
+    #endif
+
+    /// Live submit rule for the current platform, idiom, and hardware
+    /// keyboard state.
+    static var returnSubmitsNow: Bool {
+        ComposerSubmitPolicy.returnSubmits(
+            isVisionOS: isVisionOS,
+            idiom: UIDevice.current.userInterfaceIdiom,
+            hasHardwareKeyboard: GCKeyboard.coalesced != nil)
+    }
+
     override var keyCommands: [UIKeyCommand]? {
-        // On iPhone, don't intercept Return — it should always insert a newline
-        guard UIDevice.current.userInterfaceIdiom == .pad else { return nil }
-        // Intercept bare Return (no modifiers) on iPad — calls handleReturn
+        // Don't intercept Return where it should insert a newline (iPhone
+        // always; visionOS without a hardware keyboard)
+        guard Self.returnSubmitsNow else { return nil }
+        // Intercept bare Return (no modifiers) — calls handleReturn
         let returnCommand = UIKeyCommand(
             input: "\r",
             modifierFlags: [],
@@ -71,6 +135,9 @@ struct SubmittableTextView: UIViewRepresentable {
     @Binding var isFocused: Bool
     var onSubmit: () -> Void
     var onHeightChange: ((CGFloat) -> Void)?
+    /// Reports the caret's UTF-16 offset (end of selection) on every
+    /// selection change; used by visionOS dictation to insert at the caret.
+    var onCaretChange: ((Int) -> Void)?
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
@@ -89,16 +156,17 @@ struct SubmittableTextView: UIViewRepresentable {
         // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
             guard let textView = textView else { return }
-            let h = textView.sizeThatFits(
-                CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
-            ).height
-            onHeightChange?(h)
+            onHeightChange?(textView.naturalHeight)
         }
 
         return textView
     }
 
     func updateUIView(_ textView: KeyCommandTextView, context: Context) {
+        // Keep the coordinator's parent current so its closures (e.g.
+        // onCaretChange) capture the latest state
+        context.coordinator.parent = self
+
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
 
@@ -106,9 +174,7 @@ struct SubmittableTextView: UIViewRepresentable {
         if textView.text != text {
             textView.text = text
 
-            let idealHeight = textView.sizeThatFits(
-                CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude)
-            ).height
+            let idealHeight = textView.naturalHeight
             DispatchQueue.main.async {
                 self.onHeightChange?(idealHeight)
             }
@@ -137,9 +203,10 @@ struct SubmittableTextView: UIViewRepresentable {
             parent.text = textView.text
 
             // Report ideal content height to SwiftUI
-            let idealHeight = textView.sizeThatFits(
-                CGSize(width: textView.bounds.width, height: CGFloat.greatestFiniteMagnitude)
-            ).height
+            let idealHeight = (textView as? KeyCommandTextView)?.naturalHeight
+                ?? textView.sizeThatFits(
+                    CGSize(width: textView.bounds.width, height: CGFloat.greatestFiniteMagnitude)
+                ).height
             parent.onHeightChange?(idealHeight)
 
             // Scroll to keep cursor visible
@@ -149,6 +216,11 @@ struct SubmittableTextView: UIViewRepresentable {
                     textView.scrollRectToVisible(caretRect, animated: false)
                 }
             }
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            let range = textView.selectedRange
+            parent.onCaretChange?(range.location + range.length)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
@@ -177,11 +249,10 @@ struct SubmittableTextView: UIViewRepresentable {
                 if let kbTextView = textView as? KeyCommandTextView, kbTextView.isShiftHeld {
                     return true
                 }
-                // On iPhone, Enter always inserts a newline (send via button only)
-                if UIDevice.current.userInterfaceIdiom == .phone {
-                    return true
-                }
-                // iPad software keyboard Return (or bare Return fallback) → submit
+                // Return inserts a newline where the submit rule is off
+                // (iPhone always; visionOS without a hardware keyboard)
+                guard KeyCommandTextView.returnSubmitsNow else { return true }
+                // Software keyboard Return (or bare Return fallback) → submit
                 parent.onSubmit()
                 return false
             }

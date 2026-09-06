@@ -99,6 +99,7 @@ struct WorkspaceRowView: View {
         .contentShape(Rectangle())
         .padding(.vertical, Constants.WorkspaceRow.verticalPadding)
         .padding(.horizontal, Constants.WorkspaceRow.horizontalPadding)
+        .visionAttentionCue(workspaceNeedsInput(workspace))
         .task {
             await monitorsSource.seed(workspaceId: workspace.id)
         }

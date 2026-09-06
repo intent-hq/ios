@@ -175,6 +175,7 @@ struct DelegatedAgentsRow: View {
             .padding(.vertical, Constants.AgentRow.delegatedVerticalPadding)
         }
         .buttonStyle(.plain)
+        .visionListRowHitTarget()
     }
 }
 
@@ -208,6 +209,7 @@ struct BackgroundAgentsHeader: View {
             .padding(.vertical, Constants.AgentRow.backgroundVerticalPadding)
         }
         .buttonStyle(.plain)
+        .visionListRowHitTarget()
     }
 }
 

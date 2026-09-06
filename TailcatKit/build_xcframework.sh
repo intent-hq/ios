@@ -10,6 +10,13 @@
 #
 # Output: TailcatKit/build/TailcatKit.xcframework (gitignored; the
 # Xcode project references it at that path).
+#
+# There is no xros/xrsimulator (visionOS) slice: gomobile bind has no
+# visionOS target, so the Xcode project links TailcatKit for iOS only
+# (platformFilters on the framework build files) and the app degrades
+# the tunnel feature on visionOS (UnavailableTunnelDialer). Building the
+# Go archive directly with `go build -buildmode=c-archive` against the
+# xros SDK is the likely route to add a slice later.
 set -euo pipefail
 
 cd "$(dirname "$0")"

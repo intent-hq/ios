@@ -155,11 +155,15 @@ struct ConversationTranscriptView: View {
                 .id("thinking-indicator")
         }
 
+        #if !os(visionOS)
+        // On visionOS the composer renders these as large chips above the
+        // field instead (MessageInputView).
         if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
             suggestedPromptsView
                 .flippedUpsideDown()
                 .id("suggested-prompts")
         }
+        #endif
 
         // Newest-first code order appears bottom-to-top in the flipped list.
         ForEach(viewModel.filteredMessages.reversed()) { message in
@@ -235,6 +239,7 @@ struct ConversationTranscriptView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    #if !os(visionOS)
     private var suggestedPromptsView: some View {
         VStack(spacing: 8) {
             ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
@@ -266,6 +271,7 @@ struct ConversationTranscriptView: View {
             }
         }
     }
+    #endif
 
     private var truncationBanner: some View {
         HStack(spacing: 8) {

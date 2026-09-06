@@ -68,11 +68,29 @@ extension Constants.Conversation.Message {
 }
 
 extension Constants.Conversation.Composer {
-    static let minimumTextViewHeight = Constants.Accessibility.minimumTapTarget
     static let maximumTextViewHeight: CGFloat = 120
     static let pendingImageSide: CGFloat = 56
     static let pendingFileMaximumWidth: CGFloat = 200
     static let textContainerInset: CGFloat = 4
+    // Composer control hit target: visionOS gaze targeting needs ≥60 pt
+    // (HIG); other platforms keep the 44 pt tap minimum.
+    #if os(visionOS)
+    static let controlTarget: CGFloat = 60
+    // The empty field matches the 60 pt side controls exactly: minimum text
+    // view height equals the control target with no outer vertical padding,
+    // capsule corners, and short content vertically centered by
+    // KeyCommandTextView.
+    static let minimumTextViewHeight: CGFloat = controlTarget
+    static let fieldVerticalPadding: CGFloat = 0
+    static let fieldCornerRadius: CGFloat = 30
+    static let suggestedPromptChipMinimumHeight: CGFloat = 60
+    static let suggestedPromptChipSpacing: CGFloat = 12
+    #else
+    static let controlTarget: CGFloat = Constants.Accessibility.minimumTapTarget
+    static let minimumTextViewHeight = Constants.Accessibility.minimumTapTarget
+    static let fieldVerticalPadding: CGFloat = 4
+    static let fieldCornerRadius: CGFloat = 18
+    #endif
 }
 
 extension Constants.Conversation.Column {
@@ -132,6 +150,10 @@ extension Constants.Notification {
 }
 
 extension Constants.Root {
+    static let visionDefaultWindowWidth: CGFloat = 1280
+    static let visionDefaultWindowHeight: CGFloat = 900
+    static let visionMinimumWindowWidth: CGFloat = 800
+    static let visionMinimumWindowHeight: CGFloat = 600
     static let sidebarMinimumWidth: CGFloat = 300
     static let sidebarIdealWidth: CGFloat = 350
     static let sidebarMaximumWidth: CGFloat = 400
@@ -244,6 +266,14 @@ extension Constants.WorkspaceRow {
     static let statusGlyphScale: CGFloat = 0.5
     static let statusStrokeWidth: CGFloat = 1.5
     static let inactiveStatusOpacity: Double = 0.4
+    // visionOS attention cue: single-step z-lift + scale on rows needing
+    // input, plus a brighter status chip. No continuous animation (HIG).
+    #if os(visionOS)
+    static let attentionCueZOffset: CGFloat = 12
+    static let attentionCueScale: CGFloat = 1.02
+    static let attentionCueAnimationDuration: Double = 0.25
+    static let attentionChipBrightness: Double = 0.2
+    #endif
 }
 
 extension Constants.WorkspaceList {
@@ -280,6 +310,13 @@ extension Constants.WorkspaceDetail {
     static let progressBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
+    // visionOS deliberate confirmation sheets for destructive/irreversible
+    // workspace actions (archive, delete).
+    #if os(visionOS)
+    static let confirmationSheetSpacing: CGFloat = 16
+    static let confirmationSheetPadding: CGFloat = 32
+    static let confirmationSheetWidth: CGFloat = 380
+    #endif
 }
 
 extension Constants.ModalPicker {
