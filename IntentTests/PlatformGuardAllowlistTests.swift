@@ -6,17 +6,18 @@ import Testing
 /// guard may appear only in the files listed below. Adding a guard to any
 /// other file (or removing one from a listed file) must be a deliberate act —
 /// update the allowlist in IntentTests/PlatformGuardAllowlistTests.swift
-/// alongside the change. (The guard patterns are split below so this file
-/// does not match its own scan.)
+/// alongside the change. (The guard patterns are regexes tolerating
+/// whitespace around the parentheses, so a space-separated guard spelling
+/// cannot bypass the scan; the patterns' escaped spelling also keeps this
+/// file from matching its own scan.)
 struct PlatformGuardAllowlistTests {
 
     private static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // IntentTests/
         .deletingLastPathComponent()  // repo root
 
-    // Split so this file does not match its own scan patterns.
-    private static let visionOSGuard = "os(" + "visionOS)"
-    private static let tailcatKitGuard = "canImport(" + "TailcatKit)"
+    private static let visionOSGuard = #"os\s*\(\s*visionOS\s*\)"#
+    private static let tailcatKitGuard = #"canImport\s*\(\s*TailcatKit\s*\)"#
 
     private static let visionOSAllowlist: Set<String> = [
         "Intent/App/IntentApp.swift",
@@ -46,7 +47,7 @@ struct PlatformGuardAllowlistTests {
     ]
 
     /// Repo-relative paths of .swift files under Intent/ and IntentTests/
-    /// whose contents contain `pattern`.
+    /// whose contents match the regex `pattern`.
     private func filesContaining(_ pattern: String) throws -> Set<String> {
         var matches: Set<String> = []
         let rootPrefix = Self.repoRoot.standardizedFileURL.path + "/"
@@ -69,7 +70,8 @@ struct PlatformGuardAllowlistTests {
             for case let url as URL in enumerator {
                 guard url.pathExtension == "swift" else { continue }
                 let contents = try String(contentsOf: url, encoding: .utf8)
-                guard contents.contains(pattern) else { continue }
+                guard contents.range(of: pattern, options: .regularExpression) != nil
+                else { continue }
                 let absolute = url.standardizedFileURL.path
                 try #require(
                     absolute.hasPrefix(rootPrefix),
