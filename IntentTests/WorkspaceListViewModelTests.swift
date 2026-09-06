@@ -10,6 +10,7 @@ struct WorkspaceListViewModelTests {
     private func makeWorkspace(
         id: String = "1", title: String = "Test", branch: String? = nil,
         status: String? = nil, displayStatus: String? = nil, lastActivity: String? = nil,
+        createdAt: String? = nil, updatedAt: String? = nil,
         repositoryOwner: String? = nil, repositoryName: String? = nil,
         prStatus: String? = nil, prNumber: Int? = nil,
         diffSummaryTotalFiles: Int? = nil, taskStatsTotal: Int? = nil,
@@ -17,7 +18,7 @@ struct WorkspaceListViewModelTests {
     ) -> Workspace {
         Workspace(id: id, title: title, branch: branch, baseRef: nil, status: status,
                   activity: nil, displayStatus: displayStatus, lastActivity: lastActivity,
-                  updatedAt: nil, repositoryOwner: repositoryOwner,
+                  createdAt: createdAt, updatedAt: updatedAt, repositoryOwner: repositoryOwner,
                   repositoryName: repositoryName, prStatus: prStatus, prNumber: prNumber,
                   diffSummaryTotalFiles: diffSummaryTotalFiles, taskStatsTotal: taskStatsTotal,
                   taskStatsCompleted: taskStatsCompleted, taskStatsInProgress: taskStatsInProgress,
@@ -146,6 +147,65 @@ struct WorkspaceListViewModelTests {
         #expect(ids == ["2", "3", "1"])
     }
 
+    @Test @MainActor func filteredWorkspaces_lastActivityWinsOverCreatedAtAndUpdatedAt() {
+        // "1" has the newest createdAt/updatedAt but an older lastActivity;
+        // lastActivity must decide, as in the FE.
+        let ws = [
+            makeWorkspace(id: "1", lastActivity: "2026-01-01T00:00:00Z",
+                          createdAt: "2026-06-01T00:00:00Z", updatedAt: "2026-06-02T00:00:00Z"),
+            makeWorkspace(id: "2", lastActivity: "2026-02-01T00:00:00Z",
+                          createdAt: "2025-01-01T00:00:00Z", updatedAt: "2025-01-02T00:00:00Z")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        #expect(vm.filteredWorkspaces.map(\.id) == ["2", "1"])
+    }
+
+    @Test @MainActor func filteredWorkspaces_fallsBackToCreatedAtThenUpdatedAt() {
+        let ws = [
+            makeWorkspace(id: "updatedOnly", updatedAt: "2026-03-01T00:00:00Z"),
+            makeWorkspace(id: "createdOverUpdated", createdAt: "2026-02-01T00:00:00Z",
+                          updatedAt: "2026-05-01T00:00:00Z"),
+            makeWorkspace(id: "activity", lastActivity: "2026-01-15T00:00:00Z",
+                          createdAt: "2026-04-01T00:00:00Z")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        // updatedOnly → 03-01, createdOverUpdated → 02-01 (createdAt beats
+        // updatedAt), activity → 01-15 (lastActivity beats createdAt).
+        #expect(vm.filteredWorkspaces.map(\.id) == ["updatedOnly", "createdOverUpdated", "activity"])
+    }
+
+    @Test @MainActor func filteredWorkspaces_missingOrUnparseableTimestampsSortLast() {
+        let ws = [
+            makeWorkspace(id: "none"),
+            makeWorkspace(id: "garbage", lastActivity: "not-a-date", updatedAt: "also-not"),
+            makeWorkspace(id: "stamped", lastActivity: "2026-01-01T00:00:00Z")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        let ids = vm.filteredWorkspaces.map(\.id)
+        #expect(ids.first == "stamped")
+        #expect(Set(ids.dropFirst()) == ["none", "garbage"])
+    }
+
+    @Test @MainActor func filteredWorkspaces_comparesParsedTimesAcrossFractionalPrecision() {
+        // As strings, "…00:00:00Z" > "…00:00:00.500Z" ('Z' > '.'); parsed, the
+        // fractional stamp is later and must sort first.
+        let ws = [
+            makeWorkspace(id: "whole", lastActivity: "2026-01-01T00:00:00Z"),
+            makeWorkspace(id: "fractional", lastActivity: "2026-01-01T00:00:00.500Z"),
+            makeWorkspace(id: "earlierFractional", lastActivity: "2025-12-31T23:59:59.999Z")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        #expect(vm.filteredWorkspaces.map(\.id) == ["fractional", "whole", "earlierFractional"])
+    }
+
     // MARK: - groupedByRepo
 
     @Test @MainActor func groupedByRepo_groupsByOwnerAndName() {
@@ -172,6 +232,27 @@ struct WorkspaceListViewModelTests {
         let groups = vm.groupedByRepo
         #expect(groups.count == 1)
         #expect(groups[0].0 == "Unknown")
+    }
+
+    @Test @MainActor func groupedByRepo_ordersGroupsByMostRecentMember_notAlphabetically() {
+        // "zeta/late" has the single most recent workspace; "acme/app" has an
+        // older one plus the oldest. Alphabetical would put acme first.
+        let ws = [
+            makeWorkspace(id: "a-old", lastActivity: "2026-01-01T00:00:00Z",
+                          repositoryOwner: "acme", repositoryName: "app"),
+            makeWorkspace(id: "z-new", lastActivity: "2026-03-01T00:00:00Z",
+                          repositoryOwner: "zeta", repositoryName: "late"),
+            makeWorkspace(id: "a-mid", lastActivity: "2026-02-01T00:00:00Z",
+                          repositoryOwner: "acme", repositoryName: "app"),
+            makeWorkspace(id: "m-none", repositoryOwner: "mid", repositoryName: "unstamped")
+        ]
+        let vm = setUp(ws)
+        defer { tearDown() }
+
+        let groups = vm.groupedByRepo
+        #expect(groups.map(\.0) == ["zeta/late", "acme/app", "mid/unstamped"])
+        // Members keep the activity order inside their group.
+        #expect(groups[1].1.map(\.id) == ["a-mid", "a-old"])
     }
 
     // MARK: - groupedByStatus

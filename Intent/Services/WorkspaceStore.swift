@@ -13,10 +13,6 @@ import Observation
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
 
-    /// Tracks the highest-known lastActivity per workspace so optimistic
-    /// event-driven timestamps are never overwritten by stale server data.
-    @ObservationIgnored var lastActivityHighWaterMark: [String: String] = [:]
-
     // Live-state subscription tracking
     @ObservationIgnored private var workspaceSubscriptionId: String?
     @ObservationIgnored private var workspaceReconciler: DeltaReconciler<Workspace>?
@@ -77,9 +73,7 @@ import Observation
         isLoading = true
         do {
             let result = try await ConnectionManager.shared.request("workspace.list")
-            var parsed = Self.parseWorkspaces(from: result)
-            applyHighWaterMarks(to: &parsed)
-            publishFetchedWorkspaces(parsed)
+            publishFetchedWorkspaces(Self.parseWorkspaces(from: result))
         } catch {
             AppLog.workspace.error("[WorkspaceStore] Failed to fetch workspaces: \(error)")
         }
@@ -103,52 +97,12 @@ import Observation
     /// the top. Also seeds the live reconciler so the row isn't dropped by the
     /// next delta apply.
     func addOrUpdate(_ workspace: Workspace) {
-        var merged = [workspace]
-        applyHighWaterMarks(to: &merged)
-        let row = merged[0]
-        if let index = workspaces.firstIndex(where: { $0.id == row.id }) {
-            workspaces[index] = row
+        if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
+            workspaces[index] = workspace
         } else {
-            workspaces.insert(row, at: 0)
+            workspaces.insert(workspace, at: 0)
         }
-        workspaceReconciler?.seed(id: row.id, value: row)
-    }
-
-    /// Merges high-water-mark timestamps into the given workspaces array so
-    /// optimistic event-driven timestamps are never overwritten by stale server data.
-    func applyHighWaterMarks(to workspaces: inout [Workspace]) {
-        for i in workspaces.indices {
-            let ws = workspaces[i]
-            if let hwm = lastActivityHighWaterMark[ws.id],
-               let serverTs = ws.lastActivity,
-               hwm > serverTs {
-                workspaces[i] = Workspace(
-                    id: ws.id,
-                    title: ws.title,
-                    branch: ws.branch,
-                    baseRef: ws.baseRef,
-                    status: ws.status,
-                    activity: ws.activity,
-                    displayStatus: ws.displayStatus,
-                    attention: ws.attention,
-                    waiting: ws.waiting,
-                    lastActivity: hwm,
-                    updatedAt: ws.updatedAt,
-                    repositoryOwner: ws.repositoryOwner,
-                    repositoryName: ws.repositoryName,
-                    prStatus: ws.prStatus,
-                    prNumber: ws.prNumber,
-                    diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
-                    taskStatsTotal: ws.taskStatsTotal,
-                    taskStatsCompleted: ws.taskStatsCompleted,
-                    taskStatsInProgress: ws.taskStatsInProgress,
-                    agentSummaryCount: ws.agentSummaryCount,
-                    agentSummaryAgents: ws.agentSummaryAgents,
-                    pullRequests: ws.pullRequests,
-                    activePullRequest: ws.activePullRequest
-                )
-            }
-        }
+        workspaceReconciler?.seed(id: workspace.id, value: workspace)
     }
 
     // MARK: - Event subscription
@@ -220,30 +174,28 @@ import Observation
 
         AppLog.workspace.debug("[WorkspaceStore] Received event: \(eventType)")
 
-        let eventTimestamp = event["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
         let eventWorkspaceId = event["workspaceId"] as? String
 
         switch eventType {
-        // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS)
+        // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
+        // lastActivity is never bumped locally: intentd derives it and pushes
+        // workspace:updated { changes.lastActivity } at turn boundaries.
         case "agent:started", "agent:completed", "agent:failed", "agent:created",
              "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed":
-            // Update lastActivity locally for immediate UI feedback
-            if let wsId = eventWorkspaceId {
-                updateLocalLastActivity(workspaceId: wsId, timestamp: eventTimestamp)
-            }
             // Only refetch if not in live mode (avoid double-apply)
             if !workspaceLive {
                 Task { await fetchAll() }
             }
 
         case let t where t.hasPrefix("workspace:"):
-            // Check for workspace:updated with lastActivity changes
+            // workspace:updated carrying lastActivity is an intentd-derived value —
+            // patch the row in place as received.
             if eventType == "workspace:updated",
                let data = event["data"] as? [String: Any],
                let changes = data["changes"] as? [String: Any],
                let lastActivity = changes["lastActivity"] as? String,
                let wsId = eventWorkspaceId {
-                updateLocalLastActivity(workspaceId: wsId, timestamp: lastActivity)
+                updateLastActivity(workspaceId: wsId, lastActivity: lastActivity)
             }
             // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
             // transition-only, protocol 6.17) — patch the row in place, no refetch.
@@ -290,17 +242,13 @@ import Observation
             guard let rawItems = push.snapshot else { return }
             workspaceLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
-            var parsed = reconciler.values()
-            applyHighWaterMarks(to: &parsed)
-            publishFetchedWorkspaces(parsed)
+            publishFetchedWorkspaces(reconciler.values())
             AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
 
         case .delta:
             guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
-                var parsed = reconciler.values()
-                applyHighWaterMarks(to: &parsed)
-                publishFetchedWorkspaces(parsed)
+                publishFetchedWorkspaces(reconciler.values())
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
             } else {
                 // Gap detected — resnapshot (guard against storm)
@@ -339,46 +287,41 @@ import Observation
         await fetchAll()
     }
 
-    func updateLocalLastActivity(workspaceId: String, timestamp: String) {
-        // Update high-water mark — only store if newer than existing entry
-        if let existing = lastActivityHighWaterMark[workspaceId] {
-            if timestamp > existing {
-                lastActivityHighWaterMark[workspaceId] = timestamp
-            }
-        } else {
-            lastActivityHighWaterMark[workspaceId] = timestamp
-        }
-
-        let effectiveTimestamp = lastActivityHighWaterMark[workspaceId] ?? timestamp
-
-        if let index = workspaces.firstIndex(where: { $0.id == workspaceId }) {
-            let ws = workspaces[index]
-            workspaces[index] = Workspace(
-                id: ws.id,
-                title: ws.title,
-                branch: ws.branch,
-                baseRef: ws.baseRef,
-                status: ws.status,
-                activity: ws.activity,
-                displayStatus: ws.displayStatus,
-                attention: ws.attention,
-                waiting: ws.waiting,
-                lastActivity: effectiveTimestamp,
-                updatedAt: ws.updatedAt,
-                repositoryOwner: ws.repositoryOwner,
-                repositoryName: ws.repositoryName,
-                prStatus: ws.prStatus,
-                prNumber: ws.prNumber,
-                diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
-                taskStatsTotal: ws.taskStatsTotal,
-                taskStatsCompleted: ws.taskStatsCompleted,
-                taskStatsInProgress: ws.taskStatsInProgress,
-                agentSummaryCount: ws.agentSummaryCount,
-                agentSummaryAgents: ws.agentSummaryAgents,
-                pullRequests: ws.pullRequests,
-                activePullRequest: ws.activePullRequest
-            )
-        }
+    /// Applies an intentd-sent `lastActivity` (from `workspace:updated`
+    /// `changes.lastActivity`) in place, exactly as received. The reconciler is
+    /// reseeded so the next live delta doesn't revert the value.
+    func updateLastActivity(workspaceId: String, lastActivity: String) {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
+              workspaces[index].lastActivity != lastActivity else { return }
+        let ws = workspaces[index]
+        let updated = Workspace(
+            id: ws.id,
+            title: ws.title,
+            branch: ws.branch,
+            baseRef: ws.baseRef,
+            status: ws.status,
+            activity: ws.activity,
+            displayStatus: ws.displayStatus,
+            attention: ws.attention,
+            waiting: ws.waiting,
+            lastActivity: lastActivity,
+            createdAt: ws.createdAt,
+            updatedAt: ws.updatedAt,
+            repositoryOwner: ws.repositoryOwner,
+            repositoryName: ws.repositoryName,
+            prStatus: ws.prStatus,
+            prNumber: ws.prNumber,
+            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
+            taskStatsTotal: ws.taskStatsTotal,
+            taskStatsCompleted: ws.taskStatsCompleted,
+            taskStatsInProgress: ws.taskStatsInProgress,
+            agentSummaryCount: ws.agentSummaryCount,
+            agentSummaryAgents: ws.agentSummaryAgents,
+            pullRequests: ws.pullRequests,
+            activePullRequest: ws.activePullRequest
+        )
+        workspaces[index] = updated
+        workspaceReconciler?.seed(id: updated.id, value: updated)
     }
 
     /// Applies a workspace:waiting-changed transition in place (protocol 6.17).
@@ -399,6 +342,7 @@ import Observation
             attention: ws.attention,
             waiting: waiting,
             lastActivity: ws.lastActivity,
+            createdAt: ws.createdAt,
             updatedAt: ws.updatedAt,
             repositoryOwner: ws.repositoryOwner,
             repositoryName: ws.repositoryName,
@@ -436,6 +380,7 @@ import Observation
             attention: "none",
             waiting: ws.waiting,
             lastActivity: ws.lastActivity,
+            createdAt: ws.createdAt,
             updatedAt: ws.updatedAt,
             repositoryOwner: ws.repositoryOwner,
             repositoryName: ws.repositoryName,
@@ -521,6 +466,7 @@ import Observation
             attention: dict["attention"] as? String,
             waiting: dict["waiting"] as? Bool ?? false,
             lastActivity: dict["lastActivity"] as? String,
+            createdAt: dict["createdAt"] as? String,
             updatedAt: dict["updatedAt"] as? String,
             repositoryOwner: dict["repositoryOwner"] as? String,
             repositoryName: dict["repositoryName"] as? String ?? dict["repo"] as? String,

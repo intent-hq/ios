@@ -165,21 +165,31 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
             (ws.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
             (ws.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
         }
-        return filtered.sorted {
-            let t0 = $0.lastActivity ?? $0.updatedAt ?? ""
-            let t1 = $1.lastActivity ?? $1.updatedAt ?? ""
-            return t0 > t1
-        }
+        return filtered.sorted(by: isWorkspaceActivityMoreRecent)
     }
 
+    /// Groups keyed by repo, ordered by the activity time of each group's most
+    /// recent member (its first, since `filteredWorkspaces` is already sorted)
+    /// — the same rule as the FE sidebar's `groupedByRepo`.
     var groupedByRepo: [(String, [Workspace])] {
-        let dict = Dictionary(grouping: filteredWorkspaces) { ws in
+        var keys: [String] = []
+        var groups: [String: [Workspace]] = [:]
+        for ws in filteredWorkspaces {
+            let key: String
             if let owner = ws.repositoryOwner, let name = ws.repositoryName {
-                return "\(owner)/\(name)"
+                key = "\(owner)/\(name)"
+            } else {
+                key = ws.repositoryName ?? "Unknown"
             }
-            return ws.repositoryName ?? "Unknown"
+            if groups[key] == nil { keys.append(key) }
+            groups[key, default: []].append(ws)
         }
-        return dict.sorted { $0.key < $1.key }
+        return keys
+            .map { ($0, groups[$0] ?? []) }
+            .sorted { lhs, rhs in
+                guard let l = lhs.1.first, let r = rhs.1.first else { return false }
+                return isWorkspaceActivityMoreRecent(l, than: r)
+            }
     }
 
     var groupedByStatus: [(String, [Workspace])] {
