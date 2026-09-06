@@ -9,13 +9,17 @@ struct ToastInfo: Equatable {
     let workspaceId: String
     let agentName: String
     let workspaceName: String
+    /// The pinned backend the alert came from; nil for the default session.
+    let sourceBackendID: BackendID?
 
-    init(agentId: String, workspaceId: String, agentName: String, workspaceName: String) {
+    init(agentId: String, workspaceId: String, agentName: String, workspaceName: String,
+         sourceBackendID: BackendID? = nil) {
         self.id = UUID()
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.workspaceName = workspaceName
+        self.sourceBackendID = sourceBackendID
     }
 }
 
@@ -45,8 +49,15 @@ struct ToastInfo: Equatable {
     @ObservationIgnored private let applicationState: () -> UIApplication.State
     @ObservationIgnored private let presentFeedback: () -> Void
     @ObservationIgnored private let activeConnectionId: () -> UUID?
+    @ObservationIgnored private let connection: ConnectionManagerRouting
+    @ObservationIgnored private let workspaceStore: WorkspaceStore
     @ObservationIgnored private var agentSelectionHandler: ((String, String, String, UUID) -> Void)?
     @ObservationIgnored private var pendingNotificationResponse: LocalNotificationService.Response?
+
+    /// Pinned sessions currently observed for cross-window alert aggregation,
+    /// with the event-handler id registered on each session's connection.
+    @ObservationIgnored private var observedSessions:
+        [BackendID: (session: BackendSession, handlerId: UUID)] = [:]
 
     init(
         localNotificationService: LocalNotificationService = .shared,
@@ -60,12 +71,16 @@ struct ToastInfo: Equatable {
             HapticManager.notification(.success)
             AudioServicesPlaySystemSound(1152)
         },
+        connection: ConnectionManagerRouting = ConnectionManager.shared,
+        workspaceStore: WorkspaceStore = WorkspaceStore.shared,
         registerEvents: Bool = true
     ) {
         self.localNotificationService = localNotificationService
         self.applicationState = applicationState
         self.activeConnectionId = activeConnectionId
         self.presentFeedback = presentFeedback
+        self.connection = connection
+        self.workspaceStore = workspaceStore
         localNotificationService.onWillPresentNotification = { [weak self] response in
             self?.handleForegroundNotification(response)
         }
@@ -121,14 +136,38 @@ struct ToastInfo: Equatable {
 
     private func registerEventHandler() {
         AppLog.notifications.debug("[NotificationManager] Registering event handler")
-        ConnectionManager.shared.onEvent { [weak self] method, params in
+        connection.onEvent { [weak self] method, params in
             Task { @MainActor in
-                self?.handleEvent(params)
+                self?.handleEvent(params, from: nil)
             }
         }
     }
 
-    private func handleEvent(_ params: Any) {
+    // MARK: - Cross-session aggregation
+
+    /// Observe a pinned session's connection so its agents alert too. The
+    /// default session's connection is already observed from init, so
+    /// attaching the default session — or an already-observed backend — is
+    /// a no-op. Wired to `BackendSessionRegistry.onSessionCreated`.
+    func attachSessionObserver(for session: BackendSession) {
+        guard let backendID = session.pinnedBackendID else { return }
+        guard observedSessions[backendID] == nil else { return }
+        let handlerId = session.connection.onEvent { [weak self] _, params in
+            Task { @MainActor in
+                self?.handleEvent(params, from: backendID)
+            }
+        }
+        observedSessions[backendID] = (session, handlerId)
+    }
+
+    /// Stop observing a pinned session's connection. Wired to
+    /// `BackendSessionRegistry.onSessionTeardown`; extra detaches are no-ops.
+    func detachSessionObserver(for backendID: BackendID) {
+        guard let observed = observedSessions.removeValue(forKey: backendID) else { return }
+        observed.session.connection.removeEventHandler(id: observed.handlerId)
+    }
+
+    private func handleEvent(_ params: Any, from sourceBackendID: BackendID?) {
         // Debug: log raw params type and keys
         AppLog.notifications.debug("[NotificationManager] handleEvent called, params type=\(type(of: params))")
         guard let dict = params as? [String: Any] else {
@@ -164,7 +203,18 @@ struct ToastInfo: Equatable {
             AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())")
             return
         }
-        guard let connectionId = activeConnectionId() else { return }
+        // Resolve the connection identity of the event's source. A pinned
+        // session on the backend the default connection already tracks
+        // would double-alert (both sockets receive the event) — the default
+        // handler wins and the pinned duplicate is dropped.
+        let connectionId: UUID
+        if let sourceBackendID {
+            guard sourceBackendID.connectionID != activeConnectionId() else { return }
+            connectionId = sourceBackendID.connectionID
+        } else {
+            guard let active = activeConnectionId() else { return }
+            connectionId = active
+        }
 
         // Emit-time fast paths: background agents and agents the payload
         // already marks as waiting on sub-agents never alert.
@@ -179,16 +229,36 @@ struct ToastInfo: Equatable {
         // is still waiting on delegated sub-agents, another agent is active, or
         // the idle agent is background per metadata. Fail-open on read failure.
         Task { @MainActor [weak self] in
-            let agents = await self?.fetchWorkspaceAgents(workspaceId: workspaceId)
-            guard let self, self.activeConnectionId() == connectionId else { return }
+            let agents = await self?.fetchWorkspaceAgents(
+                workspaceId: workspaceId, from: sourceBackendID)
+            guard let self,
+                  self.sourceStillCurrent(sourceBackendID, connectionId: connectionId)
+            else { return }
             if Self.shouldSuppressIdleAlert(idleAgentId: agentId, agents: agents) {
                 AppLog.notifications.debug("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
                 return
             }
             self.presentIdleAlert(
                 agentId: agentId, workspaceId: workspaceId,
-                agentName: agentName, connectionId: connectionId)
+                agentName: agentName, connectionId: connectionId,
+                sourceBackendID: sourceBackendID)
         }
+    }
+
+    /// Whether the event's source is still live: the default session must
+    /// still be on the same active connection; a pinned session must still
+    /// be observed (not torn down mid-flight).
+    private func sourceStillCurrent(_ sourceBackendID: BackendID?, connectionId: UUID) -> Bool {
+        if let sourceBackendID { return observedSessions[sourceBackendID] != nil }
+        return activeConnectionId() == connectionId
+    }
+
+    /// The workspace store owning the event source's rows: the pinned
+    /// session's store, or the default (injected) store.
+    private func workspaceStore(for sourceBackendID: BackendID?) -> WorkspaceStore {
+        guard let sourceBackendID,
+              let observed = observedSessions[sourceBackendID] else { return workspaceStore }
+        return observed.session.workspaceStore
     }
 
     /// Emit-time fast path over the raw `agent:idle` payload: skip background
@@ -223,11 +293,21 @@ struct ToastInfo: Equatable {
         }
     }
 
-    /// Fetches the workspace's agents for the suppression decision.
-    /// Returns nil when the read fails or the response is malformed.
-    private func fetchWorkspaceAgents(workspaceId: String) async -> [AgentSession]? {
+    /// Fetches the workspace's agents for the suppression decision over the
+    /// event source's own connection. Returns nil when the source session is
+    /// gone, the read fails, or the response is malformed.
+    private func fetchWorkspaceAgents(
+        workspaceId: String, from sourceBackendID: BackendID?
+    ) async -> [AgentSession]? {
+        let sourceConnection: ConnectionManagerRouting
+        if let sourceBackendID {
+            guard let observed = observedSessions[sourceBackendID] else { return nil }
+            sourceConnection = observed.session.connection
+        } else {
+            sourceConnection = connection
+        }
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await sourceConnection.request(
                 "agent.list",
                 params: ["workspaceId": workspaceId]
             )
@@ -246,18 +326,19 @@ struct ToastInfo: Equatable {
         guard let connectionId = activeConnectionId() else { return }
         presentIdleAlert(
             agentId: agentId, workspaceId: workspaceId,
-            agentName: agentName, connectionId: connectionId)
+            agentName: agentName, connectionId: connectionId, sourceBackendID: nil)
     }
 
     private func presentIdleAlert(
         agentId: String,
         workspaceId: String,
         agentName: String,
-        connectionId: UUID
+        connectionId: UUID,
+        sourceBackendID: BackendID?
     ) {
-        guard activeConnectionId() == connectionId else { return }
-        // Look up workspace name
-        let workspaceName = WorkspaceStore.shared.workspaces
+        guard sourceStillCurrent(sourceBackendID, connectionId: connectionId) else { return }
+        // Look up workspace name in the source session's store
+        let workspaceName = workspaceStore(for: sourceBackendID).workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
 
         guard applicationState() == .active else {
@@ -273,16 +354,18 @@ struct ToastInfo: Equatable {
 
         presentForegroundAlert(
             agentId: agentId, workspaceId: workspaceId,
-            agentName: agentName, workspaceName: workspaceName)
+            agentName: agentName, workspaceName: workspaceName,
+            sourceBackendID: sourceBackendID)
     }
 
     private func presentForegroundAlert(
         agentId: String,
         workspaceId: String,
         agentName: String,
-        workspaceName: String? = nil
+        workspaceName: String? = nil,
+        sourceBackendID: BackendID? = nil
     ) {
-        let workspaceName = workspaceName ?? WorkspaceStore.shared.workspaces
+        let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
         if agentId == currentAgentId {
             // Currently viewing this exact agent's conversation — haptic + sound, no toast
@@ -295,12 +378,14 @@ struct ToastInfo: Equatable {
             // Different workspace — haptic + sound + toast
             presentFeedback()
             showToast(agentId: agentId, workspaceId: workspaceId,
-                      agentName: agentName, workspaceName: workspaceName)
+                      agentName: agentName, workspaceName: workspaceName,
+                      sourceBackendID: sourceBackendID)
         }
     }
 
     private func showToast(agentId: String, workspaceId: String,
-                           agentName: String, workspaceName: String) {
+                           agentName: String, workspaceName: String,
+                           sourceBackendID: BackendID? = nil) {
         dismissTask?.cancel()
 
         withAnimation(.spring(
@@ -309,7 +394,8 @@ struct ToastInfo: Equatable {
         )) {
             currentToast = ToastInfo(
                 agentId: agentId, workspaceId: workspaceId,
-                agentName: agentName, workspaceName: workspaceName)
+                agentName: agentName, workspaceName: workspaceName,
+                sourceBackendID: sourceBackendID)
         }
 
         dismissTask = Task { @MainActor in

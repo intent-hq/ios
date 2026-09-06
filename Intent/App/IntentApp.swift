@@ -8,6 +8,18 @@ struct IntentApp: App {
 
     init() {
         _ = NotificationManager.shared
+        // Aggregate agent alerts across every live backend session: pinned
+        // sessions (visionOS auxiliary windows) attach an observer on
+        // creation and detach on last-window teardown; the default session
+        // is already observed by NotificationManager's own init.
+        BackendSessionRegistry.shared.onSessionCreated = { session in
+            NotificationManager.shared.attachSessionObserver(for: session)
+        }
+        BackendSessionRegistry.shared.onSessionTeardown = { session in
+            if let backendID = session.pinnedBackendID {
+                NotificationManager.shared.detachSessionObserver(for: backendID)
+            }
+        }
     }
 
     private var resolvedColorScheme: ColorScheme? {

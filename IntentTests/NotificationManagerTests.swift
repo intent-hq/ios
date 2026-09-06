@@ -324,3 +324,208 @@ struct NotificationManagerTests {
         ]])
     }
 }
+
+// MARK: - Cross-session aggregation
+
+/// NotificationManager stays a process-wide singleton but must alert for
+/// every live backend session: pinned sessions attach observers on their
+/// own connections, events are tagged with the source `BackendID`, and a
+/// pinned session on the backend the default connection already tracks is
+/// deduplicated.
+@Suite("NotificationManager cross-session aggregation", .serialized)
+@MainActor
+final class NotificationManagerSessionAggregationTests {
+    private static let activeConnectionId = UUID(
+        uuidString: "22222222-2222-2222-2222-222222222222")!
+
+    /// Per-test isolated persistence (same pattern as
+    /// BackendSessionRegistryTests) so AppCoordinator never touches the
+    /// real app container.
+    private let persistence: PersistenceManager
+    private let suiteName: String
+
+    init() {
+        _ = TestKeychainStorage.installed
+        suiteName = "NotificationManagerSessionAggregationTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        persistence = PersistenceManager(
+            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+    }
+
+    deinit {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+
+    private func makeManager(
+        state: UIApplication.State = .active,
+        defaultConnection: FakeConnectionManager
+    ) -> (NotificationManager, NotificationManagerFakeCenter) {
+        let center = NotificationManagerFakeCenter()
+        let service = LocalNotificationService(center: center)
+        let manager = NotificationManager(
+            localNotificationService: service,
+            applicationState: { state },
+            activeConnectionId: { Self.activeConnectionId },
+            presentFeedback: {},
+            connection: defaultConnection,
+            workspaceStore: WorkspaceStore(forTesting: true),
+            registerEvents: false)
+        return (manager, center)
+    }
+
+    private func makeSession(
+        kind: BackendSession.Kind, connection: SessionFakeConnectionManager
+    ) -> BackendSession {
+        let workspaceStore = WorkspaceStore(forTesting: true)
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            kind: kind,
+            connection: connection,
+            workspaceStore: workspaceStore,
+            coordinator: AppCoordinator(
+                workspaceStore: workspaceStore, connection: connection,
+                persistence: persistence),
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(
+                connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter(playSound: {}))
+    }
+
+    private func idleEventParams(agentId: String, workspaceId: String) -> [String: Any] {
+        [
+            "event": [
+                "type": "agent:idle",
+                "workspaceId": workspaceId,
+                "data": ["agentId": agentId, "agentName": "Pinned Agent"],
+            ] as [String: Any]
+        ]
+    }
+
+    /// Poll (bounded) until the condition holds.
+    private func waitFor(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    /// Drain the MainActor queue so spawned handler Tasks have run before
+    /// negative assertions.
+    private func drainMainQueue() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    // MARK: - Observer lifecycle
+
+    @Test func attachRegistersOneHandlerAndDetachRemovesIt() {
+        let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        let session = makeSession(kind: .pinned(backendID), connection: connection)
+
+        manager.attachSessionObserver(for: session)
+        manager.attachSessionObserver(for: session)
+        #expect(connection.eventHandlerCount == 1,
+                "Repeat attaches for the same backend must not stack handlers")
+
+        manager.detachSessionObserver(for: backendID)
+        #expect(connection.eventHandlerCount == 0)
+        manager.detachSessionObserver(for: backendID)
+        #expect(connection.eventHandlerCount == 0)
+    }
+
+    @Test func attachingDefaultSessionIsNoOp() {
+        let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
+        let connection = SessionFakeConnectionManager()
+        let session = makeSession(kind: .defaultSession, connection: connection)
+
+        manager.attachSessionObserver(for: session)
+
+        #expect(connection.eventHandlerCount == 0,
+                "The default session's connection is already observed from init")
+    }
+
+    // MARK: - Pinned-session alerts
+
+    @Test func pinnedIdleEventPresentsToastTaggedWithSourceBackend() async throws {
+        let defaultFake = FakeConnectionManager()
+        let (manager, center) = makeManager(state: .active, defaultConnection: defaultFake)
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        manager.attachSessionObserver(for: session)
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        try await waitFor { manager.currentToast != nil }
+
+        #expect(manager.currentToast?.agentId == "agent-p")
+        #expect(manager.currentToast?.sourceBackendID == backendID)
+        #expect(connection.didCallMethod("agent.list"),
+                "The suppression read must go through the source session's connection")
+        #expect(!defaultFake.didCallMethod("agent.list"))
+        #expect(center.requests.isEmpty)
+    }
+
+    @Test func pinnedIdleEventInBackgroundPostsNotificationScopedToBackend() async throws {
+        let (manager, center) = makeManager(
+            state: .background, defaultConnection: FakeConnectionManager())
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        manager.attachSessionObserver(for: session)
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        try await waitFor { !center.requests.isEmpty }
+
+        #expect(center.requests.map(\.identifier) == [
+            "agent-idle-\(backendID.connectionID.uuidString)-agent-p"
+        ])
+        #expect(manager.currentToast == nil)
+    }
+
+    @Test func pinnedSessionOnActiveBackendIsDeduplicated() async throws {
+        let (manager, center) = makeManager(defaultConnection: FakeConnectionManager())
+        let backendID = BackendID(Self.activeConnectionId)
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        manager.attachSessionObserver(for: session)
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        await drainMainQueue()
+
+        #expect(!connection.didCallMethod("agent.list"),
+                "The default handler owns events for the active backend")
+        #expect(manager.currentToast == nil)
+        #expect(center.requests.isEmpty)
+    }
+
+    @Test func detachedSessionNoLongerAlerts() async throws {
+        let (manager, center) = makeManager(defaultConnection: FakeConnectionManager())
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        manager.attachSessionObserver(for: session)
+        manager.detachSessionObserver(for: backendID)
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        await drainMainQueue()
+
+        #expect(manager.currentToast == nil)
+        #expect(center.requests.isEmpty)
+    }
+}

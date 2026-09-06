@@ -206,6 +206,55 @@ final class BackendSessionRegistryTests {
                 "The default session's connection must never be torn down")
     }
 
+    // MARK: - Session lifecycle callbacks
+
+    @Test func attachInvokesOnSessionCreatedOncePerSession() {
+        let registry = makeRegistry()
+        var created: [BackendSession] = []
+        registry.onSessionCreated = { created.append($0) }
+        let id = BackendID(UUID())
+
+        let session = registry.attach(id)
+        _ = registry.attach(id)
+
+        #expect(created.count == 1)
+        #expect(created.first === session)
+    }
+
+    @Test func defaultSessionCreationInvokesOnSessionCreated() {
+        let registry = makeRegistry()
+        var created: [BackendSession] = []
+        registry.onSessionCreated = { created.append($0) }
+
+        let session = registry.defaultSession
+        _ = registry.defaultSession
+
+        #expect(created.count == 1)
+        #expect(created.first === session)
+    }
+
+    @Test func lastDetachInvokesOnSessionTeardownBeforeDisconnect() {
+        let registry = makeRegistry()
+        let id = BackendID(UUID())
+        var tornDown: [BackendSession] = []
+        var disconnectCountAtTeardown: Int?
+        registry.onSessionTeardown = { [self] session in
+            tornDown.append(session)
+            disconnectCountAtTeardown = createdConnections[0].disconnectCallCount
+        }
+
+        let session = registry.attach(id)
+        _ = registry.attach(id)
+        registry.detach(id)
+        #expect(tornDown.isEmpty, "Only the last detach tears the session down")
+        registry.detach(id)
+
+        #expect(tornDown.count == 1)
+        #expect(tornDown.first === session)
+        #expect(disconnectCountAtTeardown == 0,
+                "Teardown callback must run before the connection is dropped")
+    }
+
     // MARK: - Live composition
 
     @Test func liveDefaultSessionWrapsSharedInstances() {
