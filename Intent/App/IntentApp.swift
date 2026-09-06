@@ -34,6 +34,17 @@ struct IntentApp: App {
                         coordinator.onScenePhaseNotActive()
                     }
                 }
+                #if os(visionOS)
+                .frame(
+                    minWidth: Constants.Root.visionMinimumWindowWidth,
+                    minHeight: Constants.Root.visionMinimumWindowHeight)
+                #endif
         }
+        #if os(visionOS)
+        .defaultSize(
+            width: Constants.Root.visionDefaultWindowWidth,
+            height: Constants.Root.visionDefaultWindowHeight)
+        .windowResizability(.contentMinSize)
+        #endif
     }
 }

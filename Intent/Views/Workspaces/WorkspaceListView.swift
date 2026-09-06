@@ -103,6 +103,7 @@ struct WorkspaceListView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .visionListRowHitTarget()
                 }
             case .repo:
                 ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
@@ -116,6 +117,7 @@ struct WorkspaceListView: View {
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())
+                            .visionListRowHitTarget()
                         }
                     }
                 }

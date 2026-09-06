@@ -124,6 +124,7 @@ struct WorkspaceDetailView: View {
                     .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
                 }
 
+                #if !os(visionOS)
                 Picker("Workspace Content", selection: $selectedTab) {
                     Text("Agents").tag(0)
                     Text("Context").tag(1)
@@ -131,6 +132,7 @@ struct WorkspaceDetailView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                 .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
+                #endif
 
                 // Tab content
                 if selectedTab == 0 {
@@ -260,8 +262,45 @@ struct WorkspaceDetailView: View {
                 .accessibilityLabel("Workspace actions")
             }
         }
+        #if os(visionOS)
+        // The Agents/Context switcher lives in a leading-edge ornament on
+        // visionOS instead of the in-window segmented control.
+        .ornament(attachmentAnchor: .scene(.leading), contentAlignment: .center) {
+            tabOrnament
+        }
+        #endif
 
     }
+
+    #if os(visionOS)
+    private var tabOrnament: some View {
+        VStack(spacing: Constants.WorkspaceDetail.ornamentButtonSpacing) {
+            ornamentTabButton("Agents", systemImage: "person.2", tag: 0)
+            ornamentTabButton("Context", systemImage: "doc.text", tag: 1)
+        }
+        .padding(Constants.WorkspaceDetail.ornamentPadding)
+        .glassBackgroundEffect()
+    }
+
+    /// 44 pt circular buttons spaced so adjacent centers sit 60 pt apart.
+    private func ornamentTabButton(_ title: String, systemImage: String, tag: Int) -> some View {
+        Button {
+            selectedTab = tag
+        } label: {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+                .frame(width: Constants.WorkspaceDetail.ornamentButtonSize,
+                       height: Constants.WorkspaceDetail.ornamentButtonSize)
+        }
+        .buttonStyle(.borderless)
+        .buttonBorderShape(.circle)
+        .background(
+            selectedTab == tag ? AnyShapeStyle(.regularMaterial) : AnyShapeStyle(.clear),
+            in: Circle())
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selectedTab == tag ? [.isSelected] : [])
+    }
+    #endif
 
     @ViewBuilder
     private var agentListContent: some View {
@@ -276,6 +315,7 @@ struct WorkspaceDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
+                    .visionListRowHitTarget()
 
                     let delegates = viewModel.delegatedAgents(for: agent.id)
                     if !delegates.isEmpty {
@@ -294,6 +334,7 @@ struct WorkspaceDetailView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contentShape(Rectangle())
+                                .visionListRowHitTarget()
                             }
                         }
                     }
@@ -316,6 +357,7 @@ struct WorkspaceDetailView: View {
                             }
                             .buttonStyle(.plain)
                             .contentShape(Rectangle())
+                            .visionListRowHitTarget()
                         }
                     }
                 }

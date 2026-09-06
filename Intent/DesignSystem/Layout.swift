@@ -73,6 +73,15 @@ extension Constants.Conversation.Composer {
     static let pendingImageSide: CGFloat = 56
     static let pendingFileMaximumWidth: CGFloat = 200
     static let textContainerInset: CGFloat = 4
+    // Composer control hit target: visionOS gaze targeting needs ≥60 pt
+    // (HIG); other platforms keep the 44 pt tap minimum.
+    #if os(visionOS)
+    static let controlTarget: CGFloat = 60
+    static let suggestedPromptChipMinimumHeight: CGFloat = 60
+    static let suggestedPromptChipSpacing: CGFloat = 12
+    #else
+    static let controlTarget: CGFloat = Constants.Accessibility.minimumTapTarget
+    #endif
 }
 
 extension Constants.Conversation.Column {
@@ -132,6 +141,10 @@ extension Constants.Notification {
 }
 
 extension Constants.Root {
+    static let visionDefaultWindowWidth: CGFloat = 1280
+    static let visionDefaultWindowHeight: CGFloat = 900
+    static let visionMinimumWindowWidth: CGFloat = 800
+    static let visionMinimumWindowHeight: CGFloat = 600
     static let sidebarMinimumWidth: CGFloat = 300
     static let sidebarIdealWidth: CGFloat = 350
     static let sidebarMaximumWidth: CGFloat = 400
@@ -280,6 +293,9 @@ extension Constants.WorkspaceDetail {
     static let progressBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
+    static let ornamentButtonSize: CGFloat = 44
+    static let ornamentButtonSpacing: CGFloat = 16
+    static let ornamentPadding: CGFloat = 8
 }
 
 extension Constants.ModalPicker {
