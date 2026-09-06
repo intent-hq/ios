@@ -15,6 +15,10 @@ visionOS branch must leave an iOS branch identical to the prior behaviour. Verif
 `-destination 'generic/platform=visionOS Simulator'` — never `-sdk xros`, which silently
 falls back to iphoneos when the visionOS platform component is not installed.
 
+## Where to look
+
+- Thread-hopping ObjC callback APIs (registry + `@Sendable` guard): `IntentTests/ObjCCallbackIsolationTests.swift` — closures passed to these are inferred MainActor-isolated and crash on device when invoked off-main unless explicitly `@Sendable`.
+
 ## Filing issues
 
 When you encounter a bug or limitation while working on this codebase, file a GitHub
