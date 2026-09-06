@@ -184,6 +184,88 @@ jobs:
           name: ios-test-results
           path: TestResults
 
+  visionos-build:
+    name: visionOS Build
+    # Build-only job (no tests) keeping the xros destination green.
+    # TailcatKit is linked with an iOS-only platform filter, so this job
+    # needs no Go toolchain and no xcframework build.
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Same Xcode selection logic as the iOS job above.
+      - name: Select Xcode
+        run: |
+          echo "Available Xcode bundles:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || true
+          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
+          else
+            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
+            xcodebuild -version
+          fi
+
+      # The macos-15 image is expected to ship a visionOS simulator runtime;
+      # download it only if absent (several GB, so guard on presence).
+      - name: Ensure visionOS simulator runtime
+        run: |
+          if xcrun simctl list runtimes | grep -q '^visionOS '; then
+            echo "visionOS simulator runtime present:"
+            xcrun simctl list runtimes | grep '^visionOS '
+          else
+            echo "No visionOS simulator runtime on this runner; downloading..."
+            sudo xcodebuild -downloadPlatform visionOS
+            xcrun simctl list runtimes | grep '^visionOS '
+          fi
+
+      # Pick an available Apple Vision Pro simulator by UDID (same rationale
+      # as the iOS job's device selection).
+      - name: Pick simulator device
+        run: |
+          devices=$(xcrun simctl list devices available)
+          line=$(echo "$devices" | grep -E '^[[:space:]]+Apple Vision' | tail -n 1 || true)
+          udid=$(echo "$line" | grep -oE '[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}' | head -n 1 || true)
+          if [ -z "$udid" ]; then
+            echo "No available Apple Vision Pro simulator on this runner" >&2
+            exit 1
+          fi
+          name=$(echo "$line" | sed -E "s/^[[:space:]]*(.*) \($udid\).*/\1/")
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          echo "Selected simulator: $name ($udid)"
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: >
+          xcodebuild -resolvePackageDependencies
+          -project Intent.xcodeproj
+          -scheme Intent
+          -clonedSourcePackagesDirPath build/SourcePackages
+
+      - name: Build
+        run: >
+          xcodebuild build
+          -project Intent.xcodeproj
+          -scheme Intent
+          -destination "platform=visionOS Simulator,id=$SIM_UDID"
+          -clonedSourcePackagesDirPath build/SourcePackages
+          CODE_SIGN_IDENTITY=""
+          CODE_SIGNING_REQUIRED=NO
+          CODE_SIGNING_ALLOWED=NO
+
   pr-title:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
