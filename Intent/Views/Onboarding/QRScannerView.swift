@@ -1,8 +1,37 @@
 import SwiftUI
+#if !os(visionOS)
 @preconcurrency import AVFoundation
 import Vision
 import VisionKit
+#endif
 
+#if os(visionOS)
+/// DataScannerViewController (VisionKit live camera scanning) is unavailable
+/// on visionOS; keep the same API so call sites compile, and direct the user
+/// to manual token entry.
+struct QRScannerView: View {
+    @Environment(\.dismiss) var dismiss
+    var onPaired: ((StoredConnection) -> Void)?
+
+    var body: some View {
+        NavigationStack {
+            Color.black
+                .overlay {
+                    Text("Camera scanning isn't available — use manual token entry instead")
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(Constants.QRScanner.unavailableMessagePadding)
+                }
+                .ignoresSafeArea()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
+        }
+    }
+}
+#else
 struct QRScannerView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
@@ -317,4 +346,5 @@ struct QRCameraPreview: UIViewControllerRepresentable {
         }
     }
 }
+#endif
 

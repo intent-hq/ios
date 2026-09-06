@@ -149,7 +149,9 @@ struct WorkspaceListSidebar: View {
             }
         }
         .listStyle(.sidebar)
+        #if !os(visionOS)
         .scrollDismissesKeyboard(.immediately)
+        #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
     }
 }

@@ -138,7 +138,9 @@ struct WorkspaceListView: View {
         }
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
+        #if !os(visionOS)
         .scrollDismissesKeyboard(.immediately)
+        #endif
     }
 }
 

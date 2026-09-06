@@ -1,6 +1,18 @@
 import SwiftUI
 import UIKit
 
+extension UIUserInterfaceIdiom {
+    /// Idioms where a hardware-keyboard bare Return submits (Shift+Return
+    /// inserts a newline). visionOS gets the iPad behavior.
+    var usesHardwareKeyboardSubmit: Bool {
+        #if os(visionOS)
+        return self == .pad || self == .vision
+        #else
+        return self == .pad
+        #endif
+    }
+}
+
 /// A UITextView subclass that intercepts hardware keyboard Return to submit,
 /// while letting Shift+Return insert a newline.
 class KeyCommandTextView: UITextView {
@@ -19,7 +31,7 @@ class KeyCommandTextView: UITextView {
 
     override var keyCommands: [UIKeyCommand]? {
         // On iPhone, don't intercept Return — it should always insert a newline
-        guard UIDevice.current.userInterfaceIdiom == .pad else { return nil }
+        guard UIDevice.current.userInterfaceIdiom.usesHardwareKeyboardSubmit else { return nil }
         // Intercept bare Return (no modifiers) on iPad — calls handleReturn
         let returnCommand = UIKeyCommand(
             input: "\r",

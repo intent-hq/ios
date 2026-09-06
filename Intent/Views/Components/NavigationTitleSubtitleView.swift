@@ -55,6 +55,11 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
+        #if os(visionOS)
+        // `.navigationSubtitle` is unavailable on visionOS; always use the
+        // principal-toolbar-item fallback there.
+        fallbackBody(content: content)
+        #else
         if #available(iOS 26.0, *) {
             Group {
                 if let subtitle {
@@ -65,16 +70,21 @@ struct WorkspaceNavigationSubtitleModifier: ViewModifier {
             }
             .task { await fetchWorkspacesIfNeeded() }
         } else {
-            content
-                .toolbar {
-                    if let subtitle {
-                        ToolbarItem(placement: .principal) {
-                            NavigationTitleSubtitleView(title: title, subtitle: subtitle)
-                        }
+            fallbackBody(content: content)
+        }
+        #endif
+    }
+
+    private func fallbackBody(content: Content) -> some View {
+        content
+            .toolbar {
+                if let subtitle {
+                    ToolbarItem(placement: .principal) {
+                        NavigationTitleSubtitleView(title: title, subtitle: subtitle)
                     }
                 }
-                .task { await fetchWorkspacesIfNeeded() }
-        }
+            }
+            .task { await fetchWorkspacesIfNeeded() }
     }
 
     /// Cold start / deep link: the store may not have fetched yet.
