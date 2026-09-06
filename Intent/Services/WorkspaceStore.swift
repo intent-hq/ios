@@ -12,6 +12,7 @@ import Observation
 
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var eventHandlerId: UUID?
+    @ObservationIgnored private let connectionManager: ConnectionManagerRouting
 
     /// Tracks the highest-known lastActivity per workspace so optimistic
     /// event-driven timestamps are never overwritten by stale server data.
@@ -24,15 +25,17 @@ import Observation
     @ObservationIgnored private var resnapshotInProgress = false
 
     /// Internal (not private) so `BackendSessionRegistry` can construct one
-    /// additional instance per pinned backend session; `.shared` remains the
-    /// process-wide default. Note: fetch/subscribe paths still route through
-    /// `ConnectionManager.shared` until the per-session rewiring lands.
-    init() {
+    /// additional instance per pinned backend session over that session's
+    /// connection; `.shared` remains the process-wide default over
+    /// `ConnectionManager.shared`.
+    init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
+        self.connectionManager = connectionManager
         observeConnection()
     }
 
     /// Test-only initializer that skips connection observation
     init(forTesting: Bool) {
+        self.connectionManager = ConnectionManager.shared
         // No connection observation for unit tests
     }
 
@@ -46,7 +49,7 @@ import Observation
     // MARK: - Connection observation
 
     private func observeConnection() {
-        connectionObserver = ConnectionManager.shared.connectionStatePublisher
+        connectionObserver = connectionManager.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 if state == .connected {
@@ -60,7 +63,7 @@ import Observation
         workspaceLive = false
         // Unregister old handler if reconnecting (defensive: subscription is invalid after disconnect)
         if let oldId = workspaceSubscriptionId {
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+            connectionManager.unregisterSubscriptionHandler(id: oldId)
         }
         workspaceSubscriptionId = nil
         workspaceReconciler = nil
@@ -80,7 +83,7 @@ import Observation
     private func _fetchAll() async {
         isLoading = true
         do {
-            let result = try await ConnectionManager.shared.request("workspace.list")
+            let result = try await connectionManager.request("workspace.list")
             var parsed = Self.parseWorkspaces(from: result)
             applyHighWaterMarks(to: &parsed)
             publishFetchedWorkspaces(parsed)
@@ -160,12 +163,12 @@ import Observation
     private func subscribeToEvents() async {
         // Remove old handler to prevent accumulation on reconnect
         if let handlerId = eventHandlerId {
-            ConnectionManager.shared.removeEventHandler(id: handlerId)
+            connectionManager.removeEventHandler(id: handlerId)
         }
 
-        // Register event handler on ConnectionManager
+        // Register event handler on the session's connection
         // (server subscription is handled centrally by ConnectionManager.subscribeToAllEvents)
-        eventHandlerId = ConnectionManager.shared.onEvent { [weak self] method, params in
+        eventHandlerId = connectionManager.onEvent { [weak self] method, params in
             Task { @MainActor in
                 self?.handleEvent(method, params: params)
             }
@@ -181,18 +184,18 @@ import Observation
 
         // Try to subscribe - if server doesn't support it, error response falls back to legacy
         do {
-            let result = try await ConnectionManager.shared.request("workspace.subscribe", params: [
+            let result = try await connectionManager.request("workspace.subscribe", params: [
                 "replaceGroup": "ios-workspaces"
             ])
             if let dict = result as? [String: Any],
                let subId = dict["subscriptionId"] as? String {
                 // Unregister old handler if we had one
                 if let oldId = workspaceSubscriptionId {
-                    ConnectionManager.shared.unregisterSubscriptionHandler(id: oldId)
+                    connectionManager.unregisterSubscriptionHandler(id: oldId)
                 }
                 workspaceSubscriptionId = subId
                 // Register handler immediately in same MainActor tick (preserves sync-capture guarantee)
-                ConnectionManager.shared.registerSubscriptionHandler(id: subId) { [weak self] push in
+                connectionManager.registerSubscriptionHandler(id: subId) { [weak self] push in
                     self?.handleSubscriptionPush(push)
                 }
                 AppLog.workspace.info("[WorkspaceStore] Subscribed to workspace.subscribe: \(subId)")
@@ -326,9 +329,9 @@ import Observation
 
         if let subId = workspaceSubscriptionId {
             // Unregister handler before unsubscribing
-            ConnectionManager.shared.unregisterSubscriptionHandler(id: subId)
+            connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await ConnectionManager.shared.request("workspace.unsubscribe", params: [
+                let _ = try await connectionManager.request("workspace.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {

@@ -19,6 +19,14 @@ final class BackendSessionRegistry {
     private var attachCounts: [BackendID: Int] = [:]
     private var defaultSessionStorage: BackendSession?
 
+    /// Called after a session is created (default or pinned) so process-wide
+    /// aggregators (e.g. `NotificationManager`) can observe its connection.
+    var onSessionCreated: ((BackendSession) -> Void)?
+
+    /// Called when a pinned session is released on last detach, before its
+    /// connection is torn down. Never called for the default session.
+    var onSessionTeardown: ((BackendSession) -> Void)?
+
     init(makeSession: @escaping SessionFactory = BackendSessionRegistry.makeLiveSession) {
         self.makeSession = makeSession
     }
@@ -31,6 +39,7 @@ final class BackendSessionRegistry {
         if let session = defaultSessionStorage { return session }
         let session = makeSession(.defaultSession)
         defaultSessionStorage = session
+        onSessionCreated?(session)
         return session
     }
 
@@ -45,6 +54,7 @@ final class BackendSessionRegistry {
         } else {
             session = makeSession(.pinned(id))
             pinned[id] = session
+            onSessionCreated?(session)
         }
         attachCounts[id, default: 0] += 1
         return session
@@ -61,7 +71,10 @@ final class BackendSessionRegistry {
         }
         attachCounts[id] = nil
         let session = pinned.removeValue(forKey: id)
-        session?.teardown()
+        if let session {
+            onSessionTeardown?(session)
+            session.teardown()
+        }
     }
 
     /// The live pinned session for `id` without attaching, if any.
@@ -102,7 +115,7 @@ final class BackendSessionRegistry {
                 attentionCueCenter: .shared)
         case .pinned:
             let connection = ConnectionManager()
-            let workspaceStore = WorkspaceStore()
+            let workspaceStore = WorkspaceStore(connectionManager: connection)
             let fileLoader = WorkspaceFileImageLoader(connection: connection)
             return BackendSession(
                 kind: kind,
