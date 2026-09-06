@@ -11,9 +11,15 @@ visionOS is a destination of the single `Intent` target. `#if os(visionOS)` and
 `#if canImport(TailcatKit)` are restricted to an allowlist enforced by
 `IntentTests/PlatformGuardAllowlistTests.swift` — the source of truth for which files
 may carry each guard; extend the allowlist there when a new guard is deliberate. Every
-visionOS branch must leave an iOS branch identical to the prior behaviour. Verify with
-`-destination 'generic/platform=visionOS Simulator'` — never `-sdk xros`, which silently
-falls back to iphoneos when the visionOS platform component is not installed.
+visionOS branch must leave an iOS branch identical to the prior behaviour.
+
+## Building and testing
+
+Run every xcodebuild build/test through `scripts/xcodebuild.sh` — the single blessed
+entry point that CI uses too: `scripts/xcodebuild.sh build-ios | build-visionos |
+test-ios`. It fixes the project, scheme, signing flags, and destinations (the
+rationale for the destination/SDK rules lives in the script's header comment), and
+refuses `-sdk`.
 
 ## Filing issues
 
