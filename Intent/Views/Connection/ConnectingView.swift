@@ -43,8 +43,15 @@ struct ConnectingView: View {
             return
         }
 
-        guard let connection = PersistenceManager.shared.activeConnection() else {
-            coordinator.currentScreen = .pairing
+        guard let connection = targetConnection() else {
+            if coordinator.pinnedBackendID != nil {
+                // A pinned window has no pairing surface to fall back to; its
+                // saved connection was deleted out from under it.
+                coordinator.onConnectionFailed(
+                    error: String(localized: "This connection is no longer saved."))
+            } else {
+                coordinator.currentScreen = .pairing
+            }
             return
         }
 
@@ -70,6 +77,17 @@ struct ConnectingView: View {
             guard !Task.isCancelled else { return }
             coordinator.onConnectionFailed(error: error.localizedDescription)
         }
+    }
+
+    /// The stored connection this window dials: a pinned window dials its
+    /// own backend's saved record; the default window dials the active
+    /// connection (unchanged semantics).
+    private func targetConnection() -> StoredConnection? {
+        if let pinned = coordinator.pinnedBackendID {
+            return PersistenceManager.shared.loadConnections()
+                .first { $0.id == pinned.connectionID }
+        }
+        return PersistenceManager.shared.activeConnection()
     }
 
     /// Waits for the session's `WorkspaceStore.lastUpdated` to become

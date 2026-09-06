@@ -44,4 +44,20 @@ struct InfoPlistSyncTests {
             "Info-visionOS.plist extras must be exactly the dictation usage keys"
         )
     }
+
+    /// Multi-scene support is a shared key (pinned-backend windows via
+    /// WindowGroup(for: BackendID.self) on visionOS and iPad). The mirror
+    /// check above keeps the plists in sync; this pins the value so a
+    /// regression fails deliberately, not via a missing-key sync error.
+    @Test func bothPlistsDeclareMultipleSceneSupport() throws {
+        for path in ["Intent/Info.plist", "Info-visionOS.plist"] {
+            let plist = try loadPlist(path)
+            let manifest = try #require(
+                plist["UIApplicationSceneManifest"] as? [String: Any],
+                "\(path) is missing UIApplicationSceneManifest")
+            #expect(
+                manifest["UIApplicationSupportsMultipleScenes"] as? Bool == true,
+                "\(path) must declare UIApplicationSupportsMultipleScenes = true")
+        }
+    }
 }

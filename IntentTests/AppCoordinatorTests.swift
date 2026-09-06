@@ -336,6 +336,29 @@ final class AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func onLoadComplete_routesToConnectingForPinnedCoordinator() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // No active connection: a pinned window dials its own backend's saved
+        // record, so it must route to .connecting, never to .pairing.
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            pinnedBackendID: BackendID(stored.id),
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        if case .connecting = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func onLogOff_forgetsActiveConnectionOnly_flagsSavedConnections() {
         resetConnectionState()
         defer { resetConnectionState() }

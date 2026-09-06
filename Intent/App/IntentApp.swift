@@ -48,6 +48,34 @@ struct IntentApp: App {
             height: Constants.Root.visionDefaultWindowHeight)
         .windowResizability(.contentMinSize)
         #endif
+
+        // Pinned-backend windows, opened via openWindow(value:) from the
+        // connections list (visionOS and iPad; iPhone never offers multiple
+        // scenes). Each window attaches the backend's shared session through
+        // the registry and owns its own coordinator via SessionWindowRoot.
+        WindowGroup(for: BackendID.self) { $backendID in
+            Group {
+                if let backendID {
+                    PinnedBackendWindowRoot(backendID: backendID)
+                } else {
+                    // Restoration lost the value: behave as a duplicated
+                    // default window (active-connection semantics).
+                    SessionWindowRoot(session: session)
+                }
+            }
+            .preferredColorScheme(resolvedColorScheme)
+            #if os(visionOS)
+            .frame(
+                minWidth: Constants.Root.visionMinimumWindowWidth,
+                minHeight: Constants.Root.visionMinimumWindowHeight)
+            #endif
+        }
+        #if os(visionOS)
+        .defaultSize(
+            width: Constants.Root.visionDefaultWindowWidth,
+            height: Constants.Root.visionDefaultWindowHeight)
+        .windowResizability(.contentMinSize)
+        #endif
     }
 }
 
@@ -81,5 +109,35 @@ struct SessionWindowRoot: View {
                     coordinator.onScenePhaseNotActive()
                 }
             }
+    }
+}
+
+/// Root of one pinned-backend window: attaches the backend's shared session
+/// through the registry on appear (creating it on first attach, refcounted
+/// across windows) and releases it on disappear so the registry tears the
+/// session down when the last window closes. Guards keep the attach/detach
+/// pair balanced if either callback fires more than once. Navigation is per
+/// window via SessionWindowRoot once the session is attached.
+struct PinnedBackendWindowRoot: View {
+    let backendID: BackendID
+    @State private var session: BackendSession?
+
+    var body: some View {
+        Group {
+            if let session {
+                SessionWindowRoot(session: session)
+            } else {
+                Color.clear
+            }
+        }
+        .onAppear {
+            guard session == nil else { return }
+            session = BackendSessionRegistry.shared.attach(backendID)
+        }
+        .onDisappear {
+            guard session != nil else { return }
+            session = nil
+            BackendSessionRegistry.shared.detach(backendID)
+        }
     }
 }

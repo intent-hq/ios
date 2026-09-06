@@ -116,7 +116,7 @@ final class BackendSessionRegistry {
                 workspaceFileImageLoader: .shared,
                 attachmentImageLoader: .shared,
                 attentionCueCenter: .shared)
-        case .pinned:
+        case .pinned(let id):
             let connection = ConnectionManager()
             let workspaceStore = WorkspaceStore(connectionManager: connection)
             let fileLoader = WorkspaceFileImageLoader(connection: connection)
@@ -127,6 +127,7 @@ final class BackendSessionRegistry {
                 coordinatorFactory: { claim in
                     AppCoordinator(
                         workspaceStore: workspaceStore, connection: connection,
+                        pinnedBackendID: id,
                         claimScreenRestoration: claim)
                 },
                 prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),

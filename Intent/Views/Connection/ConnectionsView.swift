@@ -50,6 +50,9 @@ struct ConnectionsView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
+    // False on iPhone, so the Open in New Window action never appears there.
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
     @State private var connections: [StoredConnection] = []
     @State private var activeConnectionId: UUID?
     @State private var showQRScanner = false
@@ -175,6 +178,28 @@ struct ConnectionsView: View {
             // Not role: .destructive — the row must stay until the deletion is confirmed.
             Button("Delete") { connectionPendingDelete = connection }
                 .tint(.red)
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if supportsMultipleWindows {
+                openInNewWindowButton(connection)
+                    .tint(.blue)
+            }
+        }
+        .contextMenu {
+            if supportsMultipleWindows {
+                openInNewWindowButton(connection)
+            }
+        }
+    }
+
+    /// Opens a window pinned to `connection` (visionOS and iPad only —
+    /// supportsMultipleWindows is false on iPhone, so callers gate on it).
+    private func openInNewWindowButton(_ connection: StoredConnection) -> some View {
+        Button {
+            openWindow(value: BackendID(connection: connection))
+            dismiss()
+        } label: {
+            Label("Open in New Window", systemImage: "macwindow.badge.plus")
         }
     }
 

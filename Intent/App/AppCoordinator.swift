@@ -75,6 +75,10 @@ class AppCoordinator {
 
     @ObservationIgnored private let workspaceStore: WorkspaceStore
     @ObservationIgnored private let connection: any SessionConnectionManaging
+    /// The backend this coordinator's window is pinned to; nil for default-
+    /// session windows. Pinned windows route straight to .connecting on load
+    /// and dial this backend's saved connection instead of the active one.
+    @ObservationIgnored let pinnedBackendID: BackendID?
     @ObservationIgnored private let persistence: PersistenceManager
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
@@ -95,6 +99,7 @@ class AppCoordinator {
 
     init(workspaceStore: WorkspaceStore,
          connection: any SessionConnectionManaging,
+         pinnedBackendID: BackendID? = nil,
          persistence: PersistenceManager = PersistenceManager.shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
          backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
@@ -102,6 +107,7 @@ class AppCoordinator {
          claimScreenRestoration: @escaping @MainActor () -> Bool = { true }) {
         self.workspaceStore = workspaceStore
         self.connection = connection
+        self.pinnedBackendID = pinnedBackendID
         self.persistence = persistence
         self.syncedRegistry = syncedRegistry
         self.backgroundTaskManager = backgroundTaskManager
@@ -281,7 +287,8 @@ class AppCoordinator {
     func onLoadComplete() {
         hasLoadCompleted = true
         refreshSyncedBackends()
-        if DemoMode.pretendPaired || persistence.activeConnection() != nil {
+        if DemoMode.pretendPaired || pinnedBackendID != nil
+            || persistence.activeConnection() != nil {
             currentScreen = .connecting
         } else {
             // Synced connections merged from the registry (or connections
