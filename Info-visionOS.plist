@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- visionOS variant of Intent/Info.plist (selected via the
+	     SDK-conditioned INFOPLIST_FILE build setting): identical except for
+	     the dictation usage strings at the end, which must not appear on
+	     iOS. Keep the shared keys in sync with Intent/Info.plist. -->
+	<!-- intent:// deep links (pairing via intent://pair, protocol §5). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLName</key>
+			<string>dev.intentapp.ios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>intent</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- Add-only photo library access for the chat image "Save Image" action. -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Intent saves images from your conversations to your photo library when you choose Save Image.</string>
+	<!-- Team-ID prefix ("TEAMID.") for building keychain access-group names
+	     at runtime (SyncedBackendRegistry); iOS has no public entitlement
+	     introspection API. -->
+	<key>AppIdentifierPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
+	<!-- Composer dictation (SpeechDictationController, visionOS only). -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Intent uses the microphone to dictate messages into the composer.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Intent uses speech recognition to transcribe your dictated messages.</string>
+</dict>
+</plist>

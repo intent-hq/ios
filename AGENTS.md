@@ -9,7 +9,8 @@ monorepo bump, conventional commits).
 
 visionOS is a destination of the single `Intent` target. `#if os(visionOS)` is allowed
 only in the files that already carry it: `App/IntentApp.swift`, `DesignSystem/Layout.swift`,
-`DesignSystem/VisionHitTarget.swift`, `Utils/HapticManager.swift`,
+`DesignSystem/VisionHitTarget.swift`, `Services/SpeechDictationController.swift`,
+`Utils/HapticManager.swift`,
 `Views/Components/NavigationTitleSubtitleView.swift`,
 `Views/Conversation/Composer/MessageInputView.swift`,
 `Views/Conversation/Composer/SubmittableTextView.swift`,

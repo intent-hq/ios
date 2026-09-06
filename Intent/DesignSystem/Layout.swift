@@ -68,7 +68,6 @@ extension Constants.Conversation.Message {
 }
 
 extension Constants.Conversation.Composer {
-    static let minimumTextViewHeight = Constants.Accessibility.minimumTapTarget
     static let maximumTextViewHeight: CGFloat = 120
     static let pendingImageSide: CGFloat = 56
     static let pendingFileMaximumWidth: CGFloat = 200
@@ -77,10 +76,20 @@ extension Constants.Conversation.Composer {
     // (HIG); other platforms keep the 44 pt tap minimum.
     #if os(visionOS)
     static let controlTarget: CGFloat = 60
+    // The empty field matches the 60 pt side controls exactly: minimum text
+    // view height equals the control target with no outer vertical padding,
+    // capsule corners, and short content vertically centered by
+    // KeyCommandTextView.
+    static let minimumTextViewHeight: CGFloat = controlTarget
+    static let fieldVerticalPadding: CGFloat = 0
+    static let fieldCornerRadius: CGFloat = 30
     static let suggestedPromptChipMinimumHeight: CGFloat = 60
     static let suggestedPromptChipSpacing: CGFloat = 12
     #else
     static let controlTarget: CGFloat = Constants.Accessibility.minimumTapTarget
+    static let minimumTextViewHeight = Constants.Accessibility.minimumTapTarget
+    static let fieldVerticalPadding: CGFloat = 4
+    static let fieldCornerRadius: CGFloat = 18
     #endif
 }
 

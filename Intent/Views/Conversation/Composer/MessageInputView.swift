@@ -12,6 +12,13 @@ struct MessageInputView: View {
     @State private var isPhotoPickerPresented: Bool = false
     @State private var isFilePickerPresented: Bool = false
 
+    #if os(visionOS)
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var dictation = SpeechDictationController()
+    @State private var dictationTranscript: DictationTranscript?
+    @State private var caretOffset: Int = 0
+    #endif
+
     // Local text state to decouple TextField from viewModel updates.
     // This prevents typing lag when the viewModel is rapidly updating
     // during streaming (every legacy-store publication triggers a re-render).
@@ -28,6 +35,12 @@ struct MessageInputView: View {
             // Suggested prompts as large gaze-targetable chips above the field
             if !viewModel.suggestedPrompts.isEmpty && !store.isStreaming {
                 suggestedPromptChipsRow
+            }
+
+            // Inline hint when dictation is unavailable (permissions denied,
+            // recognizer unavailable) — no alert, just guidance.
+            if let hint = dictation.unavailabilityHint {
+                dictationHintRow(hint)
             }
             #endif
 
@@ -84,7 +97,7 @@ struct MessageInputView: View {
 
                 // Text editor — bound to localText to avoid lag during streaming
                 // Uses SubmittableTextView so hardware Enter sends, Shift+Enter inserts newline
-                ZStack(alignment: .topLeading) {
+                ZStack(alignment: placeholderAlignment) {
                     SubmittableTextView(
                         text: $localText,
                         isFocused: $isFocused,
@@ -93,10 +106,17 @@ struct MessageInputView: View {
                             textViewHeight = min(
                                 max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
                                 Constants.Conversation.Composer.maximumTextViewHeight)
+                        },
+                        onCaretChange: { offset in
+                            #if os(visionOS)
+                            caretOffset = offset
+                            #else
+                            _ = offset
+                            #endif
                         }
                     )
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
                     .frame(height: textViewHeight)
 
                     // Placeholder (UITextView has no built-in placeholder)
@@ -110,7 +130,7 @@ struct MessageInputView: View {
                     }
                 }
                 .background(Theme.muted(for: colorScheme).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
 
                 #if os(visionOS)
                 dictationButton
@@ -180,6 +200,26 @@ struct MessageInputView: View {
                 localText = newValue
             }
         }
+        #if os(visionOS)
+        .onDisappear {
+            dictation.stop(reason: .viewDisappeared)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase != .active {
+                dictation.stop(reason: .sceneInactive)
+            }
+        }
+        #endif
+    }
+
+    /// visionOS centers the placeholder vertically in the 60 pt field;
+    /// iOS keeps the original top-leading placement.
+    private var placeholderAlignment: Alignment {
+        #if os(visionOS)
+        return .leading
+        #else
+        return .topLeading
+        #endif
     }
 
     // MARK: - Pending images
@@ -291,21 +331,58 @@ struct MessageInputView: View {
     #if os(visionOS)
     // MARK: - visionOS dictation & suggested prompts
 
-    /// Prominent dictation affordance. There is no public API to start
-    /// dictation programmatically, so the button focuses the text view,
-    /// which summons the system input where dictation is one pinch away.
+    /// Dictation toggle: starts a live Speech-framework session that inserts
+    /// transcriptions at the caret; tapping again stops and keeps the final
+    /// result.
     private var dictationButton: some View {
         Button {
-            isFocused = true
+            toggleDictation()
         } label: {
-            Image(systemName: "mic.fill")
+            Image(systemName: dictation.isRecording ? "stop.circle.fill" : "mic.fill")
                 .font(.title2)
-                .foregroundStyle(Theme.primary(for: colorScheme))
+                .foregroundStyle(
+                    dictation.isRecording
+                        ? Theme.destructive(for: colorScheme)
+                        : Theme.primary(for: colorScheme)
+                )
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
                     minHeight: Constants.Conversation.Composer.controlTarget)
         }
-        .accessibilityLabel("Dictate")
+        .accessibilityLabel(dictation.isRecording ? "Stop dictation" : "Dictate")
+    }
+
+    private func toggleDictation() {
+        HapticManager.impact(.light)
+        if dictation.isRecording {
+            dictation.stop(reason: .userTapped)
+            return
+        }
+
+        let transcript = DictationTranscript(baseText: localText, insertionOffset: caretOffset)
+        dictationTranscript = transcript
+        dictation.onTranscriptChange = { transcription, _ in
+            localText = transcript.merged(with: transcription)
+        }
+        dictation.onDidStop = { reason in
+            if !reason.acceptsFinalResult {
+                dictationTranscript = nil
+            }
+        }
+        Task { await dictation.startRecording() }
+    }
+
+    private func dictationHintRow(_ hint: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.slash")
+                .font(.caption)
+            Text(hint)
+                .font(.caption)
+        }
+        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
     }
 
     /// Suggested prompts as large chips directly above the field, sized for
@@ -348,6 +425,12 @@ struct MessageInputView: View {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
+        #if os(visionOS)
+        // Stop app dictation before the text is consumed; a late final
+        // result must not resurrect the sent text (.send cancels outright).
+        dictation.stop(reason: .send)
+        #endif
+
         // Check if dictation is active — only resign focus if so.
         // This prevents keyboard users from seeing a focus flicker.
         let isDictating = UITextInputMode.activeInputModes.contains { $0.primaryLanguage == "dictation" }
