@@ -1,5 +1,38 @@
 import SwiftUI
 
+/// The pairing paths PairingView offers, platform-filtered: visionOS exposes
+/// no camera to third-party apps, so live QR scanning is not a viable path
+/// there and is excluded from the options list.
+enum PairingOption: Equatable {
+    case qrScan
+    case manualEntry
+    case savedConnections
+
+    /// Whether live camera QR scanning exists on this platform.
+    static var platformSupportsCameraScanning: Bool {
+        #if os(visionOS)
+        false
+        #else
+        true
+        #endif
+    }
+
+    static func available(
+        showsSavedConnections: Bool,
+        supportsCameraScanning: Bool = platformSupportsCameraScanning
+    ) -> [PairingOption] {
+        var options: [PairingOption] = []
+        if supportsCameraScanning {
+            options.append(.qrScan)
+        }
+        options.append(.manualEntry)
+        if showsSavedConnections {
+            options.append(.savedConnections)
+        }
+        return options
+    }
+}
+
 struct PairingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
@@ -33,26 +66,33 @@ struct PairingView: View {
                     }
 
                     // Options
+                    let options = PairingOption.available(
+                        showsSavedConnections: coordinator.pairingShowsSavedConnections
+                    )
                     VStack(spacing: Constants.Pairing.optionsSpacing) {
-                        PairingOptionButton(
-                            icon: "camera.fill",
-                            title: "Scan QR Code",
-                            subtitle: "Fastest way to connect",
-                            colorScheme: colorScheme
-                        ) {
-                            showQRScanner = true
+                        if options.contains(.qrScan) {
+                            PairingOptionButton(
+                                icon: "camera.fill",
+                                title: "Scan QR Code",
+                                subtitle: "Fastest way to connect",
+                                colorScheme: colorScheme
+                            ) {
+                                showQRScanner = true
+                            }
                         }
 
-                        PairingOptionButton(
-                            icon: "keyboard",
-                            title: "Manual Connection",
-                            subtitle: "Enter IP, port, and token",
-                            colorScheme: colorScheme
-                        ) {
-                            showManualEntry = true
+                        if options.contains(.manualEntry) {
+                            PairingOptionButton(
+                                icon: "keyboard",
+                                title: "Manual Connection",
+                                subtitle: "Enter IP, port, and token",
+                                colorScheme: colorScheme
+                            ) {
+                                showManualEntry = true
+                            }
                         }
 
-                        if coordinator.pairingShowsSavedConnections {
+                        if options.contains(.savedConnections) {
                             PairingOptionButton(
                                 icon: "clock.arrow.circlepath",
                                 title: "Saved Connections",
@@ -63,6 +103,15 @@ struct PairingView: View {
                             }
                         }
 
+                        #if os(visionOS)
+                        // No camera on visionOS, so point at the other fast
+                        // path: the intent://pair deep link from the desktop
+                        // app's pairing screen.
+                        Text("Pair from your iPhone or Mac: open the intent://pair link shown in the Intent desktop app.")
+                            .font(.caption)
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .multilineTextAlignment(.center)
+                        #endif
                     }
                     .padding(.horizontal, Constants.Pairing.optionsHorizontalPadding)
 
