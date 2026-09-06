@@ -173,13 +173,15 @@ struct ConversationColumnView: View {
     }
 
     /// On visionOS the wizard is a sheet, so the composer stays available
-    /// under the opener banner; elsewhere pending questions occupy the
-    /// composer slot until collapsed.
+    /// under the opener banner and hides only during marker recovery. A
+    /// `pendingQuestions != nil` check would be redundant: a derived set means
+    /// the marked row is resident or recovered, so it implies
+    /// `isPendingQuestionRecoveryLoading` is false (invariant pinned by
+    /// PendingQuestionRecoveryExclusivityTests). Elsewhere pending questions
+    /// occupy the composer slot until collapsed.
     private var composerVisible: Bool {
         #if os(visionOS)
-        return viewModel.pendingQuestions != nil
-            || !viewModel.isPendingQuestionRecoveryLoading
-            || questionWizardCollapsed
+        return !viewModel.isPendingQuestionRecoveryLoading || questionWizardCollapsed
         #else
         return (viewModel.pendingQuestions == nil && !viewModel.isPendingQuestionRecoveryLoading)
             || questionWizardCollapsed

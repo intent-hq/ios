@@ -566,6 +566,87 @@ struct PendingQuestionDerivationTests {
     }
 }
 
+// MARK: - Marker recovery exclusivity (visionOS composerVisible invariant)
+
+/// `ConversationViewModel.isPendingQuestionRecoveryLoading` is true only while
+/// the marker names a non-resident row and no wizard can be derived from the
+/// recovered copy (`derive([recovered], isTurnActive: false,
+/// pendingQuestionsMessageId:)` is nil) — or no copy exists at all;
+/// `pendingQuestions` derives over the transcript with that copy prepended.
+/// These pin the invariant `ConversationColumnView.composerVisible` (visionOS)
+/// relies on: every state that makes the recovery gate report loading also
+/// makes the full derivation nil, so the two can never both hold.
+struct PendingQuestionRecoveryExclusivityTests {
+    private let markedId = "a-marked"
+
+    /// A transcript without the marked row but with a question-bearing tail,
+    /// so a nil result proves marker authority rather than an empty tail.
+    private var transcriptWithoutMarkedRow: [ConversationMessage] {
+        [
+            ConversationMessage(
+                id: "u1", role: .user,
+                contentBlocks: [ContentBlock(type: .text, text: "hi")]),
+            ConversationMessage(
+                id: "a-other", role: .assistant,
+                contentBlocks: [questionBlock(text: questionJSON())]),
+        ]
+    }
+
+    /// Mirrors `ConversationViewModel.pendingQuestions` during recovery: the
+    /// recovered copy (when present) is prepended to the loaded transcript.
+    private func fullDerivation(recovered: ConversationMessage?) -> PendingQuestionSet? {
+        var messages = transcriptWithoutMarkedRow
+        if let recovered { messages.insert(recovered, at: 0) }
+        return PendingQuestionSet.derive(
+            messages: messages, isTurnActive: false, pendingQuestionsMessageId: markedId)
+    }
+
+    /// Mirrors the recovery gate's derivation
+    /// (`ConversationViewModel.isPendingQuestionRecoveryLoading`): loading
+    /// while this is nil.
+    private func recoveredWizard(_ recovered: ConversationMessage) -> PendingQuestionSet? {
+        PendingQuestionSet.derive(
+            messages: [recovered], isTurnActive: false, pendingQuestionsMessageId: markedId)
+    }
+
+    @Test func noRecoveredCopyDerivesNilPendingSet() {
+        // Seek unsettled (or notFound/error): the gate is loading and the
+        // full derivation fails open to nil — no wizard renders alongside it.
+        #expect(fullDerivation(recovered: nil) == nil)
+    }
+
+    @Test func nonRenderableRecoveredCopyDerivesNilPendingSet() {
+        // Every recovered copy the gate derives to nil (still loading) also
+        // nils the full derivation with the copy prepended.
+        let nonRenderable: [ConversationMessage] = [
+            ConversationMessage(
+                id: markedId, role: .assistant,
+                contentBlocks: [questionBlock(text: questionJSON())], isStreaming: true),
+            ConversationMessage(
+                id: markedId, role: .user,
+                contentBlocks: [questionBlock(text: questionJSON())]),
+            ConversationMessage(
+                id: markedId, role: .assistant,
+                contentBlocks: [questionBlock(text: "garbage")]),
+        ]
+        for recovered in nonRenderable {
+            #expect(recoveredWizard(recovered) == nil)
+            #expect(fullDerivation(recovered: recovered) == nil)
+        }
+    }
+
+    @Test func renderableRecoveredCopyEndsLoadingAndDerivesSet() throws {
+        // Converse sanity: once a wizard derives from the recovered copy the
+        // gate stops loading, and the full derivation yields the same set.
+        let recovered = ConversationMessage(
+            id: markedId, role: .assistant,
+            contentBlocks: [questionBlock(text: questionJSON())])
+        #expect(recoveredWizard(recovered) != nil)
+        let set = try #require(fullDerivation(recovered: recovered))
+        #expect(set.messageId == markedId)
+    }
+}
+
 // MARK: - Answer flattening (FE `answer-message.ts` parity)
 
 struct AnswerFlatteningTests {
