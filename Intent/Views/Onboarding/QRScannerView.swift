@@ -11,6 +11,8 @@ import VisionKit
 /// to manual token entry.
 struct QRScannerView: View {
     @Environment(\.dismiss) var dismiss
+    /// Unused on visionOS: kept so call sites pass the same arguments as the
+    /// iOS QRScannerView below.
     var onPaired: ((StoredConnection) -> Void)?
 
     var body: some View {

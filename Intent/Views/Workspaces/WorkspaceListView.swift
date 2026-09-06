@@ -142,6 +142,7 @@ struct WorkspaceListView: View {
         .scrollContentBackground(.hidden)
         .listStyle(.plain)
         #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
         #endif
     }

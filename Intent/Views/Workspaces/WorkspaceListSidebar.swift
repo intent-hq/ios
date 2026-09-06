@@ -151,6 +151,7 @@ struct WorkspaceListSidebar: View {
         }
         .listStyle(.sidebar)
         #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)

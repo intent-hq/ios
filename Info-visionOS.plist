@@ -5,7 +5,8 @@
 	<!-- visionOS variant of Intent/Info.plist (selected via the
 	     SDK-conditioned INFOPLIST_FILE build setting): identical except for
 	     the dictation usage strings at the end, which must not appear on
-	     iOS. Keep the shared keys in sync with Intent/Info.plist. -->
+	     iOS. Keep the shared keys in sync with Intent/Info.plist — enforced
+	     by IntentTests/InfoPlistSyncTests.swift. -->
 	<!-- intent:// deep links (pairing via intent://pair, protocol §5). -->
 	<key>CFBundleURLTypes</key>
 	<array>
