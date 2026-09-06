@@ -24,6 +24,13 @@ struct MessageInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            #if os(visionOS)
+            // Suggested prompts as large gaze-targetable chips above the field
+            if !viewModel.suggestedPrompts.isEmpty && !store.isStreaming {
+                suggestedPromptChipsRow
+            }
+            #endif
+
             // Pending image thumbnails
             if !viewModel.pendingImages.isEmpty {
                 pendingImagesRow
@@ -47,8 +54,8 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.destructive(for: colorScheme))
                             .frame(
-                                minWidth: Constants.Accessibility.minimumTapTarget,
-                                minHeight: Constants.Accessibility.minimumTapTarget)
+                                minWidth: Constants.Conversation.Composer.controlTarget,
+                                minHeight: Constants.Conversation.Composer.controlTarget)
                     }
                     .accessibilityLabel("Stop response")
                 } else {
@@ -69,8 +76,8 @@ struct MessageInputView: View {
                             .font(.title2)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             .frame(
-                                minWidth: Constants.Accessibility.minimumTapTarget,
-                                minHeight: Constants.Accessibility.minimumTapTarget)
+                                minWidth: Constants.Conversation.Composer.controlTarget,
+                                minHeight: Constants.Conversation.Composer.controlTarget)
                     }
                     .accessibilityLabel("Add attachment")
                 }
@@ -105,6 +112,10 @@ struct MessageInputView: View {
                 .background(Theme.muted(for: colorScheme).opacity(0.5))
                 .clipShape(RoundedRectangle(cornerRadius: 18))
 
+                #if os(visionOS)
+                dictationButton
+                #endif
+
                 // Send button (right side)
                 VStack(spacing: 4) {
                     // Send stays disabled while a send is already placing
@@ -126,8 +137,8 @@ struct MessageInputView: View {
                                         : Theme.mutedForeground(for: colorScheme)
                                 )
                                 .frame(
-                                    minWidth: Constants.Accessibility.minimumTapTarget,
-                                    minHeight: Constants.Accessibility.minimumTapTarget)
+                                    minWidth: Constants.Conversation.Composer.controlTarget,
+                                    minHeight: Constants.Conversation.Composer.controlTarget)
                         }
                         .disabled(!hasContent)
                         .accessibilityLabel("Send message")
@@ -195,8 +206,8 @@ struct MessageInputView: View {
                                 .foregroundStyle(.white)
                                 .background(Circle().fill(.black.opacity(0.5)))
                                 .frame(
-                                    minWidth: Constants.Accessibility.minimumTapTarget,
-                                    minHeight: Constants.Accessibility.minimumTapTarget,
+                                    minWidth: Constants.Conversation.Composer.controlTarget,
+                                    minHeight: Constants.Conversation.Composer.controlTarget,
                                     alignment: .topTrailing)
                                 .contentShape(Rectangle())
                         }
@@ -259,7 +270,7 @@ struct MessageInputView: View {
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     .contentShape(Rectangle().inset(
-                                        by: -Constants.Accessibility.minimumTapTarget / 2))
+                                        by: -Constants.Conversation.Composer.controlTarget / 2))
                             }
                             .accessibilityLabel("Remove \(file.displayName)")
                         }
@@ -276,6 +287,63 @@ struct MessageInputView: View {
         }
         .scrollIndicators(.hidden)
     }
+
+    #if os(visionOS)
+    // MARK: - visionOS dictation & suggested prompts
+
+    /// Prominent dictation affordance. There is no public API to start
+    /// dictation programmatically, so the button focuses the text view,
+    /// which summons the system input where dictation is one pinch away.
+    private var dictationButton: some View {
+        Button {
+            isFocused = true
+        } label: {
+            Image(systemName: "mic.fill")
+                .font(.title2)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget)
+        }
+        .accessibilityLabel("Dictate")
+    }
+
+    /// Suggested prompts as large chips directly above the field, sized for
+    /// gaze targeting (≥60 pt). The transcript's inline prompt list is
+    /// disabled on visionOS in favor of these.
+    @ViewBuilder
+    private var suggestedPromptChipsRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: Constants.Conversation.Composer.suggestedPromptChipSpacing) {
+                ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
+                    Button {
+                        Task { await viewModel.sendSuggestedPrompt(prompt) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "paperplane")
+                                .font(.callout)
+                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            Text(prompt)
+                                .font(.body)
+                                .lineLimit(2)
+                                .foregroundStyle(Theme.foreground(for: colorScheme))
+                        }
+                        .padding(.horizontal, 20)
+                        .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
+                        .background(Theme.muted(for: colorScheme).opacity(0.4))
+                        .clipShape(Capsule())
+                        .contentShape(.hoverEffect, Capsule())
+                        .hoverEffect(.highlight)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
+        }
+        .scrollIndicators(.hidden)
+    }
+    #endif
 
     // MARK: - Actions
 

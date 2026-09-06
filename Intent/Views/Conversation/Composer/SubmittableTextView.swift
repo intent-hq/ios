@@ -1,15 +1,22 @@
+import GameController
 import SwiftUI
 import UIKit
 
-extension UIUserInterfaceIdiom {
-    /// Idioms where a hardware-keyboard bare Return submits (Shift+Return
-    /// inserts a newline). visionOS gets the iPad behavior.
-    var usesHardwareKeyboardSubmit: Bool {
-        #if os(visionOS)
-        return self == .pad || self == .vision
-        #else
-        return self == .pad
-        #endif
+/// Decides whether bare Return submits the composer message (Shift+Return
+/// always inserts a newline).
+///
+/// - visionOS: dictation-first — Return submits only while a hardware
+///   keyboard is connected (`GCKeyboard.coalesced`); the virtual keyboard's
+///   Return inserts a newline so the composer sends via the button.
+/// - iPad: Return always submits.
+/// - iPhone: Return always inserts a newline (send via button only).
+enum ComposerSubmitPolicy {
+    static func returnSubmits(
+        isVisionOS: Bool,
+        idiom: UIUserInterfaceIdiom,
+        hasHardwareKeyboard: Bool
+    ) -> Bool {
+        isVisionOS ? hasHardwareKeyboard : idiom == .pad
     }
 }
 
@@ -29,10 +36,26 @@ class KeyCommandTextView: UITextView {
         onLayoutChange?()
     }
 
+    #if os(visionOS)
+    private static let isVisionOS = true
+    #else
+    private static let isVisionOS = false
+    #endif
+
+    /// Live submit rule for the current platform, idiom, and hardware
+    /// keyboard state.
+    static var returnSubmitsNow: Bool {
+        ComposerSubmitPolicy.returnSubmits(
+            isVisionOS: isVisionOS,
+            idiom: UIDevice.current.userInterfaceIdiom,
+            hasHardwareKeyboard: GCKeyboard.coalesced != nil)
+    }
+
     override var keyCommands: [UIKeyCommand]? {
-        // On iPhone, don't intercept Return — it should always insert a newline
-        guard UIDevice.current.userInterfaceIdiom.usesHardwareKeyboardSubmit else { return nil }
-        // Intercept bare Return (no modifiers) on iPad — calls handleReturn
+        // Don't intercept Return where it should insert a newline (iPhone
+        // always; visionOS without a hardware keyboard)
+        guard Self.returnSubmitsNow else { return nil }
+        // Intercept bare Return (no modifiers) — calls handleReturn
         let returnCommand = UIKeyCommand(
             input: "\r",
             modifierFlags: [],
@@ -189,11 +212,10 @@ struct SubmittableTextView: UIViewRepresentable {
                 if let kbTextView = textView as? KeyCommandTextView, kbTextView.isShiftHeld {
                     return true
                 }
-                // On iPhone, Enter always inserts a newline (send via button only)
-                if UIDevice.current.userInterfaceIdiom == .phone {
-                    return true
-                }
-                // iPad software keyboard Return (or bare Return fallback) → submit
+                // Return inserts a newline where the submit rule is off
+                // (iPhone always; visionOS without a hardware keyboard)
+                guard KeyCommandTextView.returnSubmitsNow else { return true }
+                // Software keyboard Return (or bare Return fallback) → submit
                 parent.onSubmit()
                 return false
             }
