@@ -134,8 +134,10 @@ import Speech
 /// visionOS-only live dictation: streams microphone audio through
 /// `AVAudioEngine` into `SFSpeechRecognizer` (on-device when supported) and
 /// delivers partial and final transcriptions via callbacks. All state is
-/// MainActor-isolated (target default); recognizer/tap callbacks hop back to
-/// the main actor with only Sendable values.
+/// MainActor-isolated (target default). Closures handed to AVFoundation /
+/// Speech run off the main queue (realtime audio thread, Speech-owned
+/// queue), so they are explicitly `@Sendable` — never MainActor-inferred —
+/// and hop back to the main actor with only Sendable values.
 @Observable
 final class SpeechDictationController {
     /// True while a dictation session is active.
@@ -218,8 +220,11 @@ final class SpeechDictationController {
     }
 
     private func begin(with recognizer: SFSpeechRecognizer) throws {
+        // Dictation only records; .record + .measurement + .duckOthers is
+        // Apple's dictation configuration. Activation must precede
+        // engine.start(); teardownAudio() deactivates.
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
+        try session.setCategory(.record, mode: .measurement, options: .duckOthers)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -233,13 +238,21 @@ final class SpeechDictationController {
         audioEngine = engine
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
+        // The tap runs on the realtime audio thread, so it must be @Sendable
+        // (a MainActor-inferred closure aborts with a dispatch queue
+        // assertion there). Speech's own API contract is that append(_:) is
+        // called from the tap thread, hence the nonisolated(unsafe) capture
+        // of the non-Sendable request.
+        nonisolated(unsafe) let tapRequest = request
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
+            tapRequest.append(buffer)
         }
         engine.prepare()
         try engine.start()
 
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
+        // The result handler runs on a Speech-owned queue: extract only
+        // Sendable values there, then hop to the main actor for all state.
+        recognitionTask = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
             let text = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
             let failed = error != nil
@@ -266,7 +279,8 @@ final class SpeechDictationController {
 
     private static func requestSpeechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
         await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
+            // Invoked on an arbitrary queue; must not be MainActor-inferred.
+            SFSpeechRecognizer.requestAuthorization { @Sendable status in
                 continuation.resume(returning: status)
             }
         }
