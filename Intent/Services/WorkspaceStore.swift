@@ -23,7 +23,11 @@ import Observation
     @ObservationIgnored private var workspaceLive = false
     @ObservationIgnored private var resnapshotInProgress = false
 
-    private init() {
+    /// Internal (not private) so `BackendSessionRegistry` can construct one
+    /// additional instance per pinned backend session; `.shared` remains the
+    /// process-wide default. Note: fetch/subscribe paths still route through
+    /// `ConnectionManager.shared` until the per-session rewiring lands.
+    init() {
         observeConnection()
     }
 
