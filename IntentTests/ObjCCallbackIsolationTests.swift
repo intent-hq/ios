@@ -28,10 +28,10 @@ struct ObjCCallbackIsolationTests {
         "installTap(",                              // AVAudioNode — realtime audio thread
         "recognitionTask(with",                     // SFSpeechRecognizer — Speech-owned queue
         "SFSpeechRecognizer.requestAuthorization",  // arbitrary queue
-        "AVAudioApplication.requestRecordPermission {",  // arbitrary queue (closure form)
+        "AVAudioApplication.requestRecordPermission",  // arbitrary queue
         ".setSampleBufferDelegate(",                // AVCaptureVideoDataOutput
         ".setMetadataObjectsDelegate(",             // AVCaptureMetadataOutput
-        "NotificationCenter.addObserver(forName",   // posting thread
+        ".addObserver(forName",                     // NotificationCenter — posting thread
     ]
 
     /// How many lines below a match to search for the opening `{` of a
@@ -66,11 +66,16 @@ struct ObjCCallbackIsolationTests {
 
     /// A match is safe when the call is `await`-ed, or the first closure
     /// literal opening after the matched API name begins with `@Sendable`.
+    /// The `await` exemption only considers the matched call's own statement:
+    /// text after the last `;` before the match, so an earlier semicolon-
+    /// separated statement's `await` cannot mark the callback safe.
     private static func callSiteIsSafe(
         lines: [String], lineIndex: Int, matchRange: Range<String.Index>
     ) -> Bool {
         let line = lines[lineIndex]
-        if line[..<matchRange.lowerBound].contains("await ") { return true }
+        let ownStatementPrefix = line[..<matchRange.lowerBound]
+            .split(separator: ";", omittingEmptySubsequences: false).last ?? ""
+        if ownStatementPrefix.contains("await ") { return true }
 
         var remainder = String(line[matchRange.lowerBound...])
         for offset in 0...closureLookaheadLines {
