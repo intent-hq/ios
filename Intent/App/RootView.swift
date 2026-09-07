@@ -10,6 +10,9 @@ struct RootView: View {
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
     @State private var notificationManager = NotificationManager.shared
+    /// Token of this window's selection-handler registration, so disappear
+    /// removes only this window's registration — never a successor's.
+    @State private var selectionHandlerToken: UUID?
     @State var showingWorkspaceDetail = false
     @State var showingConversation = false
     @State var conversationAgentId: String = ""
@@ -106,21 +109,17 @@ struct RootView: View {
                 ToastView(
                     toast: toast,
                     onTap: {
+                        // The toast renders in every window; the manager
+                        // routes the tap to the SOURCE backend's window, so
+                        // a tap in another backend's window never navigates
+                        // it cross-backend.
                         notificationManager.dismissToast()
-                        switch NotificationManager.tapRoute(
-                            sourceBackendID: toast.sourceBackendID,
-                            windowBackendID: coordinator.backendID,
-                            supportsMultipleWindows: supportsMultipleWindows)
-                        {
-                        case .openPinnedWindow(let target):
-                            openWindow(value: target)
-                        case .navigateInCurrentWindow:
-                            coordinator.onSelectAgent(
-                                toast.agentId,
-                                workspaceId: toast.workspaceId,
-                                agentName: toast.agentName
-                            )
-                        }
+                        notificationManager.routeAgentSelection(
+                            agentId: toast.agentId,
+                            workspaceId: toast.workspaceId,
+                            agentName: toast.agentName,
+                            connectionId: toast.sourceBackendID.connectionID
+                        )
                     },
                     onDismiss: {
                         notificationManager.dismissToast()
@@ -184,27 +183,32 @@ struct RootView: View {
         .onAppear {
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
-            notificationManager.setAgentSelectionHandler {
-                [weak coordinator] agentId, workspaceId, agentName, connectionId in
-                let source = NotificationManager.sourceBackendID(
-                    connectionId: connectionId,
-                    activeConnectionId: PersistenceManager.shared.activeConnection()?.id)
-                switch NotificationManager.tapRoute(
-                    sourceBackendID: source,
-                    windowBackendID: coordinator?.backendID,
-                    supportsMultipleWindows: supportsMultipleWindows)
-                {
-                case .openPinnedWindow(let target):
-                    openWindow(value: target)
-                case .navigateInCurrentWindow:
-                    coordinator?.handleNotificationSelection(
-                        agentId: agentId,
-                        workspaceId: workspaceId,
-                        agentName: agentName,
-                        connectionId: connectionId
-                    )
-                }
+            notificationManager.supportsMultipleWindows = supportsMultipleWindows
+            if supportsMultipleWindows {
+                notificationManager.openBackendWindow = { openWindow(value: $0) }
             }
+            // A pairing window (no backend) registers no handler: taps for
+            // a backend route to that backend's own window instead.
+            guard let backendID = session.backendID else { return }
+            selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
+                for: backendID
+            ) { [weak coordinator] agentId, workspaceId, agentName, connectionId in
+                if supportsMultipleWindows {
+                    // Raise this backend's window before navigating it.
+                    openWindow(value: backendID)
+                }
+                coordinator?.handleNotificationSelection(
+                    agentId: agentId,
+                    workspaceId: workspaceId,
+                    agentName: agentName,
+                    connectionId: connectionId
+                )
+            }
+        }
+        .onDisappear {
+            guard let backendID = session.backendID,
+                  let token = selectionHandlerToken else { return }
+            notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
     }
 }

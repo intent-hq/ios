@@ -9,11 +9,12 @@ struct ToastInfo: Equatable {
     let workspaceId: String
     let agentName: String
     let workspaceName: String
-    /// The pinned backend the alert came from; nil for the default session.
-    let sourceBackendID: BackendID?
+    /// The backend the alert came from (window model v2: every alert has a
+    /// concrete source connection, so taps can route to its window).
+    let sourceBackendID: BackendID
 
     init(agentId: String, workspaceId: String, agentName: String, workspaceName: String,
-         sourceBackendID: BackendID? = nil) {
+         sourceBackendID: BackendID) {
         self.id = UUID()
         self.agentId = agentId
         self.workspaceId = workspaceId
@@ -29,20 +30,13 @@ struct ToastInfo: Equatable {
 
     var currentToast: ToastInfo?
 
-    /// The agent ID currently being viewed in ConversationView
-    var currentAgentId: String? {
-        didSet {
-            if let currentAgentId,
-               currentAgentId != oldValue,
-               let connectionId = activeConnectionId() {
-                localNotificationService.removeDeliveredNotifications(
-                    forAgentId: currentAgentId, connectionId: connectionId)
-            }
-        }
-    }
+    /// Agent conversations currently on screen, keyed by their session's
+    /// connection id (multi-window: each window shows at most one, but
+    /// several windows can be open at once).
+    @ObservationIgnored private var openAgentIds: [UUID: Set<String>] = [:]
 
-    /// The workspace ID currently being viewed (workspace detail or conversation)
-    var currentWorkspaceId: String?
+    /// Workspace details currently on screen, keyed by connection id.
+    @ObservationIgnored private var openWorkspaceIds: [UUID: Set<String>] = [:]
 
     @ObservationIgnored private var dismissTask: Task<Void, Never>?
     @ObservationIgnored private let localNotificationService: LocalNotificationService
@@ -51,8 +45,27 @@ struct ToastInfo: Equatable {
     @ObservationIgnored private let activeConnectionId: () -> UUID?
     @ObservationIgnored private let connection: ConnectionManagerRouting
     @ObservationIgnored private let workspaceStore: WorkspaceStore
-    @ObservationIgnored private var agentSelectionHandler: ((String, String, String, UUID) -> Void)?
-    @ObservationIgnored private var pendingNotificationResponse: LocalNotificationService.Response?
+
+    /// Per-window agent-selection handlers, keyed by the window's bound
+    /// backend (window model v2: no global last-window-wins handler). The
+    /// registration token lets a disappearing window remove only its own
+    /// registration, never a successor's.
+    @ObservationIgnored private var agentSelectionHandlers:
+        [BackendID: (token: UUID, handler: (String, String, String, UUID) -> Void)] = [:]
+
+    /// Opens — or raises — the window bound to a backend via
+    /// `openWindow(value:)`. Set by window roots where multiple windows are
+    /// supported.
+    @ObservationIgnored var openBackendWindow: ((BackendID) -> Void)?
+
+    /// Whether the platform supports multiple windows (visionOS, iPad). Set
+    /// by window roots from `\.supportsMultipleWindows`.
+    @ObservationIgnored var supportsMultipleWindows = false
+
+    /// A tapped alert held until its source backend's window registers a
+    /// handler (cold start, or a just-opened window still binding).
+    @ObservationIgnored private var pendingAgentSelection:
+        (agentId: String, workspaceId: String, agentName: String, connectionId: UUID)?
 
     /// Pinned sessions currently observed for cross-window alert aggregation,
     /// with the event-handler id registered on each session's connection.
@@ -91,89 +104,155 @@ struct ToastInfo: Equatable {
         if registerEvents { registerEventHandler() }
     }
 
-    func setAgentSelectionHandler(_ handler: @escaping (String, String, String, UUID) -> Void) {
-        agentSelectionHandler = handler
-        if let pendingNotificationResponse {
-            self.pendingNotificationResponse = nil
-            routeNotificationResponse(pendingNotificationResponse)
-        }
+    // MARK: - Window visibility (connection-scoped)
+
+    /// A conversation became visible in some window: suppress its toasts
+    /// and clear any delivered system notification for the same agent on
+    /// the same backend — never another backend's same-id agent.
+    func conversationOpened(agentId: String, connectionId: UUID) {
+        openAgentIds[connectionId, default: []].insert(agentId)
+        localNotificationService.removeDeliveredNotifications(
+            forAgentId: agentId, connectionId: connectionId)
     }
 
-    // Taps are forwarded for any connection-scoped notification: the
-    // selection handler (RootView) decides per window whether to navigate or
-    // to open the source backend's pinned window (`tapRoute`), and the
-    // coordinator drops taps for backends its window doesn't show — so on
-    // iPhone, non-active-connection taps are ignored exactly as before.
+    /// Balances `conversationOpened`. Keyed by (agent, connection), so a
+    /// parent conversation's disappear never clobbers a pushed child's —
+    /// or another window's — visibility.
+    func conversationClosed(agentId: String, connectionId: UUID) {
+        openAgentIds[connectionId]?.remove(agentId)
+    }
+
+    /// A workspace detail became visible in some window.
+    func workspaceOpened(workspaceId: String, connectionId: UUID) {
+        openWorkspaceIds[connectionId, default: []].insert(workspaceId)
+    }
+
+    /// Balances `workspaceOpened`.
+    func workspaceClosed(workspaceId: String, connectionId: UUID) {
+        openWorkspaceIds[connectionId]?.remove(workspaceId)
+    }
+
+    private func isAgentOpen(_ agentId: String, connectionId: UUID) -> Bool {
+        openAgentIds[connectionId]?.contains(agentId) ?? false
+    }
+
+    private func isWorkspaceOpen(_ workspaceId: String, connectionId: UUID) -> Bool {
+        openWorkspaceIds[connectionId]?.contains(workspaceId) ?? false
+    }
+
+    // MARK: - Selection handlers (per-backend windows)
+
+    /// Registers the selection handler for one backend's window; a later
+    /// registration for the same backend replaces the earlier one (windows
+    /// sharing a backend navigate it identically). A held cold-start tap is
+    /// re-routed immediately. Returns the token for
+    /// `removeAgentSelectionHandler`.
+    @discardableResult
+    func registerAgentSelectionHandler(
+        for backendID: BackendID,
+        _ handler: @escaping (String, String, String, UUID) -> Void
+    ) -> UUID {
+        let token = UUID()
+        agentSelectionHandlers[backendID] = (token, handler)
+        if let pending = pendingAgentSelection {
+            pendingAgentSelection = nil
+            routeAgentSelection(
+                agentId: pending.agentId, workspaceId: pending.workspaceId,
+                agentName: pending.agentName, connectionId: pending.connectionId)
+        }
+        return token
+    }
+
+    /// Removes a backend's handler if `token` still owns the registration,
+    /// so a stale window's teardown never removes its replacement's.
+    func removeAgentSelectionHandler(for backendID: BackendID, token: UUID) {
+        guard agentSelectionHandlers[backendID]?.token == token else { return }
+        agentSelectionHandlers[backendID] = nil
+    }
+
+    // System-notification taps and toast taps share one policy
+    // (`routeAgentSelection`): the tap lands on the source backend's own
+    // window, never on whichever window happened to render it.
     func handleNotificationResponse(_ response: LocalNotificationService.Response) {
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              response.agentId != nil, response.workspaceId != nil, response.agentName != nil,
-              response.connectionId != nil
-        else { return }
-
-        guard agentSelectionHandler != nil else {
-            pendingNotificationResponse = response
-            return
-        }
-        routeNotificationResponse(response)
-    }
-
-    private func routeNotificationResponse(_ response: LocalNotificationService.Response) {
-        guard let agentId = response.agentId,
+              let agentId = response.agentId,
               let workspaceId = response.workspaceId,
               let agentName = response.agentName,
               let connectionId = response.connectionId
         else { return }
-        agentSelectionHandler?(agentId, workspaceId, agentName, connectionId)
+        routeAgentSelection(
+            agentId: agentId, workspaceId: workspaceId,
+            agentName: agentName, connectionId: connectionId)
+    }
+
+    /// Routes a tapped agent alert to the window bound to its source
+    /// backend: deliver when that window is registered, open/raise it where
+    /// multiple windows are supported (delivery completes when it
+    /// registers), hold a cold-start tap for the first window, and drop
+    /// cross-backend taps on single-window platforms — the same visible
+    /// behavior as the old coordinator-side connection guard.
+    func routeAgentSelection(
+        agentId: String, workspaceId: String, agentName: String, connectionId: UUID
+    ) {
+        let source = BackendID(connectionId)
+        switch Self.selectionRoute(
+            source: source,
+            registeredBackends: Set(agentSelectionHandlers.keys),
+            supportsMultipleWindows: supportsMultipleWindows)
+        {
+        case .deliverToWindow:
+            pendingAgentSelection = nil
+            agentSelectionHandlers[source]?.handler(
+                agentId, workspaceId, agentName, connectionId)
+        case .openSourceWindow:
+            pendingAgentSelection = (agentId, workspaceId, agentName, connectionId)
+            openBackendWindow?(source)
+        case .holdForFirstWindow:
+            pendingAgentSelection = (agentId, workspaceId, agentName, connectionId)
+        case .drop:
+            pendingAgentSelection = nil
+        }
     }
 
     // MARK: - Tap routing (spec decision 5)
 
-    /// Where a tapped agent alert should land.
-    enum TapRoute: Equatable {
-        /// Navigate in the tapping window (today's single-window semantics).
-        case navigateInCurrentWindow
-        /// Focus — or open — the source backend's pinned window via
-        /// `openWindow(value:)`.
-        case openPinnedWindow(BackendID)
+    /// Where a tapped agent alert (toast or system notification) goes.
+    enum SelectionRoute: Equatable {
+        /// The source backend has a registered window: deliver to it.
+        case deliverToWindow
+        /// No window shows the source backend, but the platform can open
+        /// one: open/raise it and hold the tap until it registers.
+        case openSourceWindow
+        /// No window has registered yet (cold start): hold the tap for the
+        /// first window, which delivers or drops it on registration.
+        case holdForFirstWindow
+        /// A single-window platform is showing another backend: drop the
+        /// tap.
+        case drop
     }
 
-    /// Pure routing decision for a tapped alert (toast or system
-    /// notification). Where multiple windows are supported (visionOS, iPad),
-    /// an alert from a pinned backend routes to that backend's own window —
-    /// unless the tapping window already shows it, which navigates in place.
-    /// Everything else (iPhone, default-session alerts) navigates in the
-    /// tapping window, whose coordinator drops cross-backend taps.
-    nonisolated static func tapRoute(
-        sourceBackendID: BackendID?,
-        windowBackendID: BackendID?,
+    /// Pure routing decision for a tapped alert under window model v2:
+    /// every alert carries its source backend's connection id, and the tap
+    /// belongs to that backend's window.
+    nonisolated static func selectionRoute(
+        source: BackendID,
+        registeredBackends: Set<BackendID>,
         supportsMultipleWindows: Bool
-    ) -> TapRoute {
-        guard supportsMultipleWindows,
-              let source = sourceBackendID,
-              source != windowBackendID
-        else { return .navigateInCurrentWindow }
-        return .openPinnedWindow(source)
-    }
-
-    /// The source backend of a tapped system notification: notifications are
-    /// posted with the connection id of the session that observed the event,
-    /// so an id other than the active connection can only come from a pinned
-    /// session. The active connection's alerts map to nil (default session).
-    nonisolated static func sourceBackendID(
-        connectionId: UUID, activeConnectionId: UUID?
-    ) -> BackendID? {
-        connectionId == activeConnectionId ? nil : BackendID(connectionId)
+    ) -> SelectionRoute {
+        if registeredBackends.contains(source) { return .deliverToWindow }
+        if supportsMultipleWindows { return .openSourceWindow }
+        return registeredBackends.isEmpty ? .holdForFirstWindow : .drop
     }
 
     private func handleForegroundNotification(_ response: LocalNotificationService.Response) {
         guard let agentId = response.agentId,
               let workspaceId = response.workspaceId,
               let agentName = response.agentName,
-              let connectionId = response.connectionId,
-              connectionId == activeConnectionId()
+              let connectionId = response.connectionId
         else { return }
         presentForegroundAlert(
-            agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+            agentId: agentId, workspaceId: workspaceId, agentName: agentName,
+            connectionId: connectionId)
     }
 
     private func registerEventHandler() {
@@ -260,7 +339,7 @@ struct ToastInfo: Equatable {
 
         // Emit-time fast paths: background agents and agents the payload
         // already marks as waiting on sub-agents never alert.
-        AppLog.notifications.debug("[NotificationManager] agent:idle — agentId=\(agentId), currentAgentId=\(currentAgentId ?? "nil")")
+        AppLog.notifications.debug("[NotificationManager] agent:idle — agentId=\(agentId)")
         if Self.shouldSkipIdleEventFastPath(data) { return }
 
         let agentName = data["agentName"] as? String
@@ -397,22 +476,29 @@ struct ToastInfo: Equatable {
         presentForegroundAlert(
             agentId: agentId, workspaceId: workspaceId,
             agentName: agentName, workspaceName: workspaceName,
-            sourceBackendID: sourceBackendID)
+            connectionId: connectionId)
     }
 
+    // Suppression is connection-scoped (window model v2): only the SAME
+    // backend's open conversation/workspace downgrades its alert to
+    // feedback — an identically-named id open on another backend's window
+    // still toasts. The toast is tagged with the concrete source backend
+    // (`workspaceStore(for:)` falls back to the default store when the
+    // source isn't an observed session — the legacy handler path).
     private func presentForegroundAlert(
         agentId: String,
         workspaceId: String,
         agentName: String,
         workspaceName: String? = nil,
-        sourceBackendID: BackendID? = nil
+        connectionId: UUID
     ) {
+        let sourceBackendID = BackendID(connectionId)
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
-        if agentId == currentAgentId {
+        if isAgentOpen(agentId, connectionId: connectionId) {
             // Currently viewing this exact agent's conversation — haptic + sound, no toast
             presentFeedback()
-        } else if workspaceId == currentWorkspaceId {
+        } else if isWorkspaceOpen(workspaceId, connectionId: connectionId) {
             // Viewing this workspace (agent list) — haptic + sound, no toast
             // The agent list will update via events, so the user will see the change
             presentFeedback()
@@ -427,7 +513,7 @@ struct ToastInfo: Equatable {
 
     private func showToast(agentId: String, workspaceId: String,
                            agentName: String, workspaceName: String,
-                           sourceBackendID: BackendID? = nil) {
+                           sourceBackendID: BackendID) {
         dismissTask?.cancel()
 
         withAnimation(.spring(

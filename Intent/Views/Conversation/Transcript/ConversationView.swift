@@ -72,13 +72,19 @@ private struct ConversationViewContent: View {
                 }
             }
             .onAppear {
-                NotificationManager.shared.currentAgentId = viewModel.agentId
+                if let connectionId = session.backendID?.connectionID {
+                    NotificationManager.shared.conversationOpened(
+                        agentId: viewModel.agentId, connectionId: connectionId)
+                }
                 // Entry itself never marks seen (the divider anchor must survive
                 // until the user leaves or the turn finishes).
                 viewModel.conversationAppeared()
             }
             .onDisappear {
-                NotificationManager.shared.currentAgentId = nil
+                if let connectionId = session.backendID?.connectionID {
+                    NotificationManager.shared.conversationClosed(
+                        agentId: viewModel.agentId, connectionId: connectionId)
+                }
                 Task { await viewModel.teardownLiveStores() }
                 // Stop-looking boundary — fires markSeen immediately.
                 viewModel.conversationDisappeared()

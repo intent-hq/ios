@@ -175,8 +175,8 @@ struct NotificationManagerTests {
         let (manager, center) = makeNotificationManager(state: .inactive) {
             feedbackCount += 1
         }
-        manager.currentAgentId = "agent-1"
-        manager.currentWorkspaceId = "workspace-1"
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
+        manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
             agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
@@ -214,7 +214,7 @@ struct NotificationManagerTests {
         let (manager, center) = makeNotificationManager(state: .active) {
             feedbackCount += 1
         }
-        manager.currentAgentId = "agent-1"
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
             agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
@@ -222,6 +222,30 @@ struct NotificationManagerTests {
         #expect(center.requests.isEmpty)
         #expect(feedbackCount == 1)
         #expect(manager.currentToast == nil)
+    }
+
+    @Test @MainActor func openConversationOnAnotherBackendDoesNotSuppressToast() {
+        // Suppression is connection-scoped: the same agent id open on
+        // ANOTHER backend's window must not swallow this backend's toast.
+        let (manager, _) = makeNotificationManager(state: .active)
+        manager.conversationOpened(agentId: "agent-1", connectionId: UUID())
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+
+        #expect(manager.currentToast?.agentId == "agent-1")
+        #expect(manager.currentToast?.sourceBackendID == BackendID(Self.connectionId))
+    }
+
+    @Test @MainActor func closedConversationStopsSuppressingItsBackendToast() {
+        let (manager, _) = makeNotificationManager(state: .active)
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
+        manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+
+        #expect(manager.currentToast?.agentId == "agent-1")
     }
 
     @Test func foregroundDeliveryReplaysFeedbackAndToastBeforeSuppressingBanner() async {
@@ -256,20 +280,25 @@ struct NotificationManagerTests {
 
     // MARK: - Tap routing and delivered cleanup
 
-    @Test @MainActor func notificationTapRoutesAfterColdStartHandlerInstallation() {
-        let (manager, _) = makeNotificationManager(state: .inactive)
-        let response = LocalNotificationService.response(
+    private func makeResponse(connectionId: UUID) -> LocalNotificationService.Response {
+        LocalNotificationService.response(
             actionIdentifier: UNNotificationDefaultActionIdentifier,
             userInfo: [
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
                 "agentName": "Build Agent",
-                "connectionId": Self.connectionId.uuidString,
+                "connectionId": connectionId.uuidString,
             ])
+    }
+
+    @Test @MainActor func notificationTapRoutesAfterColdStartHandlerInstallation() {
+        let (manager, _) = makeNotificationManager(state: .inactive)
         var routedValues: (String, String, String)?
 
-        manager.handleNotificationResponse(response)
-        manager.setAgentSelectionHandler { agentId, workspaceId, agentName, _ in
+        manager.handleNotificationResponse(makeResponse(connectionId: Self.connectionId))
+        manager.registerAgentSelectionHandler(
+            for: BackendID(Self.connectionId)
+        ) { agentId, workspaceId, agentName, _ in
             routedValues = (agentId, workspaceId, agentName)
         }
 
@@ -278,30 +307,89 @@ struct NotificationManagerTests {
         #expect(routedValues?.2 == "Build Agent")
     }
 
-    @Test @MainActor func notificationTapFromDifferentConnectionForwardsForWindowRouting() {
-        // A non-active connectionId can only come from a pinned session's
-        // notification: the tap is forwarded so the selection handler can
-        // route it to that backend's window (tapRoute). On iPhone the
-        // coordinator's window guard still drops it — same visible behavior
-        // as the old manager-level filter.
+    @Test @MainActor func singleWindowTapForAnotherBackendIsDropped() {
+        // iPhone showing backend A: a tap for backend B is dropped — same
+        // visible behavior as the old coordinator-side connection guard —
+        // and must not fire later when A's window re-registers.
         let (manager, _) = makeNotificationManager(state: .inactive)
-        let otherConnectionId = UUID()
-        let response = LocalNotificationService.response(
-            actionIdentifier: UNNotificationDefaultActionIdentifier,
-            userInfo: [
-                "agentId": "agent-1",
-                "workspaceId": "workspace-1",
-                "agentName": "Build Agent",
-                "connectionId": otherConnectionId.uuidString,
-            ])
-        var routedConnectionId: UUID?
-        manager.setAgentSelectionHandler { _, _, _, connectionId in
-            routedConnectionId = connectionId
+        let windowBackend = BackendID(Self.connectionId)
+        var didRoute = false
+        manager.registerAgentSelectionHandler(for: windowBackend) { _, _, _, _ in
+            didRoute = true
         }
 
-        manager.handleNotificationResponse(response)
+        manager.handleNotificationResponse(makeResponse(connectionId: UUID()))
+        #expect(!didRoute)
 
-        #expect(routedConnectionId == otherConnectionId)
+        manager.registerAgentSelectionHandler(for: windowBackend) { _, _, _, _ in
+            didRoute = true
+        }
+        #expect(!didRoute)
+    }
+
+    @Test @MainActor func tapForUnshownBackendOpensItsWindowThenDeliversOnRegistration() {
+        // Multi-window: a tap for a backend with no window opens that
+        // backend's window; the held tap is delivered — with the SOURCE
+        // connection id — once the opened window registers its handler.
+        let (manager, _) = makeNotificationManager(state: .inactive)
+        manager.supportsMultipleWindows = true
+        var openedWindows: [BackendID] = []
+        manager.openBackendWindow = { openedWindows.append($0) }
+        let sourceConnectionId = UUID()
+        manager.registerAgentSelectionHandler(
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in
+            Issue.record("The tap must not land on another backend's window")
+        }
+
+        manager.handleNotificationResponse(makeResponse(connectionId: sourceConnectionId))
+        #expect(openedWindows == [BackendID(sourceConnectionId)])
+
+        var routedConnectionId: UUID?
+        manager.registerAgentSelectionHandler(
+            for: BackendID(sourceConnectionId)
+        ) { _, _, _, connectionId in
+            routedConnectionId = connectionId
+        }
+        #expect(routedConnectionId == sourceConnectionId)
+    }
+
+    @Test @MainActor func toastTapRoutesToSourceBackendWindow() {
+        // Toast taps go through the same routing as system-notification
+        // taps: whichever window renders the toast, the tap is delivered to
+        // the source backend's registered window.
+        let (manager, _) = makeNotificationManager(state: .active)
+        let source = BackendID(Self.connectionId)
+        var routedValues: (String, UUID)?
+        manager.registerAgentSelectionHandler(for: source) { agentId, _, _, connectionId in
+            routedValues = (agentId, connectionId)
+        }
+
+        manager.routeAgentSelection(
+            agentId: "agent-1", workspaceId: "workspace-1",
+            agentName: "Build Agent", connectionId: source.connectionID)
+
+        #expect(routedValues?.0 == "agent-1")
+        #expect(routedValues?.1 == source.connectionID)
+    }
+
+    @Test @MainActor func staleWindowTeardownDoesNotRemoveReplacementHandler() {
+        // A rebound window's disappear runs after its replacement has
+        // registered: the token guard keeps the replacement's handler.
+        let (manager, _) = makeNotificationManager(state: .inactive)
+        let backend = BackendID(Self.connectionId)
+        let staleToken = manager.registerAgentSelectionHandler(for: backend) { _, _, _, _ in
+            Issue.record("The stale handler must have been replaced")
+        }
+        var didRoute = false
+        _ = manager.registerAgentSelectionHandler(for: backend) { _, _, _, _ in
+            didRoute = true
+        }
+
+        manager.removeAgentSelectionHandler(for: backend, token: staleToken)
+        manager.handleNotificationResponse(makeResponse(connectionId: Self.connectionId))
+
+        #expect(didRoute)
     }
 
     @Test @MainActor func notificationTapWithoutConnectionScopeIsIgnored() {
@@ -314,7 +402,9 @@ struct NotificationManagerTests {
                 "agentName": "Build Agent",
             ])
         var didRoute = false
-        manager.setAgentSelectionHandler { _, _, _, _ in didRoute = true }
+        manager.registerAgentSelectionHandler(
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in didRoute = true }
 
         manager.handleNotificationResponse(response)
 
@@ -324,10 +414,23 @@ struct NotificationManagerTests {
     @Test @MainActor func openingConversationClearsDeliveredAgentNotification() {
         let (manager, center) = makeNotificationManager(state: .active)
 
-        manager.currentAgentId = "agent-1"
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
         #expect(center.removedNotificationIdentifiers == [[
             "agent-idle-\(Self.connectionId.uuidString)-agent-1"
+        ]])
+    }
+
+    @Test @MainActor func openingConversationClearsNotificationScopedToItsConnection() {
+        // The cleared identifier carries the conversation's OWN connection
+        // id, not a global active-connection pointer.
+        let (manager, center) = makeNotificationManager(state: .active)
+        let pinnedConnectionId = UUID()
+
+        manager.conversationOpened(agentId: "agent-1", connectionId: pinnedConnectionId)
+
+        #expect(center.removedNotificationIdentifiers == [[
+            "agent-idle-\(pinnedConnectionId.uuidString)-agent-1"
         ]])
     }
 
@@ -336,50 +439,40 @@ struct NotificationManagerTests {
     private static let pinnedBackend = BackendID(UUID(
         uuidString: "22222222-2222-2222-2222-222222222222")!)
 
-    @Test func tapWithoutMultiWindowSupportNavigatesInPlace() {
-        #expect(NotificationManager.tapRoute(
-            sourceBackendID: Self.pinnedBackend, windowBackendID: nil,
-            supportsMultipleWindows: false) == .navigateInCurrentWindow)
+    @Test func routeDeliversToRegisteredSourceWindow() {
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [Self.pinnedBackend, BackendID(UUID())],
+            supportsMultipleWindows: false) == .deliverToWindow)
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [Self.pinnedBackend],
+            supportsMultipleWindows: true) == .deliverToWindow)
     }
 
-    @Test func defaultSessionTapNavigatesInPlace() {
-        #expect(NotificationManager.tapRoute(
-            sourceBackendID: nil, windowBackendID: nil,
-            supportsMultipleWindows: true) == .navigateInCurrentWindow)
+    @Test func routeOpensSourceWindowWhereMultipleWindowsSupported() {
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [BackendID(UUID())],
+            supportsMultipleWindows: true) == .openSourceWindow)
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [],
+            supportsMultipleWindows: true) == .openSourceWindow)
     }
 
-    @Test func pinnedSourceTapOpensItsPinnedWindow() {
-        #expect(NotificationManager.tapRoute(
-            sourceBackendID: Self.pinnedBackend, windowBackendID: nil,
-            supportsMultipleWindows: true)
-            == .openPinnedWindow(Self.pinnedBackend))
+    @Test func routeHoldsColdStartTapForFirstWindow() {
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [],
+            supportsMultipleWindows: false) == .holdForFirstWindow)
     }
 
-    @Test func pinnedSourceTapInAnotherPinnedWindowOpensTheSourceWindow() {
-        #expect(NotificationManager.tapRoute(
-            sourceBackendID: Self.pinnedBackend, windowBackendID: BackendID(UUID()),
-            supportsMultipleWindows: true)
-            == .openPinnedWindow(Self.pinnedBackend))
-    }
-
-    @Test func pinnedSourceTapInItsOwnWindowNavigatesInPlace() {
-        #expect(NotificationManager.tapRoute(
-            sourceBackendID: Self.pinnedBackend, windowBackendID: Self.pinnedBackend,
-            supportsMultipleWindows: true) == .navigateInCurrentWindow)
-    }
-
-    @Test func activeConnectionNotificationHasNoSourceBackend() {
-        let active = UUID()
-        #expect(NotificationManager.sourceBackendID(
-            connectionId: active, activeConnectionId: active) == nil)
-    }
-
-    @Test func nonActiveConnectionNotificationMapsToPinnedSource() {
-        let pinned = UUID()
-        #expect(NotificationManager.sourceBackendID(
-            connectionId: pinned, activeConnectionId: UUID()) == BackendID(pinned))
-        #expect(NotificationManager.sourceBackendID(
-            connectionId: pinned, activeConnectionId: nil) == BackendID(pinned))
+    @Test func routeDropsCrossBackendTapOnSingleWindowPlatform() {
+        #expect(NotificationManager.selectionRoute(
+            source: Self.pinnedBackend,
+            registeredBackends: [BackendID(UUID())],
+            supportsMultipleWindows: false) == .drop)
     }
 }
 

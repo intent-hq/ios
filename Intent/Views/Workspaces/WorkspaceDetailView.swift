@@ -168,7 +168,10 @@ struct WorkspaceDetailView: View {
             }
         }
         .onAppear {
-            NotificationManager.shared.currentWorkspaceId = workspaceId
+            if let connectionId = session.backendID?.connectionID {
+                NotificationManager.shared.workspaceOpened(
+                    workspaceId: workspaceId, connectionId: connectionId)
+            }
             // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
             // Clearing here causes an empty list flash when swiping back from conversation.
             agentStore.startObservingEvents()
@@ -180,12 +183,20 @@ struct WorkspaceDetailView: View {
             }
         }
         .onDisappear {
-            // Only clear if we're still the active workspace
-            if NotificationManager.shared.currentWorkspaceId == workspaceId {
-                NotificationManager.shared.currentWorkspaceId = nil
+            // Keyed by (workspace, connection): removing this pair never
+            // clobbers another window's visibility.
+            if let connectionId = session.backendID?.connectionID {
+                NotificationManager.shared.workspaceClosed(
+                    workspaceId: workspaceId, connectionId: connectionId)
             }
         }
-        .onChange(of: workspaceId) { _, newId in
+        .onChange(of: workspaceId) { oldId, newId in
+            if let connectionId = session.backendID?.connectionID {
+                NotificationManager.shared.workspaceClosed(
+                    workspaceId: oldId, connectionId: connectionId)
+                NotificationManager.shared.workspaceOpened(
+                    workspaceId: newId, connectionId: connectionId)
+            }
             viewModel.agents = []
             agentStore.prepareForWorkspaceChange(to: newId)
             noteStore.prepareForWorkspaceChange(to: newId)
