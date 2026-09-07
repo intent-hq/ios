@@ -67,7 +67,7 @@ jobs:
         run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
           cache-dependency-path: TailcatKit/go.sum
