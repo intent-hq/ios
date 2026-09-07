@@ -145,6 +145,14 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.onSubmit = onSubmit
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
+        #if os(visionOS)
+        // Shape the system text-input hover/highlight effect to the composer
+        // field's rounded corners; its default rect shape draws a rectangle
+        // inside the rounded field (the outer RoundedRectangle clip in
+        // MessageInputView does not affect it).
+        textView.hoverStyle = UIHoverStyle(
+            shape: .rect(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+        #endif
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
         textView.isScrollEnabled = true
