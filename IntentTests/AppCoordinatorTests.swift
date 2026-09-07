@@ -533,6 +533,48 @@ final class AppCoordinatorTests {
         #expect(RemovedWindowCloseAction.forOpenWindowCount(0) == .retargetToPairing)
     }
 
+    // MARK: - Window retarget policy (window model v2)
+
+    // WindowRetargetRoute.route decides whether a switch/pair action opens or
+    // raises the target backend's own window (multi-window platforms) or
+    // rebinds the current window in place (iPhone, unbound pairing windows).
+
+    @Test func retargetRouteOpensTargetWindowOnMultiWindowPlatforms() {
+        let current = BackendID(UUID())
+        let target = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: target,
+            supportsMultipleWindows: true) == .openTargetWindow,
+            "A bound window on a multi-window platform never retargets; the target's window is opened or raised")
+    }
+
+    @Test func retargetRouteRebindsInPlaceWhenTargetIsCurrentBackend() {
+        let current = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: current,
+            supportsMultipleWindows: true) == .rebindInPlace,
+            "Switching to the backend the window is already bound to stays in place")
+    }
+
+    @Test func retargetRouteRebindsUnboundPairingWindowInPlace() {
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: nil, target: BackendID(UUID()),
+            supportsMultipleWindows: true) == .rebindInPlace,
+            "An unbound (pairing) window adopts the paired backend in place, even on multi-window platforms")
+    }
+
+    @Test func retargetRouteRebindsInPlaceOnSingleWindowPlatforms() {
+        let current = BackendID(UUID())
+        let target = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: target,
+            supportsMultipleWindows: false) == .rebindInPlace,
+            "iPhone (single-window) always rebinds the one window in place")
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: nil, target: target,
+            supportsMultipleWindows: false) == .rebindInPlace)
+    }
+
     // MARK: - Deep-link URL routing (intent://)
 
     @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
