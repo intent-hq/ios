@@ -2135,6 +2135,53 @@ final class AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func autoOpenSoleAgent_cancelledArmDoesNotForward() {
+        let wsId = "test-coord-autoopen-cancel-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        // The workspace restored to its Context tab: the view consumes the arm.
+        coordinator.cancelPendingAutoOpen(workspaceId: wsId)
+
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("A cancelled arm must never forward, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_cancelForOtherWorkspaceKeepsArm() {
+        let wsId = "test-coord-autoopen-cancel-other-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        // A stale cancel for another workspace must not disarm this entry.
+        coordinator.cancelPendingAutoOpen(workspaceId: "ws-other")
+
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-solo")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("A cancel for another workspace must keep the arm, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func autoOpenSoleAgent_droppedWhenUserNavigatedOnWhileLoading() {
         let wsId = "test-coord-autoopen-raced-\(UUID().uuidString)"
         defer {

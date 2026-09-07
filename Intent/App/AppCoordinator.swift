@@ -720,6 +720,14 @@ class AppCoordinator {
         onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
     }
 
+    /// Drops the pending auto-open without navigating: the entry decided to
+    /// stay put (e.g. the workspace shows its saved Context tab), so a later
+    /// reload or tab switch can never forward.
+    func cancelPendingAutoOpen(workspaceId: String) {
+        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
+        pendingAutoOpenWorkspaceId = nil
+    }
+
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread
     /// attention flag (blue dot) across clients when the user opens a
     /// workspace, mirroring the FE. Failures are logged and ignored — an

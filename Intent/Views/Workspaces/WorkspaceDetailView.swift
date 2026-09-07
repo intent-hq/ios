@@ -220,6 +220,13 @@ struct WorkspaceDetailView: View {
             // sync keeps the decision independent of onChange ordering.
             guard hasLoaded else { return }
             viewModel.agents = agentStore.agents
+            // The saved tab restores synchronously before the fetch lands, so
+            // a workspace showing its Context tab stays there: consume the arm
+            // instead of forwarding.
+            guard selectedTab == 0 else {
+                coordinator.cancelPendingAutoOpen(workspaceId: workspaceId)
+                return
+            }
             coordinator.autoOpenSoleAgentIfArmed(
                 workspaceId: workspaceId, foregroundAgents: viewModel.foregroundAgents)
         }

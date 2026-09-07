@@ -100,6 +100,27 @@ struct AgentStoreTests {
         #expect(store.hasLoaded == true)
     }
 
+    @Test func staleResponseAfterPrepareForWorkspaceChangeIsIgnored() async throws {
+        let fake = FakeConnectionManager()
+        let store = AgentStore(connectionManager: fake)
+        fake.pendingMethods.insert("agent.list")
+
+        let staleFetch = Task { await store.fetchAgents(workspaceId: "ws-1") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // The view switched workspaces; its async fetch for ws-2 has not
+        // started yet. The old ws-1 response landing in this window must not
+        // supply agents nor flip hasLoaded for ws-2.
+        store.prepareForWorkspaceChange(to: "ws-2")
+        fake.resolvePending("agent.list", with: ["agents": [
+            ["id": "agent-old", "name": "Old"]
+        ]])
+        await staleFetch.value
+
+        #expect(store.hasLoaded == false)
+        #expect(store.agents.isEmpty)
+    }
+
     @Test func prepareForWorkspaceChangeResetsSynchronously() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
