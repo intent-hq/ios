@@ -116,6 +116,93 @@ struct DictationTranscriptTests {
         #expect(empty.apply(transcription: "hi", to: "") == .merged("hi"))
     }
 
+    // MARK: - Segment commits (pause/reset)
+
+    /// Regression: after a silence pause the recognizer finishes the
+    /// utterance (isFinal, or a `speechRecognitionMetadata` result) and the
+    /// next partial's transcript starts over from the new utterance. The
+    /// finished segment must be committed so the new utterance appends —
+    /// before the fix it merged at the original insertion point, replacing
+    /// the previously dictated text.
+    @Test func pauseResetAppendsInsteadOfReplacing() {
+        var session = DictationSession(baseText: "", insertionOffset: 0)
+        #expect(session.apply(transcription: "hello world", endsSegment: true, to: "")
+            == .merged("hello world"))
+        // New utterance after the pause: the transcript is no longer
+        // cumulative, yet the prior text must survive.
+        #expect(session.apply(transcription: "how are you", to: "hello world")
+            == .merged("hello world how are you"))
+        #expect(session.apply(transcription: "how are you today", to: "hello world how are you")
+            == .merged("hello world how are you today"))
+    }
+
+    /// A partial is still replaced by the final of its own segment; only
+    /// after the commit does the next utterance append.
+    @Test func finalReplacesOwnSegmentPartialThenCommits() {
+        var session = DictationSession(baseText: "note:", insertionOffset: 5)
+        #expect(session.apply(transcription: "hello", to: "note:") == .merged("note: hello"))
+        #expect(session.apply(transcription: "hello world", endsSegment: true, to: "note: hello")
+            == .merged("note: hello world"))
+        #expect(session.apply(transcription: "again", to: "note: hello world")
+            == .merged("note: hello world again"))
+    }
+
+    /// A mid-text caret keeps its suffix across commits: the next utterance
+    /// inserts right after the committed one, before the trailing text.
+    @Test func segmentCommitKeepsInsertionMidText() {
+        var session = DictationSession(baseText: "before after", insertionOffset: 6)
+        #expect(session.apply(transcription: "one", endsSegment: true, to: "before after")
+            == .merged("before one after"))
+        #expect(session.apply(transcription: "two", to: "before one after")
+            == .merged("before one two after"))
+    }
+
+    /// Regression: when the recognizer genuinely ends on a pause and the
+    /// user re-taps the mic, the fresh session starts from the committed
+    /// text and caret — dictation continues appending, never replacing.
+    @Test func reTapAfterRecognizerFinishedContinuesAppending() {
+        var first = DictationSession(baseText: "", insertionOffset: 0)
+        #expect(first.apply(transcription: "hello world", endsSegment: true, to: "")
+            == .merged("hello world"))
+        // The committed insertion point sits just past the inserted text;
+        // the composer tracks it as the caret for the next session.
+        let committedCaret = first.transcript.insertionOffset
+        #expect(committedCaret == 11)
+        var second = DictationSession(baseText: "hello world", insertionOffset: committedCaret)
+        #expect(second.apply(transcription: "how are you", to: "hello world")
+            == .merged("hello world how are you"))
+    }
+
+    /// Regression (intent-hq/ios#225 review): the model applies every
+    /// transcription it is handed, including one repeating the previous
+    /// segment's words — dictating the same phrase twice must yield it
+    /// twice, whether the repeat surfaces as a partial or only as a
+    /// segment-ending result. Duplicate suppression of a re-delivered
+    /// final is the controller's job, by segment identity
+    /// (`restartSegment` cancels the finished segment's task, so its late
+    /// finals — even punctuation-corrected — are dropped by generation
+    /// before reaching the model).
+    @Test func repeatedUtteranceAppliesWhetherPartialOrFinal() {
+        var session = DictationSession(baseText: "", insertionOffset: 0)
+        #expect(session.apply(transcription: "send it", endsSegment: true, to: "")
+            == .merged("send it"))
+        // Repeat delivered only as a segment-ending result: still applies.
+        #expect(session.apply(transcription: "send it", endsSegment: true, to: "send it")
+            == .merged("send it send it"))
+        // Repeat surfacing as a partial first: applies too.
+        #expect(session.apply(transcription: "send it", to: "send it send it")
+            == .merged("send it send it send it"))
+    }
+
+    /// Typing during dictation still stops the session after a commit —
+    /// segment folding must not weaken divergence detection.
+    @Test func divergenceStillDetectedAfterCommit() {
+        var session = DictationSession(baseText: "", insertionOffset: 0)
+        #expect(session.apply(transcription: "hello", endsSegment: true, to: "")
+            == .merged("hello"))
+        #expect(session.apply(transcription: "world", to: "hello!") == .diverged)
+    }
+
     // MARK: - Stop actions (stop-after-stop window)
 
     @Test func activeSessionStopsFollowReason() {

@@ -137,18 +137,24 @@ struct DictationTranscript: Equatable {
     /// `baseText` with `transcription` inserted at `insertionOffset`,
     /// separated by single spaces from adjacent non-whitespace text.
     func merged(with transcription: String) -> String {
-        guard !transcription.isEmpty else { return baseText }
+        merging(transcription).text
+    }
+
+    /// `merged(with:)` plus the UTF-16 offset just past the inserted
+    /// transcription (before any trailing separator) — where the caret
+    /// belongs after the insertion, and where a committed segment's
+    /// successor inserts.
+    func merging(_ transcription: String) -> (text: String, caretOffset: Int) {
+        guard !transcription.isEmpty else { return (baseText, insertionOffset) }
         let splitIndex = String.Index(utf16Offset: insertionOffset, in: baseText)
         let prefix = String(baseText[..<splitIndex])
         let suffix = String(baseText[splitIndex...])
 
         let needsLeadingSpace = prefix.last.map { !$0.isWhitespace } ?? false
         let needsTrailingSpace = suffix.first.map { !$0.isWhitespace } ?? false
-        return prefix
-            + (needsLeadingSpace ? " " : "")
-            + transcription
-            + (needsTrailingSpace ? " " : "")
-            + suffix
+        let head = prefix + (needsLeadingSpace ? " " : "") + transcription
+        let text = head + (needsTrailingSpace ? " " : "") + suffix
+        return (text, head.utf16.count)
     }
 }
 
@@ -158,9 +164,24 @@ struct DictationTranscript: Equatable {
 /// user typed — or the view model replaced the text — during dictation; the
 /// session reports `.diverged` without touching the text so the caller can
 /// stop dictation instead of clobbering the edit.
+///
+/// The recognizer's transcript is cumulative only within a *segment*: after
+/// a silence pause it finishes the utterance (`isFinal`, or a result
+/// carrying `speechRecognitionMetadata`) and the next partial's transcript
+/// starts over from the new utterance. A segment-ending transcription is
+/// therefore committed — folded into the base with the insertion point
+/// moved past it — so the next utterance appends instead of replacing
+/// previously dictated text.
+///
+/// Duplicate suppression is the controller's job, by segment identity: it
+/// delivers at most one segment-ending transcription per recognition
+/// segment (see `restartSegment`), so the model applies every repeated
+/// transcription it is handed — a user dictating the same phrase twice
+/// must get it twice.
 struct DictationSession: Equatable {
-    let transcript: DictationTranscript
-    /// Text produced by the last applied merge; `nil` before the first one.
+    private(set) var transcript: DictationTranscript
+    /// Text produced by the last applied merge; `nil` before the first one
+    /// (and again right after a segment commit).
     private(set) var lastMergedText: String?
 
     /// `insertionOffset: nil` means no caret has been observed yet (a
@@ -179,12 +200,26 @@ struct DictationSession: Equatable {
         case diverged
     }
 
-    mutating func apply(transcription: String, to currentText: String) -> MergeOutcome {
+    /// Merges `transcription` into `currentText`. `endsSegment` marks a
+    /// transcription that completes the recognizer's current utterance
+    /// (a final result, or one carrying recognition metadata after a
+    /// pause): the merge is committed so subsequent transcriptions append
+    /// after it instead of replacing it.
+    mutating func apply(
+        transcription: String,
+        endsSegment: Bool = false,
+        to currentText: String
+    ) -> MergeOutcome {
         guard currentText == (lastMergedText ?? transcript.baseText) else {
             return .diverged
         }
-        let merged = transcript.merged(with: transcription)
-        lastMergedText = merged
+        let (merged, caret) = transcript.merging(transcription)
+        if endsSegment {
+            transcript = DictationTranscript(baseText: merged, insertionOffset: caret)
+            lastMergedText = nil
+        } else {
+            lastMergedText = merged
+        }
         return .merged(merged)
     }
 }
@@ -216,7 +251,11 @@ final class SpeechDictationController {
     /// (permissions denied, recognizer unavailable, audio failure).
     private(set) var unavailabilityHint: String?
 
-    /// Fires with each partial/final transcription. The Bool is `isFinal`.
+    /// Fires with each partial/final transcription. The Bool marks a
+    /// segment-ending transcription (the recognizer finished the utterance
+    /// after a pause, or delivered the session's final result): the caller
+    /// must commit it, because the next transcript starts over from the
+    /// following utterance.
     var onTranscriptChange: ((String, Bool) -> Void)?
     /// Fires when a session ends, with the reason it stopped.
     var onDidStop: ((DictationStopReason) -> Void)?
@@ -224,6 +263,16 @@ final class SpeechDictationController {
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    /// Identity of the recognition segment (request + task) whose results
+    /// may act. Bumped by every `installRecognition`; a result handler
+    /// captures the value current at install and is dropped once a newer
+    /// segment exists, so a superseded task's late final or error can
+    /// neither leak old text into a newer session nor stop its recognition.
+    /// A stop does *not* bump it: after a graceful stop the still-current
+    /// task's final result is deliberately delivered (until a new session
+    /// installs the next segment, or an interrupting stop severs the
+    /// callback).
+    private var segmentGeneration = 0
 
     /// Requests permissions and starts a dictation session. Sets
     /// `unavailabilityHint` instead of throwing when dictation cannot start.
@@ -318,6 +367,19 @@ final class SpeechDictationController {
         try session.setCategory(.record, mode: .measurement, options: .duckOthers)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
 
+        let engine = AVAudioEngine()
+        audioEngine = engine
+        installRecognition(on: engine, with: recognizer)
+        engine.prepare()
+        try engine.start()
+    }
+
+    /// Creates a recognition request + task and taps `engine`'s input into
+    /// it. Called by `begin`, and again by `restartSegment` when the
+    /// recognizer ends an utterance segment mid-session.
+    private func installRecognition(on engine: AVAudioEngine, with recognizer: SFSpeechRecognizer) {
+        segmentGeneration += 1
+        let generation = segmentGeneration
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         if recognizer.supportsOnDeviceRecognition {
@@ -325,9 +387,8 @@ final class SpeechDictationController {
         }
         recognitionRequest = request
 
-        let engine = AVAudioEngine()
-        audioEngine = engine
         let inputNode = engine.inputNode
+        inputNode.removeTap(onBus: 0)
         let format = inputNode.outputFormat(forBus: 0)
         // The tap runs on the realtime audio thread, so it must be @Sendable
         // (a MainActor-inferred closure aborts with a dispatch queue
@@ -338,27 +399,62 @@ final class SpeechDictationController {
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
             tapRequest.append(buffer)
         }
-        engine.prepare()
-        try engine.start()
 
         // The result handler runs on a Speech-owned queue: extract only
         // Sendable values there, then hop to the main actor for all state.
         recognitionTask = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
             let text = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
+            // On-device recognition finishes an utterance after a silence
+            // pause with a metadata-carrying result (no isFinal); the next
+            // partial's transcript starts over from the new utterance, so
+            // the finished one must be committed.
+            let endsSegment = isFinal || result?.speechRecognitionMetadata != nil
             let failed = error != nil
             Task { @MainActor in
-                guard let self else { return }
+                // Results from a superseded segment are stale: a new session
+                // (or an intra-session restart) has installed a newer task,
+                // so delivering them would leak the old segment's text into
+                // the current one, or let its error stop the current
+                // recognition.
+                guard let self, generation == self.segmentGeneration else { return }
                 if let text {
-                    self.onTranscriptChange?(text, isFinal)
+                    self.onTranscriptChange?(text, endsSegment)
                 }
-                if isFinal, self.isRecording {
-                    self.stop(reason: .recognizerFinished)
+                if endsSegment, self.isRecording {
+                    self.restartSegment()
                 } else if failed, self.isRecording {
                     self.stop(reason: .recognitionError)
                 }
             }
         }
+    }
+
+    /// The recognizer ended an utterance segment while still recording
+    /// (a silence pause: `isFinal`, or a metadata-carrying result). The
+    /// engine is still running: start a fresh recognition segment so one
+    /// mic tap survives pauses — the finished segment was already committed
+    /// via the segment-ending callback. Cancelling the old task makes each
+    /// segment map to exactly one recognition task, so a late re-delivery
+    /// of the finished utterance (even punctuation- or recognition-
+    /// corrected) is stale by generation and can never duplicate it — while
+    /// a genuinely repeated utterance, arriving in the new segment, applies
+    /// normally. Falls back to a recognizer-finished stop when a new
+    /// segment cannot start; the committed text means a re-tap appends
+    /// instead of replacing.
+    private func restartSegment() {
+        guard let engine = audioEngine, engine.isRunning,
+              let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
+            stop(reason: .recognizerFinished)
+            return
+        }
+        // After isFinal the task is already finished; after a metadata
+        // result it is still running and must be cancelled so its later
+        // final targets a stale generation.
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        recognitionRequest = nil
+        installRecognition(on: engine, with: recognizer)
     }
 
     private func teardownAudio() {
