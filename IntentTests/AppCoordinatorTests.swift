@@ -1948,6 +1948,217 @@ final class AppCoordinatorTests {
         }
     }
 
+    // MARK: - Auto-open a sole top-level agent on workspace entry
+
+    private static func makeAgent(
+        id: String,
+        name: String = "Worker",
+        isBackground: Bool = false,
+        createdByAgentId: String? = nil
+    ) -> AgentSession {
+        AgentSession(
+            id: id, name: name, status: "Idle",
+            isBackground: isBackground, isStreaming: false,
+            isProcessing: false, isResponding: false,
+            isWaitingForOtherAgents: false, waitingForAgentIds: [],
+            createdAt: nil, updatedAt: nil, lastActivity: nil,
+            lastAgentResponse: nil, lastUserMessage: nil,
+            lastMessageRole: nil, digest: nil, specialist: nil,
+            createdByAgentId: createdByAgentId,
+            attentionRequestKind: nil, attentionRequestReason: nil,
+            attentionRequestTimestamp: nil)
+    }
+
+    /// The agent list feeds the coordinator its `foregroundAgents`; building
+    /// them through the view model keeps the "top-level only" rule under test.
+    @MainActor private static func foregroundAgents(_ agents: [AgentSession]) -> [AgentSession] {
+        let viewModel = AgentListViewModel()
+        viewModel.agents = agents
+        return viewModel.foregroundAgents
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_opensTheOnlyTopLevelAgent() {
+        let wsId = "test-coord-autoopen-one-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([
+                Self.makeAgent(id: "agent-solo", name: "Solo"),
+                Self.makeAgent(id: "agent-bg", name: "Hook", isBackground: true),
+                Self.makeAgent(id: "agent-sub", name: "Delegate", createdByAgentId: "agent-solo"),
+            ]))
+
+        if case .agentConversation(let agentId, let wId, let agentName) = coordinator.currentScreen {
+            #expect(agentId == "agent-solo")
+            #expect(wId == wsId)
+            #expect(agentName == "Solo")
+        } else {
+            Issue.record(
+                "Expected to continue into the sole top-level agent, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_staysOnListForSeveralTopLevelAgents() {
+        let wsId = "test-coord-autoopen-many-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([
+                Self.makeAgent(id: "agent-1", name: "One"),
+                Self.makeAgent(id: "agent-2", name: "Two"),
+            ]))
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Two top-level agents must keep the agent list, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_staysOnListWithNoTopLevelAgents() {
+        let wsId = "test-coord-autoopen-none-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([
+                Self.makeAgent(id: "agent-bg", name: "Hook", isBackground: true),
+            ]))
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("A background-only workspace must keep the agent list, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_doesNotReForwardAfterBack() {
+        let wsId = "test-coord-autoopen-back-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let agents = Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")])
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        coordinator.autoOpenSoleAgentIfArmed(workspaceId: wsId, foregroundAgents: agents)
+        coordinator.onBackToWorkspaceDetail()
+
+        // The agent list reappearing (and refetching) must not forward again.
+        coordinator.autoOpenSoleAgentIfArmed(workspaceId: wsId, foregroundAgents: agents)
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Back from the auto-opened conversation must stay on the agent list, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_notArmedByRestoredSubScreen() async {
+        let wsId = "test-coord-autoopen-restore-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        persistence.saveWorkspaceScreen(
+            workspaceId: wsId,
+            screen: PersistenceManager.SavedScreen(
+                screen: "note", workspaceId: wsId,
+                agentId: nil, agentName: nil,
+                noteId: "note-live", noteTitle: "Live Note"))
+
+        let fake = FakeConnectionManager()
+        fake.responseMap["note.get"] = ["note": [
+            "id": "note-live", "title": "Live Note", "content": "hello"
+        ] as [String: Any]] as [String: Any]
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
+            persistence: persistence)
+
+        coordinator.onSelectWorkspace(wsId)
+        await Self.drainMainQueue()
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")]))
+
+        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+            #expect(noteId == "note-live")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("A restored sub-screen must not be replaced by the auto-open, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_notArmedByColdStartRestore() {
+        let wsId = "test-coord-autoopen-coldstart-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: wsId,
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: Self.windowBackend.connectionID)
+
+        let coordinator = AppCoordinator(
+            backendID: Self.windowBackend, persistence: persistence)
+        coordinator.onConnectionSuccess()
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")]))
+
+        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Restoring the agent list must not auto-forward, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func autoOpenSoleAgent_droppedWhenUserNavigatedOnWhileLoading() {
+        let wsId = "test-coord-autoopen-raced-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectWorkspace(wsId)
+        // A notification tap opened another agent before the list finished loading.
+        coordinator.onSelectAgent("agent-tapped", workspaceId: wsId, agentName: "Tapped")
+
+        coordinator.autoOpenSoleAgentIfArmed(
+            workspaceId: wsId,
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+
+        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-tapped",
+                    "A late auto-open must not replace the conversation the user already opened")
+        } else {
+            Issue.record("Expected to stay on the tapped conversation, got \(coordinator.currentScreen)")
+        }
+    }
+
     // MARK: - Reconnect re-validation of the open conversation
 
     @Test @MainActor func repeatedReconnectAttemptsDoNotFanOutWorkspaceLoadingChanges() async {

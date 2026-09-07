@@ -52,6 +52,12 @@ class AppCoordinator {
     )?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
+    /// Workspace entered from the list whose agent list has not decided yet
+    /// whether to auto-open a sole top-level agent. Armed only by an entry
+    /// that lands on the agent list (never by a restored sub-screen) and
+    /// consumed by the first `autoOpenSoleAgentIfArmed` for that workspace,
+    /// so coming back from the auto-opened conversation cannot re-forward.
+    @ObservationIgnored private var pendingAutoOpenWorkspaceId: String?
 
     var selectedWorkspaceId: String? {
         didSet {
@@ -659,6 +665,7 @@ class AppCoordinator {
 
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
+        pendingAutoOpenWorkspaceId = nil
         // Check for a saved per-workspace sub-screen and restore it
         if let saved = persistence.loadWorkspaceScreen(workspaceId: workspaceId) {
             suppressWorkspaceNavigation = true
@@ -694,6 +701,23 @@ class AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+        pendingAutoOpenWorkspaceId = workspaceId
+    }
+
+    /// Continues the entry animation into the workspace's only top-level
+    /// agent: called once by the agent list when its load completes, it opens
+    /// that agent's conversation when the workspace has exactly one foreground
+    /// agent. The arm is consumed on the first call for the workspace, so a
+    /// later reload — or the list reappearing after the user goes back — never
+    /// forwards again.
+    func autoOpenSoleAgentIfArmed(workspaceId: String, foregroundAgents: [AgentSession]) {
+        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
+        pendingAutoOpenWorkspaceId = nil
+        // The user may have navigated on while the agents loaded.
+        guard case .workspaceDetail(let shownWorkspaceId) = currentScreen,
+              shownWorkspaceId == workspaceId else { return }
+        guard foregroundAgents.count == 1, let agent = foregroundAgents.first else { return }
+        onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread
