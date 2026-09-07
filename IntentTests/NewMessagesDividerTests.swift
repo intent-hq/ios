@@ -131,7 +131,9 @@ struct ConversationTranscriptScrollPolicyTests {
 @MainActor
 struct ConversationViewModelDividerLatchTests {
     private func makeVM() -> ConversationViewModel {
-        ConversationViewModel(agentId: "test-agent", workspaceId: "test-ws", agentName: "Test")
+        ConversationViewModel(
+            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
+            connection: ConnectionManager.shared, uploadService: .shared)
     }
 
     private func message(_ id: String, role: MessageRole = .assistant) -> ConversationMessage {

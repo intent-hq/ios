@@ -326,7 +326,12 @@ struct AttachmentReferenceImageView: View {
     let workspaceId: String
     let attachmentId: String
     let style: Style
-    var loader: AttachmentImageLoader = .shared
+    /// Explicit loader override (tests); when nil, the window session's
+    /// loader is used, falling back to the shared (default-backend) loader.
+    var loader: AttachmentImageLoader?
+    /// The window's session, when present, so pinned windows resolve and
+    /// fetch attachments over their own backend connection.
+    @Environment(BackendSession.self) private var session: BackendSession?
     @Environment(\.colorScheme) var colorScheme
     @State private var image: UIImage?
     @State private var failed = false
@@ -345,6 +350,7 @@ struct AttachmentReferenceImageView: View {
                 if loadedKey != key { image = nil }
                 guard image == nil else { return }
                 failed = false
+                let loader = loader ?? session?.attachmentImageLoader ?? .shared
                 do {
                     let loaded = attempt == 0
                         ? try await loader.image(workspaceId: workspaceId, attachmentId: attachmentId)

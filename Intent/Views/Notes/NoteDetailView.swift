@@ -6,13 +6,26 @@ struct NoteDetailView: View {
     let noteTitle: String
     /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
     /// Parameters: (noteId, workspaceId, noteTitle)
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
-    @State private var noteStore = NoteStore()
-    @State private var agentStore = AgentStore()
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    @State var noteStore: NoteStore
+    @State var agentStore: AgentStore
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var note: Note?
     @State private var isLoading = true
+
+    init(
+        noteId: String, workspaceId: String, noteTitle: String,
+        session: BackendSession,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    ) {
+        self.noteId = noteId
+        self.workspaceId = workspaceId
+        self.noteTitle = noteTitle
+        self.onNavigateToNote = onNavigateToNote
+        _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
+        _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
+    }
 
     var body: some View {
         ZStack {

@@ -28,7 +28,7 @@ struct WorkspaceListViewModelTests {
     @MainActor
     private func setUp(_ workspaces: [Workspace]) -> WorkspaceListViewModel {
         WorkspaceStore.shared.workspaces = workspaces
-        return WorkspaceListViewModel()
+        return WorkspaceListViewModel(workspaceStore: WorkspaceStore.shared)
     }
 
     @MainActor

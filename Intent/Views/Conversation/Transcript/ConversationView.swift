@@ -4,11 +4,16 @@ import UIKit
 struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
 
-    init(agentId: String, workspaceId: String, agentName: String) {
+    init(
+        agentId: String, workspaceId: String, agentName: String,
+        session: BackendSession
+    ) {
         _viewModel = State(initialValue: ConversationViewModel(
             agentId: agentId,
             workspaceId: workspaceId,
-            agentName: agentName
+            agentName: agentName,
+            connection: session.connection,
+            uploadService: session.attachmentUploadService
         ))
     }
 
@@ -20,6 +25,7 @@ struct ConversationView: View {
 private struct ConversationViewContent: View {
     let viewModel: ConversationViewModel
     @Environment(AppCoordinator.self) private var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
     @State private var showModelPicker = false
     @State private var showDeleteConfirmation = false
@@ -51,7 +57,8 @@ private struct ConversationViewContent: View {
                 ConversationView(
                     agentId: dest.agentId,
                     workspaceId: dest.workspaceId,
-                    agentName: dest.agentName
+                    agentName: dest.agentName,
+                    session: session
                 )
                 .id(dest.agentId)
             }
@@ -65,13 +72,19 @@ private struct ConversationViewContent: View {
                 }
             }
             .onAppear {
-                NotificationManager.shared.currentAgentId = viewModel.agentId
+                if let connectionId = session.backendID?.connectionID {
+                    NotificationManager.shared.conversationOpened(
+                        agentId: viewModel.agentId, connectionId: connectionId)
+                }
                 // Entry itself never marks seen (the divider anchor must survive
                 // until the user leaves or the turn finishes).
                 viewModel.conversationAppeared()
             }
             .onDisappear {
-                NotificationManager.shared.currentAgentId = nil
+                if let connectionId = session.backendID?.connectionID {
+                    NotificationManager.shared.conversationClosed(
+                        agentId: viewModel.agentId, connectionId: connectionId)
+                }
                 Task { await viewModel.teardownLiveStores() }
                 // Stop-looking boundary — fires markSeen immediately.
                 viewModel.conversationDisappeared()
@@ -235,7 +248,8 @@ private struct ConversationViewContent: View {
             NoteDetailView(
                 noteId: noteInfo.noteId,
                 workspaceId: noteInfo.workspaceId,
-                noteTitle: noteInfo.noteTitle
+                noteTitle: noteInfo.noteTitle,
+                session: session
             )
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -253,7 +267,7 @@ private struct ConversationViewContent: View {
         selfInitiatedDelete = true
         Task {
             do {
-                let _ = try await ConnectionManager.shared.request(
+                let _ = try await session.connection.request(
                     "agent.delete",
                     params: [
                         "agentId": viewModel.agentId,

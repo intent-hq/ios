@@ -2,10 +2,17 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.colorScheme) var colorScheme
+    // Multi-window tap routing (spec decision 5): false on iPhone, so alert
+    // taps there always navigate in place — unchanged semantics.
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
     @State private var notificationManager = NotificationManager.shared
+    /// Token of this window's selection-handler registration, so disappear
+    /// removes only this window's registration — never a successor's.
+    @State private var selectionHandlerToken: UUID?
     @State var showingWorkspaceDetail = false
     @State var showingConversation = false
     @State var conversationAgentId: String = ""
@@ -53,7 +60,7 @@ struct RootView: View {
                 } else {
                     // iPad: NavigationSplitView with sidebar selection
                     NavigationSplitView {
-                        WorkspaceListSidebar()
+                        WorkspaceListSidebar(workspaceStore: session.workspaceStore)
                             .navigationSplitViewColumnWidth(
                                 min: Constants.Root.sidebarMinimumWidth,
                                 ideal: Constants.Root.sidebarIdealWidth,
@@ -102,11 +109,16 @@ struct RootView: View {
                 ToastView(
                     toast: toast,
                     onTap: {
+                        // The toast renders in every window; the manager
+                        // routes the tap to the SOURCE backend's window, so
+                        // a tap in another backend's window never navigates
+                        // it cross-backend.
                         notificationManager.dismissToast()
-                        coordinator.onSelectAgent(
-                            toast.agentId,
+                        notificationManager.routeAgentSelection(
+                            agentId: toast.agentId,
                             workspaceId: toast.workspaceId,
-                            agentName: toast.agentName
+                            agentName: toast.agentName,
+                            connectionId: toast.sourceBackendID.connectionID
                         )
                     },
                     onDismiss: {
@@ -141,8 +153,9 @@ struct RootView: View {
                         // Passive per-host cert-mismatch list: hosts that
                         // presented a wrong certificate during the reconnect
                         // race, while retries continue on the remaining hosts.
-                        if !connectionManager.certMismatches.isEmpty {
-                            CertMismatchListView(mismatches: connectionManager.certMismatches)
+                        if !session.connection.certMismatches.isEmpty {
+                            CertMismatchListView(
+                                mismatches: session.connection.certMismatches)
                                 .frame(maxWidth: 320)
                         }
 
@@ -168,8 +181,22 @@ struct RootView: View {
             DeepLinkPairingView(payload: request.payload)
         }
         .onAppear {
-            notificationManager.setAgentSelectionHandler {
-                [weak coordinator] agentId, workspaceId, agentName, connectionId in
+            let supportsMultipleWindows = supportsMultipleWindows
+            let openWindow = openWindow
+            notificationManager.supportsMultipleWindows = supportsMultipleWindows
+            if supportsMultipleWindows {
+                notificationManager.openBackendWindow = { openWindow(value: $0) }
+            }
+            // A pairing window (no backend) registers no handler: taps for
+            // a backend route to that backend's own window instead.
+            guard let backendID = session.backendID else { return }
+            selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
+                for: backendID
+            ) { [weak coordinator] agentId, workspaceId, agentName, connectionId in
+                if supportsMultipleWindows {
+                    // Raise this backend's window before navigating it.
+                    openWindow(value: backendID)
+                }
                 coordinator?.handleNotificationSelection(
                     agentId: agentId,
                     workspaceId: workspaceId,
@@ -177,6 +204,11 @@ struct RootView: View {
                     connectionId: connectionId
                 )
             }
+        }
+        .onDisappear {
+            guard let backendID = session.backendID,
+                  let token = selectionHandlerToken else { return }
+            notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
         }
     }
 }

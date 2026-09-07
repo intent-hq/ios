@@ -2,11 +2,18 @@ import SwiftUI
 
 struct WorkspaceListSidebar: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) private var session
     @Environment(\.colorScheme) var colorScheme
-    @State private var viewModel = WorkspaceListViewModel()
+    private let workspaceStore: WorkspaceStore
+    @State private var viewModel: WorkspaceListViewModel
     @State private var showingCreateWorkspace = false
     @State private var showingConnections = false
     @FocusState private var searchFocused: Bool
+
+    init(workspaceStore: WorkspaceStore) {
+        self.workspaceStore = workspaceStore
+        _viewModel = State(initialValue: WorkspaceListViewModel(workspaceStore: workspaceStore))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,7 +73,7 @@ struct WorkspaceListSidebar: View {
             }
         }
         .sheet(isPresented: $showingCreateWorkspace) {
-            CreateWorkspaceView()
+            CreateWorkspaceView(session: session)
                 .environment(coordinator)
         }
         .sheet(isPresented: $showingConnections) {
@@ -74,7 +81,7 @@ struct WorkspaceListSidebar: View {
                 .environment(coordinator)
         }
         .refreshable {
-            await WorkspaceStore.shared.fetchAll()
+            await workspaceStore.fetchAll()
         }
         .visionWorkspaceAttentionSound(viewModel.workspaces)
     }

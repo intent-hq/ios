@@ -42,6 +42,7 @@ enum ManualConnectionInput: Equatable {
 
 struct ManualTokenEntryView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     /// When set, pairing success is reported to the presenting context instead
@@ -220,7 +221,7 @@ struct ManualTokenEntryView: View {
             case .tailcat(let tcAddress):
                 do {
                     fingerprint = try await CertFingerprintProbe.probeViaTunnel(
-                        dialer: ConnectionManager.shared.tunnelDialer,
+                        dialer: session.connection.tunnelDialer,
                         tcAddress: tcAddress, remotePort: portNum)
                 } catch {
                     // A failed dial is the authoritative "invalid or
@@ -260,18 +261,19 @@ struct ManualTokenEntryView: View {
 
         Task {
             do {
-                try await ConnectionManager.shared.connect(
+                try await session.connection.connect(
                     hosts: input.hosts, port: portNum, token: token,
                     certFingerprint: fingerprint, tcAddress: input.tcAddress)
                 let server = PairedServer(
                     hosts: input.hosts, port: portNum, name: "Intent", pairedAt: Date(),
                     certFingerprint: fingerprint, tcAddress: input.tcAddress)
-                let stored = await ConnectionPairing.finalize(server: server, token: token)
+                let stored = await ConnectionPairing.finalize(
+                    server: server, token: token, connection: session.connection)
                 dismiss()
                 if let onPaired {
                     onPaired(stored)
                 } else {
-                    coordinator.onConnectionSuccess()
+                    coordinator.onPaired(stored)
                 }
             } catch {
                 errorMessage = "Connection failed: \(error.localizedDescription)"

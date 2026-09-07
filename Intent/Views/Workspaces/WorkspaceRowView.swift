@@ -6,8 +6,14 @@ struct WorkspaceRowView: View {
     var showRepo: Bool = true
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
-    /// indicator; the owning list provides the shared store.
-    private let monitorsSource = WorkspacePrMonitorsStore.shared
+    /// indicator, read from the window's session so pinned windows use their
+    /// own backend; falls back to the shared store when no session is in the
+    /// environment (previews/tests).
+    @Environment(BackendSession.self) private var session: BackendSession?
+
+    private var monitorsSource: WorkspacePrMonitorsStore {
+        session?.prMonitorsStore ?? .shared
+    }
 
     private var prIndicator: PrIndicatorModel {
         Self.derivePrIndicator(

@@ -13,7 +13,9 @@ struct ConversationViewModelTests {
     // MARK: - Helpers
 
     private func makeVM() -> ConversationViewModel {
-        ConversationViewModel(agentId: "test-agent", workspaceId: "test-ws", agentName: "Test")
+        ConversationViewModel(
+            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
+            connection: ConnectionManager.shared, uploadService: .shared)
     }
 
     private func textMessage(id: String = UUID().uuidString, role: MessageRole, text: String,
@@ -357,6 +359,17 @@ struct ConversationViewModelTests {
         vm.store = ConversationStore(connectionManager: fake)
         vm.uploadService = AttachmentUploadService(connection: fake)
         return (vm, fake)
+    }
+
+    /// The init-injected upload service must feed the attachment pipeline so
+    /// pinned windows place attachments on their own backend, not the
+    /// default one.
+    @Test func initRoutesInjectedUploadServiceIntoAttachmentPipeline() {
+        let service = AttachmentUploadService(connection: FakeConnectionManager())
+        let vm = ConversationViewModel(
+            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
+            connection: ConnectionManager.shared, uploadService: service)
+        #expect(vm.uploadService === service)
     }
 
     private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {

@@ -6,6 +6,35 @@ import Testing
 import UIKit
 @testable import Intent
 
+/// `AppCoordinator` takes its workspace store and connection explicitly (they
+/// come from the owning `BackendSession`). Navigation-only tests keep using
+/// the process-wide instances. Window model v2: a coordinator bound to a
+/// `backendID` drives a backend window; an unbound one drives a transient
+/// pairing window.
+extension AppCoordinator {
+    @MainActor
+    convenience init(
+        backendID: BackendID? = nil,
+        persistence: PersistenceManager = PersistenceManager.shared,
+        sessionRegistry: BackendSessionRegistry = .shared,
+        syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
+        backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
+        reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
+        claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
+    ) {
+        self.init(
+            workspaceStore: WorkspaceStore.shared,
+            connection: ConnectionManager.shared,
+            backendID: backendID,
+            persistence: persistence,
+            sessionRegistry: sessionRegistry,
+            syncedRegistry: syncedRegistry,
+            backgroundTaskManager: backgroundTaskManager,
+            reconnectLoadingObservationDidChange: reconnectLoadingObservationDidChange,
+            claimScreenRestoration: claimScreenRestoration)
+    }
+}
+
 @Suite(.serialized)
 final class AppCoordinatorTests {
 
@@ -17,6 +46,11 @@ final class AppCoordinatorTests {
     /// UUID-named plists in the test host.
     private let persistence: PersistenceManager
     private let suiteName: String
+
+    /// Backend identity for tests that bind the coordinator to a window
+    /// backend without needing a saved connection record. Sharing it across
+    /// tests is safe: each test's persistence uses its own UserDefaults suite.
+    private static let windowBackend = BackendID(UUID())
 
     init() {
         // The coordinator under test uses the injected per-test persistence,
@@ -54,6 +88,7 @@ final class AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         persistence.setActiveConnection(id: stored.id)
         let coordinator = AppCoordinator(
+            backendID: BackendID(stored.id),
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
 
         coordinator.handleNotificationSelection(
@@ -82,7 +117,7 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         persistence.setActiveConnection(id: stored.id)
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(stored.id), persistence: persistence)
 
         coordinator.currentScreen = .connectionFailed(error: "timeout")
         coordinator.handleNotificationSelection(
@@ -115,23 +150,23 @@ final class AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func deferredNotificationIsDiscardedAfterConnectionSwitch() {
+    @Test @MainActor func notificationSelectionForOtherBackendIsDropped() {
         resetConnectionState()
         defer { resetConnectionState() }
         let first = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let second = persistence.upsertConnection(Self.makeConnection(port: 5252))
-        persistence.setActiveConnection(id: first.id)
-        let coordinator = AppCoordinator(persistence: persistence)
+        // Window model v2: a tap for a backend this window doesn't show is
+        // dropped — the multi-window tap route opens that backend's window.
+        let coordinator = AppCoordinator(backendID: BackendID(first.id), persistence: persistence)
         coordinator.currentScreen = .connecting
         coordinator.handleNotificationSelection(
             agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
-            connectionId: first.id)
+            connectionId: second.id)
 
-        coordinator.onSwitchConnection(id: second.id)
         coordinator.onConnectionSuccess()
 
         if case .workspaceList = coordinator.currentScreen {} else {
-            Issue.record("Stale notification routed after connection switch")
+            Issue.record("A notification for another backend must not route in this window")
         }
     }
 
@@ -155,13 +190,92 @@ final class AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func onPaired_setsConnecting() {
+    @Test @MainActor func onPaired_retargetsWindowToPairedBackend() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onPaired()
-        if case .connecting = coordinator.currentScreen {
-            // pass
-        } else {
-            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+        coordinator.onPaired(stored)
+        #expect(retargeted == [BackendID(stored.id)],
+                "A pairing must route to the paired backend's window")
+    }
+
+    /// Regression (window model v2): pairing a different backend from a
+    /// BOUND window dials the new daemon over this window's live session
+    /// connection. After the retarget hook routes to the target's own
+    /// window, this window must drop the hijacked socket and the other
+    /// daemon's data and re-dial its own backend — not keep showing the
+    /// newly paired daemon's workspaces.
+    @Test @MainActor func onPaired_boundWindow_redialsOwnBackendAfterRoutingOut() {
+        let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let paired = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        let store = WorkspaceStore(forTesting: true)
+        store.publishFetchedWorkspaces(
+            [Self.makeWorkspace(id: "ws-paired-daemon", attention: "none")])
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake,
+            backendID: BackendID(own.id), persistence: persistence)
+        coordinator.currentScreen = .workspaceList
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(paired)
+
+        #expect(retargeted == [BackendID(paired.id)],
+                "The pairing must still route to the paired backend's window")
+        #expect(fake.disconnectCallCount == 1,
+                "The hijacked socket must be dropped")
+        #expect(store.workspaces.isEmpty,
+                "The paired daemon's workspace data must be dropped")
+        if case .connecting = coordinator.currentScreen {} else {
+            Issue.record("Expected a re-dial of this window's own backend, got \(coordinator.currentScreen)")
+        }
+    }
+
+    /// A re-pair routed for this window's own backend must not trigger the
+    /// repair re-dial (no disconnect, screen untouched).
+    @Test @MainActor func onPaired_boundWindow_sameBackend_noRedial() {
+        let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
+            backendID: BackendID(own.id), persistence: persistence)
+        coordinator.currentScreen = .workspaceList
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(own)
+
+        #expect(retargeted == [BackendID(own.id)])
+        #expect(fake.disconnectCallCount == 0,
+                "A same-backend pairing must not drop this window's connection")
+        if case .workspaceList = coordinator.currentScreen {} else {
+            Issue.record("Expected screen untouched, got \(coordinator.currentScreen)")
+        }
+    }
+
+    /// An unbound (pairing) window routes the pairing via the retarget hook
+    /// with no repair — the hook rebinds it in place (single-window) or
+    /// replaces it with the target's own window (multi-window).
+    @Test @MainActor func onPaired_unboundWindow_retargetsWithoutRedial() {
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
+            persistence: persistence)
+        coordinator.currentScreen = .pairing
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(stored)
+
+        #expect(retargeted == [BackendID(stored.id)])
+        #expect(fake.disconnectCallCount == 0)
+        if case .pairing = coordinator.currentScreen {} else {
+            Issue.record("Expected screen untouched, got \(coordinator.currentScreen)")
         }
     }
 
@@ -234,7 +348,7 @@ final class AppCoordinatorTests {
 
     /// Clean up all PersistenceManager state that could leak between tests
     private func cleanupLastScreen() {
-        persistence.clearLastScreen()
+        persistence.clearLastScreen(for: Self.windowBackend.connectionID)
     }
 
     // MARK: - Connection routing
@@ -276,7 +390,7 @@ final class AppCoordinatorTests {
         WorkspaceStore.shared.lastUpdated = nil
     }
 
-    @Test @MainActor func onLoadComplete_routesToConnectingWhenActiveConnectionExists() {
+    @Test @MainActor func onLoadComplete_routesToConnectingWhenWindowIsBound() {
         resetConnectionState()
         defer { resetConnectionState() }
 
@@ -286,6 +400,7 @@ final class AppCoordinatorTests {
         // Empty fake registry: onLoadComplete merges the synced registry, and
         // the default one would read the host machine's real keychain.
         let coordinator = AppCoordinator(
+            backendID: BackendID(stored.id),
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
         coordinator.onLoadComplete()
 
@@ -296,11 +411,12 @@ final class AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func onLoadComplete_routesToPairingWhenNoActiveConnection() {
+    @Test @MainActor func onLoadComplete_routesToPairingWhenWindowIsUnbound() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // A saved connection without an active pointer must not auto-connect.
+        // An unbound (pairing-session) window never auto-connects, even with
+        // a saved connection available.
         persistence.upsertConnection(Self.makeConnection(port: 4242))
 
         let coordinator = AppCoordinator(
@@ -314,7 +430,28 @@ final class AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func onLogOff_forgetsActiveConnectionOnly_flagsSavedConnections() {
+    @Test @MainActor func onLoadComplete_boundWindowDialsWithoutLastUsedPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // No last-used pointer: a bound window dials its own backend's saved
+        // record, so it must route to .connecting, never to .pairing.
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+
+        let coordinator = AppCoordinator(
+            backendID: BackendID(stored.id),
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        if case .connecting = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onLogOff_forgetsWindowBackendOnly_flagsSavedConnections() {
         resetConnectionState()
         defer { resetConnectionState() }
 
@@ -322,7 +459,7 @@ final class AppCoordinatorTests {
         let other = persistence.upsertConnection(Self.makeConnection(port: 2))
         persistence.setActiveConnection(id: active.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(active.id), persistence: persistence)
         coordinator.onLogOff()
 
         #expect(persistence.loadConnections().map(\.id) == [other.id])
@@ -343,7 +480,7 @@ final class AppCoordinatorTests {
         let only = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: only.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(only.id), persistence: persistence)
         coordinator.onLogOff()
 
         #expect(persistence.loadConnections().isEmpty)
@@ -355,11 +492,186 @@ final class AppCoordinatorTests {
         }
     }
 
+    // MARK: - Window-scoped Settings / Log Off (spec lifecycle decision 2a)
+
+    @Test @MainActor func windowConnection_showsBoundBackendNotLastUsed() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let bound = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let lastUsed = persistence.upsertConnection(Self.makeConnection(port: 2))
+        persistence.setActiveConnection(id: lastUsed.id)
+
+        // Settings' "Connected To" section renders windowConnection: a bound
+        // window must show its own backend, never the last-used pointer.
+        let coordinator = AppCoordinator(
+            backendID: BackendID(bound.id),
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        #expect(coordinator.windowConnection?.id == bound.id)
+
+        let pairingWindow = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        #expect(pairingWindow.windowConnection == nil,
+                "An unbound (pairing) window shows no connection record")
+    }
+
+    @Test @MainActor func onLogOff_boundWindow_forgetsOwnBackendOnly() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let other = persistence.upsertConnection(Self.makeConnection(port: 2))
+        persistence.setActiveConnection(id: other.id)
+        persistence.saveLastScreen(PersistenceManager.SavedScreen(
+            screen: "workspaceList", workspaceId: nil, agentId: nil,
+            agentName: nil, noteId: nil, noteTitle: nil), for: doomed.id)
+        persistence.saveLastScreen(PersistenceManager.SavedScreen(
+            screen: "workspaceList", workspaceId: nil, agentId: nil,
+            agentName: nil, noteId: nil, noteTitle: nil), for: other.id)
+
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            backendID: BackendID(doomed.id),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLogOff()
+
+        #expect(persistence.loadConnections().map(\.id) == [other.id],
+                "Log Off must forget only this window's backend")
+        #expect(persistence.activeConnection()?.id == other.id,
+                "Another backend's last-used pointer must survive")
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)))
+        #expect(!registry.isBackendRemoved(BackendID(other.id)))
+        #expect(persistence.loadLastScreen(for: doomed.id) == nil,
+                "The forgotten backend's saved screen must be cleared")
+        #expect(persistence.loadLastScreen(for: other.id) != nil,
+                "Log Off must not clear another backend's saved screen")
+    }
+
+    @Test @MainActor func onConnectionSuccess_windowWithoutRestorationClaimLandsOnList() {
+        defer {
+            cleanupLastScreen()
+            persistence.clearWorkspaceScreen(workspaceId: "ws-other")
+        }
+        // Only the session's first window restores (spec decision 1b): a
+        // duplicate window lands on the workspace list and never overwrites
+        // the restoring window's saved navigation.
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: "ws-owned",
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: Self.windowBackend.connectionID)
+
+        let coordinator = AppCoordinator(
+            backendID: Self.windowBackend,
+            persistence: persistence,
+            claimScreenRestoration: { false })
+        coordinator.onConnectionSuccess()
+
+        if case .workspaceList = coordinator.currentScreen {
+            // pass
+        } else {
+            Issue.record("Expected .workspaceList for a non-restoring window, got \(coordinator.currentScreen)")
+        }
+
+        coordinator.onSelectWorkspace("ws-other")
+        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID)?.workspaceId == "ws-owned",
+                "A non-restoring window must not overwrite the saved screen")
+    }
+
     @Test @MainActor func onPaired_resetsPairingShowsSavedConnections() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        // Without a retarget hook, pairing from the pairing surface connects
+        // in place and must stop offering the saved-connections list.
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.currentScreen = .pairing
         coordinator.pairingShowsSavedConnections = true
-        coordinator.onPaired()
+        coordinator.onPaired(stored)
         #expect(!coordinator.pairingShowsSavedConnections)
+    }
+
+    // MARK: - Removed backend window close fallback (spec decision 2)
+
+    // Removal-mark routing is owned by the window root (window model v2):
+    // BackendWindowRoot observes the registry's removedBackendIDs and closes
+    // the window or retargets a last remaining window to the pairing surface.
+
+    @Test func removedWindowCloseDismissesWhenOtherWindowsExist() {
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 3, attachedRemovedBackendWindows: 0) == .dismiss)
+    }
+
+    @Test func removedWindowCloseRetargetsLastWindowToPairing() {
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 1, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 0, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+    }
+
+    /// Regression: two windows on the removed backend as the app's only
+    /// windows must not race both into `.dismiss` (zero windows). A sibling
+    /// still attached to the removed backend is not a surviving window —
+    /// the first window to decide rebinds to pairing; the later one then
+    /// counts the rebound survivor and dismisses.
+    @Test func removedWindowCloseExcludesSiblingsStillOnRemovedBackend() {
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 1) == .retargetToPairing,
+            "First of two removed-backend windows to decide must become the pairing survivor")
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss,
+            "The later window counts the rebound survivor and dismisses")
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 3, attachedRemovedBackendWindows: 1) == .dismiss,
+            "With a window on another backend surviving, every removed-backend window dismisses")
+    }
+
+    // MARK: - Window retarget policy (window model v2)
+
+    // WindowRetargetRoute.route decides whether a switch/pair action opens or
+    // raises the target backend's own window (multi-window platforms),
+    // replaces an unbound pairing window with the target's own window, or
+    // rebinds the current window in place (single-window platforms).
+
+    @Test func retargetRouteOpensTargetWindowOnMultiWindowPlatforms() {
+        let current = BackendID(UUID())
+        let target = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: target,
+            supportsMultipleWindows: true) == .openTargetWindow,
+            "A bound window on a multi-window platform never retargets; the target's window is opened or raised")
+    }
+
+    @Test func retargetRouteRebindsInPlaceWhenTargetIsCurrentBackend() {
+        let current = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: current,
+            supportsMultipleWindows: true) == .rebindInPlace,
+            "Switching to the backend the window is already bound to stays in place")
+    }
+
+    @Test func retargetRouteReplacesUnboundPairingWindow() {
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: nil, target: BackendID(UUID()),
+            supportsMultipleWindows: true) == .replaceWindow,
+            "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)")
+    }
+
+    @Test func retargetRouteRebindsInPlaceOnSingleWindowPlatforms() {
+        let current = BackendID(UUID())
+        let target = BackendID(UUID())
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: current, target: target,
+            supportsMultipleWindows: false) == .rebindInPlace,
+            "iPhone (single-window) always rebinds the one window in place")
+        #expect(WindowRetargetRoute.route(
+            currentBackendID: nil, target: target,
+            supportsMultipleWindows: false) == .rebindInPlace)
     }
 
     // MARK: - Deep-link URL routing (intent://)
@@ -486,11 +798,12 @@ final class AppCoordinatorTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        // Cold start with an active saved connection: onLoadComplete routes
-        // to .connecting and the stashed deep link is confirmed over it.
+        // Cold start of a bound window: onLoadComplete routes to .connecting
+        // and the stashed deep link is confirmed over it.
         let old = persistence.upsertConnection(Self.makeConnection(port: 1111))
         persistence.setActiveConnection(id: old.id)
         let coordinator = AppCoordinator(
+            backendID: BackendID(old.id),
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
         coordinator.handleIncomingURL(
             URL(string: "intent://pair?token=t&host=10.0.0.2&port=2222")!)
@@ -624,7 +937,7 @@ final class AppCoordinatorTests {
         #expect(persistence.loadConnections().map(\.id) == [stored.id])
     }
 
-    @Test @MainActor func refreshSyncedBackends_tombstoneOnActiveRoutesToPairing() {
+    @Test @MainActor func refreshSyncedBackends_tombstoneOnWindowBackendRoutesToPairing() {
         resetConnectionState()
         defer { resetConnectionState() }
 
@@ -644,6 +957,7 @@ final class AppCoordinatorTests {
             + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
             + #""updatedAt": \#(clock), "deleted": true}"#
         let coordinator = AppCoordinator(
+            backendID: BackendID(doomed.id),
             persistence: persistence,
             syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
         let outcome = coordinator.refreshSyncedBackends()
@@ -655,6 +969,44 @@ final class AppCoordinatorTests {
                 "The remaining saved connection must be offered on the pairing surface")
         if case .pairing = coordinator.currentScreen {
             // pass
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func refreshSyncedBackends_tombstoneKeepsOtherBackendsLastUsedPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        let active = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: active.id)
+
+        let clock = Date().timeIntervalSince1970 * 1000
+        let tombstone = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+            + #""updatedAt": \#(clock), "deleted": true}"#
+        let registry = BackendSessionRegistry()
+        let coordinator = AppCoordinator(
+            backendID: BackendID(doomed.id),
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+        let outcome = coordinator.refreshSyncedBackends()
+
+        // The tombstone removed this window's backend — not the last-used
+        // one — so this window must still route out.
+        #expect(outcome?.removedIds == [doomed.id])
+        #expect(outcome?.removedActiveConnection == false)
+        #expect(persistence.activeConnection()?.id == active.id)
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)))
+        if case .pairing = coordinator.currentScreen {
+            // pass — exitRemovedBackend ran for the pinned backend's removal
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
@@ -676,6 +1028,7 @@ final class AppCoordinatorTests {
             + #""host": "10.9.9.10", "port": 5252, "fingerprint": "aa:bb", "#
             + #""token": "tok-rotated", "updatedAt": 200}"#
         let coordinator = AppCoordinator(
+            backendID: BackendID(active.id),
             persistence: persistence,
             syncedRegistry: Self.syncedRegistry(payloads: [rotated]))
         let outcome = coordinator.refreshSyncedBackends()
@@ -766,15 +1119,16 @@ final class AppCoordinatorTests {
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail", workspaceId: "ws-1",
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: b.id)
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace("ws-1")
         coordinator.onSwitchConnection(id: b.id)
 
         #expect(persistence.activeConnection()?.id == b.id)
-        #expect(persistence.loadLastScreen() == nil,
-                "Last-screen state must be cleared on switch")
+        #expect(persistence.loadLastScreen(for: b.id) == nil,
+                "The target backend's last-screen state must be cleared on switch")
         #expect(coordinator.selectedWorkspaceId == nil,
                 "selectedWorkspaceId must be reset on switch")
         if case .connecting = coordinator.currentScreen {
@@ -830,7 +1184,7 @@ final class AppCoordinatorTests {
         persistence.setActiveConnection(id: active.id)
         Self.seedWorkspaceStore()
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(active.id), persistence: persistence)
         coordinator.onDeleteConnection(id: active.id)
 
         #expect(WorkspaceStore.shared.workspaces.isEmpty)
@@ -858,7 +1212,7 @@ final class AppCoordinatorTests {
         let other = persistence.upsertConnection(Self.makeConnection(port: 2))
         persistence.setActiveConnection(id: active.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(active.id), persistence: persistence)
         coordinator.onConnectionSuccess()
         coordinator.onDeleteConnection(id: other.id)
 
@@ -879,7 +1233,7 @@ final class AppCoordinatorTests {
         let other = persistence.upsertConnection(Self.makeConnection(port: 2))
         persistence.setActiveConnection(id: active.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(active.id), persistence: persistence)
         coordinator.onDeleteConnection(id: active.id)
 
         #expect(persistence.loadConnections().map(\.id) == [other.id])
@@ -900,7 +1254,7 @@ final class AppCoordinatorTests {
         let only = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: only.id)
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: BackendID(only.id), persistence: persistence)
         coordinator.onDeleteConnection(id: only.id)
 
         #expect(persistence.loadConnections().isEmpty)
@@ -926,6 +1280,93 @@ final class AppCoordinatorTests {
         #expect(persistence.loadConnections().isEmpty)
         #expect(!coordinator.pairingShowsSavedConnections,
                 "Flag must clear once no saved connections remain")
+    }
+
+    // MARK: - Backend removal marks pinned windows for auto-close (spec decision 2)
+
+    /// Registry whose session factory must never run: these tests only assert
+    /// removal marks, which never create or tear down sessions.
+    @MainActor private static func markOnlySessionRegistry() -> BackendSessionRegistry {
+        BackendSessionRegistry { kind in
+            fatalError("Removal marks must not build sessions (got \(kind))")
+        }
+    }
+
+    @Test @MainActor func onDeleteConnection_marksBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence, sessionRegistry: registry)
+
+        coordinator.onDeleteConnection(id: doomed.id)
+
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
+                "Deleting a saved connection must auto-close its pinned windows")
+    }
+
+    @Test @MainActor func onLogOff_marksActiveBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let active = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: active.id)
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            backendID: BackendID(active.id),
+            persistence: persistence, sessionRegistry: registry)
+
+        coordinator.onLogOff()
+
+        #expect(registry.isBackendRemoved(BackendID(active.id)),
+                "Log Off forgets the active connection; its pinned windows must close")
+    }
+
+    @Test @MainActor func refreshSyncedBackends_tombstoneMarksBackendRemovedInSessionRegistry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = persistence.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+
+        let clock = Date().timeIntervalSince1970 * 1000
+        let tombstone = #"{"v": 1, "label": "Synced Mac", "#
+            + #""host": "10.9.9.9", "port": 4242, "fingerprint": "aa:bb", "#
+            + #""updatedAt": \#(clock), "deleted": true}"#
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.removedIds == [doomed.id])
+        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
+                "A synced tombstone must auto-close the removed backend's pinned windows")
+    }
+
+    @Test @MainActor func refreshSyncedBackends_mergeAddNeverMarksBackendsRemoved() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            persistence: persistence,
+            sessionRegistry: registry,
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+
+        let outcome = coordinator.refreshSyncedBackends()
+
+        #expect(outcome?.addedIds.count == 1)
+        #expect(registry.removedBackendIDs.isEmpty,
+                "A merge that only adds must not mark anything removed")
     }
 
     @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {
@@ -1113,7 +1554,8 @@ final class AppCoordinatorTests {
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail", workspaceId: wsId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: Self.windowBackend.connectionID)
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
@@ -1121,11 +1563,12 @@ final class AppCoordinatorTests {
                 agentId: "agent-1", agentName: "Worker",
                 noteId: nil, noteTitle: nil))
 
-        let coordinator = AppCoordinator(persistence: persistence)
+        let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         coordinator.handleMissingWorkspace(workspaceId: wsId)
 
         // Both should be cleared
-        #expect(persistence.loadLastScreen() == nil, "Last screen should be cleared")
+        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
+                "Last screen should be cleared")
         #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 
@@ -1360,13 +1803,16 @@ final class AppCoordinatorTests {
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail", workspaceId: wsId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: Self.windowBackend.connectionID)
 
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
         let fake = FakeConnectionManager()
         fake.responseMap["workspace.markSeen"] = ["workspace": ["id": wsId]] as [String: Any]
-        let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake,
+            backendID: Self.windowBackend, persistence: persistence)
 
         coordinator.onConnectionSuccess()
         await Self.drainMainQueue()
@@ -1416,7 +1862,9 @@ final class AppCoordinatorTests {
         }
 
         let store = WorkspaceStore(forTesting: true)
-        let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: FakeConnectionManager(),
+            backendID: Self.windowBackend, persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
         // Regression: the very first post-launch fetch must trigger validation
@@ -1431,7 +1879,8 @@ final class AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceList after first fetch without the workspace, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadLastScreen() == nil, "Last screen should be cleared")
+        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
+                "Last screen should be cleared")
         #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 

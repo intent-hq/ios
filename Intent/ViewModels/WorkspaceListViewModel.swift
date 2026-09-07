@@ -142,12 +142,19 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     var viewMode: ViewMode = .recent
     var searchText = ""
 
+    /// The window's workspace store, injected from its `BackendSession`.
+    @ObservationIgnored private let workspaceStore: WorkspaceStore
+
+    init(workspaceStore: WorkspaceStore) {
+        self.workspaceStore = workspaceStore
+    }
+
     var workspaces: [Workspace] {
-        WorkspaceStore.shared.workspaces
+        workspaceStore.workspaces
     }
 
     var isLoading: Bool {
-        WorkspaceStore.shared.isLoading
+        workspaceStore.isLoading
     }
 
     var hasSearchQuery: Bool {

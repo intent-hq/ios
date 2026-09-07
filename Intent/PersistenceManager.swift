@@ -162,6 +162,9 @@ class PersistenceManager {
         }
     }
 
+    /// The last-used backend pointer (window model v2: no longer a
+    /// navigation concept — it only seeds which backend a fresh window
+    /// binds to at launch).
     func activeConnection() -> StoredConnection? {
         migrateLegacyPairingIfNeeded()
         guard let id = activeConnectionIdLocked() else { return nil }
@@ -170,6 +173,16 @@ class PersistenceManager {
 
     func setActiveConnection(id: UUID) {
         defaults.set(id.uuidString, forKey: activeConnectionIdKey)
+    }
+
+    /// The backend a fresh window binds to at launch when system restoration
+    /// supplied none: the last-used pointer when its record still exists,
+    /// else the most recently connected saved record.
+    func lastUsedConnection() -> StoredConnection? {
+        if let active = activeConnection() { return active }
+        return loadConnections().max {
+            ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast)
+        }
     }
 
     func touchLastConnected(id: UUID) {
@@ -304,8 +317,12 @@ class PersistenceManager {
         defaults.removeObject(forKey: key)
     }
 
-    // MARK: - Last Viewed Screen
+    // MARK: - Last Viewed Screen (keyed per backend)
 
+    private let lastScreensKey = "lastScreens"
+    // Legacy single-slot keys (pre window model v2): read once as a
+    // migration fallback for the connection that was active when they were
+    // written, then cleaned up.
     private let lastScreenKey = "lastScreen"
     private let lastWorkspaceIdKey = "lastWorkspaceId"
     private let lastAgentIdKey = "lastAgentId"
@@ -322,16 +339,42 @@ class PersistenceManager {
         let noteTitle: String?
     }
 
-    func saveLastScreen(_ screen: SavedScreen) {
-        defaults.set(screen.screen, forKey: lastScreenKey)
-        defaults.set(screen.workspaceId, forKey: lastWorkspaceIdKey)
-        defaults.set(screen.agentId, forKey: lastAgentIdKey)
-        defaults.set(screen.agentName, forKey: lastAgentNameKey)
-        defaults.set(screen.noteId, forKey: lastNoteIdKey)
-        defaults.set(screen.noteTitle, forKey: lastNoteTitleKey)
+    func saveLastScreen(_ screen: SavedScreen, for connectionID: UUID) {
+        var dict = loadLastScreensDict()
+        if let data = try? JSONEncoder().encode(screen) {
+            dict[connectionID.uuidString] = data
+        }
+        defaults.set(dict, forKey: lastScreensKey)
     }
 
-    func loadLastScreen() -> SavedScreen? {
+    func loadLastScreen(for connectionID: UUID) -> SavedScreen? {
+        let dict = loadLastScreensDict()
+        if let data = dict[connectionID.uuidString] {
+            return try? JSONDecoder().decode(SavedScreen.self, from: data)
+        }
+        // Legacy migration: the old single-slot screen belonged to the
+        // connection that was active when it was saved.
+        guard let legacy = loadLegacyLastScreen(),
+              activeConnection()?.id == connectionID else { return nil }
+        saveLastScreen(legacy, for: connectionID)
+        clearLegacyLastScreen()
+        return legacy
+    }
+
+    func clearLastScreen(for connectionID: UUID) {
+        var dict = loadLastScreensDict()
+        dict.removeValue(forKey: connectionID.uuidString)
+        defaults.set(dict, forKey: lastScreensKey)
+        if activeConnection()?.id == connectionID {
+            clearLegacyLastScreen()
+        }
+    }
+
+    private func loadLastScreensDict() -> [String: Data] {
+        (defaults.dictionary(forKey: lastScreensKey) as? [String: Data]) ?? [:]
+    }
+
+    private func loadLegacyLastScreen() -> SavedScreen? {
         guard let screen = defaults.string(forKey: lastScreenKey) else { return nil }
         return SavedScreen(
             screen: screen,
@@ -343,7 +386,7 @@ class PersistenceManager {
         )
     }
 
-    func clearLastScreen() {
+    private func clearLegacyLastScreen() {
         defaults.removeObject(forKey: lastScreenKey)
         defaults.removeObject(forKey: lastWorkspaceIdKey)
         defaults.removeObject(forKey: lastAgentIdKey)

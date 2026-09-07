@@ -5,12 +5,13 @@ extension RootView {
     var detailContent: some View {
         if let workspaceId = coordinator.selectedWorkspaceId {
             NavigationStack(path: $noteStack) {
-                WorkspaceDetailView(workspaceId: workspaceId)
+                WorkspaceDetailView(workspaceId: workspaceId, session: session)
                     .navigationDestination(isPresented: $showingConversation) {
                         ConversationView(
                             agentId: conversationAgentId,
                             workspaceId: conversationWorkspaceId,
-                            agentName: conversationAgentName
+                            agentName: conversationAgentName,
+                            session: session
                         )
                         .id(conversationAgentId)
                     }
@@ -19,6 +20,7 @@ extension RootView {
                             noteId: dest.noteId,
                             workspaceId: dest.workspaceId,
                             noteTitle: dest.noteTitle,
+                            session: session,
                             onNavigateToNote: { noteId, wsId, title in
                                 noteStack.append(NoteDestination(noteId: noteId, workspaceId: wsId, noteTitle: title))
                             }

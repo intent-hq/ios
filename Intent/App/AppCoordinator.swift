@@ -74,23 +74,56 @@ class AppCoordinator {
     @ObservationIgnored private let reconnectLoadingObservationDidChange: @Sendable () -> Void
 
     @ObservationIgnored private let workspaceStore: WorkspaceStore
-    @ObservationIgnored private let connection: ConnectionManagerRouting
+    @ObservationIgnored private let connection: any SessionConnectionManaging
+    /// The backend this coordinator's window is bound to; nil only for a
+    /// window that has no backend yet (pairing session). Bound windows route
+    /// straight to .connecting on load and dial this backend's saved record.
+    @ObservationIgnored let backendID: BackendID?
     @ObservationIgnored private let persistence: PersistenceManager
+    @ObservationIgnored private let sessionRegistry: BackendSessionRegistry
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
+    @ObservationIgnored private let claimScreenRestoration: @MainActor () -> Bool
+    @ObservationIgnored private var claimedScreenRestoration: Bool?
+    /// Rebinds this coordinator's window to another backend, set by the
+    /// window root (BackendWindowRoot). On single-window platforms it
+    /// retargets the window in place; where multiple windows are supported
+    /// it opens/raises the target backend's window instead (window model
+    /// v2: a bound multi-window scene never retargets). When unset (tests,
+    /// previews), switch/pair actions fall back to in-place routing over
+    /// this session's connection.
+    @ObservationIgnored var retargetWindow: ((BackendID) -> Void)?
 
-    init(workspaceStore: WorkspaceStore = WorkspaceStore.shared,
-         connection: ConnectionManagerRouting = ConnectionManager.shared,
+    /// Whether this coordinator owns the session's last-screen persistence.
+    /// Only the first window per backend session restores and saves that
+    /// backend's screen; duplicated windows start at the workspace list.
+    /// The claim is consumed lazily on first use so coordinators built for
+    /// discarded SwiftUI view constructions never spend it.
+    private var restoresLastScreen: Bool {
+        if let claimed = claimedScreenRestoration { return claimed }
+        let claimed = claimScreenRestoration()
+        claimedScreenRestoration = claimed
+        return claimed
+    }
+
+    init(workspaceStore: WorkspaceStore,
+         connection: any SessionConnectionManaging,
+         backendID: BackendID? = nil,
          persistence: PersistenceManager = PersistenceManager.shared,
+         sessionRegistry: BackendSessionRegistry = .shared,
          syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
          backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
-         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {}) {
+         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
+         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }) {
         self.workspaceStore = workspaceStore
         self.connection = connection
+        self.backendID = backendID
         self.persistence = persistence
+        self.sessionRegistry = sessionRegistry
         self.syncedRegistry = syncedRegistry
         self.backgroundTaskManager = backgroundTaskManager
         self.reconnectLoadingObservationDidChange = reconnectLoadingObservationDidChange
+        self.claimScreenRestoration = claimScreenRestoration
         startObservingConnection()
         startObservingCertMismatch()
         startObservingWorkspaceList()
@@ -209,13 +242,13 @@ class AppCoordinator {
 
 
     private func startObservingCertMismatch() {
-        certMismatchObserver = ConnectionManager.shared.certMismatchPublisher
+        certMismatchObserver = connection.certMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
                 guard let self = self, mismatch else { return }
                 self.currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
                 // Reset the flag so it doesn't re-trigger
-                ConnectionManager.shared.certMismatchDetected = false
+                self.connection.certMismatchDetected = false
             }
     }
 
@@ -265,7 +298,7 @@ class AppCoordinator {
     func onLoadComplete() {
         hasLoadCompleted = true
         refreshSyncedBackends()
-        if DemoMode.pretendPaired || persistence.activeConnection() != nil {
+        if DemoMode.pretendPaired || backendID != nil {
             currentScreen = .connecting
         } else {
             // Synced connections merged from the registry (or connections
@@ -302,13 +335,52 @@ class AppCoordinator {
         pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
     }
 
-    /// A deep-link pairing connected and persisted successfully. From the
-    /// first-run pairing surface this lands in the connected UI directly,
-    /// same as a successful QR scan; from anywhere else (already connected
-    /// to another daemon, connecting, failed) it routes through
-    /// onSwitchConnection so state from the previous daemon is fully reset.
+    /// A deep-link pairing connected and persisted successfully.
+    ///
+    /// A re-pair of this window's own backend (same record id, e.g. a
+    /// rotated token) restarts this window's attempt so it dials the
+    /// refreshed record. Any other pairing routes to the new backend via
+    /// onPaired: the window root's retarget hook applies the v2 policy
+    /// (rebind in place on single-window platforms; open/raise the new
+    /// backend's window — or replace an unbound pairing window with it —
+    /// where multiple windows are supported).
     func onDeepLinkPaired(_ connection: StoredConnection) {
         pendingDeepLinkPairing = nil
+        if let bound = backendID, bound.connectionID == connection.id {
+            self.connection.updateCachedCredentials(
+                hosts: connection.server.hosts, port: connection.server.port,
+                token: connection.token,
+                certFingerprint: connection.server.certFingerprint,
+                tcAddress: connection.server.tcAddress)
+            connectionAttemptId += 1
+            currentScreen = .connecting
+            return
+        }
+        onPaired(connection)
+    }
+
+    /// A pairing completed over this window's session (QR scan, manual
+    /// entry, or deep link for another backend): route to the paired
+    /// backend's window. The window root's retarget hook applies the
+    /// v2 policy (rebind in place vs open/raise); without a hook (tests,
+    /// previews) the pairing session's live connection is used in place.
+    func onPaired(_ connection: StoredConnection) {
+        if let retargetWindow {
+            let target = BackendID(connection.id)
+            retargetWindow(target)
+            // The pairing dialed the new backend over THIS window's live
+            // session connection. Where multiple windows are supported the
+            // retarget opened/raised the target's own window and this window
+            // keeps its binding — re-dial its own backend or it keeps showing
+            // the newly paired daemon's data over the hijacked socket. On
+            // single-window platforms the retarget rebinds this window in
+            // place (session torn down and replaced), so the repair state is
+            // discarded with the old session.
+            if let bound = backendID, bound != target {
+                redialWindowBackend()
+            }
+            return
+        }
         if case .pairing = currentScreen {
             pairingShowsSavedConnections = false
             onConnectionSuccess()
@@ -317,15 +389,31 @@ class AppCoordinator {
         }
     }
 
+    /// The connection identity this window shows: the bound backend's, if
+    /// any.
+    private var windowConnectionID: UUID? {
+        backendID?.connectionID
+    }
+
+    /// The saved connection record this window shows: the bound backend's
+    /// record. Settings renders it and Log Off forgets it — always scoped
+    /// to this window's backend, never a global pointer.
+    var windowConnection: StoredConnection? {
+        guard let backendID else { return nil }
+        return persistence.loadConnections().first { $0.id == backendID.connectionID }
+    }
+
     /// Routes notification taps immediately once the connected UI is stable,
-    /// or stashes them until cold-start connection routing completes.
+    /// or stashes them until cold-start connection routing completes. Taps
+    /// for a backend this window doesn't show are dropped (the multi-window
+    /// tap route opens the source backend's own window instead).
     func handleNotificationSelection(
         agentId: String,
         workspaceId: String,
         agentName: String,
         connectionId: UUID
     ) {
-        guard persistence.activeConnection()?.id == connectionId else { return }
+        guard windowConnectionID == connectionId else { return }
         switch currentScreen {
         case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
             pendingNotificationSelection = (agentId, workspaceId, agentName, connectionId)
@@ -351,32 +439,34 @@ class AppCoordinator {
     /// Merges the iCloud-synced backend registry into the saved connections
     /// (see `SyncedBackendConnectionMerge`). An unavailable registry read
     /// (locked keychain, missing entitlement) is a no-op — existing local
-    /// knowledge is kept. When a tombstone removes the active connection,
-    /// disconnects and routes to the pairing surface like Log Off. When the
-    /// merge rewrote the active connection's record (rotated token, new
-    /// routes), the live ConnectionManager cache adopts the new fields so
-    /// the next reconnect uses them.
+    /// knowledge is kept. When a tombstone removes this window's backend,
+    /// disconnects and routes away like Log Off (the window root's removal
+    /// observation closes or rebinds the window). When the merge rewrote
+    /// this window's record (rotated token, new routes), the live
+    /// ConnectionManager cache adopts the new fields so the next reconnect
+    /// uses them.
     @discardableResult
     func refreshSyncedBackends() -> SyncedBackendMergeOutcome? {
         guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
+        let windowID = windowConnectionID
         let outcome = persistence.mergeSyncedBackends(records: records)
-        if outcome.removedActiveConnection {
-            hasEverConnected = false
-            isDisconnected = false
-            ConnectionManager.shared.disconnect()
-            resetWorkspaceStore()
-            persistence.clearLastScreen()
-            selectedWorkspaceId = nil
-            pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
-            currentScreen = .pairing
+        // Tombstones close windows on the removed backends; a re-added
+        // record (same id resurrected from another device) clears its mark.
+        sessionRegistry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))
+        sessionRegistry.clearRemovedMarks(outcome.addedIds.map(BackendID.init))
+        for removedId in outcome.removedIds {
+            persistence.clearLastScreen(for: removedId)
+        }
+        if let windowID, outcome.removedIds.contains(windowID) {
+            exitRemovedBackend()
         } else if outcome.changed {
-            if let active = persistence.activeConnection(),
-                outcome.updatedIds.contains(active.id)
+            if let record = windowConnection,
+                outcome.updatedIds.contains(record.id)
             {
-                ConnectionManager.shared.updateCachedCredentials(
-                    hosts: active.server.hosts, port: active.server.port,
-                    token: active.token, certFingerprint: active.server.certFingerprint,
-                    tcAddress: active.server.tcAddress)
+                connection.updateCachedCredentials(
+                    hosts: record.server.hosts, port: record.server.port,
+                    token: record.token, certFingerprint: record.server.certFingerprint,
+                    tcAddress: record.server.tcAddress)
             }
             // A merge while the pairing surface is up must (un)offer the
             // saved connections it added/removed.
@@ -390,7 +480,7 @@ class AppCoordinator {
     func onConnectionSuccess() {
         if let selection = pendingNotificationSelection {
             pendingNotificationSelection = nil
-            if persistence.activeConnection()?.id == selection.connectionId {
+            if windowConnectionID == selection.connectionId {
                 onSelectAgent(
                     selection.agentId,
                     workspaceId: selection.workspaceId,
@@ -400,11 +490,13 @@ class AppCoordinator {
             }
         }
 
-        // Try to restore last viewed screen. Restoring into a workspace counts
-        // as viewing it, so it marks the workspace seen — mirroring the FE,
-        // where the workspace surface marks seen whenever it becomes active
-        // (including cold-start restore).
-        if let saved = persistence.loadLastScreen() {
+        // Try to restore this backend's last viewed screen. Restoring into a
+        // workspace counts as viewing it, so it marks the workspace seen —
+        // mirroring the FE, where the workspace surface marks seen whenever
+        // it becomes active (including cold-start restore). Only the session's
+        // first window restores; other windows land on the workspace list.
+        if restoresLastScreen, let connectionID = windowConnectionID,
+           let saved = persistence.loadLastScreen(for: connectionID) {
             switch saved.screen {
             case "workspaceDetail":
                 if let workspaceId = saved.workspaceId {
@@ -467,51 +559,83 @@ class AppCoordinator {
         currentScreen = .pairing
     }
 
-    func onPaired() {
-        pairingShowsSavedConnections = false
-        currentScreen = .connecting
-    }
-
     /// Drop the previous daemon's workspace data so no stale rows are shown
     /// after reconnecting, and so ConnectingView's waitForWorkspaceData
     /// (which polls lastUpdated == nil) genuinely waits for the new daemon.
     private func resetWorkspaceStore() {
-        WorkspaceStore.shared.workspaces = []
-        WorkspaceStore.shared.lastUpdated = nil
+        workspaceStore.workspaces = []
+        workspaceStore.lastUpdated = nil
     }
 
-    /// Switch to another saved connection: drop the live connection, clear the
-    /// saved screen state, make the target connection active, and reconnect.
-    func onSwitchConnection(id: UUID) {
+    /// Re-dial this window's own backend after its live session connection
+    /// was used to pair a different one (onPaired's bound multi-window
+    /// route): drop the hijacked socket and the other daemon's workspace
+    /// data, then restart the attempt — ConnectingView dials from
+    /// windowConnection, this window's own saved record.
+    private func redialWindowBackend() {
         hasEverConnected = false
         isDisconnected = false
-        ConnectionManager.shared.disconnect()
+        connection.disconnect()
         resetWorkspaceStore()
-        persistence.clearLastScreen()
+        connectionAttemptId += 1
+        currentScreen = .connecting
+    }
+
+    /// In-place route-out for a backend this window may no longer show —
+    /// Log Off, deleting this window's connection, or a synced tombstone:
+    /// drop the live connection and land on the pairing surface, offering
+    /// any remaining saved connections. In the running app the window root's
+    /// removal observation supersedes this (it closes the window or rebinds
+    /// it to a fresh pairing session); this in-place routing covers windows
+    /// without a root hook (tests, previews).
+    private func exitRemovedBackend() {
+        hasEverConnected = false
+        isDisconnected = false
+        connection.disconnect()
+        resetWorkspaceStore()
+        if let connectionID = windowConnectionID {
+            persistence.clearLastScreen(for: connectionID)
+        }
+        selectedWorkspaceId = nil
+        pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
+        currentScreen = .pairing
+    }
+
+    /// Switch this window to another saved connection. Marks the target as
+    /// the last-used backend and clears its saved screen state (a switch
+    /// lands on the workspace list, as before), then routes to its window
+    /// via the root's retarget hook (rebind in place on single-window
+    /// platforms; open/raise where multiple windows are supported). Without
+    /// a hook (tests, previews) falls back to dialing in place.
+    func onSwitchConnection(id: UUID) {
         persistence.setActiveConnection(id: id)
+        persistence.clearLastScreen(for: id)
+        if let retargetWindow {
+            retargetWindow(BackendID(id))
+            return
+        }
+        hasEverConnected = false
+        isDisconnected = false
+        connection.disconnect()
+        resetWorkspaceStore()
         selectedWorkspaceId = nil
         pairingShowsSavedConnections = false
         connectionAttemptId += 1
         currentScreen = .connecting
     }
 
-    /// Delete a saved connection. Deleting the active one disconnects and routes
-    /// like Log Off: pairing surface, with the remaining saved connections
-    /// offered when any are left.
+    /// Delete a saved connection. Any window on the deleted backend —
+    /// including this one — leaves it via the registry's removal mark
+    /// (window model v2: the window root closes the window, or rebinds a
+    /// last remaining window to the pairing surface).
     func onDeleteConnection(id: UUID) {
-        let wasActive = persistence.activeConnection()?.id == id
+        let wasThisWindows = windowConnectionID == id
         persistence.deleteConnection(id: id)
-        let hasRemaining = !persistence.loadConnections().isEmpty
-        if wasActive {
-            hasEverConnected = false
-            isDisconnected = false
-            ConnectionManager.shared.disconnect()
-            resetWorkspaceStore()
-            persistence.clearLastScreen()
-            selectedWorkspaceId = nil
-            pairingShowsSavedConnections = hasRemaining
-            currentScreen = .pairing
-        } else if !hasRemaining {
+        persistence.clearLastScreen(for: id)
+        sessionRegistry.markBackendRemoved(BackendID(id))
+        if wasThisWindows {
+            exitRemovedBackend()
+        } else if persistence.loadConnections().isEmpty {
             pairingShowsSavedConnections = false
         }
     }
@@ -520,21 +644,17 @@ class AppCoordinator {
         currentScreen = .settings
     }
 
-    /// Log Off forgets the active connection only. If other saved connections
-    /// remain, the pairing surface is shown with those connections available;
-    /// otherwise it behaves like first-run pairing.
+    /// Log Off forgets this window's backend only. Every window on the
+    /// forgotten backend leaves it via the registry's removal mark (the
+    /// window root closes it, or rebinds a last remaining window to the
+    /// pairing surface, offering any remaining saved connections).
     func onLogOff() {
-        hasEverConnected = false
-        isDisconnected = false
-        ConnectionManager.shared.disconnect()
-        resetWorkspaceStore()
-        if let active = persistence.activeConnection() {
-            persistence.deleteConnection(id: active.id)
+        if let record = windowConnection {
+            persistence.deleteConnection(id: record.id)
+            persistence.clearLastScreen(for: record.id)
+            sessionRegistry.markBackendRemoved(BackendID(record.id))
         }
-        persistence.clearLastScreen()
-        selectedWorkspaceId = nil
-        pairingShowsSavedConnections = !persistence.loadConnections().isEmpty
-        currentScreen = .pairing
+        exitRemovedBackend()
     }
 
     func onSelectWorkspace(_ workspaceId: String) {
@@ -596,7 +716,9 @@ class AppCoordinator {
     /// Navigates back to the workspace list and clears all saved screen state for that workspace.
     func handleMissingWorkspace(workspaceId: String) {
         persistence.clearWorkspaceScreen(workspaceId: workspaceId)
-        persistence.clearLastScreen()
+        if let connectionID = windowConnectionID {
+            persistence.clearLastScreen(for: connectionID)
+        }
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
     }
@@ -604,10 +726,12 @@ class AppCoordinator {
     func onBackToWorkspaceList() {
         selectedWorkspaceId = nil
         currentScreen = .workspaceList
+        guard restoresLastScreen, let connectionID = windowConnectionID else { return }
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceList", workspaceId: nil,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: connectionID)
     }
 
     func onSelectAgent(_ agentId: String, workspaceId: String, agentName: String) {
@@ -656,6 +780,9 @@ class AppCoordinator {
     // MARK: - Screen Persistence
 
     private func saveCurrentScreen() {
+        // Windows without the restoration claim must not overwrite the
+        // restoring window's saved navigation (spec decision 1b).
+        guard restoresLastScreen else { return }
         let saved: PersistenceManager.SavedScreen
         switch currentScreen {
         case .workspaceDetail(let workspaceId):
@@ -673,7 +800,8 @@ class AppCoordinator {
         default:
             return
         }
-        persistence.saveLastScreen(saved)
+        guard let connectionID = windowConnectionID else { return }
+        persistence.saveLastScreen(saved, for: connectionID)
     }
 
     /// Validates that a restored agent still exists. Only a definitive not-found falls back —

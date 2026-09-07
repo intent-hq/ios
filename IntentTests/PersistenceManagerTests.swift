@@ -668,6 +668,42 @@ struct ConnectionPersistenceTests {
         }
     }
 
+    // MARK: - Launch-seed fallback (window model v2)
+
+    @Test func lastUsedConnectionPrefersLastUsedPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        pm.touchLastConnected(id: b.id)
+        pm.setActiveConnection(id: a.id)
+
+        #expect(pm.lastUsedConnection()?.id == a.id,
+                "The last-used pointer wins over recency when its record exists")
+    }
+
+    @Test func lastUsedConnectionFallsBackToMostRecentlyConnected() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        _ = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        let c = pm.upsertConnection(StoredConnection(server: makeServer(port: 3), token: "c"))
+        pm.touchLastConnected(id: c.id)
+        pm.touchLastConnected(id: b.id)
+
+        #expect(pm.lastUsedConnection()?.id == b.id,
+                "Without a pointer the most recently connected record wins")
+    }
+
+    @Test func lastUsedConnectionIsNilWithoutSavedConnections() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        #expect(pm.lastUsedConnection() == nil)
+    }
+
     // MARK: - Migration
 
     @Test func migratesLegacyKeychainPairing() throws {
@@ -844,6 +880,81 @@ struct ConnectionPersistenceTests {
         pm.clearPairing()
         #expect(pm.loadPairing() == nil)
         #expect(pm.loadConnections().map(\.id) == [other.id])
+    }
+}
+
+/// Keyed last-screen persistence (window model v2: one slot per backend
+/// connection) plus migration of the legacy single-slot screen. Each test
+/// gets its own UserDefaults suite and in-memory keychain, removed again in
+/// deinit.
+@Suite(.serialized)
+final class LastScreenPersistenceTests {
+
+    private let pm: PersistenceManager
+    private let suiteName: String
+
+    init() {
+        _ = TestKeychainStorage.installed
+        suiteName = "LastScreenPersistenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        pm = PersistenceManager(
+            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+    }
+
+    deinit {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+
+    private func makeScreen(workspaceId: String) -> PersistenceManager.SavedScreen {
+        PersistenceManager.SavedScreen(
+            screen: "workspaceDetail", workspaceId: workspaceId,
+            agentId: nil, agentName: nil, noteId: nil, noteTitle: nil)
+    }
+
+    @Test func roundTripIsKeyedPerConnection() {
+        let a = UUID()
+        let b = UUID()
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+
+        #expect(pm.loadLastScreen(for: a)?.workspaceId == "ws-a")
+        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
+        #expect(pm.loadLastScreen(for: UUID()) == nil)
+    }
+
+    @Test func clearRemovesOnlyThatConnectionsSlot() {
+        let a = UUID()
+        let b = UUID()
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+
+        pm.clearLastScreen(for: a)
+
+        #expect(pm.loadLastScreen(for: a) == nil)
+        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
+    }
+
+    @Test func legacySingleSlotMigratesToTheActiveConnection() {
+        let active = pm.upsertConnection(StoredConnection(
+            server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),
+            token: "t"))
+        pm.setActiveConnection(id: active.id)
+        pm.defaults.set("workspaceDetail", forKey: "lastScreen")
+        pm.defaults.set("ws-legacy", forKey: "lastWorkspaceId")
+
+        // A different connection must not adopt the legacy slot.
+        #expect(pm.loadLastScreen(for: UUID()) == nil)
+
+        // The connection that was active adopts the legacy slot once, and
+        // the legacy keys are cleared so it cannot migrate twice.
+        let migrated = pm.loadLastScreen(for: active.id)
+        #expect(migrated?.screen == "workspaceDetail")
+        #expect(migrated?.workspaceId == "ws-legacy")
+        #expect(pm.defaults.string(forKey: "lastScreen") == nil,
+                "The legacy slot must be cleared after migration")
+        #expect(pm.loadLastScreen(for: active.id)?.workspaceId == "ws-legacy",
+                "The migrated screen must persist under the keyed slot")
     }
 }
 

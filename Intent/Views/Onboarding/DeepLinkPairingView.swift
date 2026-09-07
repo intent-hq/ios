@@ -10,6 +10,7 @@ import SwiftUI
 /// ws://.
 struct DeepLinkPairingView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) var session
     let payload: PairingPayload
     @State private var isValidating = false
     @State private var errorMessage: String?
@@ -124,7 +125,8 @@ struct DeepLinkPairingView: View {
         pairingTask = Task {
             do {
                 let stored = try await PairingFlow.connect(
-                    payload: payload, certFingerprint: certFingerprint)
+                    payload: payload, certFingerprint: certFingerprint,
+                    connectionManager: session.connection)
                 guard !Task.isCancelled else { return }
                 coordinator.onDeepLinkPaired(stored)
             } catch {

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ConnectionFailureView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     let errorMessage: String
     var isCertMismatch: Bool = false
@@ -47,8 +47,8 @@ struct ConnectionFailureView: View {
                     // path this lists all mismatching hosts (not just one);
                     // during auto-retry it is the passive list while retries
                     // continue on the remaining hosts.
-                    if !connectionManager.certMismatches.isEmpty {
-                        CertMismatchListView(mismatches: connectionManager.certMismatches)
+                    if !session.connection.certMismatches.isEmpty {
+                        CertMismatchListView(mismatches: session.connection.certMismatches)
                     }
 
                     // Auto-retry progress
@@ -123,7 +123,7 @@ struct ConnectionFailureView: View {
         .onAppear {
             savedConnections = ConnectionFailureView.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
-                activeId: PersistenceManager.shared.activeConnection()?.id)
+                activeId: coordinator.backendID?.connectionID)
             if !isCertMismatch {
                 startAutoRetry()
             }
@@ -142,8 +142,21 @@ struct ConnectionFailureView: View {
         message.localizedCaseInsensitiveContains("certificate")
     }
 
-    /// Saved connections other than the currently failing active one,
-    /// most recently used first.
+    /// The saved record auto-retry dials: this window's own bound
+    /// connection resolved from the saved list — never the global pairing
+    /// record, so a retry success reconnects this window's backend instead
+    /// of retargeting it at the last-used one (window model v2). Nil —
+    /// unbound window, or the record was deleted mid-failure — means there
+    /// is nothing to dial.
+    static func autoRetryConnection(
+        connections: [StoredConnection], windowConnectionID: UUID?
+    ) -> StoredConnection? {
+        guard let windowConnectionID else { return nil }
+        return connections.first { $0.id == windowConnectionID }
+    }
+
+    /// Saved connections other than this window's currently failing bound
+    /// one, most recently used first.
     static func alternativeConnections(
         connections: [StoredConnection], activeId: UUID?
     ) -> [StoredConnection] {
@@ -202,19 +215,25 @@ struct ConnectionFailureView: View {
                 try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { break }
 
-                // Try to connect
-                guard let pairing = PersistenceManager.shared.loadPairing() else {
-                    coordinator.currentScreen = .pairing
+                // Dial this window's own bound record (re-read each
+                // attempt so rotated tokens synced mid-retry are used);
+                // a missing record routes to pairing instead of dialing
+                // another backend's.
+                guard let record = ConnectionFailureView.autoRetryConnection(
+                    connections: PersistenceManager.shared.loadConnections(),
+                    windowConnectionID: coordinator.backendID?.connectionID)
+                else {
+                    coordinator.onReconnect()
                     return
                 }
 
                 do {
-                    try await ConnectionManager.shared.connect(
-                        hosts: pairing.server.hosts,
-                        port: pairing.server.port,
-                        token: pairing.token,
-                        certFingerprint: pairing.server.certFingerprint,
-                        tcAddress: pairing.server.tcAddress
+                    try await session.connection.connect(
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
                     )
                     // A cancelled retry must never route: the user may have
                     // switched to another saved connection while this connect
@@ -233,15 +252,17 @@ struct ConnectionFailureView: View {
 }
 
 #Preview("Connection Failed") {
+    let session = BackendSessionRegistry.shared.makePairingSession()
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.makeCoordinator())
 }
 
 #Preview("Connection Failed - Dark") {
+    let session = BackendSessionRegistry.shared.makePairingSession()
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
 

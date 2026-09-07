@@ -6,6 +6,7 @@ struct UserMessageView: View {
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     @Binding var isAgentMessageExpanded: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(BackendSession.self) private var session
 
     private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
 
@@ -146,7 +147,8 @@ struct UserMessageView: View {
     }
 
     private var workspaceRepo: String? {
-        guard let workspace = WorkspaceStore.shared.workspaces.first(where: { $0.id == workspaceId }),
+        guard let workspace = session.workspaceStore.workspaces.first(
+                where: { $0.id == workspaceId }),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"

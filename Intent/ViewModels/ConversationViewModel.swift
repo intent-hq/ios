@@ -4,16 +4,19 @@ import SwiftUI
 
 @MainActor
 @Observable class ConversationViewModel {
-    var store = ConversationStore() {
+    var store: ConversationStore {
         didSet {
             oldValue.onStreamingChanged = nil
             observeStreaming()
         }
     }
     /// Live background hooks for this conversation's workspace (PROTOCOL §5.40).
-    var hookStore = BackgroundHookStore()
+    var hookStore: BackgroundHookStore
     /// Live PR monitors for this conversation's workspace (PROTOCOL §5.42).
-    var monitoredPrStore = MonitoredPrStore()
+    var monitoredPrStore: MonitoredPrStore
+
+    /// The window's backend connection, injected from its `BackendSession`.
+    @ObservationIgnored private let connection: any ConnectionManagerRouting
 
     let agentId: String
     let workspaceId: String
@@ -88,7 +91,7 @@ import SwiftUI
     var specialistName: String?
     var specialistDescription: String?
 
-    private let attachmentPipeline = ConversationAttachmentPipeline()
+    private let attachmentPipeline: ConversationAttachmentPipeline
     var pendingImages: [UIImage] {
         get { attachmentPipeline.pendingImages }
         set { attachmentPipeline.pendingImages = newValue }
@@ -122,10 +125,19 @@ import SwiftUI
         set { attachmentPipeline.uploadService = newValue }
     }
 
-    init(agentId: String, workspaceId: String, agentName: String) {
+    init(
+        agentId: String, workspaceId: String, agentName: String,
+        connection: any ConnectionManagerRouting,
+        uploadService: AttachmentUploadService
+    ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
+        self.connection = connection
+        self.store = ConversationStore(connectionManager: connection)
+        self.hookStore = BackgroundHookStore(connectionManager: connection)
+        self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
+        self.attachmentPipeline = ConversationAttachmentPipeline(uploadService: uploadService)
 
         // Restore saved draft
         self.messageText = PersistenceManager.shared.loadDraft(
@@ -297,7 +309,7 @@ import SwiftUI
 
     func stopAgent(agentId: String) async {
         do {
-            let _ = try await ConnectionManager.shared.request(
+            let _ = try await connection.request(
                 "agent.stop", params: ["agentId": agentId])
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Failed to stop agent: \(error)")
@@ -313,7 +325,7 @@ import SwiftUI
     /// Fetch the agent's current model and specialist from the backend.
     private func fetchCurrentModel() async {
         do {
-            let result = try await ConnectionManager.shared.request(
+            let result = try await connection.request(
                 "agent.get",
                 params: ["agentId": agentId]
             )
@@ -336,7 +348,7 @@ import SwiftUI
     /// Fetch specialist name and description via specialist.list
     private func fetchSpecialistInfo(specialistId: String) async {
         do {
-            let result = try await ConnectionManager.shared.request("specialist.list")
+            let result = try await connection.request("specialist.list")
             if let dict = result as? [String: Any],
                let items = dict["specialists"] as? [[String: Any]] {
                 if let match = items.first(where: { ($0["id"] as? String) == specialistId }) {
@@ -492,7 +504,7 @@ import SwiftUI
     }
 
     func renameAgent(_ newName: String) async throws {
-        let _ = try await ConnectionManager.shared.request(
+        let _ = try await connection.request(
             "agent.rename",
             params: [
                 "agentId": agentId,

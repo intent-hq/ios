@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @AppStorage("appThemePreference") private var themePreference: String = "system"
@@ -20,7 +20,9 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
 
-                if let connection = PersistenceManager.shared.activeConnection() {
+                // Window-scoped: a pinned window shows (and logs off) its own
+                // backend, never the default session's active connection.
+                if let connection = coordinator.windowConnection {
                     Section("Connected To") {
                         HStack(spacing: Constants.Settings.connectionRowSpacing) {
                             Image(systemName: "desktopcomputer")
@@ -48,8 +50,8 @@ struct SettingsView: View {
                             }
                         }
 
-                        if !connectionManager.certMismatches.isEmpty {
-                            CertMismatchListView(mismatches: connectionManager.certMismatches)
+                        if !session.connection.certMismatches.isEmpty {
+                            CertMismatchListView(mismatches: session.connection.certMismatches)
                         }
                     }
                 }
@@ -91,15 +93,17 @@ struct SettingsView: View {
 }
 
 #Preview("Settings") {
+    let session = BackendSessionRegistry.shared.makePairingSession()
     SettingsView()
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.makeCoordinator())
 }
 
 #Preview("Settings - Dark") {
+    let session = BackendSessionRegistry.shared.makePairingSession()
     SettingsView()
-        .environment(AppCoordinator())
-        .environment(ConnectionManager.shared)
+        .environment(session)
+        .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
 

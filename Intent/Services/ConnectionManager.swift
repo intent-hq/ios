@@ -152,7 +152,10 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// a loopback forwarder.
     nonisolated static let tunnelCandidateLabel = "tailcat-tunnel"
 
-    private init() {
+    /// Internal (not private) so `BackendSessionRegistry` can construct one
+    /// additional instance per pinned backend session; `.shared` remains the
+    /// process-wide default used by the default session and existing code.
+    init() {
         connectionStateSubject = CurrentValueSubject(connectionState)
         certMismatchSubject = CurrentValueSubject(certMismatchDetected)
         certMismatchesSubject = CurrentValueSubject(certMismatches)

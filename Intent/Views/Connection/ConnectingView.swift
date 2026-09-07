@@ -7,15 +7,15 @@ import SwiftUI
 /// observed any) and owns the connection attempt.
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
 
     var body: some View {
         VStack(spacing: 12) {
             Spacer()
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
-            if !connectionManager.certMismatches.isEmpty {
-                CertMismatchListView(mismatches: connectionManager.certMismatches)
+            if !session.connection.certMismatches.isEmpty {
+                CertMismatchListView(mismatches: session.connection.certMismatches)
                     .padding(.horizontal, 32)
             }
             ProgressView()
@@ -37,19 +37,27 @@ struct ConnectingView: View {
             // Demo/screenshot mode: no daemon. Mark the connection live so the
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
-            ConnectionManager.shared.connectionState = .connected
+            session.connection.connectionState = .connected
             await waitForWorkspaceData(timeout: Constants.Connecting.workspaceLoadTimeout)
             coordinator.onConnectionSuccess()
             return
         }
 
-        guard let connection = PersistenceManager.shared.activeConnection() else {
-            coordinator.currentScreen = .pairing
+        guard let connection = coordinator.windowConnection else {
+            if coordinator.backendID != nil {
+                // The bound backend's saved connection was deleted out from
+                // under this window; the window root's removal observation
+                // closes or rebinds it.
+                coordinator.onConnectionFailed(
+                    error: String(localized: "This connection is no longer saved."))
+            } else {
+                coordinator.currentScreen = .pairing
+            }
             return
         }
 
         do {
-            try await ConnectionManager.shared.connect(
+            try await session.connection.connect(
                 hosts: connection.server.hosts,
                 port: connection.server.port,
                 token: connection.token,
@@ -72,12 +80,13 @@ struct ConnectingView: View {
         }
     }
 
-    /// Waits for `WorkspaceStore.shared.lastUpdated` to become non-nil,
-    /// indicating that workspace data has been fetched. Gives up after
-    /// `timeout` seconds so the app never gets stuck on the loading screen.
+    /// Waits for the session's `WorkspaceStore.lastUpdated` to become
+    /// non-nil, indicating that workspace data has been fetched. Gives up
+    /// after `timeout` seconds so the app never gets stuck on the loading
+    /// screen.
     private func waitForWorkspaceData(timeout: TimeInterval) async {
         let deadline = Date().addingTimeInterval(timeout)
-        while WorkspaceStore.shared.lastUpdated == nil && Date() < deadline {
+        while session.workspaceStore.lastUpdated == nil && Date() < deadline {
             try? await Task.sleep(for: Constants.Connecting.workspacePollInterval)
         }
     }

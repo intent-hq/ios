@@ -483,3 +483,51 @@ struct WorkspaceStorePublishOrderTests {
     }
 }
 
+// MARK: - Per-connection routing
+
+/// Stores constructed over distinct injected connections (one per pinned
+/// backend session) must fetch, subscribe, and publish independently.
+@MainActor
+struct WorkspaceStoreConnectionRoutingTests {
+
+    /// Poll (bounded) until the condition holds — avoids fixed-sleep
+    /// flakiness for assertions on Task-spawned work.
+    private func waitFor(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
+    @Test func storesOverDistinctConnectionsStayIsolated() async throws {
+        let fakeA = FakeConnectionManager()
+        fakeA.responseMap["workspace.list"] = [
+            "workspaces": [["id": "ws-a", "title": "Backend A"]]]
+        fakeA.responseMap["workspace.subscribe"] = ["subscriptionId": "sub-a"]
+        let fakeB = FakeConnectionManager()
+        fakeB.responseMap["workspace.list"] = [
+            "workspaces": [["id": "ws-b", "title": "Backend B"]]]
+        fakeB.responseMap["workspace.subscribe"] = ["subscriptionId": "sub-b"]
+        let storeA = WorkspaceStore(connectionManager: fakeA)
+        let storeB = WorkspaceStore(connectionManager: fakeB)
+
+        fakeA.simulateConnect()
+        try await waitFor { storeA.workspaces.map(\.id) == ["ws-a"] }
+
+        #expect(storeA.workspaces.map(\.id) == ["ws-a"])
+        #expect(storeB.workspaces.isEmpty)
+        #expect(!fakeB.didCallMethod("workspace.list"))
+
+        fakeB.simulateConnect()
+        try await waitFor { storeB.workspaces.map(\.id) == ["ws-b"] }
+
+        #expect(storeB.workspaces.map(\.id) == ["ws-b"])
+        #expect(storeA.workspaces.map(\.id) == ["ws-a"],
+                "Store A must be untouched by store B's connection")
+        #expect(fakeA.hasSubscriptionHandler(id: "sub-a"))
+        #expect(fakeB.hasSubscriptionHandler(id: "sub-b"))
+        #expect(!fakeA.hasSubscriptionHandler(id: "sub-b"))
+        #expect(!fakeB.hasSubscriptionHandler(id: "sub-a"))
+    }
+}
+

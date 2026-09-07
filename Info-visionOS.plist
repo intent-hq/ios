@@ -21,6 +21,14 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Multi-scene support for the pinned-backend windows
+	     (WindowGroup(for: BackendID.self)) on visionOS and iPad. iPhone
+	     never offers multiple scenes, so its behaviour is unchanged. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -36,6 +36,7 @@ struct QRScannerView: View {
 #else
 struct QRScannerView: View {
     @Environment(AppCoordinator.self) var coordinator
+    @Environment(BackendSession.self) var session
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     /// When set, pairing success is reported to the presenting context instead
@@ -214,12 +215,13 @@ struct QRScannerView: View {
         Task {
             do {
                 let stored = try await PairingFlow.connect(
-                    payload: payload, certFingerprint: certFingerprint)
+                    payload: payload, certFingerprint: certFingerprint,
+                    connectionManager: session.connection)
                 dismiss()
                 if let onPaired {
                     onPaired(stored)
                 } else {
-                    coordinator.onConnectionSuccess()
+                    coordinator.onPaired(stored)
                 }
             } catch {
                 errorAutoClearID = nil

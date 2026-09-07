@@ -43,10 +43,14 @@ enum PairingFlow {
     /// via ConnectionPairing.finalize. Every pairing path goes through here
     /// with a non-nil fingerprint (from the payload or the trust-confirmed
     /// probe), so pairing can never fall back to plain ws://.
+    /// `connectionManager` is the window session's own connection (window
+    /// model v2: there is no default session), so the pairing dials the
+    /// connection the presenting window will keep using.
     static func connect(
-        payload: PairingPayload, certFingerprint: String
+        payload: PairingPayload, certFingerprint: String,
+        connectionManager: any SessionConnectionManaging
     ) async throws -> StoredConnection {
-        try await ConnectionManager.shared.connect(
+        try await connectionManager.connect(
             hosts: payload.hosts, port: payload.port, token: payload.token,
             certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
         // A cancelled pairing (deep-link sheet dismissed mid-flight) must
@@ -54,13 +58,14 @@ enum PairingFlow {
         // and the just-established authenticated socket must not be left
         // dangling with no UI reflecting it.
         if Task.isCancelled {
-            await ConnectionManager.shared.disconnect()
+            await connectionManager.disconnect()
             throw CancellationError()
         }
         let server = PairedServer(
             hosts: payload.hosts, port: payload.port, name: "Intent",
             pairedAt: Date(), certFingerprint: certFingerprint,
             tcAddress: payload.tcAddress)
-        return await ConnectionPairing.finalize(server: server, token: payload.token)
+        return await ConnectionPairing.finalize(
+            server: server, token: payload.token, connection: connectionManager)
     }
 }

@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 @testable import Intent
 
@@ -94,5 +95,54 @@ struct WorkspaceDetailViewTests {
         for count in [progress.completed, progress.inProgress, progress.remaining] {
             #expect(progress.segmentWidth(for: count, in: 1, spacing: 4) == 0)
         }
+    }
+
+    // MARK: - Session store routing (multi-window state split)
+
+    /// A backend-bound session composed over a fake backend connection; the
+    /// coordinator factory is never invoked by these tests.
+    @MainActor
+    private func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: BackendID(UUID()),
+            connection: connection,
+            workspaceStore: WorkspaceStore(forTesting: true),
+            coordinatorFactory: { _ in fatalError("coordinator is not built in these tests") },
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(
+                connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter(playSound: {}))
+    }
+
+    /// A pinned window's workspace detail must fetch/observe agents and
+    /// notes over its own session's backend, never the default one.
+    @MainActor
+    @Test func workspaceDetailStoresRouteOverTheSessionConnection() {
+        let fake = FakeConnectionManager()
+        let view = WorkspaceDetailView(
+            workspaceId: "ws-1", session: makePinnedSession(connection: fake))
+
+        #expect(view.agentStore.connectionManager === fake)
+        #expect(view.noteStore.connectionManager === fake)
+        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
+    }
+
+    /// Same contract for the note detail: its note/agent stores are bound
+    /// to the session that opened the note.
+    @MainActor
+    @Test func noteDetailStoresRouteOverTheSessionConnection() {
+        let fake = FakeConnectionManager()
+        let view = NoteDetailView(
+            noteId: "n-1", workspaceId: "ws-1", noteTitle: "Note",
+            session: makePinnedSession(connection: fake))
+
+        #expect(view.noteStore.connectionManager === fake)
+        #expect(view.agentStore.connectionManager === fake)
+        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
     }
 }

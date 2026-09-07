@@ -2,11 +2,11 @@ import SwiftUI
 
 struct DisconnectedView: View {
     @Environment(AppCoordinator.self) var coordinator
-    @Environment(ConnectionManager.self) var connectionManager
+    @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
 
     private var attemptNumber: Int {
-        if case .reconnecting(let attempt) = connectionManager.connectionState {
+        if case .reconnecting(let attempt) = session.connection.connectionState {
             return attempt
         }
         return 0
@@ -35,8 +35,10 @@ struct DisconnectedView: View {
                     .font(.title2.bold())
                     .foregroundStyle(Theme.foreground(for: colorScheme))
 
-                if let pairing = PersistenceManager.shared.loadPairing() {
-                    Text("Reconnecting to \(pairing.server.name)...")
+                // Window-scoped: name this window's bound backend, never the
+                // global pairing record (another window's backend).
+                if let connection = coordinator.windowConnection {
+                    Text("Reconnecting to \(connection.server.name)...")
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
@@ -55,15 +57,15 @@ struct DisconnectedView: View {
                 // Note: no coordinator path currently routes to the
                 // .disconnected screen, so this renders only if that screen
                 // gets wired up.
-                if !connectionManager.certMismatches.isEmpty {
-                    CertMismatchListView(mismatches: connectionManager.certMismatches)
+                if !session.connection.certMismatches.isEmpty {
+                    CertMismatchListView(mismatches: session.connection.certMismatches)
                         .padding(.horizontal, 32)
                 }
 
                 Spacer()
 
                 Button(action: {
-                    connectionManager.disconnect()
+                    session.connection.disconnect()
                     coordinator.onLogOff()
                 }) {
                     Text("Log Off")
