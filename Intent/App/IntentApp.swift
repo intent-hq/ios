@@ -247,13 +247,23 @@ struct BackendWindowRoot: View {
 
     /// Close-or-rebind decision for a removed backend: with other windows
     /// open, dismiss this one; the app's last window rebinds to the pairing
-    /// surface instead of leaving zero windows.
+    /// surface instead of leaving zero windows. Sibling windows still
+    /// attached to the removed backend (this window has already detached)
+    /// are excluded from the count: they will run this same decision and
+    /// cannot be relied on to survive, so two windows on the removed
+    /// backend never race both into `.dismiss` and end at zero windows —
+    /// the first to decide rebinds to pairing, and the later one counts it
+    /// as a surviving window and dismisses.
     private func closeRemovedWindow() {
         guard let removedID = backendID else { return }
         let windowScenes = UIApplication.shared.connectedScenes
             .filter { $0 is UIWindowScene }
             .count
-        switch RemovedWindowCloseAction.forOpenWindowCount(windowScenes) {
+        switch RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: windowScenes,
+            attachedRemovedBackendWindows:
+                BackendSessionRegistry.shared.attachmentCount(for: removedID))
+        {
         case .dismiss:
             dismissWindow(value: removedID)
         case .retargetToPairing:
@@ -281,10 +291,18 @@ enum RemovedWindowCloseAction: Equatable {
     case dismiss
     case retargetToPairing
 
-    /// `count` is the number of window scenes connected to the app,
-    /// including the removed window itself.
-    static func forOpenWindowCount(_ count: Int) -> RemovedWindowCloseAction {
-        count > 1 ? .dismiss : .retargetToPairing
+    /// `connectedWindowScenes` is the number of window scenes connected to
+    /// the app, including the removed window itself;
+    /// `attachedRemovedBackendWindows` counts the sibling windows still
+    /// attached to the removed backend (the deciding window has already
+    /// detached). Only windows outside both — scenes that survive the
+    /// removal — justify a dismiss.
+    static func forWindowCounts(
+        connectedWindowScenes: Int,
+        attachedRemovedBackendWindows: Int
+    ) -> RemovedWindowCloseAction {
+        let surviving = connectedWindowScenes - attachedRemovedBackendWindows - 1
+        return surviving > 0 ? .dismiss : .retargetToPairing
     }
 }
 

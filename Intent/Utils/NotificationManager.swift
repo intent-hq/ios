@@ -31,12 +31,14 @@ struct ToastInfo: Equatable {
     var currentToast: ToastInfo?
 
     /// Agent conversations currently on screen, keyed by their session's
-    /// connection id (multi-window: each window shows at most one, but
-    /// several windows can be open at once).
-    @ObservationIgnored private var openAgentIds: [UUID: Set<String>] = [:]
+    /// connection id. Counted (multiset): two windows on the same backend
+    /// can show the same conversation, and closing one must not stop
+    /// suppressing alerts for the surface still visible in the sibling.
+    @ObservationIgnored private var openAgentIds: [UUID: [String: Int]] = [:]
 
     /// Workspace details currently on screen, keyed by connection id.
-    @ObservationIgnored private var openWorkspaceIds: [UUID: Set<String>] = [:]
+    /// Counted for the same sibling-window reason as `openAgentIds`.
+    @ObservationIgnored private var openWorkspaceIds: [UUID: [String: Int]] = [:]
 
     @ObservationIgnored private var dismissTask: Task<Void, Never>?
     @ObservationIgnored private let localNotificationService: LocalNotificationService
@@ -110,7 +112,7 @@ struct ToastInfo: Equatable {
     /// and clear any delivered system notification for the same agent on
     /// the same backend — never another backend's same-id agent.
     func conversationOpened(agentId: String, connectionId: UUID) {
-        openAgentIds[connectionId, default: []].insert(agentId)
+        openAgentIds[connectionId, default: [:]][agentId, default: 0] += 1
         localNotificationService.removeDeliveredNotifications(
             forAgentId: agentId, connectionId: connectionId)
     }
@@ -119,25 +121,32 @@ struct ToastInfo: Equatable {
     /// parent conversation's disappear never clobbers a pushed child's —
     /// or another window's — visibility.
     func conversationClosed(agentId: String, connectionId: UUID) {
-        openAgentIds[connectionId]?.remove(agentId)
+        decrement(&openAgentIds, id: agentId, connectionId: connectionId)
     }
 
     /// A workspace detail became visible in some window.
     func workspaceOpened(workspaceId: String, connectionId: UUID) {
-        openWorkspaceIds[connectionId, default: []].insert(workspaceId)
+        openWorkspaceIds[connectionId, default: [:]][workspaceId, default: 0] += 1
     }
 
     /// Balances `workspaceOpened`.
     func workspaceClosed(workspaceId: String, connectionId: UUID) {
-        openWorkspaceIds[connectionId]?.remove(workspaceId)
+        decrement(&openWorkspaceIds, id: workspaceId, connectionId: connectionId)
+    }
+
+    private func decrement(
+        _ counts: inout [UUID: [String: Int]], id: String, connectionId: UUID
+    ) {
+        guard let count = counts[connectionId]?[id] else { return }
+        counts[connectionId]?[id] = count > 1 ? count - 1 : nil
     }
 
     private func isAgentOpen(_ agentId: String, connectionId: UUID) -> Bool {
-        openAgentIds[connectionId]?.contains(agentId) ?? false
+        (openAgentIds[connectionId]?[agentId] ?? 0) > 0
     }
 
     private func isWorkspaceOpen(_ workspaceId: String, connectionId: UUID) -> Bool {
-        openWorkspaceIds[connectionId]?.contains(workspaceId) ?? false
+        (openWorkspaceIds[connectionId]?[workspaceId] ?? 0) > 0
     }
 
     // MARK: - Selection handlers (per-backend windows)

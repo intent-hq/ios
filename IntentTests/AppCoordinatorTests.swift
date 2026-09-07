@@ -601,13 +601,34 @@ final class AppCoordinatorTests {
     // the window or retargets a last remaining window to the pairing surface.
 
     @Test func removedWindowCloseDismissesWhenOtherWindowsExist() {
-        #expect(RemovedWindowCloseAction.forOpenWindowCount(2) == .dismiss)
-        #expect(RemovedWindowCloseAction.forOpenWindowCount(3) == .dismiss)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 3, attachedRemovedBackendWindows: 0) == .dismiss)
     }
 
     @Test func removedWindowCloseRetargetsLastWindowToPairing() {
-        #expect(RemovedWindowCloseAction.forOpenWindowCount(1) == .retargetToPairing)
-        #expect(RemovedWindowCloseAction.forOpenWindowCount(0) == .retargetToPairing)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 1, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 0, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+    }
+
+    /// Regression: two windows on the removed backend as the app's only
+    /// windows must not race both into `.dismiss` (zero windows). A sibling
+    /// still attached to the removed backend is not a surviving window —
+    /// the first window to decide rebinds to pairing; the later one then
+    /// counts the rebound survivor and dismisses.
+    @Test func removedWindowCloseExcludesSiblingsStillOnRemovedBackend() {
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 1) == .retargetToPairing,
+            "First of two removed-backend windows to decide must become the pairing survivor")
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss,
+            "The later window counts the rebound survivor and dismisses")
+        #expect(RemovedWindowCloseAction.forWindowCounts(
+            connectedWindowScenes: 3, attachedRemovedBackendWindows: 1) == .dismiss,
+            "With a window on another backend surviving, every removed-backend window dismisses")
     }
 
     // MARK: - Window retarget policy (window model v2)

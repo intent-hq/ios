@@ -248,6 +248,46 @@ struct NotificationManagerTests {
         #expect(manager.currentToast?.agentId == "agent-1")
     }
 
+    @Test @MainActor func conversationOpenInSiblingWindowKeepsSuppressingAfterOneClose() {
+        // Visibility is counted per (id, connection): two windows on the
+        // SAME backend can show the same conversation, and closing one
+        // must not stop suppressing while the sibling still shows it.
+        let (manager, _) = makeNotificationManager(state: .active)
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
+        manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+        #expect(manager.currentToast == nil,
+                "The conversation is still visible in the sibling window")
+
+        manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+        #expect(manager.currentToast?.agentId == "agent-1",
+                "The last close stops the suppression")
+    }
+
+    @Test @MainActor func workspaceOpenInSiblingWindowKeepsSuppressingAfterOneClose() {
+        // Same counted semantics for workspace-detail visibility.
+        let (manager, _) = makeNotificationManager(state: .active)
+        manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
+        manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
+        manager.workspaceClosed(workspaceId: "workspace-1", connectionId: Self.connectionId)
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+        #expect(manager.currentToast == nil,
+                "The workspace is still visible in the sibling window")
+
+        manager.workspaceClosed(workspaceId: "workspace-1", connectionId: Self.connectionId)
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+        #expect(manager.currentToast?.workspaceId == "workspace-1",
+                "The last close stops the suppression")
+    }
+
     @Test func foregroundDeliveryReplaysFeedbackAndToastBeforeSuppressingBanner() async {
         let center = NotificationManagerFakeCenter()
         let service = LocalNotificationService(center: center)
