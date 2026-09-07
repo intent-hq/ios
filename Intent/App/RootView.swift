@@ -105,14 +105,19 @@ struct RootView: View {
         .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
                    value: String(describing: coordinator.currentScreen))
         .overlay(alignment: .top) {
-            if let toast = notificationManager.currentToast {
+            // On multi-window platforms only the source backend's window
+            // renders the toast (windowPresentsAlert); on iPhone every
+            // toast renders as before. The tap still goes through the
+            // manager's routing so delivery lands on the source backend's
+            // registered handler.
+            if let toast = notificationManager.currentToast,
+               NotificationManager.windowPresentsAlert(
+                   source: toast.sourceBackendID,
+                   windowBackendID: session.backendID,
+                   supportsMultipleWindows: supportsMultipleWindows) {
                 ToastView(
                     toast: toast,
                     onTap: {
-                        // The toast renders in every window; the manager
-                        // routes the tap to the SOURCE backend's window, so
-                        // a tap in another backend's window never navigates
-                        // it cross-backend.
                         notificationManager.dismissToast()
                         notificationManager.routeAgentSelection(
                             agentId: toast.agentId,

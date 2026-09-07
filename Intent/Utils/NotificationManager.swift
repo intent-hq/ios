@@ -253,6 +253,38 @@ struct ToastInfo: Equatable {
         return registeredBackends.isEmpty ? .holdForFirstWindow : .drop
     }
 
+    // MARK: - Presentation routing (per-backend windows)
+
+    /// Pure per-window presentation decision: on multi-window platforms a
+    /// toast renders only in the window bound to its source backend — a
+    /// window on another backend (or a pairing window with no backend)
+    /// shows nothing. Single-window platforms render every toast, keeping
+    /// iPhone behavior unchanged.
+    nonisolated static func windowPresentsAlert(
+        source: BackendID,
+        windowBackendID: BackendID?,
+        supportsMultipleWindows: Bool
+    ) -> Bool {
+        guard supportsMultipleWindows else { return true }
+        return windowBackendID == source
+    }
+
+    /// Pure manager-level decision: whether a foreground alert presents at
+    /// all. On multi-window platforms feedback plays and the toast is
+    /// stored only when the source backend's window is registered — the
+    /// one window that would render it (`windowPresentsAlert`); otherwise
+    /// the alert would be invisible yet clobber another backend's visible
+    /// toast. Single-window platforms always present (unchanged iPhone
+    /// behavior).
+    nonisolated static func alertPresents(
+        source: BackendID,
+        registeredBackends: Set<BackendID>,
+        supportsMultipleWindows: Bool
+    ) -> Bool {
+        guard supportsMultipleWindows else { return true }
+        return registeredBackends.contains(source)
+    }
+
     private func handleForegroundNotification(_ response: LocalNotificationService.Response) {
         guard let agentId = response.agentId,
               let workspaceId = response.workspaceId,
@@ -494,6 +526,9 @@ struct ToastInfo: Equatable {
     // still toasts. The toast is tagged with the concrete source backend
     // (`workspaceStore(for:)` falls back to the default store when the
     // source isn't an observed session — the legacy handler path).
+    // Presentation is window-scoped: on multi-window platforms the alert
+    // (feedback and toast alike) presents only via the source backend's
+    // window (`alertPresents`); other windows see and hear nothing.
     private func presentForegroundAlert(
         agentId: String,
         workspaceId: String,
@@ -502,6 +537,11 @@ struct ToastInfo: Equatable {
         connectionId: UUID
     ) {
         let sourceBackendID = BackendID(connectionId)
+        guard Self.alertPresents(
+            source: sourceBackendID,
+            registeredBackends: Set(agentSelectionHandlers.keys),
+            supportsMultipleWindows: supportsMultipleWindows)
+        else { return }
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {

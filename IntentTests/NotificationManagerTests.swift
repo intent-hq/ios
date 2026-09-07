@@ -514,6 +514,121 @@ struct NotificationManagerTests {
             registeredBackends: [BackendID(UUID())],
             supportsMultipleWindows: false) == .drop)
     }
+
+    // MARK: - Presentation routing (per-backend windows)
+
+    @Test func singleWindowRendersEveryToast() {
+        // iPhone: the sole window renders the toast regardless of its bound
+        // backend — unchanged behavior.
+        #expect(NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: Self.pinnedBackend,
+            supportsMultipleWindows: false))
+        #expect(NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: BackendID(UUID()),
+            supportsMultipleWindows: false))
+        #expect(NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: nil,
+            supportsMultipleWindows: false))
+    }
+
+    @Test func multiWindowRendersToastOnlyInSourceBackendWindow() {
+        #expect(NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: Self.pinnedBackend,
+            supportsMultipleWindows: true))
+        #expect(!NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: BackendID(UUID()),
+            supportsMultipleWindows: true))
+        #expect(!NotificationManager.windowPresentsAlert(
+            source: Self.pinnedBackend,
+            windowBackendID: nil,
+            supportsMultipleWindows: true),
+            "A pairing window (no backend) renders no toasts on multi-window platforms")
+    }
+
+    @Test func singleWindowAlwaysPresentsAlerts() {
+        #expect(NotificationManager.alertPresents(
+            source: Self.pinnedBackend,
+            registeredBackends: [],
+            supportsMultipleWindows: false))
+        #expect(NotificationManager.alertPresents(
+            source: Self.pinnedBackend,
+            registeredBackends: [BackendID(UUID())],
+            supportsMultipleWindows: false))
+    }
+
+    @Test func multiWindowPresentsAlertOnlyWhenSourceWindowRegistered() {
+        #expect(NotificationManager.alertPresents(
+            source: Self.pinnedBackend,
+            registeredBackends: [Self.pinnedBackend, BackendID(UUID())],
+            supportsMultipleWindows: true))
+        #expect(!NotificationManager.alertPresents(
+            source: Self.pinnedBackend,
+            registeredBackends: [BackendID(UUID())],
+            supportsMultipleWindows: true))
+        #expect(!NotificationManager.alertPresents(
+            source: Self.pinnedBackend,
+            registeredBackends: [],
+            supportsMultipleWindows: true))
+    }
+
+    @Test @MainActor func multiWindowAlertPresentsViaRegisteredSourceWindow() {
+        var feedbackCount = 0
+        let (manager, _) = makeNotificationManager(state: .active) {
+            feedbackCount += 1
+        }
+        manager.supportsMultipleWindows = true
+        manager.registerAgentSelectionHandler(
+            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+
+        #expect(feedbackCount == 1)
+        #expect(manager.currentToast?.agentId == "agent-1")
+    }
+
+    @Test @MainActor func multiWindowAlertWithoutSourceWindowPresentsNothing() {
+        // visionOS/iPad: an alert whose source backend has no registered
+        // window plays no feedback and stores no toast — it would render
+        // nowhere and clobber another backend's visible toast.
+        var feedbackCount = 0
+        let (manager, center) = makeNotificationManager(state: .active) {
+            feedbackCount += 1
+        }
+        manager.supportsMultipleWindows = true
+        manager.registerAgentSelectionHandler(for: BackendID(UUID())) { _, _, _, _ in }
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+
+        #expect(feedbackCount == 0)
+        #expect(manager.currentToast == nil)
+        #expect(center.requests.isEmpty)
+    }
+
+    @Test @MainActor func multiWindowSuppressedAlertStillPlaysFeedbackInSourceWindow() {
+        // The connection-scoped suppression downgrade (open conversation →
+        // feedback only) keeps working when the source window is registered.
+        var feedbackCount = 0
+        let (manager, _) = makeNotificationManager(state: .active) {
+            feedbackCount += 1
+        }
+        manager.supportsMultipleWindows = true
+        manager.registerAgentSelectionHandler(
+            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+        manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
+
+        manager.presentIdleAlert(
+            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+
+        #expect(feedbackCount == 1)
+        #expect(manager.currentToast == nil)
+    }
 }
 
 // MARK: - Cross-session aggregation
