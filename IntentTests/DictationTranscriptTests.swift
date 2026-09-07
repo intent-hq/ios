@@ -173,20 +173,25 @@ struct DictationTranscriptTests {
             == .merged("hello world how are you"))
     }
 
-    /// A final result re-delivering the just-committed segment (e.g.
-    /// endAudio after a pause with no new speech) must not append the text
-    /// a second time — but a repeated utterance surfacing as a partial
-    /// first still applies.
-    @Test func duplicateFinalAfterCommitIsDropped() {
+    /// Regression (intent-hq/ios#225 review): the model applies every
+    /// transcription it is handed, including one repeating the previous
+    /// segment's words — dictating the same phrase twice must yield it
+    /// twice, whether the repeat surfaces as a partial or only as a
+    /// segment-ending result. Duplicate suppression of a re-delivered
+    /// final is the controller's job, by segment identity
+    /// (`restartSegment` cancels the finished segment's task, so its late
+    /// finals — even punctuation-corrected — are dropped by generation
+    /// before reaching the model).
+    @Test func repeatedUtteranceAppliesWhetherPartialOrFinal() {
         var session = DictationSession(baseText: "", insertionOffset: 0)
         #expect(session.apply(transcription: "send it", endsSegment: true, to: "")
             == .merged("send it"))
+        // Repeat delivered only as a segment-ending result: still applies.
         #expect(session.apply(transcription: "send it", endsSegment: true, to: "send it")
-            == .merged("send it"))
-        // The same words as a fresh partial are a new utterance, not a
-        // duplicate final: they merge.
-        #expect(session.apply(transcription: "send it", to: "send it")
             == .merged("send it send it"))
+        // Repeat surfacing as a partial first: applies too.
+        #expect(session.apply(transcription: "send it", to: "send it send it")
+            == .merged("send it send it send it"))
     }
 
     /// Typing during dictation still stops the session after a commit —
