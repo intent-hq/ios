@@ -93,14 +93,14 @@ struct SettingsView: View {
 }
 
 #Preview("Settings") {
-    let session = BackendSessionRegistry.shared.defaultSession
+    let session = BackendSessionRegistry.shared.makePairingSession()
     SettingsView()
         .environment(session)
         .environment(session.makeCoordinator())
 }
 
 #Preview("Settings - Dark") {
-    let session = BackendSessionRegistry.shared.defaultSession
+    let session = BackendSessionRegistry.shared.makePairingSession()
     SettingsView()
         .environment(session)
         .environment(session.makeCoordinator())

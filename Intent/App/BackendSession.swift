@@ -37,30 +37,22 @@ extension ConnectionManager: SessionConnectionManaging {}
 /// One backend's runtime state: the connection plus the per-window stores
 /// and loaders from the spec's state split. Sessions are vended by
 /// `BackendSessionRegistry`; this type never reads process-wide singletons —
-/// the registry's live factory composes the object graph (the default
-/// session over the existing `.shared` instances, pinned sessions over
-/// fresh per-backend instances).
+/// the registry's live factory composes fresh per-backend instances (window
+/// model v2: every window is bound to exactly one backend; there is no
+/// default session).
 @MainActor
 @Observable
 final class BackendSession {
-    /// How the session is bound to a backend.
-    enum Kind: Equatable {
-        /// Tracks the active connection and supports in-place switching
-        /// (today's iOS semantics; used by the default window on both
-        /// platforms). Persists for the app's lifetime.
-        case defaultSession
-        /// Bound to one saved backend; exists only while at least one
-        /// visionOS window shows it.
-        case pinned(BackendID)
-    }
-
     /// Builds a per-window coordinator bound to this session's connection and
     /// stores. `claimScreenRestoration` is the coordinator's lazy hook into
     /// `claimScreenRestoration()` below.
     typealias CoordinatorFactory =
         @MainActor (_ claimScreenRestoration: @escaping @MainActor () -> Bool) -> AppCoordinator
 
-    let kind: Kind
+    /// The backend this session is bound to; nil only for the transient
+    /// pairing session backing a window that has no backend yet (first run,
+    /// or a window unbound after its backend was removed).
+    let backendID: BackendID?
     let connection: any SessionConnectionManaging
     let workspaceStore: WorkspaceStore
     let prMonitorsStore: WorkspacePrMonitorsStore
@@ -72,14 +64,8 @@ final class BackendSession {
     private let coordinatorFactory: CoordinatorFactory
     private var screenRestorationClaimed = false
 
-    /// The backend this session is pinned to; nil for the default session.
-    var pinnedBackendID: BackendID? {
-        if case .pinned(let id) = kind { return id }
-        return nil
-    }
-
     init(
-        kind: Kind,
+        backendID: BackendID?,
         connection: any SessionConnectionManaging,
         workspaceStore: WorkspaceStore,
         coordinatorFactory: @escaping CoordinatorFactory,
@@ -89,7 +75,7 @@ final class BackendSession {
         attachmentImageLoader: AttachmentImageLoader,
         attentionCueCenter: WorkspaceAttentionCueCenter
     ) {
-        self.kind = kind
+        self.backendID = backendID
         self.connection = connection
         self.workspaceStore = workspaceStore
         self.coordinatorFactory = coordinatorFactory
@@ -110,18 +96,18 @@ final class BackendSession {
         }
     }
 
-    /// Grants last-screen restoration to the first default-session claimant
-    /// only (spec decision 1b): duplicated default windows and pinned windows
-    /// start at the workspace list and never write last-screen state.
+    /// Grants last-screen restoration to this session's first claimant only:
+    /// the first window on a backend restores that backend's saved screen;
+    /// duplicated windows start at the workspace list. Pairing sessions
+    /// (nil backendID) have no backend to restore.
     func claimScreenRestoration() -> Bool {
-        guard kind == .defaultSession, !screenRestorationClaimed else { return false }
+        guard backendID != nil, !screenRestorationClaimed else { return false }
         screenRestorationClaimed = true
         return true
     }
 
     /// Disconnects the backend connection. Called by the registry when the
-    /// last window detaches from a pinned session; never called on the
-    /// default session.
+    /// last window detaches from the session.
     func teardown() {
         connection.disconnect()
     }

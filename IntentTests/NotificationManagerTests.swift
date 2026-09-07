@@ -386,10 +386,9 @@ struct NotificationManagerTests {
 // MARK: - Cross-session aggregation
 
 /// NotificationManager stays a process-wide singleton but must alert for
-/// every live backend session: pinned sessions attach observers on their
-/// own connections, events are tagged with the source `BackendID`, and a
-/// pinned session on the backend the default connection already tracks is
-/// deduplicated.
+/// every live backend session: backend sessions attach observers on their
+/// own connections and events are tagged with the source `BackendID`
+/// (window model v2: there is no default session to deduplicate against).
 @Suite("NotificationManager cross-session aggregation", .serialized)
 @MainActor
 final class NotificationManagerSessionAggregationTests {
@@ -433,12 +432,12 @@ final class NotificationManagerSessionAggregationTests {
     }
 
     private func makeSession(
-        kind: BackendSession.Kind, connection: SessionFakeConnectionManager
+        backendID: BackendID?, connection: SessionFakeConnectionManager
     ) -> BackendSession {
         let workspaceStore = WorkspaceStore(forTesting: true)
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(
-            kind: kind,
+            backendID: backendID,
             connection: connection,
             workspaceStore: workspaceStore,
             coordinatorFactory: { [persistence] claim in
@@ -484,7 +483,7 @@ final class NotificationManagerSessionAggregationTests {
         let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
-        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        let session = makeSession(backendID: backendID, connection: connection)
 
         manager.attachSessionObserver(for: session)
         manager.attachSessionObserver(for: session)
@@ -497,26 +496,26 @@ final class NotificationManagerSessionAggregationTests {
         #expect(connection.eventHandlerCount == 0)
     }
 
-    @Test func attachingDefaultSessionIsNoOp() {
+    @Test func attachingPairingSessionIsNoOp() {
         let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
         let connection = SessionFakeConnectionManager()
-        let session = makeSession(kind: .defaultSession, connection: connection)
+        let session = makeSession(backendID: nil, connection: connection)
 
         manager.attachSessionObserver(for: session)
 
         #expect(connection.eventHandlerCount == 0,
-                "The default session's connection is already observed from init")
+                "A transient pairing session has no backend to observe")
     }
 
-    // MARK: - Pinned-session alerts
+    // MARK: - Backend-session alerts
 
-    @Test func pinnedIdleEventPresentsToastTaggedWithSourceBackend() async throws {
+    @Test func idleEventPresentsToastTaggedWithSourceBackend() async throws {
         let defaultFake = FakeConnectionManager()
         let (manager, center) = makeManager(state: .active, defaultConnection: defaultFake)
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
-        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        let session = makeSession(backendID: backendID, connection: connection)
         manager.attachSessionObserver(for: session)
 
         connection.deliverEvent(
@@ -532,13 +531,13 @@ final class NotificationManagerSessionAggregationTests {
         #expect(center.requests.isEmpty)
     }
 
-    @Test func pinnedIdleEventInBackgroundPostsNotificationScopedToBackend() async throws {
+    @Test func idleEventInBackgroundPostsNotificationScopedToBackend() async throws {
         let (manager, center) = makeManager(
             state: .background, defaultConnection: FakeConnectionManager())
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
-        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        let session = makeSession(backendID: backendID, connection: connection)
         manager.attachSessionObserver(for: session)
 
         connection.deliverEvent(
@@ -552,23 +551,22 @@ final class NotificationManagerSessionAggregationTests {
         #expect(manager.currentToast == nil)
     }
 
-    @Test func pinnedSessionOnActiveBackendIsDeduplicated() async throws {
-        let (manager, center) = makeManager(defaultConnection: FakeConnectionManager())
+    @Test func sessionOnLastUsedBackendStillAlerts() async throws {
+        let (manager, _) = makeManager(defaultConnection: FakeConnectionManager())
         let backendID = BackendID(Self.activeConnectionId)
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
-        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        let session = makeSession(backendID: backendID, connection: connection)
         manager.attachSessionObserver(for: session)
 
         connection.deliverEvent(
             method: "event",
             params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
-        await drainMainQueue()
+        try await waitFor { manager.currentToast != nil }
 
-        #expect(!connection.didCallMethod("agent.list"),
-                "The default handler owns events for the active backend")
-        #expect(manager.currentToast == nil)
-        #expect(center.requests.isEmpty)
+        #expect(connection.didCallMethod("agent.list"),
+                "Every backend session is observed directly (v2: no default handler dedup)")
+        #expect(manager.currentToast?.sourceBackendID == backendID)
     }
 
     @Test func detachedSessionNoLongerAlerts() async throws {
@@ -576,7 +574,7 @@ final class NotificationManagerSessionAggregationTests {
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
-        let session = makeSession(kind: .pinned(backendID), connection: connection)
+        let session = makeSession(backendID: backendID, connection: connection)
         manager.attachSessionObserver(for: session)
         manager.detachSessionObserver(for: backendID)
 

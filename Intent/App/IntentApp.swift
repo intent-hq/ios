@@ -3,23 +3,19 @@ import UIKit
 
 @main
 struct IntentApp: App {
-    /// The default window's session: the registry's default session, whose
-    /// objects every view and view model below reads from the environment.
-    /// This is the app's single root injection site for session state.
-    @State private var session = BackendSessionRegistry.shared.defaultSession
     @AppStorage("appThemePreference") private var themePreference: String = "system"
 
     init() {
         _ = NotificationManager.shared
-        // Aggregate agent alerts across every live backend session: pinned
-        // sessions (visionOS auxiliary windows) attach an observer on
-        // creation and detach on last-window teardown; the default session
-        // is already observed by NotificationManager's own init.
+        // Aggregate agent alerts across every live backend session: each
+        // session attaches an observer on creation and detaches on
+        // last-window teardown (window model v2: there is no default
+        // session; transient pairing sessions carry no backend to observe).
         BackendSessionRegistry.shared.onSessionCreated = { session in
             NotificationManager.shared.attachSessionObserver(for: session)
         }
         BackendSessionRegistry.shared.onSessionTeardown = { session in
-            if let backendID = session.pinnedBackendID {
+            if let backendID = session.backendID {
                 NotificationManager.shared.detachSessionObserver(for: backendID)
             }
         }
@@ -34,8 +30,14 @@ struct IntentApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
-            SessionWindowRoot(session: session)
+        // Window model v2: every window is bound to exactly one backend.
+        // `openWindow(value:)` raises the existing window for a backend or
+        // opens a new one; system restoration reopens the last open windows
+        // with their values. A nil value (plain launch, restoration loss)
+        // resolves to the last-used backend, else runs a transient pairing
+        // session until a pairing completes and rebinds the window.
+        WindowGroup(for: BackendID.self) { $backendID in
+            BackendWindowRoot(backendID: $backendID)
                 .preferredColorScheme(resolvedColorScheme)
                 #if os(visionOS)
                 .frame(
@@ -49,50 +51,46 @@ struct IntentApp: App {
             height: Constants.Root.visionDefaultWindowHeight)
         .windowResizability(.contentMinSize)
         #endif
+    }
+}
 
-        // Pinned-backend windows, opened via openWindow(value:) from the
-        // connections list (visionOS and iPad; iPhone never offers multiple
-        // scenes). Each window attaches the backend's shared session through
-        // the registry and owns its own coordinator via SessionWindowRoot.
-        WindowGroup(for: BackendID.self) { $backendID in
-            Group {
-                if let backendID {
-                    PinnedBackendWindowRoot(backendID: backendID)
-                } else {
-                    // Restoration lost the value: behave as a duplicated
-                    // default window (active-connection semantics).
-                    SessionWindowRoot(session: session)
-                }
-            }
-            .preferredColorScheme(resolvedColorScheme)
-            #if os(visionOS)
-            .frame(
-                minWidth: Constants.Root.visionMinimumWindowWidth,
-                minHeight: Constants.Root.visionMinimumWindowHeight)
-            #endif
-        }
-        #if os(visionOS)
-        .defaultSize(
-            width: Constants.Root.visionDefaultWindowWidth,
-            height: Constants.Root.visionDefaultWindowHeight)
-        .windowResizability(.contentMinSize)
-        #endif
+/// The v2 retarget policy for a switch/pair action performed in a window:
+/// where multiple windows are supported, a bound window never retargets —
+/// the target backend's own window is opened or raised. Single-window
+/// platforms (iPhone; iPad without multi-window) and unbound (pairing)
+/// windows rebind in place.
+enum WindowRetargetRoute: Equatable {
+    case rebindInPlace
+    case openTargetWindow
+
+    static func route(
+        currentBackendID: BackendID?,
+        target: BackendID,
+        supportsMultipleWindows: Bool
+    ) -> WindowRetargetRoute {
+        guard supportsMultipleWindows,
+              let current = currentBackendID,
+              current != target
+        else { return .rebindInPlace }
+        return .openTargetWindow
     }
 }
 
 /// Root of one window (scene): owns that window's `AppCoordinator` so windows
-/// sharing a session navigate independently (spec "State split" / decision 1b).
-/// `@State` keeps one coordinator per scene; the session's restoration claim
-/// is consumed lazily on first use, so coordinators built for discarded view
+/// sharing a session navigate independently (spec "State split"). `@State`
+/// keeps one coordinator per scene; the session's restoration claim is
+/// consumed lazily on first use, so coordinators built for discarded view
 /// constructions never spend it. Scene phase and incoming URLs are handled
 /// here so each window's coordinator sees its own scene's lifecycle.
 struct SessionWindowRoot: View {
     let session: BackendSession
+    let retargetWindow: ((BackendID) -> Void)?
     @State private var coordinator: AppCoordinator
     @Environment(\.scenePhase) private var scenePhase
 
-    init(session: BackendSession) {
+    init(session: BackendSession, retargetWindow: ((BackendID) -> Void)? = nil) {
         self.session = session
+        self.retargetWindow = retargetWindow
         _coordinator = State(initialValue: session.makeCoordinator())
     }
 
@@ -100,6 +98,9 @@ struct SessionWindowRoot: View {
         RootView()
             .environment(session)
             .environment(coordinator)
+            .onAppear {
+                coordinator.retargetWindow = retargetWindow
+            }
             .onOpenURL { url in
                 coordinator.handleIncomingURL(url)
             }
@@ -113,49 +114,82 @@ struct SessionWindowRoot: View {
     }
 }
 
-/// Root of one pinned-backend window: attaches the backend's shared session
-/// through the registry on appear (creating it on first attach, refcounted
-/// across windows) and releases it on disappear so the registry tears the
-/// session down when the last window closes. Guards keep the attach/detach
-/// pair balanced if either callback fires more than once. Navigation is per
-/// window via SessionWindowRoot once the session is attached.
+/// Root of one backend-bound window (window model v2). The scene value is
+/// the binding contract: a bound window attaches its backend's shared
+/// session through the registry (created on first attach, refcounted across
+/// windows) and releases it when the window closes or rebinds, so the
+/// registry tears the session down at zero windows. A nil scene value
+/// (plain launch, restoration loss) is resolved once to the last-used
+/// backend; with none paired the window runs a transient pairing session
+/// until a pairing completes and rebinds it via the retarget hook.
 ///
-/// Backend removal (spec decision 2): when the registry marks this window's
-/// backend removed — user delete, log off, synced tombstone, or (on appear)
-/// a restored window whose saved record no longer exists — the session is
-/// released immediately (dropping the connection via the normal detach path)
-/// and the window dismisses itself via `dismissWindow(value:)`. If the
-/// dismissal cannot be delivered (e.g. this is the app's last window, where
-/// `dismissWindow` is a no-op), the "connection removed" placeholder remains
-/// with a manual Close Window button that itself must work in the last-window
-/// case: it dismisses when other windows exist, otherwise the window adopts
-/// the default session and lands on a usable surface.
-struct PinnedBackendWindowRoot: View {
-    let backendID: BackendID
+/// Backend removal: when the registry marks this window's backend removed —
+/// user delete, log off, synced tombstone, or (on bind) a restored window
+/// whose saved record no longer exists — the session is released
+/// immediately (dropping the connection via the normal detach path) and the
+/// window dismisses itself via `dismissWindow(value:)`; the app's last
+/// window rebinds to the pairing surface instead of leaving zero windows.
+/// If a dismissal cannot be delivered, the "connection removed" placeholder
+/// remains with a manual Close Window button applying the same decision.
+struct BackendWindowRoot: View {
+    @Binding var backendID: BackendID?
     @State private var session: BackendSession?
-    @State private var showsDefaultSession = false
+    @State private var pairingSession: BackendSession?
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
+    @Environment(\.openWindow) private var openWindow
 
     private var isRemoved: Bool {
-        BackendSessionRegistry.shared.isBackendRemoved(backendID)
+        guard let backendID else { return false }
+        return BackendSessionRegistry.shared.isBackendRemoved(backendID)
     }
 
     var body: some View {
         Group {
-            if showsDefaultSession {
-                SessionWindowRoot(session: BackendSessionRegistry.shared.defaultSession)
-            } else if isRemoved {
+            if isRemoved {
                 RemovedBackendPlaceholderView(onClose: closeRemovedWindow)
-            } else if let session {
-                SessionWindowRoot(session: session)
+            } else if let session = session ?? pairingSession {
+                SessionWindowRoot(session: session, retargetWindow: retarget)
+                    // A rebind must build a fresh window root (new
+                    // coordinator over the new session), not update the old
+                    // one in place.
+                    .id(ObjectIdentifier(session))
             } else {
                 Color.clear
             }
         }
         .onAppear {
-            // A window restored after its backend was removed while the app
-            // was not running: mark it so the shared auto-close path below
-            // takes over.
+            if backendID == nil,
+               let lastUsed = PersistenceManager.shared.lastUsedConnection() {
+                // Plain launch (no restored scene value): bind to the
+                // last-used backend; bindCurrentBackend runs via onChange.
+                backendID = BackendID(lastUsed.id)
+                return
+            }
+            bindCurrentBackend()
+        }
+        .onChange(of: backendID) { oldValue, _ in
+            releaseSession(oldValue)
+            bindCurrentBackend()
+        }
+        // initial: true covers a mark set before this window ever rendered
+        // (removal racing a window that is still opening or being restored).
+        .onChange(of: isRemoved, initial: true) { _, removed in
+            guard removed else { return }
+            releaseSession(backendID)
+            closeRemovedWindow()
+        }
+        .onDisappear {
+            releaseSession(backendID)
+        }
+    }
+
+    /// Attaches the session for the current scene value: the backend's
+    /// shared session when bound, else a fresh transient pairing session.
+    private func bindCurrentBackend() {
+        if let backendID {
+            // A window restored (or retargeted) after its backend's record
+            // was removed: mark it so the shared auto-close path takes over.
             if !isRemoved,
                !PersistenceManager.shared.loadConnections()
                    .contains(where: { $0.id == backendID.connectionID }) {
@@ -164,60 +198,73 @@ struct PinnedBackendWindowRoot: View {
             }
             guard !isRemoved, session == nil else { return }
             session = BackendSessionRegistry.shared.attach(backendID)
-        }
-        // initial: true covers a mark set before this window ever rendered
-        // (removal racing a window that is still opening or being restored).
-        .onChange(of: isRemoved, initial: true) { _, removed in
-            guard removed, !showsDefaultSession else { return }
-            releaseSession()
-            dismissWindow(value: backendID)
-        }
-        .onDisappear {
-            releaseSession()
+        } else {
+            guard pairingSession == nil else { return }
+            pairingSession = BackendSessionRegistry.shared.makePairingSession()
         }
     }
 
-    /// The placeholder's Close Window action. With other windows open the
-    /// programmatic dismissal works; as the last window it is a no-op, so
-    /// the window adopts the default session instead (spec decision 2).
+    /// The coordinator's retarget hook: apply the v2 policy for switching
+    /// this window to `target` (rebind in place vs open/raise the target
+    /// backend's own window).
+    private func retarget(to target: BackendID) {
+        switch WindowRetargetRoute.route(
+            currentBackendID: backendID, target: target,
+            supportsMultipleWindows: supportsMultipleWindows)
+        {
+        case .openTargetWindow:
+            openWindow(value: target)
+        case .rebindInPlace:
+            backendID = target
+        }
+    }
+
+    /// Close-or-rebind decision for a removed backend: with other windows
+    /// open, dismiss this one; the app's last window rebinds to the pairing
+    /// surface instead of leaving zero windows.
     private func closeRemovedWindow() {
+        guard let removedID = backendID else { return }
         let windowScenes = UIApplication.shared.connectedScenes
             .filter { $0 is UIWindowScene }
             .count
         switch RemovedWindowCloseAction.forOpenWindowCount(windowScenes) {
         case .dismiss:
-            dismissWindow(value: backendID)
-        case .adoptDefaultSession:
-            showsDefaultSession = true
+            dismissWindow(value: removedID)
+        case .retargetToPairing:
+            backendID = nil
         }
     }
 
-    private func releaseSession() {
-        guard session != nil else { return }
-        session = nil
-        BackendSessionRegistry.shared.detach(backendID)
+    private func releaseSession(_ id: BackendID?) {
+        if session != nil, let id {
+            session = nil
+            BackendSessionRegistry.shared.detach(id)
+        }
+        if let pairing = pairingSession {
+            pairingSession = nil
+            pairing.teardown()
+        }
     }
 }
 
-/// What the removed-backend placeholder's Close Window button does (spec
-/// decision 2): with other windows open, `dismissWindow(value:)` closes this
-/// window; when it is the app's last window that dismissal is a no-op, so
-/// the window adopts the default session instead — routing to a usable
-/// surface rather than silently doing nothing.
+/// What removing a window's backend does to the window (window model v2):
+/// with other windows open, `dismissWindow(value:)` closes it; the app's
+/// last window rebinds to the pairing surface instead — never zero windows,
+/// never a silently dead surface.
 enum RemovedWindowCloseAction: Equatable {
     case dismiss
-    case adoptDefaultSession
+    case retargetToPairing
 
     /// `count` is the number of window scenes connected to the app,
     /// including the removed window itself.
     static func forOpenWindowCount(_ count: Int) -> RemovedWindowCloseAction {
-        count > 1 ? .dismiss : .adoptDefaultSession
+        count > 1 ? .dismiss : .retargetToPairing
     }
 }
 
-/// Fallback surface for a pinned window whose backend was removed but whose
-/// programmatic dismissal could not be delivered (spec decision 2): names
-/// the state and offers a manual close that works even as the last window.
+/// Fallback surface for a window whose backend was removed but whose
+/// programmatic dismissal could not be delivered: names the state and
+/// offers a manual close that works even as the last window.
 private struct RemovedBackendPlaceholderView: View {
     let onClose: () -> Void
 

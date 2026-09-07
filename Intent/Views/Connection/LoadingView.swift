@@ -85,7 +85,7 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
-    .environment(BackendSessionRegistry.shared.defaultSession.makeCoordinator())
+    .environment(BackendSessionRegistry.shared.makePairingSession().makeCoordinator())
 }
 
 #Preview("Loading - Dark") {
@@ -93,6 +93,6 @@ struct IntentLogo: Shape {
         SplashArtView()
         LoadingView()
     }
-    .environment(BackendSessionRegistry.shared.defaultSession.makeCoordinator())
+    .environment(BackendSessionRegistry.shared.makePairingSession().makeCoordinator())
     .preferredColorScheme(.dark)
 }

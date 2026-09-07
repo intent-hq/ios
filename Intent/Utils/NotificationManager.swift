@@ -187,12 +187,12 @@ struct ToastInfo: Equatable {
 
     // MARK: - Cross-session aggregation
 
-    /// Observe a pinned session's connection so its agents alert too. The
-    /// default session's connection is already observed from init, so
-    /// attaching the default session — or an already-observed backend — is
-    /// a no-op. Wired to `BackendSessionRegistry.onSessionCreated`.
+    /// Observe a backend session's connection so its agents alert too.
+    /// Attaching a transient pairing session (no backend) or an
+    /// already-observed backend is a no-op. Wired to
+    /// `BackendSessionRegistry.onSessionCreated`.
     func attachSessionObserver(for session: BackendSession) {
-        guard let backendID = session.pinnedBackendID else { return }
+        guard let backendID = session.backendID else { return }
         guard observedSessions[backendID] == nil else { return }
         let handlerId = session.connection.onEvent { [weak self] _, params in
             Task { @MainActor in
@@ -202,7 +202,7 @@ struct ToastInfo: Equatable {
         observedSessions[backendID] = (session, handlerId)
     }
 
-    /// Stop observing a pinned session's connection. Wired to
+    /// Stop observing a backend session's connection. Wired to
     /// `BackendSessionRegistry.onSessionTeardown`; extra detaches are no-ops.
     func detachSessionObserver(for backendID: BackendID) {
         guard let observed = observedSessions.removeValue(forKey: backendID) else { return }
@@ -245,13 +245,13 @@ struct ToastInfo: Equatable {
             AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())")
             return
         }
-        // Resolve the connection identity of the event's source. A pinned
-        // session on the backend the default connection already tracks
-        // would double-alert (both sockets receive the event) — the default
-        // handler wins and the pinned duplicate is dropped.
+        // Resolve the connection identity of the event's source session
+        // (window model v2: every backend session is observed directly —
+        // there is no default handler to deduplicate against). The nil
+        // source (legacy init-registered handler) maps to the last-used
+        // pointer.
         let connectionId: UUID
         if let sourceBackendID {
-            guard sourceBackendID.connectionID != activeConnectionId() else { return }
             connectionId = sourceBackendID.connectionID
         } else {
             guard let active = activeConnectionId() else { return }

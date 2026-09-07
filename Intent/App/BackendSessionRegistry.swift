@@ -3,69 +3,58 @@ import Observation
 
 /// Process-global map of `BackendID` → `BackendSession`.
 ///
-/// Pinned sessions are created on first attach, shared by later attaches
-/// (one attach per window showing the backend), and torn down — disconnect
-/// + release — when the last window detaches. The default session is
-/// created on first access and persists for the app's lifetime.
+/// Sessions are created on first attach, shared by later attaches (one
+/// attach per window showing the backend), and torn down — disconnect
+/// + release — when the last window detaches. There is no default session
+/// (window model v2): every window is bound to exactly one backend.
 ///
-/// Observable so pinned windows can react to `removedBackendIDs`: backends
-/// whose saved connection was deleted this run (spec decision 2) auto-close
+/// Observable so windows can react to `removedBackendIDs`: backends whose
+/// saved connection was deleted this run (spec decision 2) unbind or close
 /// their windows.
 @MainActor
 @Observable
 final class BackendSessionRegistry {
     static let shared = BackendSessionRegistry()
 
-    /// Builds a session for a kind. Defaults to the live composition root;
-    /// tests inject a factory producing sessions over fakes.
-    typealias SessionFactory = @MainActor (BackendSession.Kind) -> BackendSession
+    /// Builds a session for a backend (nil = transient pairing session).
+    /// Defaults to the live composition root; tests inject a factory
+    /// producing sessions over fakes.
+    typealias SessionFactory = @MainActor (BackendID?) -> BackendSession
 
     @ObservationIgnored private let makeSession: SessionFactory
-    @ObservationIgnored private var pinned: [BackendID: BackendSession] = [:]
+    @ObservationIgnored private var sessions: [BackendID: BackendSession] = [:]
     @ObservationIgnored private var attachCounts: [BackendID: Int] = [:]
-    @ObservationIgnored private var defaultSessionStorage: BackendSession?
 
     /// Backends whose saved connection was removed while the app runs (user
-    /// delete, log off, or a synced tombstone). Pinned windows observe this
-    /// to auto-close (spec decision 2); marking never tears a session down
-    /// by itself — the closing window's detach drives the normal teardown.
+    /// delete, log off, or a synced tombstone). Windows observe this to
+    /// unbind or auto-close (spec decision 2); marking never tears a session
+    /// down by itself — the closing window's detach drives normal teardown.
     private(set) var removedBackendIDs: Set<BackendID> = []
 
-    /// Called after a session is created (default or pinned) so process-wide
-    /// aggregators (e.g. `NotificationManager`) can observe its connection.
+    /// Called after a backend session is created so process-wide aggregators
+    /// (e.g. `NotificationManager`) can observe its connection. Not called
+    /// for transient pairing sessions.
     @ObservationIgnored var onSessionCreated: ((BackendSession) -> Void)?
 
-    /// Called when a pinned session is released on last detach, before its
-    /// connection is torn down. Never called for the default session.
+    /// Called when a session is released on last detach, before its
+    /// connection is torn down.
     @ObservationIgnored var onSessionTeardown: ((BackendSession) -> Void)?
 
     init(makeSession: @escaping SessionFactory = BackendSessionRegistry.makeLiveSession) {
         self.makeSession = makeSession
     }
 
-    // MARK: - Default session
-
-    /// The session tracking the active connection (today's iOS semantics).
-    /// Created on first access; never torn down.
-    var defaultSession: BackendSession {
-        if let session = defaultSessionStorage { return session }
-        let session = makeSession(.defaultSession)
-        defaultSessionStorage = session
-        onSessionCreated?(session)
-        return session
-    }
-
-    // MARK: - Pinned sessions
+    // MARK: - Backend sessions
 
     /// The session for `id`, created on first attach and shared afterwards.
     /// Every attach must be balanced by a `detach(_:)`.
     func attach(_ id: BackendID) -> BackendSession {
         let session: BackendSession
-        if let existing = pinned[id] {
+        if let existing = sessions[id] {
             session = existing
         } else {
-            session = makeSession(.pinned(id))
-            pinned[id] = session
+            session = makeSession(id)
+            sessions[id] = session
             onSessionCreated?(session)
         }
         attachCounts[id, default: 0] += 1
@@ -82,16 +71,16 @@ final class BackendSessionRegistry {
             return
         }
         attachCounts[id] = nil
-        let session = pinned.removeValue(forKey: id)
+        let session = sessions.removeValue(forKey: id)
         if let session {
             onSessionTeardown?(session)
             session.teardown()
         }
     }
 
-    /// The live pinned session for `id` without attaching, if any.
-    func pinnedSession(for id: BackendID) -> BackendSession? {
-        pinned[id]
+    /// The live session for `id` without attaching, if any.
+    func session(for id: BackendID) -> BackendSession? {
+        sessions[id]
     }
 
     /// Number of windows currently attached to `id`.
@@ -99,9 +88,19 @@ final class BackendSessionRegistry {
         attachCounts[id] ?? 0
     }
 
-    /// Backends that currently have a live pinned session.
-    var pinnedBackendIDs: [BackendID] {
-        Array(pinned.keys)
+    /// Backends that currently have a live session.
+    var liveBackendIDs: [BackendID] {
+        Array(sessions.keys)
+    }
+
+    // MARK: - Pairing sessions
+
+    /// A fresh transient session (nil backendID) for a window that has no
+    /// backend yet (first run, or unbound after removal). Not registered or
+    /// refcounted: the owning window tears it down when pairing completes
+    /// or the window closes.
+    func makePairingSession() -> BackendSession {
+        makeSession(nil)
     }
 
     // MARK: - Removed backends (spec decision 2)
@@ -133,48 +132,27 @@ final class BackendSessionRegistry {
 
     // MARK: - Live composition
 
-    /// Composition root for real sessions: the default session wraps the
-    /// existing process-wide `.shared` instances (unchanged iOS semantics);
-    /// pinned sessions get fresh per-backend instances.
-    static func makeLiveSession(kind: BackendSession.Kind) -> BackendSession {
-        switch kind {
-        case .defaultSession:
-            let connection = ConnectionManager.shared
-            let workspaceStore = WorkspaceStore.shared
-            return BackendSession(
-                kind: kind,
-                connection: connection,
-                workspaceStore: workspaceStore,
-                coordinatorFactory: { claim in
-                    AppCoordinator(
-                        workspaceStore: workspaceStore, connection: connection,
-                        claimScreenRestoration: claim)
-                },
-                prMonitorsStore: .shared,
-                attachmentUploadService: .shared,
-                workspaceFileImageLoader: .shared,
-                attachmentImageLoader: .shared,
-                attentionCueCenter: .shared)
-        case .pinned(let id):
-            let connection = ConnectionManager()
-            let workspaceStore = WorkspaceStore(connectionManager: connection)
-            let fileLoader = WorkspaceFileImageLoader(connection: connection)
-            return BackendSession(
-                kind: kind,
-                connection: connection,
-                workspaceStore: workspaceStore,
-                coordinatorFactory: { claim in
-                    AppCoordinator(
-                        workspaceStore: workspaceStore, connection: connection,
-                        pinnedBackendID: id,
-                        claimScreenRestoration: claim)
-                },
-                prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
-                attachmentUploadService: AttachmentUploadService(connection: connection),
-                workspaceFileImageLoader: fileLoader,
-                attachmentImageLoader: AttachmentImageLoader(
-                    connection: connection, fileLoader: fileLoader),
-                attentionCueCenter: WorkspaceAttentionCueCenter())
-        }
+    /// Composition root for real sessions: every session gets fresh
+    /// per-backend instances (window model v2 — no `.shared` state split).
+    static func makeLiveSession(backendID: BackendID?) -> BackendSession {
+        let connection = ConnectionManager()
+        let workspaceStore = WorkspaceStore(connectionManager: connection)
+        let fileLoader = WorkspaceFileImageLoader(connection: connection)
+        return BackendSession(
+            backendID: backendID,
+            connection: connection,
+            workspaceStore: workspaceStore,
+            coordinatorFactory: { claim in
+                AppCoordinator(
+                    workspaceStore: workspaceStore, connection: connection,
+                    backendID: backendID,
+                    claimScreenRestoration: claim)
+            },
+            prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
+            attachmentUploadService: AttachmentUploadService(connection: connection),
+            workspaceFileImageLoader: fileLoader,
+            attachmentImageLoader: AttachmentImageLoader(
+                connection: connection, fileLoader: fileLoader),
+            attentionCueCenter: WorkspaceAttentionCueCenter())
     }
 }

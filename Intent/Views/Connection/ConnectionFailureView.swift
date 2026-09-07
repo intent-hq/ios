@@ -123,7 +123,7 @@ struct ConnectionFailureView: View {
         .onAppear {
             savedConnections = ConnectionFailureView.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
-                activeId: PersistenceManager.shared.activeConnection()?.id)
+                activeId: coordinator.backendID?.connectionID)
             if !isCertMismatch {
                 startAutoRetry()
             }
@@ -142,8 +142,8 @@ struct ConnectionFailureView: View {
         message.localizedCaseInsensitiveContains("certificate")
     }
 
-    /// Saved connections other than the currently failing active one,
-    /// most recently used first.
+    /// Saved connections other than this window's currently failing bound
+    /// one, most recently used first.
     static func alternativeConnections(
         connections: [StoredConnection], activeId: UUID?
     ) -> [StoredConnection] {
@@ -233,14 +233,14 @@ struct ConnectionFailureView: View {
 }
 
 #Preview("Connection Failed") {
-    let session = BackendSessionRegistry.shared.defaultSession
+    let session = BackendSessionRegistry.shared.makePairingSession()
     ConnectionFailureView(errorMessage: "The server at 192.168.1.42:5179 is not responding.")
         .environment(session)
         .environment(session.makeCoordinator())
 }
 
 #Preview("Connection Failed - Dark") {
-    let session = BackendSessionRegistry.shared.defaultSession
+    let session = BackendSessionRegistry.shared.makePairingSession()
     ConnectionFailureView(errorMessage: "Connection timed out after 10 seconds.")
         .environment(session)
         .environment(session.makeCoordinator())

@@ -20,7 +20,7 @@ final class BackendSessionRegistryTests {
 
     /// Fakes created by the injected factory, in creation order.
     private var createdConnections: [SessionFakeConnectionManager] = []
-    private var createdKinds: [BackendSession.Kind] = []
+    private var createdBackendIDs: [BackendID?] = []
 
     init() {
         _ = TestKeychainStorage.installed
@@ -36,17 +36,18 @@ final class BackendSessionRegistryTests {
     }
 
     private func makeSession(
-        kind: BackendSession.Kind, connection: SessionFakeConnectionManager
+        backendID: BackendID?, connection: SessionFakeConnectionManager
     ) -> BackendSession {
         let workspaceStore = WorkspaceStore(forTesting: true)
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(
-            kind: kind,
+            backendID: backendID,
             connection: connection,
             workspaceStore: workspaceStore,
             coordinatorFactory: { [persistence] claim in
                 AppCoordinator(
                     workspaceStore: workspaceStore, connection: connection,
+                    backendID: backendID,
                     persistence: persistence, claimScreenRestoration: claim)
             },
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
@@ -58,26 +59,26 @@ final class BackendSessionRegistryTests {
     }
 
     private func makeRegistry() -> BackendSessionRegistry {
-        BackendSessionRegistry { [self] kind in
+        BackendSessionRegistry { [self] backendID in
             let connection = SessionFakeConnectionManager()
-            createdKinds.append(kind)
+            createdBackendIDs.append(backendID)
             createdConnections.append(connection)
-            return makeSession(kind: kind, connection: connection)
+            return makeSession(backendID: backendID, connection: connection)
         }
     }
 
-    // MARK: - Pinned session create / reuse
+    // MARK: - Backend session create / reuse
 
-    @Test func attachCreatesPinnedSessionOnFirstRequest() {
+    @Test func attachCreatesSessionOnFirstRequest() {
         let registry = makeRegistry()
         let id = BackendID(UUID())
 
         let session = registry.attach(id)
 
-        #expect(createdKinds == [.pinned(id)])
-        #expect(session.pinnedBackendID == id)
+        #expect(createdBackendIDs == [id])
+        #expect(session.backendID == id)
         #expect(registry.attachmentCount(for: id) == 1)
-        #expect(registry.pinnedSession(for: id) === session)
+        #expect(registry.session(for: id) === session)
     }
 
     @Test func attachReusesLiveSessionAndRefcounts() {
@@ -88,7 +89,7 @@ final class BackendSessionRegistryTests {
         let second = registry.attach(id)
 
         #expect(first === second)
-        #expect(createdKinds.count == 1)
+        #expect(createdBackendIDs.count == 1)
         #expect(registry.attachmentCount(for: id) == 2)
     }
 
@@ -103,7 +104,7 @@ final class BackendSessionRegistryTests {
         #expect(sessionA !== sessionB)
         #expect(sessionA.connection !== sessionB.connection)
         #expect(sessionA.workspaceStore !== sessionB.workspaceStore)
-        #expect(Set(registry.pinnedBackendIDs) == [a, b])
+        #expect(Set(registry.liveBackendIDs) == [a, b])
     }
 
     // MARK: - Teardown
@@ -116,7 +117,7 @@ final class BackendSessionRegistryTests {
         _ = registry.attach(id)
         registry.detach(id)
 
-        #expect(registry.pinnedSession(for: id) === session)
+        #expect(registry.session(for: id) === session)
         #expect(registry.attachmentCount(for: id) == 1)
         #expect(createdConnections[0].disconnectCallCount == 0)
     }
@@ -129,9 +130,9 @@ final class BackendSessionRegistryTests {
         registry.detach(id)
 
         #expect(createdConnections[0].disconnectCallCount == 1)
-        #expect(registry.pinnedSession(for: id) == nil)
+        #expect(registry.session(for: id) == nil)
         #expect(registry.attachmentCount(for: id) == 0)
-        #expect(registry.pinnedBackendIDs.isEmpty)
+        #expect(registry.liveBackendIDs.isEmpty)
     }
 
     @Test func reattachAfterTeardownCreatesFreshSession() {
@@ -143,7 +144,7 @@ final class BackendSessionRegistryTests {
         let second = registry.attach(id)
 
         #expect(first !== second)
-        #expect(createdKinds == [.pinned(id), .pinned(id)])
+        #expect(createdBackendIDs == [id, id])
         #expect(second.connection !== first.connection)
         #expect(registry.attachmentCount(for: id) == 1)
     }
@@ -154,7 +155,7 @@ final class BackendSessionRegistryTests {
 
         registry.detach(id)
 
-        #expect(createdKinds.isEmpty)
+        #expect(createdBackendIDs.isEmpty)
         #expect(registry.attachmentCount(for: id) == 0)
     }
 
@@ -167,36 +168,35 @@ final class BackendSessionRegistryTests {
         let sessionB = registry.attach(b)
         registry.detach(a)
 
-        #expect(registry.pinnedSession(for: a) == nil)
-        #expect(registry.pinnedSession(for: b) === sessionB)
+        #expect(registry.session(for: a) == nil)
+        #expect(registry.session(for: b) === sessionB)
         #expect(createdConnections[1].disconnectCallCount == 0)
     }
 
-    // MARK: - Default session
+    // MARK: - Pairing sessions
 
-    @Test func defaultSessionIsCreatedOnceAndPersists() {
+    @Test func pairingSessionsAreFreshAndUnregistered() {
         let registry = makeRegistry()
 
-        let first = registry.defaultSession
-        let second = registry.defaultSession
+        let first = registry.makePairingSession()
+        let second = registry.makePairingSession()
 
-        #expect(first === second)
-        #expect(createdKinds == [.defaultSession])
-        #expect(first.pinnedBackendID == nil)
-        #expect(first.kind == .defaultSession)
+        #expect(first !== second)
+        #expect(first.backendID == nil)
+        #expect(createdBackendIDs == [nil, nil])
+        #expect(registry.liveBackendIDs.isEmpty,
+                "Pairing sessions are owned by their window, never registered")
     }
 
-    @Test func pinnedTeardownDoesNotTouchDefaultSession() {
+    @Test func pairingSessionDoesNotInvokeOnSessionCreated() {
         let registry = makeRegistry()
-        let id = BackendID(UUID())
+        var created: [BackendSession] = []
+        registry.onSessionCreated = { created.append($0) }
 
-        let defaultSession = registry.defaultSession
-        _ = registry.attach(id)
-        registry.detach(id)
+        _ = registry.makePairingSession()
 
-        #expect(registry.defaultSession === defaultSession)
-        #expect(createdConnections[0].disconnectCallCount == 0,
-                "The default session's connection must never be torn down")
+        #expect(created.isEmpty,
+                "A pairing session has no backend for aggregators to observe")
     }
 
     // MARK: - Session lifecycle callbacks
@@ -209,18 +209,6 @@ final class BackendSessionRegistryTests {
 
         let session = registry.attach(id)
         _ = registry.attach(id)
-
-        #expect(created.count == 1)
-        #expect(created.first === session)
-    }
-
-    @Test func defaultSessionCreationInvokesOnSessionCreated() {
-        let registry = makeRegistry()
-        var created: [BackendSession] = []
-        registry.onSessionCreated = { created.append($0) }
-
-        let session = registry.defaultSession
-        _ = registry.defaultSession
 
         #expect(created.count == 1)
         #expect(created.first === session)
@@ -276,14 +264,16 @@ final class BackendSessionRegistryTests {
         #expect(second.selectedWorkspaceId == nil)
     }
 
-    @Test func onlyFirstDefaultWindowRestoresLastScreen() {
+    @Test func onlyFirstWindowOnABackendRestoresItsLastScreen() {
         let registry = makeRegistry()
+        let id = BackendID(UUID())
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail", workspaceId: "ws-restore",
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: id.connectionID)
 
-        let session = registry.defaultSession
+        let session = registry.attach(id)
         let first = session.makeCoordinator()
         let second = session.makeCoordinator()
 
@@ -293,10 +283,10 @@ final class BackendSessionRegistryTests {
         if case .workspaceDetail(let wId) = first.currentScreen {
             #expect(wId == "ws-restore")
         } else {
-            Issue.record("Expected the first default window to restore, got \(first.currentScreen)")
+            Issue.record("Expected the first window on the backend to restore, got \(first.currentScreen)")
         }
         if case .workspaceList = second.currentScreen {
-            // pass — extra default windows start at the workspace list
+            // pass — duplicated windows start at the workspace list
         } else {
             Issue.record("Expected .workspaceList on the extra window, got \(second.currentScreen)")
         }
@@ -304,7 +294,8 @@ final class BackendSessionRegistryTests {
 
     @Test func nonClaimingWindowDoesNotOverwriteSavedScreen() {
         let registry = makeRegistry()
-        let session = registry.defaultSession
+        let id = BackendID(UUID())
+        let session = registry.attach(id)
         let first = session.makeCoordinator()
         let second = session.makeCoordinator()
 
@@ -313,39 +304,41 @@ final class BackendSessionRegistryTests {
         first.onSelectWorkspace("ws-first")
         second.onSelectWorkspace("ws-second")
 
-        #expect(persistence.loadLastScreen()?.workspaceId == "ws-first",
+        #expect(persistence.loadLastScreen(for: id.connectionID)?.workspaceId == "ws-first",
                 "A window without the restoration claim must not write last-screen state")
     }
 
-    @Test func pinnedSessionCoordinatorNeverRestoresLastScreen() {
+    @Test func windowOnAnotherBackendNeverRestoresForeignScreen() {
         let registry = makeRegistry()
+        let saved = BackendID(UUID())
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail", workspaceId: "ws-restore",
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil))
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: saved.connectionID)
 
         let session = registry.attach(BackendID(UUID()))
         let coordinator = session.makeCoordinator()
         coordinator.onConnectionSuccess()
 
         if case .workspaceList = coordinator.currentScreen {
-            // pass — pinned windows never restore the default window's screen
+            // pass — last-screen state is keyed per backend
         } else {
-            Issue.record("Pinned windows must start at the workspace list, got \(coordinator.currentScreen)")
+            Issue.record("Another backend's window must start at the workspace list, got \(coordinator.currentScreen)")
         }
     }
 
-    @Test func defaultSessionGrantsRestorationClaimOnce() {
+    @Test func backendSessionGrantsRestorationClaimOnce() {
         let registry = makeRegistry()
-        let session = registry.defaultSession
+        let session = registry.attach(BackendID(UUID()))
 
         #expect(session.claimScreenRestoration())
         #expect(!session.claimScreenRestoration())
     }
 
-    @Test func pinnedSessionNeverGrantsRestorationClaim() {
+    @Test func pairingSessionNeverGrantsRestorationClaim() {
         let registry = makeRegistry()
-        let session = registry.attach(BackendID(UUID()))
+        let session = registry.makePairingSession()
 
         #expect(!session.claimScreenRestoration())
     }
@@ -394,7 +387,7 @@ final class BackendSessionRegistryTests {
         let session = registry.attach(id)
         registry.markBackendRemoved(id)
 
-        #expect(registry.pinnedSession(for: id) === session)
+        #expect(registry.session(for: id) === session)
         #expect(createdConnections[0].disconnectCallCount == 0,
                 "Marking drives window close; the window's detach tears down")
 
@@ -404,30 +397,26 @@ final class BackendSessionRegistryTests {
 
     // MARK: - Live composition
 
-    @Test func liveDefaultSessionWrapsSharedInstances() {
-        let session = BackendSessionRegistry.makeLiveSession(kind: .defaultSession)
+    @Test func liveSessionsGetFreshIsolatedInstances() {
+        let id = BackendID(UUID())
+        let session = BackendSessionRegistry.makeLiveSession(backendID: id)
+        let other = BackendSessionRegistry.makeLiveSession(backendID: BackendID(UUID()))
 
-        #expect(session.connection === ConnectionManager.shared)
-        #expect(session.workspaceStore === WorkspaceStore.shared)
-        #expect(session.prMonitorsStore === WorkspacePrMonitorsStore.shared)
-        #expect(session.attachmentUploadService === AttachmentUploadService.shared)
-        #expect(session.workspaceFileImageLoader === WorkspaceFileImageLoader.shared)
-        #expect(session.attachmentImageLoader === AttachmentImageLoader.shared)
-        #expect(session.attentionCueCenter === WorkspaceAttentionCueCenter.shared)
+        #expect(session.backendID == id)
+        #expect(session.connection !== other.connection)
+        #expect(session.workspaceStore !== other.workspaceStore)
+        #expect(session.prMonitorsStore !== other.prMonitorsStore)
+        #expect(session.attachmentUploadService !== other.attachmentUploadService)
+        #expect(session.workspaceFileImageLoader !== other.workspaceFileImageLoader)
+        #expect(session.attachmentImageLoader !== other.attachmentImageLoader)
+        #expect(session.attentionCueCenter !== other.attentionCueCenter)
     }
 
-    @Test func livePinnedSessionGetsFreshInstances() {
-        let id = BackendID(UUID())
-        let session = BackendSessionRegistry.makeLiveSession(kind: .pinned(id))
+    @Test func livePairingSessionHasNoBackend() {
+        let session = BackendSessionRegistry.makeLiveSession(backendID: nil)
 
-        #expect(session.pinnedBackendID == id)
-        #expect(session.connection !== ConnectionManager.shared)
-        #expect(session.workspaceStore !== WorkspaceStore.shared)
-        #expect(session.prMonitorsStore !== WorkspacePrMonitorsStore.shared)
-        #expect(session.attachmentUploadService !== AttachmentUploadService.shared)
-        #expect(session.workspaceFileImageLoader !== WorkspaceFileImageLoader.shared)
-        #expect(session.attachmentImageLoader !== AttachmentImageLoader.shared)
-        #expect(session.attentionCueCenter !== WorkspaceAttentionCueCenter.shared)
+        #expect(session.backendID == nil)
+        #expect(!session.claimScreenRestoration())
     }
 }
 

@@ -273,7 +273,7 @@ struct ManualTokenEntryView: View {
                 if let onPaired {
                     onPaired(stored)
                 } else {
-                    coordinator.onConnectionSuccess()
+                    coordinator.onPaired(stored)
                 }
             } catch {
                 errorMessage = "Connection failed: \(error.localizedDescription)"

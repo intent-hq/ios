@@ -54,7 +54,6 @@ struct ConnectionsView: View {
     @Environment(\.supportsMultipleWindows) private var supportsMultipleWindows
     @Environment(\.openWindow) private var openWindow
     @State private var connections: [StoredConnection] = []
-    @State private var activeConnectionId: UUID?
     @State private var showQRScanner = false
     @State private var showManualEntry = false
     @State private var connectionPendingDelete: StoredConnection?
@@ -113,7 +112,7 @@ struct ConnectionsView: View {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) { delete(connection) }
             } message: { connection in
-                Text(connection.id == activeConnectionId
+                Text(connection.id == windowConnectionId
                     ? "This is the current connection. Deleting it will disconnect you."
                     : "This removes the saved connection. You'll need to pair again to reconnect.")
             }
@@ -126,9 +125,16 @@ struct ConnectionsView: View {
         }
     }
 
+    /// The connection this window's backend is bound to (window model v2:
+    /// "connected" badges and delete warnings are scoped to this window, not
+    /// a global active pointer). Nil in an unbound pairing window.
+    private var windowConnectionId: UUID? {
+        coordinator.backendID?.connectionID
+    }
+
     private func connectionRow(_ connection: StoredConnection) -> some View {
         Button {
-            if connection.id != activeConnectionId {
+            if connection.id != windowConnectionId {
                 coordinator.onSwitchConnection(id: connection.id)
             }
             dismiss()
@@ -161,7 +167,7 @@ struct ConnectionsView: View {
 
                 Spacer()
 
-                if connection.id == activeConnectionId {
+                if connection.id == windowConnectionId {
                     HStack(spacing: Constants.Connections.statusSpacing) {
                         Circle()
                             .fill(.green)
@@ -205,19 +211,18 @@ struct ConnectionsView: View {
 
     private func handlePaired(_ connection: StoredConnection) {
         dismiss()
-        coordinator.onSwitchConnection(id: connection.id)
+        coordinator.onPaired(connection)
     }
 
     private func delete(_ connection: StoredConnection) {
-        let wasActive = connection.id == activeConnectionId
+        let wasBound = connection.id == windowConnectionId
         coordinator.onDeleteConnection(id: connection.id)
         reload()
-        if wasActive { dismiss() }
+        if wasBound { dismiss() }
     }
 
     private func reload() {
         connections = PersistenceManager.shared.loadConnections()
             .sorted { ($0.lastConnectedAt ?? .distantPast) > ($1.lastConnectedAt ?? .distantPast) }
-        activeConnectionId = PersistenceManager.shared.activeConnection()?.id
     }
 }

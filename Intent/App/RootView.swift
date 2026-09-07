@@ -109,7 +109,7 @@ struct RootView: View {
                         notificationManager.dismissToast()
                         switch NotificationManager.tapRoute(
                             sourceBackendID: toast.sourceBackendID,
-                            windowBackendID: coordinator.pinnedBackendID,
+                            windowBackendID: coordinator.backendID,
                             supportsMultipleWindows: supportsMultipleWindows)
                         {
                         case .openPinnedWindow(let target):
@@ -191,7 +191,7 @@ struct RootView: View {
                     activeConnectionId: PersistenceManager.shared.activeConnection()?.id)
                 switch NotificationManager.tapRoute(
                     sourceBackendID: source,
-                    windowBackendID: coordinator?.pinnedBackendID,
+                    windowBackendID: coordinator?.backendID,
                     supportsMultipleWindows: supportsMultipleWindows)
                 {
                 case .openPinnedWindow(let target):

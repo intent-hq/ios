@@ -43,11 +43,12 @@ enum PairingFlow {
     /// via ConnectionPairing.finalize. Every pairing path goes through here
     /// with a non-nil fingerprint (from the payload or the trust-confirmed
     /// probe), so pairing can never fall back to plain ws://.
-    /// Pairing is a default-session concern, so `connectionManager` defaults
-    /// to the shared instance backing the default `BackendSession`.
+    /// `connectionManager` is the window session's own connection (window
+    /// model v2: there is no default session), so the pairing dials the
+    /// connection the presenting window will keep using.
     static func connect(
         payload: PairingPayload, certFingerprint: String,
-        connectionManager: ConnectionManager = .shared
+        connectionManager: any SessionConnectionManaging
     ) async throws -> StoredConnection {
         try await connectionManager.connect(
             hosts: payload.hosts, port: payload.port, token: payload.token,

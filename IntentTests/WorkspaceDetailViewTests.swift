@@ -99,13 +99,13 @@ struct WorkspaceDetailViewTests {
 
     // MARK: - Session store routing (multi-window state split)
 
-    /// A pinned session composed over a fake backend connection; the
+    /// A backend-bound session composed over a fake backend connection; the
     /// coordinator factory is never invoked by these tests.
     @MainActor
     private func makePinnedSession(connection: FakeConnectionManager) -> BackendSession {
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
         return BackendSession(
-            kind: .pinned(BackendID(UUID())),
+            backendID: BackendID(UUID()),
             connection: connection,
             workspaceStore: WorkspaceStore(forTesting: true),
             coordinatorFactory: { _ in fatalError("coordinator is not built in these tests") },
