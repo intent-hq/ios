@@ -56,23 +56,27 @@ struct IntentApp: App {
 
 /// The v2 retarget policy for a switch/pair action performed in a window:
 /// where multiple windows are supported, a bound window never retargets —
-/// the target backend's own window is opened or raised. Single-window
-/// platforms (iPhone; iPad without multi-window) and unbound (pairing)
-/// windows rebind in place.
+/// the target backend's own window is opened or raised — and an unbound
+/// (pairing) window is REPLACED by the target's own window rather than
+/// rebound: `openWindow(value:)` only matches windows whose scene value was
+/// set at creation, so a window rebound via the scene-value binding write
+/// is never raised again — later switches to its backend open duplicate
+/// windows (observed on visionOS). Replacing keeps every bound multi-window
+/// scene natively valued. Single-window platforms (iPhone; iPad without
+/// multi-window) rebind the one window in place.
 enum WindowRetargetRoute: Equatable {
     case rebindInPlace
     case openTargetWindow
+    case replaceWindow
 
     static func route(
         currentBackendID: BackendID?,
         target: BackendID,
         supportsMultipleWindows: Bool
     ) -> WindowRetargetRoute {
-        guard supportsMultipleWindows,
-              let current = currentBackendID,
-              current != target
-        else { return .rebindInPlace }
-        return .openTargetWindow
+        guard supportsMultipleWindows else { return .rebindInPlace }
+        guard let current = currentBackendID else { return .replaceWindow }
+        return current == target ? .rebindInPlace : .openTargetWindow
     }
 }
 
@@ -205,8 +209,9 @@ struct BackendWindowRoot: View {
     }
 
     /// The coordinator's retarget hook: apply the v2 policy for switching
-    /// this window to `target` (rebind in place vs open/raise the target
-    /// backend's own window).
+    /// this window to `target` (rebind in place, open/raise the target
+    /// backend's own window, or replace this unbound pairing window with
+    /// the target's own window so it stays raisable by value).
     private func retarget(to target: BackendID) {
         switch WindowRetargetRoute.route(
             currentBackendID: backendID, target: target,
@@ -214,8 +219,29 @@ struct BackendWindowRoot: View {
         {
         case .openTargetWindow:
             openWindow(value: target)
+        case .replaceWindow:
+            openWindow(value: target)
+            dismissWhenReplacementConnects()
         case .rebindInPlace:
             backendID = target
+        }
+    }
+
+    /// Dismisses this (pairing) window once the replacement window's scene
+    /// has connected: the scene opened by `openWindow` connects
+    /// asynchronously, and dismissing the app's only window is a system
+    /// no-op — a synchronous `dismissWindow()` right after `openWindow`
+    /// leaves the pairing window behind (observed on visionOS).
+    private func dismissWhenReplacementConnects() {
+        Task { @MainActor in
+            for _ in 0..<20 {
+                let scenes = UIApplication.shared.connectedScenes
+                    .filter { $0 is UIWindowScene }
+                    .count
+                if scenes > 1 { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            dismissWindow()
         }
     }
 

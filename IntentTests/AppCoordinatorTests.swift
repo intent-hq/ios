@@ -202,6 +202,83 @@ final class AppCoordinatorTests {
                 "A pairing must route to the paired backend's window")
     }
 
+    /// Regression (window model v2): pairing a different backend from a
+    /// BOUND window dials the new daemon over this window's live session
+    /// connection. After the retarget hook routes to the target's own
+    /// window, this window must drop the hijacked socket and the other
+    /// daemon's data and re-dial its own backend — not keep showing the
+    /// newly paired daemon's workspaces.
+    @Test @MainActor func onPaired_boundWindow_redialsOwnBackendAfterRoutingOut() {
+        let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let paired = persistence.upsertConnection(Self.makeConnection(port: 5252))
+        let store = WorkspaceStore(forTesting: true)
+        store.publishFetchedWorkspaces(
+            [Self.makeWorkspace(id: "ws-paired-daemon", attention: "none")])
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake,
+            backendID: BackendID(own.id), persistence: persistence)
+        coordinator.currentScreen = .workspaceList
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(paired)
+
+        #expect(retargeted == [BackendID(paired.id)],
+                "The pairing must still route to the paired backend's window")
+        #expect(fake.disconnectCallCount == 1,
+                "The hijacked socket must be dropped")
+        #expect(store.workspaces.isEmpty,
+                "The paired daemon's workspace data must be dropped")
+        if case .connecting = coordinator.currentScreen {} else {
+            Issue.record("Expected a re-dial of this window's own backend, got \(coordinator.currentScreen)")
+        }
+    }
+
+    /// A re-pair routed for this window's own backend must not trigger the
+    /// repair re-dial (no disconnect, screen untouched).
+    @Test @MainActor func onPaired_boundWindow_sameBackend_noRedial() {
+        let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
+            backendID: BackendID(own.id), persistence: persistence)
+        coordinator.currentScreen = .workspaceList
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(own)
+
+        #expect(retargeted == [BackendID(own.id)])
+        #expect(fake.disconnectCallCount == 0,
+                "A same-backend pairing must not drop this window's connection")
+        if case .workspaceList = coordinator.currentScreen {} else {
+            Issue.record("Expected screen untouched, got \(coordinator.currentScreen)")
+        }
+    }
+
+    /// An unbound (pairing) window routes the pairing via the retarget hook
+    /// with no repair — the hook rebinds it in place (single-window) or
+    /// replaces it with the target's own window (multi-window).
+    @Test @MainActor func onPaired_unboundWindow_retargetsWithoutRedial() {
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
+            persistence: persistence)
+        coordinator.currentScreen = .pairing
+        var retargeted: [BackendID] = []
+        coordinator.retargetWindow = { retargeted.append($0) }
+
+        coordinator.onPaired(stored)
+
+        #expect(retargeted == [BackendID(stored.id)])
+        #expect(fake.disconnectCallCount == 0)
+        if case .pairing = coordinator.currentScreen {} else {
+            Issue.record("Expected screen untouched, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func onOpenSettings_setsSettings() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onOpenSettings()
@@ -536,8 +613,9 @@ final class AppCoordinatorTests {
     // MARK: - Window retarget policy (window model v2)
 
     // WindowRetargetRoute.route decides whether a switch/pair action opens or
-    // raises the target backend's own window (multi-window platforms) or
-    // rebinds the current window in place (iPhone, unbound pairing windows).
+    // raises the target backend's own window (multi-window platforms),
+    // replaces an unbound pairing window with the target's own window, or
+    // rebinds the current window in place (single-window platforms).
 
     @Test func retargetRouteOpensTargetWindowOnMultiWindowPlatforms() {
         let current = BackendID(UUID())
@@ -556,11 +634,11 @@ final class AppCoordinatorTests {
             "Switching to the backend the window is already bound to stays in place")
     }
 
-    @Test func retargetRouteRebindsUnboundPairingWindowInPlace() {
+    @Test func retargetRouteReplacesUnboundPairingWindow() {
         #expect(WindowRetargetRoute.route(
             currentBackendID: nil, target: BackendID(UUID()),
-            supportsMultipleWindows: true) == .rebindInPlace,
-            "An unbound (pairing) window adopts the paired backend in place, even on multi-window platforms")
+            supportsMultipleWindows: true) == .replaceWindow,
+            "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)")
     }
 
     @Test func retargetRouteRebindsInPlaceOnSingleWindowPlatforms() {

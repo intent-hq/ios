@@ -340,9 +340,10 @@ class AppCoordinator {
     /// A re-pair of this window's own backend (same record id, e.g. a
     /// rotated token) restarts this window's attempt so it dials the
     /// refreshed record. Any other pairing routes to the new backend via
-    /// onPaired: an unbound (pairing) window rebinds in place; a bound
-    /// window opens/raises the new backend's window where multiple windows
-    /// are supported, else retargets in place (window model v2).
+    /// onPaired: the window root's retarget hook applies the v2 policy
+    /// (rebind in place on single-window platforms; open/raise the new
+    /// backend's window — or replace an unbound pairing window with it —
+    /// where multiple windows are supported).
     func onDeepLinkPaired(_ connection: StoredConnection) {
         pendingDeepLinkPairing = nil
         if let bound = backendID, bound.connectionID == connection.id {
@@ -365,7 +366,19 @@ class AppCoordinator {
     /// previews) the pairing session's live connection is used in place.
     func onPaired(_ connection: StoredConnection) {
         if let retargetWindow {
-            retargetWindow(BackendID(connection.id))
+            let target = BackendID(connection.id)
+            retargetWindow(target)
+            // The pairing dialed the new backend over THIS window's live
+            // session connection. Where multiple windows are supported the
+            // retarget opened/raised the target's own window and this window
+            // keeps its binding — re-dial its own backend or it keeps showing
+            // the newly paired daemon's data over the hijacked socket. On
+            // single-window platforms the retarget rebinds this window in
+            // place (session torn down and replaced), so the repair state is
+            // discarded with the old session.
+            if let bound = backendID, bound != target {
+                redialWindowBackend()
+            }
             return
         }
         if case .pairing = currentScreen {
@@ -552,6 +565,20 @@ class AppCoordinator {
     private func resetWorkspaceStore() {
         workspaceStore.workspaces = []
         workspaceStore.lastUpdated = nil
+    }
+
+    /// Re-dial this window's own backend after its live session connection
+    /// was used to pair a different one (onPaired's bound multi-window
+    /// route): drop the hijacked socket and the other daemon's workspace
+    /// data, then restart the attempt — ConnectingView dials from
+    /// windowConnection, this window's own saved record.
+    private func redialWindowBackend() {
+        hasEverConnected = false
+        isDisconnected = false
+        connection.disconnect()
+        resetWorkspaceStore()
+        connectionAttemptId += 1
+        currentScreen = .connecting
     }
 
     /// In-place route-out for a backend this window may no longer show —
