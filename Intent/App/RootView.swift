@@ -50,6 +50,28 @@ struct RootView: View {
         }
     }
 
+    /// visionOS: the scene-anchored chime emitter; empty elsewhere.
+    @ViewBuilder private var windowFeedbackEmitter: some View {
+        #if os(visionOS)
+        WindowFeedbackSoundEmitter(event: feedbackEventForThisWindow)
+        #endif
+    }
+
+    #if os(visionOS)
+    /// The manager's latest feedback request when this window is the one
+    /// that must emit it — the same per-window decision as toast rendering
+    /// (windowPresentsAlert); every other window gets nil.
+    private var feedbackEventForThisWindow: NotificationManager.FeedbackEvent? {
+        guard let event = notificationManager.windowFeedbackEvent,
+              NotificationManager.windowPresentsAlert(
+                  source: event.sourceBackendID,
+                  windowBackendID: session.backendID,
+                  supportsMultipleWindows: supportsMultipleWindows)
+        else { return nil }
+        return event
+    }
+    #endif
+
     var body: some View {
         @Bindable var coordinator = coordinator
         Group {
@@ -132,6 +154,13 @@ struct RootView: View {
                 )
                 .padding(.top, Constants.Root.toastTopPadding)
             }
+        }
+        .background {
+            // visionOS: the notification chime is emitted from within THIS
+            // window's scene (not a global system sound) so spatial audio
+            // localizes it to the source workspace's window. EmptyView on
+            // other platforms, which keep the manager's global feedback.
+            windowFeedbackEmitter
         }
         .overlay {
             if coordinator.isDisconnected {

@@ -30,6 +30,22 @@ struct ToastInfo: Equatable {
 
     var currentToast: ToastInfo?
 
+    /// One feedback-sound request for a window to emit. On platforms where
+    /// the window emits the sound (visionOS), the manager publishes this
+    /// instead of playing a global sound, and the source backend's window
+    /// plays it from within its own scene so spatial audio localizes it to
+    /// that window. The fresh `id` distinguishes back-to-back requests from
+    /// the same backend.
+    struct FeedbackEvent: Equatable {
+        let id = UUID()
+        let sourceBackendID: BackendID
+    }
+
+    /// The latest feedback request for a window to emit; observed by window
+    /// roots (`WindowFeedbackSoundEmitter` via RootView). Never set on
+    /// platforms that play global feedback.
+    var windowFeedbackEvent: FeedbackEvent?
+
     /// Agent conversations currently on screen, keyed by their session's
     /// connection id. Counted (multiset): two windows on the same backend
     /// can show the same conversation, and closing one must not stop
@@ -44,6 +60,14 @@ struct ToastInfo: Equatable {
     @ObservationIgnored private let localNotificationService: LocalNotificationService
     @ObservationIgnored private let applicationState: () -> UIApplication.State
     @ObservationIgnored private let presentFeedback: () -> Void
+    /// Whether the source window's scene emits the feedback sound instead of
+    /// `presentFeedback` playing a global one. True on visionOS, where the
+    /// global system sound is non-spatial: emitting from the source window's
+    /// own view hierarchy lets spatial audio tell the user which window's
+    /// workspace finished. visionOS has no haptics (HapticManager no-ops),
+    /// so routing the sound routes all of the feedback. Injectable because
+    /// tests run on the iOS simulator.
+    @ObservationIgnored private let windowEmitsFeedbackSound: Bool
     @ObservationIgnored private let activeConnectionId: () -> UUID?
     @ObservationIgnored private let connection: ConnectionManagerRouting
     @ObservationIgnored private let workspaceStore: WorkspaceStore
@@ -86,6 +110,7 @@ struct ToastInfo: Equatable {
             HapticManager.notification(.success)
             AudioServicesPlaySystemSound(1152)
         },
+        windowEmitsFeedbackSound: Bool = NotificationManager.platformWindowEmitsFeedbackSound,
         connection: ConnectionManagerRouting = ConnectionManager.shared,
         workspaceStore: WorkspaceStore = WorkspaceStore.shared,
         registerEvents: Bool = true
@@ -94,6 +119,7 @@ struct ToastInfo: Equatable {
         self.applicationState = applicationState
         self.activeConnectionId = activeConnectionId
         self.presentFeedback = presentFeedback
+        self.windowEmitsFeedbackSound = windowEmitsFeedbackSound
         self.connection = connection
         self.workspaceStore = workspaceStore
         localNotificationService.onWillPresentNotification = { [weak self] response in
@@ -283,6 +309,15 @@ struct ToastInfo: Equatable {
     ) -> Bool {
         guard supportsMultipleWindows else { return true }
         return registeredBackends.contains(source)
+    }
+
+    /// Platform default for `windowEmitsFeedbackSound` (see its doc).
+    nonisolated static var platformWindowEmitsFeedbackSound: Bool {
+        #if os(visionOS)
+        true
+        #else
+        false
+        #endif
     }
 
     private func handleForegroundNotification(_ response: LocalNotificationService.Response) {
@@ -545,18 +580,30 @@ struct ToastInfo: Equatable {
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {
-            // Currently viewing this exact agent's conversation — haptic + sound, no toast
-            presentFeedback()
+            // Currently viewing this exact agent's conversation — feedback, no toast
+            playFeedback(source: sourceBackendID)
         } else if isWorkspaceOpen(workspaceId, connectionId: connectionId) {
-            // Viewing this workspace (agent list) — haptic + sound, no toast
+            // Viewing this workspace (agent list) — feedback, no toast
             // The agent list will update via events, so the user will see the change
-            presentFeedback()
+            playFeedback(source: sourceBackendID)
         } else {
-            // Different workspace — haptic + sound + toast
-            presentFeedback()
+            // Different workspace — feedback + toast
+            playFeedback(source: sourceBackendID)
             showToast(agentId: agentId, workspaceId: workspaceId,
                       agentName: agentName, workspaceName: workspaceName,
                       sourceBackendID: sourceBackendID)
+        }
+    }
+
+    /// Plays alert feedback: on window-emitting platforms (visionOS) publish
+    /// the request for the source backend's window to emit the chime from
+    /// its own scene (`WindowFeedbackSoundEmitter`); elsewhere play the
+    /// global haptic + sound.
+    private func playFeedback(source: BackendID) {
+        if windowEmitsFeedbackSound {
+            windowFeedbackEvent = FeedbackEvent(sourceBackendID: source)
+        } else {
+            presentFeedback()
         }
     }
 
