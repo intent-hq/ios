@@ -142,6 +142,19 @@ struct ConnectionFailureView: View {
         message.localizedCaseInsensitiveContains("certificate")
     }
 
+    /// The saved record auto-retry dials: this window's own bound
+    /// connection resolved from the saved list — never the global pairing
+    /// record, so a retry success reconnects this window's backend instead
+    /// of retargeting it at the last-used one (window model v2). Nil —
+    /// unbound window, or the record was deleted mid-failure — means there
+    /// is nothing to dial.
+    static func autoRetryConnection(
+        connections: [StoredConnection], windowConnectionID: UUID?
+    ) -> StoredConnection? {
+        guard let windowConnectionID else { return nil }
+        return connections.first { $0.id == windowConnectionID }
+    }
+
     /// Saved connections other than this window's currently failing bound
     /// one, most recently used first.
     static func alternativeConnections(
@@ -202,19 +215,25 @@ struct ConnectionFailureView: View {
                 try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { break }
 
-                // Try to connect
-                guard let pairing = PersistenceManager.shared.loadPairing() else {
-                    coordinator.currentScreen = .pairing
+                // Dial this window's own bound record (re-read each
+                // attempt so rotated tokens synced mid-retry are used);
+                // a missing record routes to pairing instead of dialing
+                // another backend's.
+                guard let record = ConnectionFailureView.autoRetryConnection(
+                    connections: PersistenceManager.shared.loadConnections(),
+                    windowConnectionID: coordinator.backendID?.connectionID)
+                else {
+                    coordinator.onReconnect()
                     return
                 }
 
                 do {
                     try await session.connection.connect(
-                        hosts: pairing.server.hosts,
-                        port: pairing.server.port,
-                        token: pairing.token,
-                        certFingerprint: pairing.server.certFingerprint,
-                        tcAddress: pairing.server.tcAddress
+                        hosts: record.server.hosts,
+                        port: record.server.port,
+                        token: record.token,
+                        certFingerprint: record.server.certFingerprint,
+                        tcAddress: record.server.tcAddress
                     )
                     // A cancelled retry must never route: the user may have
                     // switched to another saved connection while this connect
