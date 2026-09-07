@@ -365,12 +365,19 @@ struct MessageInputView: View {
         }
 
         dictationSession = DictationSession(baseText: localText, insertionOffset: caretOffset)
-        dictation.onTranscriptChange = { transcription, _ in
+        dictation.onTranscriptChange = { transcription, endsSegment in
             guard var session = dictationSession else { return }
-            switch session.apply(transcription: transcription, to: localText) {
+            switch session.apply(transcription: transcription, endsSegment: endsSegment, to: localText) {
             case .merged(let text):
                 localText = text
                 dictationSession = session
+                if endsSegment {
+                    // Programmatic text sets don't reliably fire a selection
+                    // change, so the observed caret can be stale; track the
+                    // committed insertion point so a re-tap after the
+                    // recognizer finishes appends instead of replacing.
+                    caretOffset = session.transcript.insertionOffset
+                }
             case .diverged:
                 // The composer text was edited outside dictation (typed, or
                 // replaced by the view model — e.g. a send cleared it). The
