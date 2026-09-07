@@ -35,8 +35,10 @@ struct DisconnectedView: View {
                     .font(.title2.bold())
                     .foregroundStyle(Theme.foreground(for: colorScheme))
 
-                if let pairing = PersistenceManager.shared.loadPairing() {
-                    Text("Reconnecting to \(pairing.server.name)...")
+                // Window-scoped: name this window's bound backend, never the
+                // global pairing record (another window's backend).
+                if let connection = coordinator.windowConnection {
+                    Text("Reconnecting to \(connection.server.name)...")
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
