@@ -17,6 +17,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     case complete
     case prReady
     case prOpen
+    case prQueued
     case prMerged
     /// A wire value this build does not know (a newer daemon's status) —
     /// rendered neutrally rather than being folded into another status.
@@ -39,6 +40,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case "complete": self = .complete
         case "pr_ready": self = .prReady
         case "pr_open": self = .prOpen
+        case "pr_queued": self = .prQueued
         case "pr_merged": self = .prMerged
         default: return nil
         }
@@ -55,6 +57,8 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .complete: return Constants.Colors.WorkspaceStatus.complete
         case .prReady: return Constants.Colors.WorkspaceStatus.prReady
         case .prOpen: return Constants.Colors.WorkspaceStatus.prOpen
+        // Shares the open colour, matching the FE's `text-info` for both.
+        case .prQueued: return Constants.Colors.WorkspaceStatus.prOpen
         case .prMerged: return Constants.Colors.WorkspaceStatus.prMerged
         case .unknown: return Constants.Colors.WorkspaceStatus.unknown
         }
@@ -71,6 +75,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .complete: return "Complete"
         case .prReady: return "PR Mergeable"
         case .prOpen: return "PR Open"
+        case .prQueued: return "PR Queued"
         case .prMerged: return "PR Merged"
         case .unknown: return "Unknown"
         }
@@ -79,7 +84,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     /// Order for the Status view grouping. This is presentation ordering that
     /// matches the FE sidebar status view — attention states first, then a
     /// lifecycle progression (idle → not started → in progress → complete →
-    /// PR open → mergeable → merged) — not the BE-owned derivation precedence
+    /// PR open → mergeable → queued → merged) — not the BE-owned derivation precedence
     /// (which a workspace never needs here: it already resolves to a single
     /// status). Unknown values sort last.
     var sortOrder: Int {
@@ -93,8 +98,9 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         case .complete: return 6
         case .prOpen: return 7
         case .prReady: return 8
-        case .prMerged: return 9
-        case .unknown: return 10
+        case .prQueued: return 9
+        case .prMerged: return 10
+        case .unknown: return 11
         }
     }
 }

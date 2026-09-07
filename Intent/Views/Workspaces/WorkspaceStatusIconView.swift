@@ -185,6 +185,17 @@ struct WorkspaceStatusIconView: View {
             }
             .frame(width: size, height: size)
 
+        case .prQueued:
+            // Filled circle with hourglass (PR sitting in the merge queue)
+            ZStack {
+                Circle()
+                    .fill(color)
+                Image(systemName: "hourglass")
+                    .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .frame(width: size, height: size)
+
         case .prMerged:
             // Filled circle with merge icon
             ZStack {

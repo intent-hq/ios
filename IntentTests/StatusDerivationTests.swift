@@ -42,6 +42,7 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus(wireValue: "complete") == .complete)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_ready") == .prReady)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_open") == .prOpen)
+        #expect(WorkspaceDisplayStatus(wireValue: "pr_queued") == .prQueued)
         #expect(WorkspaceDisplayStatus(wireValue: "pr_merged") == .prMerged)
         #expect(WorkspaceDisplayStatus(wireValue: "some_future_status") == nil)
     }
@@ -57,6 +58,11 @@ struct StatusDerivationTests {
     @Test func resolveMapsPrReady() async throws {
         let ws = makeWorkspace(displayStatus: "pr_ready", prStatus: "Open")
         #expect(resolveDisplayStatus(for: ws) == .prReady)
+    }
+
+    @Test func resolveMapsPrQueued() async throws {
+        let ws = makeWorkspace(displayStatus: "pr_queued", prStatus: "Open")
+        #expect(resolveDisplayStatus(for: ws) == .prQueued)
     }
 
     @Test func resolveDefaultsToNotStartedWhenFieldAbsent() async throws {
@@ -176,6 +182,7 @@ struct StatusDerivationTests {
         #expect(WorkspaceDisplayStatus.complete.label == "Complete")
         #expect(WorkspaceDisplayStatus.prReady.label == "PR Mergeable")
         #expect(WorkspaceDisplayStatus.prOpen.label == "PR Open")
+        #expect(WorkspaceDisplayStatus.prQueued.label == "PR Queued")
         #expect(WorkspaceDisplayStatus.prMerged.label == "PR Merged")
         #expect(WorkspaceDisplayStatus.unknown.label == "Unknown")
     }
@@ -185,7 +192,7 @@ struct StatusDerivationTests {
     @Test func sortOrderOrdering() async throws {
         let ordered: [WorkspaceDisplayStatus] = [
             .failed, .blocked, .needsAttention, .idle, .notStarted,
-            .inProgress, .complete, .prOpen, .prReady, .prMerged, .unknown,
+            .inProgress, .complete, .prOpen, .prReady, .prQueued, .prMerged, .unknown,
         ]
         for i in 0..<ordered.count - 1 {
             #expect(ordered[i].sortOrder < ordered[i + 1].sortOrder)
