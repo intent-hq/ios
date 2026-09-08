@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Intent
 
@@ -6,6 +7,15 @@ import Testing
 /// the cert probe + user trust confirmation, and a failed probe aborts —
 /// pairing never falls back to plain ws://.
 struct PairingFlowTests {
+
+    private func makePersistence(
+        storage: InMemoryKeychainStorage
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "PairingFlowTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
 
     private func payload(fingerprint: String?) -> PairingPayload {
         PairingPayload(
@@ -42,5 +52,47 @@ struct PairingFlowTests {
         ) { _, _ in nil }
         #expect(resolution == .failed(
             message: CertFingerprintProbe.noCertErrorMessage))
+    }
+
+    @Test @MainActor func failedNewPairSaveDisconnectsAndPublishesNoPairing() async {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let existing = setup.manager.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: 4242, name: "existing", pairedAt: Date(),
+                certFingerprint: "12:34"),
+            token: "existing-token"))
+        setup.manager.setActiveConnection(id: existing.id)
+        storage.setSaveFailure(true)
+        let fake = FakeConnectionManager()
+        fake.responseMap["host.status"] = ["hostname": "test.local"]
+
+        await #expect(throws: ConnectionPairing.PersistenceError.self) {
+            try await PairingFlow.connect(
+                payload: payload(fingerprint: "ab:cd"), certFingerprint: "ab:cd",
+                connectionManager: fake, persistence: setup.manager)
+        }
+
+        #expect(setup.manager.loadConnections() == [existing])
+        #expect(setup.manager.activeConnection()?.id == existing.id)
+        #expect(fake.disconnectCallCount == 1)
+        #expect(fake.refreshHostRoutesCallCount == 0)
+    }
+
+    @Test @MainActor func successfulPairSavePersistsAndKeepsConnectionLive() async throws {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let fake = FakeConnectionManager()
+        fake.responseMap["host.status"] = ["hostname": "test.local"]
+
+        let stored = try await PairingFlow.connect(
+            payload: payload(fingerprint: "ab:cd"), certFingerprint: "ab:cd",
+            connectionManager: fake, persistence: setup.manager)
+
+        #expect(setup.manager.loadConnections() == [stored])
+        #expect(setup.manager.activeConnection()?.id == stored.id)
+        #expect(fake.disconnectCallCount == 0)
     }
 }

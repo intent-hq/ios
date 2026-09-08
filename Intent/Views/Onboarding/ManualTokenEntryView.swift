@@ -267,8 +267,14 @@ struct ManualTokenEntryView: View {
                 let server = PairedServer(
                     hosts: input.hosts, port: portNum, name: "Intent", pairedAt: Date(),
                     certFingerprint: fingerprint, tcAddress: input.tcAddress)
-                let stored = await ConnectionPairing.finalize(
-                    server: server, token: token, connection: session.connection)
+                let stored: StoredConnection
+                do {
+                    stored = try await ConnectionPairing.finalize(
+                        server: server, token: token, connection: session.connection)
+                } catch {
+                    session.connection.disconnect()
+                    throw error
+                }
                 dismiss()
                 if let onPaired {
                     onPaired(stored)

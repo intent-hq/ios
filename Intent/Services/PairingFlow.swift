@@ -48,7 +48,8 @@ enum PairingFlow {
     /// connection the presenting window will keep using.
     static func connect(
         payload: PairingPayload, certFingerprint: String,
-        connectionManager: any SessionConnectionManaging
+        connectionManager: any SessionConnectionManaging,
+        persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
         try await connectionManager.connect(
             hosts: payload.hosts, port: payload.port, token: payload.token,
@@ -65,7 +66,15 @@ enum PairingFlow {
             hosts: payload.hosts, port: payload.port, name: "Intent",
             pairedAt: Date(), certFingerprint: certFingerprint,
             tcAddress: payload.tcAddress)
-        return await ConnectionPairing.finalize(
-            server: server, token: payload.token, connection: connectionManager)
+        do {
+            return try await ConnectionPairing.finalize(
+                server: server, token: payload.token, connection: connectionManager,
+                persistence: persistence)
+        } catch {
+            // The authenticated socket belongs to this failed pairing attempt;
+            // do not leave it live when no saved connection can own it.
+            await connectionManager.disconnect()
+            throw error
+        }
     }
 }
