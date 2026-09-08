@@ -127,6 +127,10 @@ extension SpecialistInfo {
     /// workspace's hasLoaded while the fetch task has not started yet.
     func prepareForWorkspaceChange(to workspaceId: String) {
         guard self.workspaceId != workspaceId else { return }
+        // Advance the workspace id now, not when the fetch task starts:
+        // an in-flight response for the old workspace must already fail
+        // the stale-response guard in _fetchAgents.
+        self.workspaceId = workspaceId
         agents = []
         hasLoaded = false
     }

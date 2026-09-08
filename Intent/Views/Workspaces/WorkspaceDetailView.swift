@@ -214,6 +214,22 @@ struct WorkspaceDetailView: View {
         .onChange(of: agentStore.agents) { _, newAgents in
             viewModel.agents = newAgents
         }
+        .onChange(of: agentStore.hasLoaded) { _, hasLoaded in
+            // The agent list just became authoritative for this workspace:
+            // let the coordinator continue into a sole top-level agent. The
+            // sync keeps the decision independent of onChange ordering.
+            guard hasLoaded else { return }
+            viewModel.agents = agentStore.agents
+            // The saved tab restores synchronously before the fetch lands, so
+            // a workspace showing its Context tab stays there: consume the arm
+            // instead of forwarding.
+            guard selectedTab == 0 else {
+                coordinator.cancelPendingAutoOpen(workspaceId: workspaceId)
+                return
+            }
+            coordinator.autoOpenSoleAgentIfArmed(
+                workspaceId: workspaceId, foregroundAgents: viewModel.foregroundAgents)
+        }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
             if workspaceStore.lastUpdated != nil && !newWorkspaces.contains(where: { $0.id == workspaceId }) {
