@@ -21,11 +21,14 @@ struct PlatformGuardAllowlistTests {
 
     private static let visionOSAllowlist: Set<String> = [
         "Intent/App/IntentApp.swift",
+        "Intent/App/RootView.swift",
         "Intent/DesignSystem/Layout.swift",
         "Intent/DesignSystem/VisionHitTarget.swift",
         "Intent/Services/SpeechDictationController.swift",
         "Intent/Utils/HapticManager.swift",
+        "Intent/Utils/NotificationManager.swift",
         "Intent/Views/Components/NavigationTitleSubtitleView.swift",
+        "Intent/Views/Components/WindowFeedbackSoundEmitter.swift",
         "Intent/Views/Conversation/Composer/MessageInputView.swift",
         "Intent/Views/Conversation/Composer/SubmittableTextView.swift",
         "Intent/Views/Conversation/Transcript/ConversationColumnView.swift",
