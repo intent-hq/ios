@@ -193,23 +193,21 @@ struct ManualTokenEntryViewTests {
         #expect(fingerprint == Self.fixtureIdentityFingerprint)
     }
 
-    // MARK: - Input classification (direct host vs tailcat address, mirroring
-    // cloudlands-fe's shared isTcAddress predicate)
+    // MARK: - Input classification (direct host vs Tailcat connection blob)
 
-    @Test func classifiesDaemonMintedTcAddressesAsTailcat() {
-        #expect(ManualConnectionInput.classify("tc-key-abc123")
-            == .tailcat(tcAddress: "tc-key-abc123"))
-        #expect(ManualConnectionInput.classify("tc-7f2a91")
-            == .tailcat(tcAddress: "tc-7f2a91"))
+    /// Pinned tailcat v0.4.0's synthetic RegionID fixture: `tc` followed by
+    /// case-sensitive, unpadded base64url-encoded CBOR. Contains no credential.
+    private static let syntheticSDKConnBlob =
+        "tcomFwWCAAAQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2FpCg"
+
+    @Test func classifiesSDKConnectionBlobAsTailcatWithoutChangingEncodedCase() {
+        #expect(ManualConnectionInput.classify(Self.syntheticSDKConnBlob)
+            == .tailcat(tcAddress: Self.syntheticSDKConnBlob))
     }
 
     @Test func classificationToleratesPasteArtifacts() {
-        #expect(ManualConnectionInput.classify("  tc-key-abc123  ")
-            == .tailcat(tcAddress: "tc-key-abc123"))
-        // Hand-typed uppercase still dials: tc addresses are daemon-minted
-        // lowercase, so the dialed address is lowercased like cloudlands-fe.
-        #expect(ManualConnectionInput.classify("TC-KEY-ABC123")
-            == .tailcat(tcAddress: "tc-key-abc123"))
+        #expect(ManualConnectionInput.classify("  \(Self.syntheticSDKConnBlob)\n")
+            == .tailcat(tcAddress: Self.syntheticSDKConnBlob))
     }
 
     @Test func classifiesHostnamesIPsAndNearMissesAsDirect() {
@@ -217,6 +215,8 @@ struct ManualTokenEntryViewTests {
         #expect(ManualConnectionInput.classify("192.168.1.10") == .direct(host: "192.168.1.10"))
         #expect(ManualConnectionInput.classify("tcp-server.local") == .direct(host: "tcp-server.local"))
         #expect(ManualConnectionInput.classify("tchost") == .direct(host: "tchost"))
+        #expect(ManualConnectionInput.classify("tc-key-abc123") == .direct(host: "tc-key-abc123"))
+        #expect(ManualConnectionInput.classify("tco.example.com") == .direct(host: "tco.example.com"))
         #expect(ManualConnectionInput.classify("") == .direct(host: ""))
         #expect(ManualConnectionInput.classify(" 10.0.0.7 ") == .direct(host: "10.0.0.7"))
     }
@@ -228,9 +228,9 @@ struct ManualTokenEntryViewTests {
     }
 
     @Test func tailcatInputConnectsTunnelOnly() {
-        let input = ManualConnectionInput.classify("tc-key-abc123")
+        let input = ManualConnectionInput.classify(Self.syntheticSDKConnBlob)
         #expect(input.hosts == [])
-        #expect(input.tcAddress == "tc-key-abc123")
+        #expect(input.tcAddress == Self.syntheticSDKConnBlob)
     }
 
     // MARK: - Fingerprint probe through the tailcat tunnel (mock dialer)
@@ -260,14 +260,14 @@ struct ManualTokenEntryViewTests {
         let probed = OSAllocatedUnfairLock<[String]>(initialState: [])
 
         let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
-            dialer: dialer, tcAddress: "tc-key-abc123", remotePort: 5180
+            dialer: dialer, tcAddress: Self.syntheticSDKConnBlob, remotePort: 5181
         ) { host, port in
             probed.withLock { $0.append("\(host):\(port)") }
             return "ab:cd:ef"
         }
 
         #expect(fingerprint == "ab:cd:ef")
-        #expect(dialer.observed.withLock { $0 } == ["tc-key-abc123": 5180])
+        #expect(dialer.observed.withLock { $0 } == [Self.syntheticSDKConnBlob: 5181])
         #expect(probed.withLock { $0 } == ["127.0.0.1:45678"])
         #expect(tunnel.isClosed)
     }

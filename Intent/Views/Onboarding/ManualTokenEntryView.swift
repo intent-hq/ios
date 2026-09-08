@@ -1,24 +1,37 @@
 import SwiftUI
 
 /// Classification of the manual-entry "Host / Tailcat Address" input: a
-/// direct host/IP dialed as today, or a tailcat tunnel address dialed via
-/// TailcatKit. Mirrors cloudlands-fe's shared `isTcAddress` predicate
-/// (PROTOCOL §12.3): tc addresses are daemon-minted lowercase with the
-/// `tc-` prefix, and the check stays a cheap prefix test on purpose — the
-/// tunnel dial itself is the authoritative validation.
+/// direct host/IP dialed as today, or a Tailcat connection blob dialed via
+/// TailcatKit. Pinned tailcat v0.4.0 encodes blobs as lowercase `tc` followed
+/// by unpadded base64url-encoded CBOR; the tunnel dial remains the authoritative
+/// validation of the decoded contents.
 enum ManualConnectionInput: Equatable {
     case direct(host: String)
     case tailcat(tcAddress: String)
 
     static func classify(_ raw: String) -> ManualConnectionInput {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.lowercased().hasPrefix("tc-") {
-            // Lowercase like cloudlands-fe does for its dial: tc addresses
-            // are daemon-minted lowercase, so a hand-typed `TC-…` still
-            // dials.
-            return .tailcat(tcAddress: trimmed.lowercased())
+        if isTailcatConnectionBlob(trimmed) {
+            return .tailcat(tcAddress: trimmed)
         }
         return .direct(host: trimmed)
+    }
+
+    private static func isTailcatConnectionBlob(_ input: String) -> Bool {
+        guard input.hasPrefix("tc") else { return false }
+        let encoded = input.dropFirst(2)
+        let base64URLCharacters = CharacterSet.alphanumerics
+            .union(CharacterSet(charactersIn: "-_"))
+        guard !encoded.isEmpty,
+              encoded.unicodeScalars.allSatisfy(base64URLCharacters.contains)
+        else { return false }
+
+        var base64 = String(encoded)
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        guard let firstByte = Data(base64Encoded: base64)?.first else { return false }
+        return firstByte & 0b1110_0000 == 0b1010_0000 // CBOR map
     }
 
     /// Direct hosts to race and persist: empty for a tunnel-only target
@@ -99,7 +112,7 @@ struct ManualTokenEntryView: View {
                                 Text("Host / Tailcat Address")
                                     .font(.caption.weight(.medium))
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                TextField("192.168.1.42 or tc-…", text: $host)
+                                TextField("192.168.1.42 or tc…", text: $host)
                                     .textFieldStyle(.roundedBorder)
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
