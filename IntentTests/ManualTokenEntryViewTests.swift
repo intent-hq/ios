@@ -215,6 +215,7 @@ struct ManualTokenEntryViewTests {
         #expect(ManualConnectionInput.classify("192.168.1.10") == .direct(host: "192.168.1.10"))
         #expect(ManualConnectionInput.classify("tcp-server.local") == .direct(host: "tcp-server.local"))
         #expect(ManualConnectionInput.classify("tchost") == .direct(host: "tchost"))
+        #expect(ManualConnectionInput.classify("tcoA") == .direct(host: "tcoA"))
         #expect(ManualConnectionInput.classify("tc-key-abc123") == .direct(host: "tc-key-abc123"))
         #expect(ManualConnectionInput.classify("tco.example.com") == .direct(host: "tco.example.com"))
         #expect(ManualConnectionInput.classify("") == .direct(host: ""))

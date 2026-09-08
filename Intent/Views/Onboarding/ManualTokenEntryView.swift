@@ -30,8 +30,13 @@ enum ManualConnectionInput: Equatable {
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        guard let firstByte = Data(base64Encoded: base64)?.first else { return false }
-        return firstByte & 0b1110_0000 == 0b1010_0000 // CBOR map
+        guard let decoded = Data(base64Encoded: base64), decoded.count >= 37 else { return false }
+        // v0.4.0's wireConnInfo emits a 1–4 entry map whose first, required
+        // field is `p`: a 32-byte server public key. Requiring that structure
+        // prevents short legal DNS labels such as `tcoA` (an empty CBOR map)
+        // from being mistaken for connection blobs.
+        return (0xa1...0xa4).contains(decoded[0])
+            && decoded[1...4].elementsEqual([0x61, 0x70, 0x58, 0x20])
     }
 
     /// Direct hosts to race and persist: empty for a tunnel-only target
