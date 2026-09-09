@@ -112,7 +112,8 @@ struct RootView: View {
                     case .connectionFailed(let error):
                         ConnectionFailureView(
                             errorMessage: error,
-                            isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error)
+                            isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
+                            retryPolicy: coordinator.connectionFailureRetryPolicy
                         )
                     case .settings:
                         SettingsView()

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import Intent
 
@@ -211,6 +212,7 @@ struct PersistenceManagerTests {
 /// leak between runs.
 final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     private var items: [String: Data] = [:]
+    private var shouldFailSaves = false
     private let lock = NSLock()
 
     private func key(_ service: String, _ account: String) -> String { "\(service)\u{1F}\(account)" }
@@ -219,8 +221,15 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     func save(data: Data, service: String, account: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        guard !shouldFailSaves else { return false }
         items[key(service, account)] = data
         return true
+    }
+
+    func setSaveFailure(_ shouldFail: Bool) {
+        lock.lock()
+        shouldFailSaves = shouldFail
+        lock.unlock()
     }
 
     func load(service: String, account: String) -> Data? {
@@ -236,11 +245,207 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     }
 }
 
+@Suite("Connection persistence failures", .serialized)
+struct ConnectionPersistenceFailureTests {
+    private func makePersistence(
+        storage: InMemoryKeychainStorage
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "ConnectionPersistenceFailureTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
+
+    private func connection(token: String = "old") -> StoredConnection {
+        StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+                certFingerprint: "aa:bb"),
+            token: token, displayName: "Original")
+    }
+
+    @Test func failedRemovalPreservesRecordAndActivePointer() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        setup.manager.setActiveConnection(id: stored.id)
+        storage.setSaveFailure(true)
+
+        #expect(!setup.manager.deleteConnection(id: stored.id))
+        #expect(setup.manager.loadConnections() == [stored])
+        #expect(setup.manager.activeConnection()?.id == stored.id)
+    }
+
+    @Test func failedSyncedMergePreservesRecordPointerAndReportsNoChange() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        setup.manager.setActiveConnection(id: stored.id)
+        storage.setSaveFailure(true)
+        let tombstone = SyncedBackendRecord(
+            label: "Synced Mac", host: "10.0.0.1", hosts: ["10.0.0.1"], port: 4242,
+            fingerprint: "aa:bb", hostname: nil, detectHosts: true, token: "",
+            updatedAt: Date().timeIntervalSince1970 * 1000, deleted: true,
+            deletedAt: Date().timeIntervalSince1970 * 1000)
+
+        let outcome = setup.manager.mergeSyncedBackends(records: [tombstone])
+
+        #expect(!outcome.changed)
+        #expect(setup.manager.loadConnections() == [stored])
+        #expect(setup.manager.activeConnection()?.id == stored.id)
+    }
+
+    @Test func failedMetadataRefreshKeepsPreviouslySavedRecord() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        storage.setSaveFailure(true)
+
+        #expect(!setup.manager.updateConnectionDisplayName(
+            id: stored.id, displayName: "Updated"))
+        #expect(setup.manager.loadConnections() == [stored])
+    }
+}
+
 /// Installs the in-memory Keychain backend exactly once per test process.
 enum TestKeychainStorage {
     static let installed: Void = {
         PersistenceManager.shared.keychainStorage = InMemoryKeychainStorage()
     }()
+}
+
+private final class FakeSecItemStore {
+    struct Record: Equatable {
+        var data: Data
+        var accessibility: String
+    }
+
+    var items: [String: Record]
+    var updateFailure: OSStatus?
+    var addFailure: OSStatus?
+    private(set) var updateCallCount = 0
+    private(set) var addCallCount = 0
+    private(set) var deleteCallCount = 0
+
+    init(items: [String: Record] = [:]) {
+        self.items = items
+    }
+
+    func record(service: String, account: String) -> Record? {
+        items[key(service: service, account: account)]
+    }
+
+    func securityCalls() -> SecItemKeychainStorage.SecurityCalls {
+        SecItemKeychainStorage.SecurityCalls(
+            update: { [self] query, attributes in
+                updateCallCount += 1
+                if let updateFailure { return updateFailure }
+                guard let key = key(from: query), var record = items[key] else {
+                    return errSecItemNotFound
+                }
+                guard let data = attributes[kSecValueData as String] as? Data else {
+                    return errSecParam
+                }
+                record.data = data
+                items[key] = record
+                return errSecSuccess
+            },
+            add: { [self] query in
+                addCallCount += 1
+                if let addFailure { return addFailure }
+                guard let key = key(from: query), items[key] == nil,
+                      let data = query[kSecValueData as String] as? Data,
+                      let accessibility = query[kSecAttrAccessible as String] as? String else {
+                    return errSecParam
+                }
+                items[key] = Record(data: data, accessibility: accessibility)
+                return errSecSuccess
+            },
+            delete: { [self] query in
+                deleteCallCount += 1
+                guard let key = key(from: query) else { return errSecParam }
+                items.removeValue(forKey: key)
+                return errSecSuccess
+            }
+        )
+    }
+
+    private func key(service: String, account: String) -> String {
+        "\(service)\u{1F}\(account)"
+    }
+
+    private func key(from query: [String: Any]) -> String? {
+        guard let service = query[kSecAttrService as String] as? String,
+              let account = query[kSecAttrAccount as String] as? String else { return nil }
+        return key(service: service, account: account)
+    }
+}
+
+@Suite("SecItem Keychain storage")
+struct SecItemKeychainStorageTests {
+    private let service = "test.service"
+    private let account = "test.account"
+    private let original = FakeSecItemStore.Record(
+        data: Data("old".utf8), accessibility: "existing-accessibility")
+
+    @Test func updateSucceedsWithoutDeleteOrAdd() {
+        let fake = FakeSecItemStore(items: ["\(service)\u{1F}\(account)": original])
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+        let replacement = Data("new".utf8)
+
+        #expect(storage.save(data: replacement, service: service, account: account))
+        #expect(
+            fake.record(service: service, account: account)
+                == .init(data: replacement, accessibility: original.accessibility))
+        #expect(fake.updateCallCount == 1)
+        #expect(fake.addCallCount == 0)
+        #expect(fake.deleteCallCount == 0)
+    }
+
+    @Test func updateFailurePreservesExistingRecordWithoutFallback() {
+        let fake = FakeSecItemStore(items: ["\(service)\u{1F}\(account)": original])
+        fake.updateFailure = errSecInteractionNotAllowed
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+
+        #expect(!storage.save(data: Data("new".utf8), service: service, account: account))
+        #expect(fake.record(service: service, account: account) == original)
+        #expect(fake.updateCallCount == 1)
+        #expect(fake.addCallCount == 0)
+        #expect(fake.deleteCallCount == 0)
+    }
+
+    @Test func missingItemAddsWithExistingIdentityAndAccessibility() {
+        let fake = FakeSecItemStore()
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+        let data = Data("new".utf8)
+
+        #expect(storage.save(data: data, service: service, account: account))
+        #expect(
+            fake.record(service: service, account: account)
+                == .init(
+                    data: data,
+                    accessibility: kSecAttrAccessibleAfterFirstUnlock as String))
+        #expect(fake.updateCallCount == 1)
+        #expect(fake.addCallCount == 1)
+        #expect(fake.deleteCallCount == 0)
+    }
+
+    @Test func addFailureLeavesOtherEntriesUntouched() {
+        let otherAccount = "other.account"
+        let fake = FakeSecItemStore(items: ["\(service)\u{1F}\(otherAccount)": original])
+        fake.addFailure = errSecNotAvailable
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+
+        #expect(!storage.save(data: Data("new".utf8), service: service, account: account))
+        #expect(fake.record(service: service, account: account) == nil)
+        #expect(fake.record(service: service, account: otherAccount) == original)
+        #expect(fake.updateCallCount == 1)
+        #expect(fake.addCallCount == 1)
+        #expect(fake.deleteCallCount == 0)
+    }
 }
 
 /// Tests for the multi-connection persistence layer (Keychain-backed connection list,

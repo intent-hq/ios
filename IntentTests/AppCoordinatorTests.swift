@@ -492,6 +492,69 @@ final class AppCoordinatorTests {
         }
     }
 
+    @Test @MainActor func failedDeleteKeepsSavedStateAndLiveWindow() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let storage = InMemoryKeychainStorage()
+        persistence.keychainStorage = storage
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: stored.id)
+        persistence.saveLastScreen(PersistenceManager.SavedScreen(
+            screen: "workspaceList", workspaceId: nil, agentId: nil,
+            agentName: nil, noteId: nil, noteTitle: nil), for: stored.id)
+        storage.setSaveFailure(true)
+        let fake = FakeConnectionManager()
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared, connection: fake,
+            backendID: BackendID(stored.id), persistence: persistence,
+            sessionRegistry: registry)
+        coordinator.currentScreen = .settings
+
+        #expect(!coordinator.onDeleteConnection(id: stored.id))
+
+        #expect(persistence.loadConnections() == [stored])
+        #expect(persistence.activeConnection()?.id == stored.id)
+        #expect(persistence.loadLastScreen(for: stored.id) != nil)
+        #expect(!registry.isBackendRemoved(BackendID(stored.id)))
+        #expect(fake.disconnectCallCount == 0)
+        if case .settings = coordinator.currentScreen {} else {
+            Issue.record("Failed deletion changed the current screen")
+        }
+    }
+
+    @Test @MainActor func failedLogOffDisconnectsButKeepsSavedStateAndShowsFailure() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let storage = InMemoryKeychainStorage()
+        persistence.keychainStorage = storage
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: stored.id)
+        persistence.saveLastScreen(PersistenceManager.SavedScreen(
+            screen: "workspaceList", workspaceId: nil, agentId: nil,
+            agentName: nil, noteId: nil, noteTitle: nil), for: stored.id)
+        storage.setSaveFailure(true)
+        let fake = FakeConnectionManager()
+        let registry = Self.markOnlySessionRegistry()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared, connection: fake,
+            backendID: BackendID(stored.id), persistence: persistence,
+            sessionRegistry: registry)
+
+        #expect(!coordinator.onLogOff())
+
+        #expect(persistence.loadConnections() == [stored])
+        #expect(persistence.activeConnection()?.id == stored.id)
+        #expect(persistence.loadLastScreen(for: stored.id) != nil)
+        #expect(!registry.isBackendRemoved(BackendID(stored.id)))
+        #expect(fake.disconnectCallCount == 1)
+        if case .connectionFailed(let message) = coordinator.currentScreen {
+            #expect(message == "Could not forget this connection. Please try again.")
+        } else {
+            Issue.record("Expected persistence failure screen")
+        }
+    }
+
     // MARK: - Window-scoped Settings / Log Off (spec lifecycle decision 2a)
 
     @Test @MainActor func windowConnection_showsBoundBackendNotLastUsed() {

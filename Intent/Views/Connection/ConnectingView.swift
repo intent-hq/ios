@@ -64,7 +64,9 @@ struct ConnectingView: View {
                 certFingerprint: connection.server.certFingerprint,
                 tcAddress: connection.server.tcAddress
             )
-            PersistenceManager.shared.touchLastConnected(id: connection.id)
+            if !PersistenceManager.shared.touchLastConnected(id: connection.id) {
+                AppLog.connection.warning("[ConnectingView] Could not persist last-connected timestamp")
+            }
             // Wait for WorkspaceStore to finish fetching workspace data before
             // navigating, so the user doesn't see an empty workspace list.
             // WorkspaceStore auto-fetches on .connected and sets lastUpdated

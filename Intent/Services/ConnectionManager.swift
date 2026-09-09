@@ -546,7 +546,11 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             let stored = PersistenceManager.shared.activeConnection(),
             stored.token == token, stored.server.port == port,
             stored.server.tcAddress != reportedTc {
-            PersistenceManager.shared.updateConnectionTcAddress(id: stored.id, tcAddress: reportedTc)
+            if !PersistenceManager.shared.updateConnectionTcAddress(
+                id: stored.id, tcAddress: reportedTc
+            ) {
+                AppLog.connection.warning("[ConnectionManager] Could not persist refreshed tunnel route")
+            }
         }
 
         guard let reported = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
@@ -577,7 +581,11 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             stored.token == token, stored.server.port == port {
             let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
             if stored.server.hosts != persistedHosts {
-                PersistenceManager.shared.updateConnectionHosts(id: stored.id, hosts: persistedHosts)
+                if !PersistenceManager.shared.updateConnectionHosts(
+                    id: stored.id, hosts: persistedHosts
+                ) {
+                    AppLog.connection.warning("[ConnectionManager] Could not persist refreshed host routes")
+                }
             }
         }
     }
@@ -603,7 +611,11 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             stored.token == token, stored.server.port == port,
             stored.displayName != name {
             AppLog.connection.debug("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
-            PersistenceManager.shared.updateConnectionDisplayName(id: stored.id, displayName: name)
+            if !PersistenceManager.shared.updateConnectionDisplayName(
+                id: stored.id, displayName: name
+            ) {
+                AppLog.connection.warning("[ConnectionManager] Could not persist refreshed display name")
+            }
         }
     }
 

@@ -46,6 +46,15 @@ class PersistenceManager {
     /// insert a duplicate record.
     @discardableResult
     func upsertConnection(_ connection: StoredConnection) -> StoredConnection {
+        upsertConnectionWithOutcome(connection).connection
+    }
+
+    /// Upserts a connection and reports whether the resulting registry was
+    /// durably saved. Callers that publish pairing success must use this form.
+    @discardableResult
+    func upsertConnectionWithOutcome(
+        _ connection: StoredConnection
+    ) -> (connection: StoredConnection, persisted: Bool) {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
         let stored: StoredConnection
@@ -84,8 +93,7 @@ class PersistenceManager {
             stored = connection
             connections.append(stored)
         }
-        saveConnectionsLocked(connections)
-        return stored
+        return (stored, saveConnectionsLocked(connections))
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -104,10 +112,11 @@ class PersistenceManager {
     /// preserving the record identity. Unlike `upsertConnection` (which matches
     /// by host set + port and would treat a grown host set as a new pairing),
     /// this never inserts or duplicates records. No-op when the id is unknown.
-    func updateConnectionHosts(id: UUID, hosts: [String]) {
+    @discardableResult
+    func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
-        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
             hosts: hosts,
@@ -117,17 +126,18 @@ class PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: server.tcAddress
         )
-        saveConnectionsLocked(connections)
+        return saveConnectionsLocked(connections)
     }
 
     /// Replaces the stored tailcat tunnel address of the connection with the
     /// given id, preserving the record identity. Used by the post-connect
     /// refresh when `system.status` reports a `tcAddress`. No-op when the id
     /// is unknown.
-    func updateConnectionTcAddress(id: UUID, tcAddress: String) {
+    @discardableResult
+    func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
-        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
             hosts: server.hosts,
@@ -137,29 +147,33 @@ class PersistenceManager {
             certFingerprint: server.certFingerprint,
             tcAddress: tcAddress
         )
-        saveConnectionsLocked(connections)
+        return saveConnectionsLocked(connections)
     }
 
     /// Replaces the stored display name of the connection with the given id,
     /// preserving the record identity. Used by the post-connect refresh so
     /// records saved before the daemon reported a pretty hostname heal on the
     /// next successful connect. No-op when the id is unknown.
-    func updateConnectionDisplayName(id: UUID, displayName: String) {
+    @discardableResult
+    func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
-        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].displayName = displayName
-        saveConnectionsLocked(connections)
+        return saveConnectionsLocked(connections)
     }
 
-    func deleteConnection(id: UUID) {
+    @discardableResult
+    func deleteConnection(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
+        guard connections.contains(where: { $0.id == id }) else { return true }
         connections.removeAll { $0.id == id }
-        saveConnectionsLocked(connections)
+        guard saveConnectionsLocked(connections) else { return false }
         if activeConnectionIdLocked() == id {
             defaults.removeObject(forKey: activeConnectionIdKey)
         }
+        return true
     }
 
     /// The last-used backend pointer (window model v2: no longer a
@@ -185,12 +199,13 @@ class PersistenceManager {
         }
     }
 
-    func touchLastConnected(id: UUID) {
+    @discardableResult
+    func touchLastConnected(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
-        guard let index = connections.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].lastConnectedAt = Date()
-        saveConnectionsLocked(connections)
+        return saveConnectionsLocked(connections)
     }
 
     /// Merges the iCloud-synced backend registry's per-key winners (including
@@ -273,9 +288,13 @@ class PersistenceManager {
 
     // MARK: - Pairing (compatibility shims over the connections API)
 
-    func savePairing(server: PairedServer, token: String) {
-        let stored = upsertConnection(StoredConnection(server: server, token: token))
-        setActiveConnection(id: stored.id)
+    @discardableResult
+    func savePairing(server: PairedServer, token: String) -> Bool {
+        let outcome = upsertConnectionWithOutcome(
+            StoredConnection(server: server, token: token))
+        guard outcome.persisted else { return false }
+        setActiveConnection(id: outcome.connection.id)
+        return true
     }
 
     func loadPairing() -> (server: PairedServer, token: String)? {
@@ -284,14 +303,16 @@ class PersistenceManager {
     }
 
     /// Forgets the active connection (removes it from the saved list).
-    func clearPairing() {
+    @discardableResult
+    func clearPairing() -> Bool {
         if let connection = activeConnection() {
-            deleteConnection(id: connection.id)
+            guard deleteConnection(id: connection.id) else { return false }
         }
         // Clean up any legacy entries
         deleteFromKeychain(account: keychainAccountToken)
         deleteFromKeychain(account: keychainAccountServer)
         defaults.removeObject(forKey: serverKey)
+        return true
     }
 
     // MARK: - Draft Messages
@@ -476,18 +497,43 @@ protocol KeychainStorage {
 
 /// Production backend over the Security framework.
 struct SecItemKeychainStorage: KeychainStorage {
+    struct SecurityCalls {
+        let update: ([String: Any], [String: Any]) -> OSStatus
+        let add: ([String: Any]) -> OSStatus
+        let delete: ([String: Any]) -> OSStatus
+
+        static let live = SecurityCalls(
+            update: { query, attributes in
+                SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+            },
+            add: { query in SecItemAdd(query as CFDictionary, nil) },
+            delete: { query in SecItemDelete(query as CFDictionary) }
+        )
+    }
+
+    private let security: SecurityCalls
+
+    init(security: SecurityCalls = .live) {
+        self.security = security
+    }
+
     @discardableResult
     func save(data: Data, service: String, account: String) -> Bool {
-        delete(service: service, account: account) // Remove existing
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+        ]
+        let updateStatus = security.update(query, [kSecValueData as String: data])
+        if updateStatus == errSecSuccess { return true }
+        guard updateStatus == errSecItemNotFound else { return false }
+
+        var addQuery = query
+        addQuery.merge([
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
-        ]
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        ]) { _, new in new }
+        return security.add(addQuery) == errSecSuccess
     }
 
     func load(service: String, account: String) -> Data? {
@@ -510,7 +556,7 @@ struct SecItemKeychainStorage: KeychainStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
-        SecItemDelete(query as CFDictionary)
+        _ = security.delete(query)
     }
 }
 

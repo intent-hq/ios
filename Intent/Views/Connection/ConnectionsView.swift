@@ -5,6 +5,14 @@ import SwiftUI
 /// the user-facing `prettyHostname` over the raw `hostname`, falling back to
 /// host:port), saves it (upsert), and marks it active.
 enum ConnectionPairing {
+    enum PersistenceError: LocalizedError {
+        case saveFailed
+
+        var errorDescription: String? {
+            String(localized: "Could not save this connection. Please try again.")
+        }
+    }
+
     /// Picks the connection display name from a `host.status` result:
     /// `prettyHostname` (user-facing, e.g. "Clement's Mac Studio") when present
     /// and non-blank, else `hostname`, else nil (caller falls back to host:port).
@@ -25,17 +33,20 @@ enum ConnectionPairing {
     /// over, so a pinned session names and refreshes its own backend.
     @discardableResult
     static func finalize(
-        server: PairedServer, token: String, connection: any SessionConnectionManaging
-    ) async -> StoredConnection {
+        server: PairedServer, token: String, connection: any SessionConnectionManaging,
+        persistence: PersistenceManager = .shared
+    ) async throws -> StoredConnection {
         var displayName: String?
         if let result = try? await connection.request("host.status") {
             displayName = Self.displayName(fromHostStatus: result)
         }
-        let stored = PersistenceManager.shared.upsertConnection(
+        let outcome = persistence.upsertConnectionWithOutcome(
             StoredConnection(
                 server: server, token: token,
                 displayName: displayName, lastConnectedAt: Date()))
-        PersistenceManager.shared.setActiveConnection(id: stored.id)
+        guard outcome.persisted else { throw PersistenceError.saveFailed }
+        let stored = outcome.connection
+        persistence.setActiveConnection(id: stored.id)
         // Re-trigger the post-connect route refresh now that the record exists:
         // the refresh fired by connect() may have run before the upsert above
         // and found no stored record to persist the daemon-reported IPs into.
@@ -57,6 +68,7 @@ struct ConnectionsView: View {
     @State private var showQRScanner = false
     @State private var showManualEntry = false
     @State private var connectionPendingDelete: StoredConnection?
+    @State private var showDeleteError = false
 
     var body: some View {
         NavigationStack {
@@ -115,6 +127,11 @@ struct ConnectionsView: View {
                 Text(connection.id == windowConnectionId
                     ? "This is the current connection. Deleting it will disconnect you."
                     : "This removes the saved connection. You'll need to pair again to reconnect.")
+            }
+            .alert("Couldn’t Delete Connection", isPresented: $showDeleteError) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The saved connection could not be removed. Please try again.")
             }
             .onAppear {
                 // Pull in registry changes synced from other devices while
@@ -216,7 +233,10 @@ struct ConnectionsView: View {
 
     private func delete(_ connection: StoredConnection) {
         let wasBound = connection.id == windowConnectionId
-        coordinator.onDeleteConnection(id: connection.id)
+        guard coordinator.onDeleteConnection(id: connection.id) else {
+            showDeleteError = true
+            return
+        }
         reload()
         if wasBound { dismiss() }
     }

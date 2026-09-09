@@ -6,6 +6,15 @@ import Testing
 /// prettyHostname > hostname > nil (caller falls back to host:port).
 struct ConnectionPairingTests {
 
+    private func makePersistence(
+        storage: InMemoryKeychainStorage
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "ConnectionPairingTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
+
     @Test func prefersPrettyHostnameOverHostname() {
         let status: [String: Any] = [
             "prettyHostname": "Clement's Mac Studio",
@@ -52,5 +61,33 @@ struct ConnectionPairingTests {
             hosts: ["10.0.0.1"], port: 4242, name: "Intent", pairedAt: Date())
         let stored = StoredConnection(server: server, token: "tok", displayName: nil)
         #expect(stored.displayName == "10.0.0.1:4242")
+    }
+
+    @Test @MainActor func failedRepairKeepsOldRecordAndActivePointer() async {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let old = setup.manager.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+                certFingerprint: "aa:bb"),
+            token: "old-token"))
+        setup.manager.setActiveConnection(id: old.id)
+        storage.setSaveFailure(true)
+        let fake = FakeConnectionManager()
+        fake.responseMap["host.status"] = ["prettyHostname": "Updated Name"]
+        let repairedServer = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+            certFingerprint: "aa:bb")
+
+        await #expect(throws: ConnectionPairing.PersistenceError.self) {
+            try await ConnectionPairing.finalize(
+                server: repairedServer, token: "new-token", connection: fake,
+                persistence: setup.manager)
+        }
+
+        #expect(setup.manager.loadConnections() == [old])
+        #expect(setup.manager.activeConnection()?.id == old.id)
+        #expect(fake.refreshHostRoutesCallCount == 0)
     }
 }

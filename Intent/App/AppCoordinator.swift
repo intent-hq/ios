@@ -15,6 +15,11 @@ enum AppScreen {
     case disconnected
 }
 
+enum ConnectionFailureRetryPolicy: Equatable {
+    case automaticConnection
+    case manualLogOff
+}
+
 /// A pairing request delivered via an `intent://pair` deep link, awaiting
 /// explicit user confirmation before any connection is attempted — unlike the
 /// in-app camera scan, a deep link can be triggered by any web page.
@@ -27,6 +32,7 @@ struct DeepLinkPairingRequest: Identifiable, Equatable {
 @Observable
 class AppCoordinator {
     var currentScreen: AppScreen = .loading
+    private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
@@ -252,6 +258,7 @@ class AppCoordinator {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
                 guard let self = self, mismatch else { return }
+                self.connectionFailureRetryPolicy = .automaticConnection
                 self.currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
                 // Reset the flag so it doesn't re-trigger
                 self.connection.certMismatchDetected = false
@@ -553,6 +560,7 @@ class AppCoordinator {
     }
 
     func onConnectionFailed(error: String) {
+        connectionFailureRetryPolicy = .automaticConnection
         currentScreen = .connectionFailed(error: error)
     }
 
@@ -634,9 +642,13 @@ class AppCoordinator {
     /// including this one — leaves it via the registry's removal mark
     /// (window model v2: the window root closes the window, or rebinds a
     /// last remaining window to the pairing surface).
-    func onDeleteConnection(id: UUID) {
+    @discardableResult
+    func onDeleteConnection(id: UUID) -> Bool {
         let wasThisWindows = windowConnectionID == id
-        persistence.deleteConnection(id: id)
+        guard persistence.deleteConnection(id: id) else {
+            AppLog.app.error("[AppCoordinator] Failed to delete saved connection")
+            return false
+        }
         persistence.clearLastScreen(for: id)
         sessionRegistry.markBackendRemoved(BackendID(id))
         if wasThisWindows {
@@ -644,6 +656,7 @@ class AppCoordinator {
         } else if persistence.loadConnections().isEmpty {
             pairingShowsSavedConnections = false
         }
+        return true
     }
 
     func onOpenSettings() {
@@ -654,13 +667,33 @@ class AppCoordinator {
     /// forgotten backend leaves it via the registry's removal mark (the
     /// window root closes it, or rebinds a last remaining window to the
     /// pairing surface, offering any remaining saved connections).
-    func onLogOff() {
+    @discardableResult
+    func onLogOff() -> Bool {
         if let record = windowConnection {
-            persistence.deleteConnection(id: record.id)
+            guard persistence.deleteConnection(id: record.id) else {
+                AppLog.app.error("[AppCoordinator] Failed to forget saved connection during log off")
+                handleFailedLogOff()
+                return false
+            }
             persistence.clearLastScreen(for: record.id)
             sessionRegistry.markBackendRemoved(BackendID(record.id))
         }
         exitRemovedBackend()
+        return true
+    }
+
+    /// A user-requested log off always disconnects, even when the saved record
+    /// cannot be forgotten. Keep persistence-derived state intact and surface
+    /// the failure instead of routing to first-run pairing.
+    private func handleFailedLogOff() {
+        hasEverConnected = false
+        isDisconnected = false
+        connection.disconnect()
+        resetWorkspaceStore()
+        selectedWorkspaceId = nil
+        connectionFailureRetryPolicy = .manualLogOff
+        currentScreen = .connectionFailed(
+            error: String(localized: "Could not forget this connection. Please try again."))
     }
 
     func onSelectWorkspace(_ workspaceId: String) {

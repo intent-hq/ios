@@ -6,6 +6,7 @@ struct ConnectionFailureView: View {
     @Environment(\.colorScheme) var colorScheme
     let errorMessage: String
     var isCertMismatch: Bool = false
+    var retryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     @State private var isRetrying = false
     @State private var attemptNumber = 0
     @State private var retryTask: Task<Void, Never>?
@@ -31,7 +32,7 @@ struct ConnectionFailureView: View {
                 }
 
                 VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
-                    Text("Can't Connect")
+                    Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
                         .font(.title2.bold())
                         .foregroundStyle(Theme.foreground(for: colorScheme))
 
@@ -69,9 +70,21 @@ struct ConnectionFailureView: View {
                             cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
                     }
 
+                    if retryPolicy == .manualLogOff {
+                        Button {
+                            stopAutoRetry()
+                            coordinator.onLogOff()
+                        } label: {
+                            Label("Retry Log Off", systemImage: "rectangle.portrait.and.arrow.forward")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.primary(for: colorScheme))
+                    }
+
                     // Re-pair button
                     Button {
-                        retryTask?.cancel()
+                        stopAutoRetry()
                         coordinator.onReconnect()
                     } label: {
                         Label(isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
@@ -108,10 +121,12 @@ struct ConnectionFailureView: View {
 
                 // Help text
                 VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
-                    Text("Troubleshooting")
+                    Text(retryPolicy == .manualLogOff ? "Connection Kept" : "Troubleshooting")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text("• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
+                    Text(retryPolicy == .manualLogOff
+                         ? "Your saved connection and settings were kept so you can retry logging off."
+                         : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.leading)
@@ -124,12 +139,16 @@ struct ConnectionFailureView: View {
             savedConnections = ConnectionFailureView.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
                 activeId: coordinator.backendID?.connectionID)
-            if !isCertMismatch {
-                startAutoRetry()
-            }
+            applyRetryPolicy()
+        }
+        .onChange(of: retryPolicy) {
+            applyRetryPolicy()
+        }
+        .onChange(of: isCertMismatch) {
+            applyRetryPolicy()
         }
         .onDisappear {
-            retryTask?.cancel()
+            stopAutoRetry()
         }
     }
 
@@ -167,7 +186,7 @@ struct ConnectionFailureView: View {
 
     private func savedConnectionRow(_ connection: StoredConnection) -> some View {
         Button {
-            retryTask?.cancel()
+            stopAutoRetry()
             coordinator.onSwitchConnection(id: connection.id)
         } label: {
             HStack(spacing: Constants.ConnectionFailure.savedConnectionRowSpacing) {
@@ -199,8 +218,21 @@ struct ConnectionFailureView: View {
         .buttonStyle(.plain)
     }
 
-    private func startAutoRetry() {
+    private func applyRetryPolicy() {
+        stopAutoRetry()
+        if retryPolicy == .automaticConnection && !isCertMismatch {
+            startAutoRetry()
+        }
+    }
+
+    private func stopAutoRetry() {
         retryTask?.cancel()
+        retryTask = nil
+        isRetrying = false
+        attemptNumber = 0
+    }
+
+    private func startAutoRetry() {
         retryTask = Task {
             var attempt = 0
             while !Task.isCancelled {
