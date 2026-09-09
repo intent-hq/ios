@@ -309,16 +309,16 @@ struct AgentListViewModelTests {
         #expect(agent.displayMessage == "response text")
     }
 
-    @Test func agentSession_bestTimestamp_prefersUpdatedAt() {
+    @Test func agentSession_bestTimestamp_prefersLastActivity() {
         let agent = makeAgent(
             updatedAt: "2026-03-15T12:00:00Z",
             lastActivity: "2026-03-15T11:00:00Z"
         )
-        #expect(agent.bestTimestamp == "2026-03-15T12:00:00Z")
+        #expect(agent.bestTimestamp == "2026-03-15T11:00:00Z")
     }
 
     @Test func agentSession_bestTimestamp_fallbackChain() {
-        let agent1 = makeAgent(lastActivity: "2026-03-15T11:00:00Z")
+        let agent1 = makeAgent(updatedAt: "2026-03-15T11:00:00Z")
         #expect(agent1.bestTimestamp == "2026-03-15T11:00:00Z")
 
         let agent2 = makeAgent(createdAt: "2026-03-15T10:00:00Z")

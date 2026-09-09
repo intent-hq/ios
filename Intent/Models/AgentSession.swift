@@ -137,7 +137,7 @@ struct AgentSession: Identifiable, Equatable {
     }
 
     var bestTimestamp: String? {
-        updatedAt ?? lastActivity ?? createdAt
+        lastActivity ?? updatedAt ?? createdAt
     }
 
     /// Returns a copy with mid-turn preview fields from an enriched
