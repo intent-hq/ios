@@ -203,36 +203,43 @@ struct WorkspaceRowPresentationTests {
     }
 
     private func renderBadges(width: CGFloat) throws -> RenderedBadges {
-        let indicator = WorkspaceRowView.PrIndicatorModel(
-            pill: .init(status: .merged, number: 123_456_789),
-            otherMonitorCount: 100)
-        let height: CGFloat = 300
-        let rootView = WorkspaceRowView.PullRequestBadges(
-            indicator: indicator,
-            colorScheme: .light,
-            colorSchemeContrast: .standard,
-            expanded: true)
-            .environment(\.dynamicTypeSize, .accessibility3)
-            .frame(width: width, height: height, alignment: .topLeading)
-        let controller = UIHostingController(rootView: rootView)
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
-        controller.view.frame = window.bounds
-        window.addSubview(controller.view)
-        window.isHidden = false
-        defer {
-            controller.view.removeFromSuperview()
-            window.isHidden = true
-        }
-        controller.view.layoutIfNeeded()
+        try autoreleasepool {
+            let indicator = WorkspaceRowView.PrIndicatorModel(
+                pill: .init(status: .merged, number: 123_456_789),
+                otherMonitorCount: 100)
+            let height: CGFloat = 300
+            let rootView = WorkspaceRowView.PullRequestBadges(
+                indicator: indicator,
+                colorScheme: .light,
+                colorSchemeContrast: .standard,
+                expanded: true)
+                .environment(\.dynamicTypeSize, .accessibility3)
+                .frame(width: width, height: height, alignment: .topLeading)
+            let controller = UIHostingController(rootView: rootView)
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
+            controller.view.frame = window.bounds
+            // This synthetic container owns attachment, so it must forward a matched lifecycle.
+            controller.beginAppearanceTransition(true, animated: false)
+            window.addSubview(controller.view)
+            window.isHidden = false
+            controller.endAppearanceTransition()
+            defer {
+                controller.beginAppearanceTransition(false, animated: false)
+                controller.view.removeFromSuperview()
+                window.isHidden = true
+                controller.endAppearanceTransition()
+            }
+            controller.view.layoutIfNeeded()
 
-        let labels = ["Merged pull request #123456789", "100 additional pull requests"]
-        let elements = accessibilityElements(in: controller.view)
-        let badges = try labels.map { label in
-            let element = try #require(elements.first { $0.accessibilityLabel == label })
-            return (label, element.accessibilityFrame)
+            let labels = ["Merged pull request #123456789", "100 additional pull requests"]
+            let elements = accessibilityElements(in: controller.view)
+            let badges = try labels.map { label in
+                let element = try #require(elements.first { $0.accessibilityLabel == label })
+                return (label, element.accessibilityFrame)
+            }
+            let hostFrame = controller.view.convert(controller.view.bounds, to: nil)
+            return RenderedBadges(hostFrame: hostFrame, badges: badges)
         }
-        let hostFrame = controller.view.convert(controller.view.bounds, to: nil)
-        return RenderedBadges(hostFrame: hostFrame, badges: badges)
     }
 
     private func accessibilityElements(in view: UIView) -> [NSObject] {
