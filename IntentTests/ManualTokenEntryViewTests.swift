@@ -195,12 +195,33 @@ struct ManualTokenEntryViewTests {
 
     // MARK: - Input classification (direct host vs Tailcat connection blob)
 
-    /// Pinned tailcat v0.4.0's synthetic RegionID fixture: `tc` followed by
-    /// case-sensitive, unpadded base64url-encoded CBOR. Contains no credential.
+    /// Generated offline with pinned tailcat v0.4.0's `ConnInfo.ConnBlob` from
+    /// distinct deterministic 32-byte node/disco public keys and RegionID 10.
+    /// It contains no private key, token, or other credential.
     private static let syntheticSDKConnBlob =
-        "tcomFwWCAAAQIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH2FpCg"
+        "tco2FwWCABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fIGFrWCChoqOkpaanqKmqq6ytrq-wsbKztLW2t7i5uru8vb6_wGFpCg"
+
+    private static func decodedSyntheticSDKConnBlob() throws -> Data {
+        var base64 = String(syntheticSDKConnBlob.dropFirst(2))
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
+        return try #require(Data(base64Encoded: base64))
+    }
+
+    @Test func syntheticSDKConnectionBlobMatchesPinnedServerShape() throws {
+        let decoded = try Self.decodedSyntheticSDKConnBlob()
+        #expect(decoded.count == 76)
+        #expect(decoded[0] == 0xa3)
+        #expect(decoded[1..<5].elementsEqual([0x61, 0x70, 0x58, 0x20]))
+        #expect(decoded[5..<37].elementsEqual((1...32).map(UInt8.init)))
+        #expect(decoded[37..<41].elementsEqual([0x61, 0x6b, 0x58, 0x20]))
+        #expect(decoded[41..<73].elementsEqual((0xa1...0xc0).map(UInt8.init)))
+        #expect(decoded[73..<76].elementsEqual([0x61, 0x69, 0x0a]))
+    }
 
     @Test func classifiesSDKConnectionBlobAsTailcatWithoutChangingEncodedCase() {
+        #expect(Self.syntheticSDKConnBlob != Self.syntheticSDKConnBlob.lowercased())
         #expect(ManualConnectionInput.classify(Self.syntheticSDKConnBlob)
             == .tailcat(tcAddress: Self.syntheticSDKConnBlob))
     }

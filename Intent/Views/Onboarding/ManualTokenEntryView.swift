@@ -242,9 +242,10 @@ struct ManualTokenEntryView: View {
                         dialer: session.connection.tunnelDialer,
                         tcAddress: tcAddress, remotePort: portNum)
                 } catch {
-                    // A failed dial is the authoritative "invalid or
-                    // unreachable Tailcat address" signal (classification is
-                    // only a prefix test).
+                    // Classification only recognizes the expected prefix,
+                    // base64, and CBOR-header shape. TailcatKit authoritatively
+                    // validates decoded fields, and the dial reports invalid
+                    // or unreachable addresses.
                     guard !Task.isCancelled else { return }
                     errorMessage = "Could not reach the Tailcat address: \(error.localizedDescription)"
                     isValidating = false
