@@ -5,6 +5,7 @@ struct WorkspaceRowView: View {
     let colorScheme: ColorScheme
     var showRepo: Bool = true
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Workspace-scoped PR monitors feeding the pill pool and the "+N"
     /// indicator, read from the window's session so pinned windows use their
     /// own backend; falls back to the shared store when no session is in the
@@ -22,85 +23,23 @@ struct WorkspaceRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: Constants.WorkspaceRow.rowSpacing) {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.rowSpacing) {
             // Status icon with agent activity / unread dot overlays
             WorkspaceStatusIconView(workspace: workspace, colorScheme: colorScheme)
+                .alignmentGuide(.firstTextBaseline) { dimensions in
+                    dimensions[.bottom]
+                }
 
             VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
-                if workspace.title.trimmingCharacters(in: .whitespaces).isEmpty {
-                    Text("<Untitled>")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.mutedForeground(
-                            for: colorScheme, contrast: colorSchemeContrast))
-                        .lineLimit(2)
+                title
+
+                if Self.usesExpandedMetadataLayout(for: dynamicTypeSize) {
+                    expandedMetadata
                 } else {
-                    Text(workspace.title)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(2)
-                }
-
-                HStack(spacing: Constants.WorkspaceRow.metadataSpacing) {
-                    if showRepo, let repo = workspace.repositoryName {
-                        Text(repo)
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .layoutPriority(-1)
-                    }
-
-                    if let pill = prIndicator.pill {
-                        let pillColor = Self.pillColor(for: pill.status)
-                        HStack(spacing: 3) {
-                            Image(systemName: Self.pillSystemImage(for: pill.status))
-                            Text("PR\(pill.number.map { " #\($0)" } ?? "")")
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(pillColor)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
-                        .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                        .background(pillColor.opacity(Constants.WorkspaceRow.pillBackgroundOpacity))
-                        .clipShape(Capsule())
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel(
-                            "\(pill.status.rawValue.capitalized) pull request"
-                                + (pill.number.map { " #\($0)" } ?? ""))
-                    }
-
-                    // "+N": other monitored PRs in the pool beyond the
-                    // primary pill (same capsule styling, muted).
-                    if prIndicator.otherMonitorCount > 0 {
-                        Text("+\(prIndicator.otherMonitorCount)")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
-                            .lineLimit(1)
-                            .fixedSize(horizontal: true, vertical: false)
-                            .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
-                            .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
-                            .background(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast).opacity(
-                                    Constants.WorkspaceRow.pillBackgroundOpacity))
-                            .clipShape(Capsule())
-                    }
+                    compactMetadata
                 }
             }
-            .layoutPriority(1)
-
-            Spacer()
-
-            if let activity = workspace.lastActivity ?? workspace.updatedAt {
-                Text(relativeDate(from: activity))
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(
-                        for: colorScheme, contrast: colorSchemeContrast))
-                    .lineLimit(1)
-                    .fixedSize()
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .contentShape(Rectangle())
         .padding(.vertical, Constants.WorkspaceRow.verticalPadding)
@@ -108,6 +47,166 @@ struct WorkspaceRowView: View {
         .visionAttentionCue(workspaceNeedsInput(workspace))
         .task {
             await monitorsSource.seed(workspaceId: workspace.id)
+        }
+    }
+
+    nonisolated static func usesExpandedMetadataLayout(for size: DynamicTypeSize) -> Bool {
+        size.isAccessibilitySize
+    }
+
+    nonisolated static func titleLineLimit(for size: DynamicTypeSize) -> Int? {
+        usesExpandedMetadataLayout(for: size) ? nil : 2
+    }
+
+    nonisolated static func additionalPullRequestsAccessibilityLabel(_ count: Int) -> String {
+        count == 1 ? "1 additional pull request" : "\(count) additional pull requests"
+    }
+
+    @ViewBuilder
+    private var title: some View {
+        let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
+        Text(isUntitled ? "<Untitled>" : workspace.title)
+            .font(.headline)
+            .foregroundStyle(isUntitled
+                ? Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
+                : Theme.foreground(for: colorScheme))
+            .lineLimit(Self.titleLineLimit(for: dynamicTypeSize))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var compactMetadata: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.WorkspaceRow.metadataSpacing) {
+            repositoryLabel(lineLimit: 1)
+            pullRequestBadges(expanded: false)
+            Spacer(minLength: Constants.WorkspaceRow.metadataSpacing)
+            timestampLabel
+        }
+    }
+
+    private var expandedMetadata: some View {
+        VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
+            repositoryLabel(lineLimit: nil)
+                .fixedSize(horizontal: false, vertical: true)
+            pullRequestBadges(expanded: true)
+            timestampLabel
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    @ViewBuilder
+    private func repositoryLabel(lineLimit: Int?) -> some View {
+        if showRepo, let repo = workspace.repositoryName {
+            Text(repo)
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme, contrast: colorSchemeContrast))
+                .lineLimit(lineLimit)
+                .truncationMode(.middle)
+                .layoutPriority(-1)
+                .accessibilityLabel("Repository \(repo)")
+        }
+    }
+
+    @ViewBuilder
+    private func pullRequestBadges(expanded: Bool) -> some View {
+        PullRequestBadges(
+            indicator: prIndicator,
+            colorScheme: colorScheme,
+            colorSchemeContrast: colorSchemeContrast,
+            expanded: expanded)
+    }
+
+    struct PullRequestBadges: View {
+        let indicator: PrIndicatorModel
+        let colorScheme: ColorScheme
+        let colorSchemeContrast: ColorSchemeContrast
+        let expanded: Bool
+
+        var body: some View {
+            if expanded {
+                ViewThatFits(in: .horizontal) {
+                    horizontalBadges
+                    verticalBadges
+                }
+            } else {
+                horizontalBadges
+            }
+        }
+
+        private var horizontalBadges: some View {
+            HStack(alignment: .firstTextBaseline,
+                   spacing: Constants.WorkspaceRow.metadataSpacing) {
+                badgeContent
+            }
+        }
+
+        private var verticalBadges: some View {
+            VStack(alignment: .leading, spacing: Constants.WorkspaceRow.titleSpacing) {
+                badgeContent
+            }
+        }
+
+        @ViewBuilder
+        private var badgeContent: some View {
+            if let pill = indicator.pill {
+                let pillColor = WorkspaceRowView.pillColor(for: pill.status)
+                HStack(alignment: .firstTextBaseline,
+                       spacing: Constants.WorkspaceRow.titleSpacing) {
+                    Image(systemName: WorkspaceRowView.pillSystemImage(for: pill.status))
+                        .foregroundStyle(pillColor)
+                    Text("PR\(pill.number.map { " #\($0)" } ?? "")")
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme, contrast: colorSchemeContrast))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+                .background(Theme.muted(for: colorScheme), in: Capsule())
+                .overlay {
+                    Capsule().strokeBorder(Theme.border(
+                        for: colorScheme, contrast: colorSchemeContrast),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    "\(pill.status.rawValue.capitalized) pull request"
+                        + (pill.number.map { " #\($0)" } ?? ""))
+            }
+
+            if indicator.otherMonitorCount > 0 {
+                Text("+\(indicator.otherMonitorCount)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.mutedForeground(
+                        for: colorScheme, contrast: colorSchemeContrast))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
+                    .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
+                    .background(Theme.muted(for: colorScheme), in: Capsule())
+                    .overlay {
+                        Capsule().strokeBorder(Theme.border(
+                            for: colorScheme, contrast: colorSchemeContrast),
+                            lineWidth: colorSchemeContrast == .increased ? 1 : 0.5)
+                    }
+                    .accessibilityLabel(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(
+                        indicator.otherMonitorCount))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var timestampLabel: some View {
+        if let activity = workspace.lastActivity ?? workspace.updatedAt {
+            let value = relativeDate(from: activity)
+            Text(value)
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme, contrast: colorSchemeContrast))
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityLabel("Updated \(value)")
         }
     }
 

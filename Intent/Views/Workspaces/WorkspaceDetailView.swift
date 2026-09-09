@@ -45,8 +45,10 @@ struct WorkspaceDetailView: View {
                 // Repo name
                 if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
                     Text("\(owner)/\(repo)")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(
+                            for: colorScheme, contrast: colorSchemeContrast))
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                         .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
@@ -67,9 +69,8 @@ struct WorkspaceDetailView: View {
                     VStack(alignment: .leading,
                            spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
                         Text(progressSummary)
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Theme.foreground(for: colorScheme))
                             .fixedSize(horizontal: false, vertical: true)
 
                         HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
@@ -139,7 +140,9 @@ struct WorkspaceDetailView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                .padding(.vertical, Constants.WorkspaceDetail.tabVerticalPadding)
+                .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
+                    hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0))
+                .padding(.bottom, Constants.WorkspaceDetail.tabVerticalPadding)
                 #endif
 
                 // Tab content
@@ -485,6 +488,12 @@ struct WorkspaceTaskProgressLayout: Equatable {
         let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
         let distributableWidth = max(0, measuredWidth - totalSpacing)
         return distributableWidth * CGFloat(count) / CGFloat(total)
+    }
+}
+
+enum WorkspaceDetailHeaderLayout {
+    static func tabTopPadding(hasTaskProgress: Bool) -> CGFloat {
+        hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
     }
 }
 

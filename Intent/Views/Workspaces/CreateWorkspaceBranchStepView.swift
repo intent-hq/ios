@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CreateWorkspaceBranchStepView: View {
+    let repositoryFullName: String
     let displayedBranches: [String]
     let defaultBranch: String?
     let isLoading: Bool
@@ -13,6 +14,8 @@ struct CreateWorkspaceBranchStepView: View {
     let onLoad: () async -> Void
     let onBranchChanged: () -> Void
     let onSearchTextChanged: (String) -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -40,7 +43,7 @@ struct CreateWorkspaceBranchStepView: View {
         .navigationTitle("Select Branch")
         .toolbarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button("Next", action: onNext)
                     .disabled(selectedBranch == nil)
             }
@@ -52,6 +55,13 @@ struct CreateWorkspaceBranchStepView: View {
 
     private var branchList: some View {
         List {
+            Section("Source") {
+                ForEach(CreateWorkspaceView.creationContextRows(
+                    repositoryFullName: repositoryFullName
+                )) { row in
+                    contextRow(row)
+                }
+            }
             Section("Branches") {
                 if displayedBranches.isEmpty {
                     let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -78,13 +88,16 @@ struct CreateWorkspaceBranchStepView: View {
         Button {
             selectedBranch = branch
         } label: {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text(branch)
                     .font(.body)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
                 Spacer()
                 if branch == defaultBranch {
-                    Text("default")
+                    Text("Default")
                         .font(.caption)
                         .padding(.horizontal, Constants.CreateWorkspace.branchBadgeHorizontalPadding)
                         .padding(.vertical, Constants.CreateWorkspace.branchBadgeVerticalPadding)
@@ -96,12 +109,36 @@ struct CreateWorkspaceBranchStepView: View {
                 if selectedBranch == branch {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Theme.primary(for: colorScheme))
-                        .fontWeight(.semibold)
+                        .bold()
+                        .accessibilityLabel("Selected")
                 }
             }
             .padding(.vertical, Constants.CreateWorkspace.branchRowVerticalPadding)
         }
+        .accessibilityAddTraits(selectedBranch == branch ? .isSelected : [])
         .listRowBackground(Theme.card(for: colorScheme))
+    }
+
+    @ViewBuilder
+    private func contextRow(_ row: CreateWorkspaceView.CreationContextRow) -> some View {
+        if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
+            VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
+                Text(row.label)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Text(row.value)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            LabeledContent(row.label) {
+                Text(row.value)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+            }
+        }
     }
 }
 

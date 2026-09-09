@@ -61,7 +61,6 @@ struct WorkspaceListView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
                 .accessibilityLabel("Workspace options")
             }
@@ -70,7 +69,6 @@ struct WorkspaceListView: View {
                     showingCreateWorkspace = true
                 } label: {
                     Image(systemName: "plus")
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
                 }
                 .accessibilityLabel("Create workspace")
             }

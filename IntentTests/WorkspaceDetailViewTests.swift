@@ -4,6 +4,17 @@ import Testing
 @testable import Intent
 
 struct WorkspaceDetailViewTests {
+    @Test func delegatedAgentCountUsesLegibleSingularAndPluralLabels() {
+        #expect(AgentGroupSummary.delegatedTitle(count: 1) == "1 delegated agent")
+        #expect(AgentGroupSummary.delegatedTitle(count: 34) == "34 delegated agents")
+    }
+
+    @Test func tabsDoNotDoubleHeaderSpacingAfterTaskProgress() {
+        #expect(WorkspaceDetailHeaderLayout.tabTopPadding(hasTaskProgress: true) == 0)
+        #expect(WorkspaceDetailHeaderLayout.tabTopPadding(hasTaskProgress: false)
+            == Constants.WorkspaceDetail.tabVerticalPadding)
+    }
+
     @Test func progressCountsPreserveAllThreeProportions() throws {
         let progress = try #require(WorkspaceTaskProgressLayout(
             total: 10,

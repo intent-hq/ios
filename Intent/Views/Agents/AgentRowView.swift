@@ -42,7 +42,7 @@ struct AgentRowView: View {
     private var avatarState: AgentAvatarState { AgentAvatarState.state(for: agent) }
 
     var body: some View {
-        HStack(spacing: Constants.AgentRow.rowSpacing) {
+        HStack(alignment: .top, spacing: Constants.AgentRow.rowSpacing) {
             // Avatar tile colored by state, with a state-driven corner cue. The
             // needs-user states always keep their symbol (never color alone),
             // so Differentiate Without Color needs no extra branch here.
@@ -70,41 +70,7 @@ struct AgentRowView: View {
             .accessibilityLabel(avatarState.accessibilityLabel)
 
             VStack(alignment: .leading, spacing: Constants.AgentRow.textSpacing) {
-                HStack(spacing: Constants.AgentRow.titleSpacing) {
-                    Text(agent.name)
-                        .font(.body)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-
-                    if agent.isBackground {
-                        Text("BG")
-                            .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
-                            .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
-                            .padding(.horizontal, Constants.AgentRow.badgeHorizontalPadding)
-                            .padding(.vertical, Constants.AgentRow.badgeVerticalPadding)
-                            .background(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast).opacity(
-                                    Constants.AgentRow.badgeBackgroundOpacity))
-                            .clipShape(.rect(cornerRadius: Constants.AgentRow.badgeCornerRadius))
-                            .overlay {
-                                if colorSchemeContrast == .increased {
-                                    RoundedRectangle(cornerRadius: Constants.AgentRow.badgeCornerRadius)
-                                        .strokeBorder(Theme.border(
-                                            for: colorScheme, contrast: colorSchemeContrast))
-                                }
-                            }
-                    }
-
-                    Spacer()
-
-                    if let timestamp = agent.bestTimestamp {
-                        Text(relativeDate(from: timestamp))
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
-                    }
-                }
+                titleAndTimestamp
 
                 if avatarState == .question {
                     Text(avatarState.accessibilityLabel)
@@ -129,6 +95,64 @@ struct AgentRowView: View {
         .padding(.leading, indented ? Constants.AgentRow.nestedLeadingPadding : 0)
     }
 
+    @ViewBuilder
+    private var titleAndTimestamp: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Constants.AgentRow.textSpacing) {
+                agentIdentity
+                timestamp
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.titleSpacing) {
+                agentIdentity
+                Spacer()
+                timestamp
+            }
+        }
+    }
+
+    private var agentIdentity: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.titleSpacing) {
+            Text(agent.name)
+                .font(.body)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .layoutPriority(1)
+
+            if agent.isBackground {
+                Text("BG")
+                    .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
+                    .foregroundStyle(Theme.mutedForeground(
+                        for: colorScheme, contrast: colorSchemeContrast))
+                    .padding(.horizontal, Constants.AgentRow.badgeHorizontalPadding)
+                    .padding(.vertical, Constants.AgentRow.badgeVerticalPadding)
+                    .background(Theme.mutedForeground(
+                        for: colorScheme, contrast: colorSchemeContrast).opacity(
+                            Constants.AgentRow.badgeBackgroundOpacity))
+                    .clipShape(.rect(cornerRadius: Constants.AgentRow.badgeCornerRadius))
+                    .overlay {
+                        if colorSchemeContrast == .increased {
+                            RoundedRectangle(cornerRadius: Constants.AgentRow.badgeCornerRadius)
+                                .strokeBorder(Theme.border(
+                                    for: colorScheme, contrast: colorSchemeContrast))
+                        }
+                    }
+                    .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var timestamp: some View {
+        if let timestamp = agent.bestTimestamp {
+            Text(relativeDate(from: timestamp))
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme, contrast: colorSchemeContrast))
+                .fixedSize()
+        }
+    }
+
     private func relativeDate(from isoString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -151,20 +175,13 @@ struct DelegatedAgentsRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(spacing: Constants.AgentRow.headerSpacing) {
-                // Overlapping avatars (up to 5)
-                HStack(spacing: Constants.AgentRow.avatarOverlap) {
-                    ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
-                        AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist,
-                                        state: AgentAvatarState.state(for: agent))
-                    }
-                }
-                .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
-
-                Text("\(agents.count) delegated")
-                    .font(.caption)
+            HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.headerSpacing) {
+                Label(AgentGroupSummary.delegatedTitle(count: agents.count),
+                      systemImage: "person.2.fill")
+                    .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .layoutPriority(1)
 
                 Spacer()
 
@@ -172,10 +189,21 @@ struct DelegatedAgentsRow: View {
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
+            .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
             .padding(.vertical, Constants.AgentRow.delegatedVerticalPadding)
+            .frame(minHeight: Constants.Accessibility.minimumTapTarget)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(AgentGroupSummary.delegatedTitle(count: agents.count))
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
+    }
+}
+
+enum AgentGroupSummary {
+    static func delegatedTitle(count: Int) -> String {
+        count == 1 ? "1 delegated agent" : "\(count) delegated agents"
     }
 }
 
