@@ -15,6 +15,11 @@ enum AppScreen {
     case disconnected
 }
 
+enum ConnectionFailureRetryPolicy: Equatable {
+    case automaticConnection
+    case manualLogOff
+}
+
 /// A pairing request delivered via an `intent://pair` deep link, awaiting
 /// explicit user confirmation before any connection is attempted — unlike the
 /// in-app camera scan, a deep link can be triggered by any web page.
@@ -27,6 +32,7 @@ struct DeepLinkPairingRequest: Identifiable, Equatable {
 @Observable
 class AppCoordinator {
     var currentScreen: AppScreen = .loading
+    private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false
     /// True when the pairing surface should also offer the remaining saved
     /// connections (e.g. after logging off the active connection while others
@@ -252,6 +258,7 @@ class AppCoordinator {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
                 guard let self = self, mismatch else { return }
+                self.connectionFailureRetryPolicy = .automaticConnection
                 self.currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
                 // Reset the flag so it doesn't re-trigger
                 self.connection.certMismatchDetected = false
@@ -553,6 +560,7 @@ class AppCoordinator {
     }
 
     func onConnectionFailed(error: String) {
+        connectionFailureRetryPolicy = .automaticConnection
         currentScreen = .connectionFailed(error: error)
     }
 
@@ -683,6 +691,7 @@ class AppCoordinator {
         connection.disconnect()
         resetWorkspaceStore()
         selectedWorkspaceId = nil
+        connectionFailureRetryPolicy = .manualLogOff
         currentScreen = .connectionFailed(
             error: String(localized: "Could not forget this connection. Please try again."))
     }
