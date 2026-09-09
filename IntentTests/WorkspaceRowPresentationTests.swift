@@ -132,6 +132,15 @@ struct WorkspaceRowPresentationTests {
         print("SYNTHETIC PR badge fallback geometry: \(fallback)")
     }
 
+    @Test func accessibilityTraversalIncludesDynamicContainerElements() {
+        let container = DynamicAccessibilityContainer()
+
+        #expect(container.accessibilityElements == nil)
+        #expect(accessibilityElements(in: container).map(\.accessibilityLabel) == [
+            "Dynamic container element",
+        ])
+    }
+
     @Test func statusSummaryPreservesConcurrentStatusCues() {
         let workspace = makeWorkspace(
             displayStatus: "needs_attention",
@@ -207,8 +216,13 @@ struct WorkspaceRowPresentationTests {
             .frame(width: width, height: height, alignment: .topLeading)
         let controller = UIHostingController(rootView: rootView)
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
-        window.rootViewController = controller
+        controller.view.frame = window.bounds
+        window.addSubview(controller.view)
         window.isHidden = false
+        defer {
+            controller.view.removeFromSuperview()
+            window.isHidden = true
+        }
         controller.view.layoutIfNeeded()
 
         let labels = ["Merged pull request #123456789", "100 additional pull requests"]
@@ -222,8 +236,31 @@ struct WorkspaceRowPresentationTests {
     }
 
     private func accessibilityElements(in view: UIView) -> [NSObject] {
-        let direct = (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+        let elementCount = view.accessibilityElementCount()
+        let direct = elementCount == NSNotFound
+            ? (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+            : (0..<elementCount).compactMap {
+                view.accessibilityElement(at: $0) as? NSObject
+            }
         return (view.isAccessibilityElement ? [view] : direct)
             + view.subviews.flatMap(accessibilityElements(in:))
+    }
+
+    private final class DynamicAccessibilityContainer: UIView {
+        private lazy var dynamicElement: UIAccessibilityElement = {
+            let element = UIAccessibilityElement(accessibilityContainer: self)
+            element.accessibilityLabel = "Dynamic container element"
+            return element
+        }()
+
+        override func accessibilityElementCount() -> Int { 1 }
+
+        override func accessibilityElement(at index: Int) -> Any? {
+            index == 0 ? dynamicElement : nil
+        }
+
+        override func index(ofAccessibilityElement element: Any) -> Int {
+            element as AnyObject === dynamicElement ? 0 : NSNotFound
+        }
     }
 }
