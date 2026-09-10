@@ -483,12 +483,5 @@ extension Constants.Loading {
 }
 
 extension Constants.Splash {
-    static let targetCellWidth: Double = 150
-    static let targetRouteCoverage: Double = 0.65
-    static let firstAmbientDelay: Double = 700
-    static let ambientStagger: Double = 0.7
-    static let minimumAmbientInterval: Double = 1_100
-    static let ambientIntervalRange: Double = 1_500
-    static let repeatFlipCooldown: Double = 350
-    static let interactiveStagger: Double = 0.45
+    static let maximumLogoDimension: CGFloat = 80
 }

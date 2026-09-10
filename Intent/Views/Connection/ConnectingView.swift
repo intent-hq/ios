@@ -2,15 +2,14 @@ import SwiftUI
 
 /// Connecting phase overlay: the splash art itself is rendered by RootView in
 /// a position shared with the loading phase (so it doesn't reset on the
-/// loading → connecting transition). This view adds the small bottom HUD pill
-/// (spinner, plus the passive per-host cert-mismatch list when the race has
-/// observed any) and owns the connection attempt.
+/// loading → connecting transition). This view presents passive per-host
+/// certificate-mismatch warnings and owns the connection attempt.
 struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack {
             Spacer()
             // Passive per-host cert-mismatch list: hosts that presented a
             // wrong certificate while the race continues on the others.
@@ -18,12 +17,8 @@ struct ConnectingView: View {
                 CertMismatchListView(mismatches: session.connection.certMismatches)
                     .padding(.horizontal, 32)
             }
-            ProgressView()
-                .padding(.horizontal, Constants.Connecting.horizontalPadding)
-                .padding(.vertical, Constants.Connecting.verticalPadding)
-                .background(.regularMaterial, in: Capsule())
         }
-        .padding(.bottom, Constants.Connecting.bottomPadding)
+        .padding(.bottom, 24)
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.

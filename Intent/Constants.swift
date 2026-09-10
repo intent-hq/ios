@@ -210,16 +210,6 @@ enum Constants {
 
     enum Loading {}
 
-    enum Splash {
-        enum Random {
-            static let multiplier: UInt32 = 1_664_525
-            static let increment: UInt32 = 1_013_904_223
-            static let normalizationDivisor: Double = 4_294_967_296
-        }
-
-        static let minimumColumns = 4
-        static let minimumRows = 6
-        static let routeCoverageWeight: Double = 1_000
-    }
+    enum Splash {}
 
 }
