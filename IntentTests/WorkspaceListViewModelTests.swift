@@ -524,3 +524,48 @@ struct WorkspaceListViewModelTests {
     }
 }
 
+/// Duplicate windows bound to one backend all observe the same
+/// FeedbackEvent/WindowCueEvent; the claim registry lets exactly one
+/// window's emitter play each event.
+@Suite @MainActor struct WindowSoundClaimRegistryTests {
+
+    @Test func twoWindowsOnOneBackend_exactlyOnePlaybackPerEvent() {
+        let registry = WindowSoundClaimRegistry()
+        let event = UUID()
+        // Both duplicate windows observe the same event id; only the
+        // first observer plays.
+        #expect(registry.claim(event))
+        #expect(!registry.claim(event))
+    }
+
+    @Test func windowsOnDifferentBackends_unaffected() {
+        let registry = WindowSoundClaimRegistry()
+        // Different backends publish distinct events (fresh ids); each
+        // window's claim succeeds.
+        #expect(registry.claim(UUID()))
+        #expect(registry.claim(UUID()))
+    }
+
+    @Test func backToBackDistinctEvents_eachPlay() {
+        let registry = WindowSoundClaimRegistry()
+        let first = UUID()
+        let second = UUID()
+        #expect(registry.claim(first))
+        #expect(registry.claim(second),
+                "A fresh event id is a new sound, not a duplicate")
+        #expect(!registry.claim(first))
+        #expect(!registry.claim(second))
+    }
+
+    @Test func evictionKeepsRecentClaims() {
+        let registry = WindowSoundClaimRegistry(capacity: 2)
+        let old = UUID()
+        #expect(registry.claim(old))
+        #expect(registry.claim(UUID()))
+        #expect(registry.claim(UUID()))
+        // `old` was evicted (FIFO); the bound only needs to cover ids
+        // still observable within a MainActor turn of publication.
+        #expect(registry.claim(old))
+    }
+}
+
