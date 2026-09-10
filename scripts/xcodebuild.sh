@@ -136,10 +136,13 @@ cmd_build_for_testing() {
 # ephemeral CI simulator never does, so tests that read accessibility labels
 # or frames out of a UIHostingController pass locally and fail on CI. Enable
 # it explicitly on the test device so both environments see the same tree.
+#
+# bootstatus output is left visible: it shows how long the boot wait took,
+# which otherwise disappears into a silent gap inside xcodebuild.
 enable_simulator_accessibility() {
   local udid=$1
-  xcrun simctl boot "$udid" >/dev/null 2>&1 || true
-  xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 || true
+  xcrun simctl boot "$udid" 2>&1 | grep -v 'current state: Booted' || true
+  xcrun simctl bootstatus "$udid" -b || true
   xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
     ApplicationAccessibilityEnabled -bool true
   xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
