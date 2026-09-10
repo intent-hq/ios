@@ -129,10 +129,28 @@ cmd_build_for_testing() {
     -destination "platform=iOS Simulator,id=$udid" "${SIGNING_ARGS[@]}"
 }
 
+# SwiftUI hosting views only publish their accessibility tree when the
+# simulator has accessibility enabled (the same switch Accessibility Inspector
+# and XCUITest flip, persisted in the device's com.apple.Accessibility
+# domain). A long-lived local simulator usually has it on already; an
+# ephemeral CI simulator never does, so tests that read accessibility labels
+# or frames out of a UIHostingController pass locally and fail on CI. Enable
+# it explicitly on the test device so both environments see the same tree.
+enable_simulator_accessibility() {
+  local udid=$1
+  xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+  xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 || true
+  xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
+    ApplicationAccessibilityEnabled -bool true
+  xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
+    AccessibilityEnabled -bool true
+}
+
 # xcodebuild refuses an existing result bundle path, so remove it first.
 cmd_test_without_building() {
   local udid extra=()
   udid=$(pick_simulator)
+  enable_simulator_accessibility "$udid"
   if [ -n "${RESULT_BUNDLE:-}" ]; then
     rm -rf -- "${RESULT_BUNDLE:?}"
     extra+=(-resultBundlePath "$RESULT_BUNDLE")
