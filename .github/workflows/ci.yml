@@ -2,12 +2,17 @@ name: CI
 # No push-to-main trigger: the repo ruleset requires PR branches to be up to
 # date with main before merging, so the squash commit that lands on main has
 # the identical tree the PR CI just tested. A post-merge re-run adds no signal.
+# Caches are seeded on main by warm-cache.yml instead: a PR can only restore
+# caches created on its own merge ref or on main, so without that seeding
+# every PR's first run started cold.
 on:
   pull_request:
 
 permissions:
   contents: read
   pull-requests: read
+  # Lets the iOS job read the go-test job's conclusion (Require Go unit tests).
+  actions: read
 
 # Cancel in progress workflows on pull_requests.
 # https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
@@ -16,8 +21,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  go-test:
+    name: Go unit tests (TailcatKit)
+    # TailcatKit is pure Go and cross-compiles for Linux, so its tests run
+    # here on a cheap, fast Linux runner instead of serialising 2-12 minutes
+    # of Tailscale compilation onto the 3-core macOS VM.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Go unit tests
+        working-directory: TailcatKit
+        run: go test -timeout 300s ./...
+
   build-and-test:
     name: iOS Build & Test
+    # The repo ruleset requires only this job. A job skipped because a
+    # `needs` dependency failed counts as passing for required checks, so
+    # `needs: go-test` would not keep a Go failure merge-blocking; instead
+    # the final "Require Go unit tests" step below waits for that job and
+    # fails this one if it did not succeed. Both jobs still run in parallel.
     # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
     # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
     # on the 3-core M-series VM.
@@ -62,34 +93,43 @@ jobs:
       # resolution and compilation instead of delaying the test step.
       # Run in the background: simctl boot can block for minutes waiting for
       # the device to reach the Booted state, but CoreSimulator completes the
-      # boot on its own and xcodebuild waits for it if still in progress.
+      # boot on its own and the test step waits on bootstatus before
+      # launching. Output goes to a log file that the "Simulator state" step
+      # prints later, so a failed or slow boot is visible instead of silent.
       - name: Pre-boot simulator
-        run: xcrun simctl boot "$SIM_UDID" >/dev/null 2>&1 || true &
+        run: xcrun simctl boot "$SIM_UDID" > /tmp/simboot.log 2>&1 || true &
+
+      # The gomobile bind output (and the tcecho helper binary) are
+      # deterministic for a given wrapper source + module graph + Go
+      # toolchain, so cache them on a hash of those inputs. go.mod is
+      # included because it picks the toolchain (setup-go go-version-file)
+      # and module versions. On a hit the job never needs Go at all, which
+      # skips the multi-minute toolchain download and the 800 MB Go cache
+      # restore/save. warm-cache.yml seeds this cache on main.
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
       - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v7
         with:
           go-version-file: TailcatKit/go.mod
           cache-dependency-path: TailcatKit/go.sum
 
-      - name: Go unit tests (TailcatKit)
-        working-directory: TailcatKit
-        run: go test -timeout 300s ./...
-
-      # The gomobile bind output is deterministic for a given wrapper
-      # source + module graph + Go toolchain, so cache the xcframework
-      # on a hash of those inputs. go.mod is included because it picks
-      # the toolchain (setup-go go-version-file) and module versions.
-      - name: Cache TailcatKit.xcframework
-        id: tailcat-cache
-        uses: actions/cache@v6
-        with:
-          path: TailcatKit/build/TailcatKit.xcframework
-          key: ${{ runner.os }}-tailcatkit-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
-
       - name: Build TailcatKit.xcframework
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
         run: ./TailcatKit/build_xcframework.sh
+
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
 
       # In-process tailcat echo server for the Swift smoke test; prints
       # its connection token on the first line of stdout. The token
@@ -97,8 +137,7 @@ jobs:
       - name: Start tailcat echo server
         working-directory: TailcatKit
         run: |
-          go build -o /tmp/tcecho ./cmd/tcecho
-          /tmp/tcecho > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
+          ./build/tcecho > /tmp/tcecho-token.txt 2>/tmp/tcecho-err.txt &
           pid=$!
           for i in $(seq 1 30); do
             [ -s /tmp/tcecho-token.txt ] && break
@@ -136,6 +175,16 @@ jobs:
       - name: Build for testing
         run: scripts/xcodebuild.sh build-for-testing
 
+      # Diagnostics for the intermittent multi-minute stall before the test
+      # host launches: show what the background boot printed and whether
+      # the device is actually Booted before xcodebuild takes over.
+      - name: Simulator state
+        run: |
+          echo "--- simctl boot output:"
+          cat /tmp/simboot.log 2>/dev/null || echo "(no output)"
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
       # The script removes any existing result bundle at RESULT_BUNDLE
       # (xcodebuild refuses an existing path). xcodebuild forwards its
       # TEST_RUNNER_-prefixed environment variables into the test process
@@ -152,6 +201,25 @@ jobs:
         with:
           name: ios-test-results
           path: TestResults
+
+      # See the job comment: turns a go-test failure into a failure of this
+      # (the only ruleset-required) job. go-test normally finishes minutes
+      # before this step runs, so the wait is usually zero.
+      - name: Require Go unit tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 80); do
+            c=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)") | .conclusion // empty')
+            case "$c" in
+              success) echo "Go unit tests passed"; exit 0 ;;
+              "") sleep 15 ;;
+              *) echo "Go unit tests job concluded: $c" >&2; exit 1 ;;
+            esac
+          done
+          echo "timed out waiting for the Go unit tests job" >&2
+          exit 1
 
   visionos-build:
     name: visionOS Build

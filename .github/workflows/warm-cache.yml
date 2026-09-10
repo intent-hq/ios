@@ -1,0 +1,103 @@
+name: Warm caches
+# Seeds the Actions caches that ci.yml consumes. A pull request can only
+# restore caches created on its own merge ref or on the default branch, and
+# ci.yml deliberately does not run on main, so without this every PR's first
+# run paid for a cold Go toolchain download, a full Tailscale compile, a
+# gomobile bind, and a cold SPM clone (12-20 minutes on the 3-core macOS VM).
+#
+# Keys, paths, and hash inputs must stay byte-identical to ci.yml; a hit on
+# an exact key skips the save, so PRs stop creating per-PR duplicate caches
+# (the ~800 MB Go cache per PR was filling the repo's 10 GB quota).
+#
+# Runs on every push to main (a run whose caches all hit costs about a
+# minute) and weekly, because GitHub evicts caches unused for 7 days.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  warm-go-linux:
+    name: Warm Go cache (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      # Compiling the test binaries populates the Go build cache with
+      # everything ci.yml's go-test job needs; the tests themselves already
+      # ran on the PR.
+      - name: Compile tests to populate build cache
+        working-directory: TailcatKit
+        run: go test -count=1 -run '^$' ./...
+
+  warm-macos:
+    name: Warm TailcatKit and SPM caches (macOS)
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      GIT_TERMINAL_PROMPT: '0'
+      SPM_CLONE_DIR: build/SourcePackages
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
+            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+            echo "Selected $xcode"
+          fi
+
+      - name: Cache TailcatKit.xcframework
+        id: tailcat-cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            TailcatKit/build/TailcatKit.xcframework
+            TailcatKit/build/tcecho
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
+
+      - name: Set up Go
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: TailcatKit/go.mod
+          cache-dependency-path: TailcatKit/go.sum
+
+      - name: Build TailcatKit.xcframework
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        run: ./TailcatKit/build_xcframework.sh
+
+      - name: Build tailcat echo server
+        if: steps.tailcat-cache.outputs.cache-hit != 'true'
+        working-directory: TailcatKit
+        run: go build -o build/tcecho ./cmd/tcecho
+
+      - name: Cache SPM packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Intent.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Resolve SPM packages
+        run: scripts/xcodebuild.sh resolve
