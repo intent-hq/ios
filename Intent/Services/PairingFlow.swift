@@ -59,7 +59,7 @@ enum PairingFlow {
         // and the just-established authenticated socket must not be left
         // dangling with no UI reflecting it.
         if Task.isCancelled {
-            await connectionManager.disconnect()
+            connectionManager.disconnect()
             throw CancellationError()
         }
         let server = PairedServer(
@@ -73,7 +73,7 @@ enum PairingFlow {
         } catch {
             // The authenticated socket belongs to this failed pairing attempt;
             // do not leave it live when no saved connection can own it.
-            await connectionManager.disconnect()
+            connectionManager.disconnect()
             throw error
         }
     }
