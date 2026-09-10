@@ -407,5 +407,42 @@ struct WorkspaceListViewModelTests {
         ])
         #expect(sounds == 1)
     }
+
+    @Test @MainActor func cueCenter_windowEmitsCue_publishesEventInsteadOfSound() {
+        var sounds = 0
+        let center = WorkspaceAttentionCueCenter(
+            playSound: { sounds += 1 }, windowEmitsCueSound: true)
+
+        // Priming snapshot: silent, no event.
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        #expect(center.windowCueEvent == nil)
+
+        // New attention: publishes a window cue event, never the global sound.
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        let first = center.windowCueEvent
+        #expect(first != nil)
+        #expect(sounds == 0)
+
+        // Idempotent re-observation: same event, no re-trigger.
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent == first)
+
+        // Cleared then raised again: a fresh event id re-triggers playback.
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent != nil)
+        #expect(center.windowCueEvent != first)
+        #expect(sounds == 0)
+    }
+
+    @Test @MainActor func cueCenter_globalSoundPath_neverPublishesWindowEvent() {
+        var sounds = 0
+        let center = WorkspaceAttentionCueCenter(
+            playSound: { sounds += 1 }, windowEmitsCueSound: false)
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(sounds == 1)
+        #expect(center.windowCueEvent == nil)
+    }
 }
 

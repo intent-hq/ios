@@ -1,4 +1,5 @@
 import SwiftUI
+import Observation
 import AudioToolbox
 
 /// True when the workspace is asking for user input: a blocker/attention
@@ -39,24 +40,61 @@ struct WorkspaceAttentionCueTracker {
 
 /// Shared cue center: multiple list surfaces feed it the current workspace
 /// snapshot; identical observations are idempotent, so dual-mounted lists
-/// never double-chime. Plays one short system sound per batch that contains
-/// at least one newly-attention workspace.
+/// never double-chime. Emits one cue per batch that contains at least one
+/// newly-attention workspace: a short global system sound, or — where the
+/// window emits the cue (visionOS) — a `WindowCueEvent` the session's
+/// window plays from within its own scene so spatial audio localizes the
+/// cue to the window whose workspace list observed the new attention.
 @MainActor
+@Observable
 final class WorkspaceAttentionCueCenter {
     static let shared = WorkspaceAttentionCueCenter()
 
-    private var tracker = WorkspaceAttentionCueTracker()
-    private let playSound: () -> Void
+    /// One attention-cue request for the session's window to emit. The
+    /// fresh `id` distinguishes back-to-back cues.
+    struct WindowCueEvent: Equatable {
+        let id = UUID()
+    }
 
-    init(playSound: @escaping () -> Void = { AudioServicesPlaySystemSound(1152) }) {
+    /// The latest cue for the session's window to emit; observed by window
+    /// roots (`WindowFeedbackSoundEmitter` via RootView). Never set on
+    /// platforms that play the global system sound.
+    private(set) var windowCueEvent: WindowCueEvent?
+
+    @ObservationIgnored private var tracker = WorkspaceAttentionCueTracker()
+    @ObservationIgnored private let playSound: () -> Void
+    /// Whether the session's window emits the cue instead of `playSound`
+    /// playing a global one. True on visionOS, where the global system
+    /// sound is non-spatial — the same routing NotificationManager applies
+    /// to the agent-completion chime (`windowEmitsFeedbackSound`).
+    /// Injectable because tests run on the iOS simulator.
+    @ObservationIgnored private let windowEmitsCueSound: Bool
+
+    nonisolated static var platformWindowEmitsCueSound: Bool {
+        #if os(visionOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    init(
+        playSound: @escaping () -> Void = { AudioServicesPlaySystemSound(1152) },
+        windowEmitsCueSound: Bool = WorkspaceAttentionCueCenter.platformWindowEmitsCueSound
+    ) {
         self.playSound = playSound
+        self.windowEmitsCueSound = windowEmitsCueSound
     }
 
     func observe(workspaces: [Workspace]) {
         let universe = Set(workspaces.map(\.id))
         let attention = Set(workspaces.filter(workspaceNeedsInput).map(\.id))
         if tracker.observe(universe: universe, attention: attention) {
-            playSound()
+            if windowEmitsCueSound {
+                windowCueEvent = WindowCueEvent()
+            } else {
+                playSound()
+            }
         }
     }
 }
