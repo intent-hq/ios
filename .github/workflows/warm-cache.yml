@@ -73,7 +73,7 @@ jobs:
           path: |
             TailcatKit/build/TailcatKit.xcframework
             TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'

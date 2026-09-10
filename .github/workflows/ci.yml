@@ -11,6 +11,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  # Lets the iOS job read the go-test job's conclusion (Require Go unit tests).
+  actions: read
 
 # Cancel in progress workflows on pull_requests.
 # https://docs.github.com/en/actions/using-jobs/using-concurrency#example-using-a-fallback-value
@@ -42,10 +44,11 @@ jobs:
 
   build-and-test:
     name: iOS Build & Test
-    # The repo ruleset requires only this job, so it depends on go-test to
-    # keep a Go test failure merge-blocking. Drop `needs` and add the go-test
-    # job to the ruleset's required checks to run the two fully in parallel.
-    needs: go-test
+    # The repo ruleset requires only this job. A job skipped because a
+    # `needs` dependency failed counts as passing for required checks, so
+    # `needs: go-test` would not keep a Go failure merge-blocking; instead
+    # the final "Require Go unit tests" step below waits for that job and
+    # fails this one if it did not succeed. Both jobs still run in parallel.
     # GitHub-hosted arm64 macOS runner; ships Xcode and iOS simulator
     # runtimes preinstalled. Timeout allows a cold SPM resolve + full build
     # on the 3-core M-series VM.
@@ -110,7 +113,7 @@ jobs:
           path: |
             TailcatKit/build/TailcatKit.xcframework
             TailcatKit/build/tcecho
-          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh') }}
+          key: ${{ runner.os }}-tailcatkit-v2-${{ hashFiles('TailcatKit/**/*.go', 'TailcatKit/go.mod', 'TailcatKit/go.sum', 'TailcatKit/build_xcframework.sh', 'TailcatKit/LICENSE.tailcat') }}
 
       - name: Set up Go
         if: steps.tailcat-cache.outputs.cache-hit != 'true'
@@ -198,6 +201,25 @@ jobs:
         with:
           name: ios-test-results
           path: TestResults
+
+      # See the job comment: turns a go-test failure into a failure of this
+      # (the only ruleset-required) job. go-test normally finishes minutes
+      # before this step runs, so the wait is usually zero.
+      - name: Require Go unit tests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 80); do
+            c=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)") | .conclusion // empty')
+            case "$c" in
+              success) echo "Go unit tests passed"; exit 0 ;;
+              "") sleep 15 ;;
+              *) echo "Go unit tests job concluded: $c" >&2; exit 1 ;;
+            esac
+          done
+          echo "timed out waiting for the Go unit tests job" >&2
+          exit 1
 
   visionos-build:
     name: visionOS Build
