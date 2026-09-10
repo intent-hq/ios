@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import Testing
 @testable import Intent
@@ -346,37 +347,37 @@ struct WorkspaceListViewModelTests {
     @Test func tracker_emptyUniverseNeverPrimes() {
         var tracker = WorkspaceAttentionCueTracker()
         let cued = tracker.observe(universe: [], attention: [])
-        #expect(!cued)
+        #expect(cued.isEmpty)
         #expect(!tracker.primed)
     }
 
     @Test func tracker_firstSnapshotPrimesSilently() {
         var tracker = WorkspaceAttentionCueTracker()
         let primingCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
-        #expect(!primingCue)
+        #expect(primingCue.isEmpty)
         #expect(tracker.primed)
         // Same set after priming: still no cue.
         let repeatCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
-        #expect(!repeatCue)
+        #expect(repeatCue.isEmpty)
     }
 
     @Test func tracker_newAttentionCuesOnce() {
         var tracker = WorkspaceAttentionCueTracker()
         _ = tracker.observe(universe: ["a", "b"], attention: [])
         let newCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
-        #expect(newCue)
+        #expect(newCue == ["b"])
         // Persisting attention does not re-cue.
         let persistingCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
-        #expect(!persistingCue)
+        #expect(persistingCue.isEmpty)
     }
 
     @Test func tracker_clearedThenRaisedAgainRecues() {
         var tracker = WorkspaceAttentionCueTracker()
         _ = tracker.observe(universe: ["a"], attention: ["a"])
         let clearedCue = tracker.observe(universe: ["a"], attention: [])
-        #expect(!clearedCue)
+        #expect(clearedCue.isEmpty)
         let raisedAgainCue = tracker.observe(universe: ["a"], attention: ["a"])
-        #expect(raisedAgainCue)
+        #expect(raisedAgainCue == ["a"])
     }
 
     // MARK: - WorkspaceAttentionCueCenter
@@ -443,6 +444,83 @@ struct WorkspaceListViewModelTests {
         center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
         #expect(sounds == 1)
         #expect(center.windowCueEvent == nil)
+    }
+
+    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
+
+    private func makeDedupCenter(now: @escaping () -> Date)
+        -> WorkspaceAttentionCueCenter {
+        WorkspaceAttentionCueCenter(
+            playSound: {}, windowEmitsCueSound: true, now: now)
+    }
+
+    @Test @MainActor func cueCenter_unreadFlipAfterAlertChimeIsSilent() {
+        // One agent:idle → alert chime plays, then the same completion
+        // flips the workspace to unread: exactly one audible trigger.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += 1
+        center.observe(workspaces: [makeWorkspace(id: "a", attention: "unread")])
+        #expect(center.windowCueEvent == nil)
+    }
+
+    @Test @MainActor func cueCenter_blockerTransitionAfterAlertChimeIsSilent() {
+        // A raised blocker also emits agent:idle, so the blocked
+        // transition coincides with an alert chime: one audible trigger.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += 1
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent == nil)
+    }
+
+    @Test @MainActor func cueCenter_recentCueSuppressesAlertChimeSameWorkspaceOnly() {
+        // Reverse arrival order: the attention flip is observed before the
+        // chime — the chime is suppressed, but only for that workspace.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])
+
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"), makeWorkspace(id: "b")
+        ])
+        #expect(center.windowCueEvent != nil)
+        nowDate += 1
+        #expect(!center.noteAlertChimeWillPlay(workspaceId: "a"))
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "b"))
+    }
+
+    @Test @MainActor func cueCenter_pureAttentionTransitionStillSounds() {
+        // Attention raised with no coinciding alert (e.g. another
+        // workspace's chime, or attention without idle) still sounds.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "b"))
+        nowDate += 1
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"), makeWorkspace(id: "b")
+        ])
+        #expect(center.windowCueEvent != nil)
+    }
+
+    @Test @MainActor func cueCenter_dedupExpiresAfterInterval() {
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += WorkspaceAttentionCueCenter.dedupInterval + 0.1
+        center.observe(workspaces: [makeWorkspace(id: "a", attention: "unread")])
+        #expect(center.windowCueEvent != nil,
+                "An attention flip past the dedup window is a distinct event")
     }
 }
 

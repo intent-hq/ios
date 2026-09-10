@@ -771,7 +771,9 @@ final class NotificationManagerSessionAggregationTests {
 
     private func makeManager(
         state: UIApplication.State = .active,
-        defaultConnection: FakeConnectionManager
+        defaultConnection: FakeConnectionManager,
+        windowEmitsFeedbackSound: Bool = false,
+        feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
         let center = NotificationManagerFakeCenter()
         let service = LocalNotificationService(center: center)
@@ -779,7 +781,8 @@ final class NotificationManagerSessionAggregationTests {
             localNotificationService: service,
             applicationState: { state },
             activeConnectionId: { Self.activeConnectionId },
-            presentFeedback: {},
+            presentFeedback: feedback,
+            windowEmitsFeedbackSound: windowEmitsFeedbackSound,
             connection: defaultConnection,
             workspaceStore: WorkspaceStore(forTesting: true),
             registerEvents: false)
@@ -787,7 +790,9 @@ final class NotificationManagerSessionAggregationTests {
     }
 
     private func makeSession(
-        backendID: BackendID?, connection: SessionFakeConnectionManager
+        backendID: BackendID?, connection: SessionFakeConnectionManager,
+        attentionCueCenter: WorkspaceAttentionCueCenter =
+            WorkspaceAttentionCueCenter(playSound: {})
     ) -> BackendSession {
         let workspaceStore = WorkspaceStore(forTesting: true)
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
@@ -805,7 +810,7 @@ final class NotificationManagerSessionAggregationTests {
             workspaceFileImageLoader: fileLoader,
             attachmentImageLoader: AttachmentImageLoader(
                 connection: connection, fileLoader: fileLoader),
-            attentionCueCenter: WorkspaceAttentionCueCenter(playSound: {}))
+            attentionCueCenter: attentionCueCenter)
     }
 
     private func idleEventParams(agentId: String, workspaceId: String) -> [String: Any] {
@@ -940,5 +945,72 @@ final class NotificationManagerSessionAggregationTests {
 
         #expect(manager.currentToast == nil)
         #expect(center.requests.isEmpty)
+    }
+
+    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
+
+    private func makeCueWorkspace(id: String, attention: String? = nil) -> Workspace {
+        Workspace(id: id, title: "Test", branch: nil, baseRef: nil, status: nil,
+                  activity: nil, displayStatus: nil, attention: attention,
+                  lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
+                  repositoryName: nil, prStatus: nil, prNumber: nil,
+                  diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+                  taskStatsCompleted: nil, taskStatsInProgress: nil,
+                  agentSummaryCount: nil, agentSummaryAgents: nil)
+    }
+
+    @Test func idleAlertChimeThenAttentionFlipYieldsOneAudibleTrigger() async throws {
+        // agent:idle chimes via the observed session, then the same
+        // completion flips the workspace to unread: the cue stays silent.
+        let (manager, _) = makeManager(
+            defaultConnection: FakeConnectionManager(), windowEmitsFeedbackSound: true)
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let cueCenter = WorkspaceAttentionCueCenter(
+            playSound: {}, windowEmitsCueSound: true)
+        let session = makeSession(
+            backendID: backendID, connection: connection,
+            attentionCueCenter: cueCenter)
+        manager.attachSessionObserver(for: session)
+        cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p")])
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        try await waitFor { manager.windowFeedbackEvent != nil }
+
+        cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p", attention: "unread")])
+        #expect(cueCenter.windowCueEvent == nil,
+                "The alert chime already sounded for ws-p — no second chime")
+    }
+
+    @Test func attentionCueThenIdleAlertYieldsOneAudibleTrigger() async throws {
+        // Reverse arrival order: the workspace snapshot flips first, then
+        // the agent:idle alert arrives — the chime is suppressed.
+        let (manager, _) = makeManager(
+            defaultConnection: FakeConnectionManager(), windowEmitsFeedbackSound: true)
+        let backendID = BackendID(UUID())
+        let connection = SessionFakeConnectionManager()
+        connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
+        let cueCenter = WorkspaceAttentionCueCenter(
+            playSound: {}, windowEmitsCueSound: true)
+        let session = makeSession(
+            backendID: backendID, connection: connection,
+            attentionCueCenter: cueCenter)
+        manager.attachSessionObserver(for: session)
+        cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p")])
+        cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p", attention: "unread")])
+        #expect(cueCenter.windowCueEvent != nil)
+
+        connection.deliverEvent(
+            method: "event",
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+        try await waitFor { manager.currentToast != nil }
+
+        #expect(manager.windowFeedbackEvent == nil,
+                "The attention cue already sounded for ws-p — no alert chime")
+        #expect(manager.currentToast != nil,
+                "Dedup silences the sound only; the toast still shows")
     }
 }
