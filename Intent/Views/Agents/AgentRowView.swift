@@ -175,35 +175,51 @@ struct DelegatedAgentsRow: View {
 
     var body: some View {
         Button(action: onToggle) {
-            HStack(alignment: .firstTextBaseline, spacing: Constants.AgentRow.headerSpacing) {
-                Label(AgentGroupSummary.delegatedTitle(count: agents.count),
-                      systemImage: "person.2.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: Constants.AgentRow.headerSpacing) {
+                summaryLabel
                     .layoutPriority(1)
 
-                Spacer()
-
-                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Spacer(minLength: Constants.AgentRow.headerSpacing)
+                chevron
             }
-            .padding(.leading, Constants.AgentRow.delegatedLeadingPadding)
+            .padding(.leading, Constants.AgentRow.avatarSize + Constants.AgentRow.rowSpacing)
             .padding(.vertical, Constants.AgentRow.delegatedVerticalPadding)
             .frame(minHeight: Constants.Accessibility.minimumTapTarget)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(AgentGroupSummary.delegatedTitle(count: agents.count))
+        .accessibilityLabel(summaryTitle)
         .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
+    }
+
+    private var summaryLabel: some View {
+        Text(summaryTitle)
+            .font(.subheadline)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var chevron: some View {
+        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+    }
+
+    private var summaryTitle: String {
+        let runningCount = agents.count { AgentAvatarState.state(for: $0) == .running }
+        return AgentGroupSummary.delegatedRunningTitle(
+            runningCount: runningCount, totalCount: agents.count)
     }
 }
 
 enum AgentGroupSummary {
     static func delegatedTitle(count: Int) -> String {
         count == 1 ? "1 delegated agent" : "\(count) delegated agents"
+    }
+
+    static func delegatedRunningTitle(runningCount: Int, totalCount: Int) -> String {
+        "\(runningCount) of \(delegatedTitle(count: totalCount)) running"
     }
 }
 

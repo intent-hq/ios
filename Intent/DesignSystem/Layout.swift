@@ -241,7 +241,6 @@ extension Constants.AgentRow {
     static let headerSpacing: CGFloat = 4
     static let avatarOverlap: CGFloat = -6
     static let headerAvatarSize: CGFloat = 16
-    static let delegatedLeadingPadding: CGFloat = 40
     static let delegatedVerticalPadding: CGFloat = 4
     static let backgroundVerticalPadding: CGFloat = 8
 }
