@@ -14,6 +14,7 @@ struct GitHubRepoPickerView: View {
     @Binding var selectedRepo: GitHubRepo?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var searchText = ""
     /// The trimmed query the current `store.searchResults` answer; nil until
@@ -113,20 +114,26 @@ struct GitHubRepoPickerView: View {
                     Text(repo.name)
                         .font(.headline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                     Text(repo.fullName)
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .truncationMode(.middle)
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
                 Spacer()
                 if selectedRepo?.id == repo.id {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Theme.primary(for: colorScheme))
-                        .fontWeight(.semibold)
+                        .bold()
+                        .accessibilityLabel("Selected")
                 }
             }
             .padding(.vertical, Constants.GitHubRepoPicker.rowVerticalPadding)
         }
+        .accessibilityAddTraits(selectedRepo?.id == repo.id ? .isSelected : [])
         .listRowBackground(Theme.card(for: colorScheme))
     }
 

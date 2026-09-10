@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct CreateWorkspaceSpecialistStepView: View {
+    let repositoryFullName: String
+    let branch: String
     let specialists: [SpecialistInfo]
     let isLoadingSpecialists: Bool
     @Binding var selectedSpecialist: SpecialistInfo?
@@ -17,6 +19,8 @@ struct CreateWorkspaceSpecialistStepView: View {
     let onSelectProvider: (ProviderInfo) -> Void
     let onCreate: () -> Void
     let onLoad: () async -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -35,7 +39,7 @@ struct CreateWorkspaceSpecialistStepView: View {
         .toolbarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isCreating)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .confirmationAction) {
                 Button("Create", action: onCreate)
                     .disabled(CreateWorkspaceView.isCreateDisabled(
                         isCreating: isCreating,
@@ -54,30 +58,46 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     private var optionsList: some View {
         List {
-            Section("Initial Message (Optional)") {
-                TextField("Describe what you'd like to do...", text: $messageText, axis: .vertical)
-                    .lineLimit(Constants.CreateWorkspace.messageLineCountRange)
+            Section("Source") {
+                VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
+                    ForEach(CreateWorkspaceView.creationContextRows(
+                        repositoryFullName: repositoryFullName,
+                        branch: branch
+                    )) { row in
+                        contextRow(row)
+                    }
+                }
+            }
+            Section("Agent") {
+                adaptiveField("Specialist") {
+                    specialistPicker
+                }
+
+                if providers.noneSelectable {
+                    noProvidersSignedInPlaceholder
+                        .listRowBackground(Theme.card(for: colorScheme))
+                } else if !providers.isEmpty {
+                    adaptiveField("Provider") {
+                        providerPicker
+                    }
+                }
+
+                if !models.isEmpty {
+                    adaptiveField("Model") {
+                        modelPicker
+                    }
+                }
+            }
+            Section {
+                TextField("What should the first agent work on?", text: $messageText, axis: .vertical)
+                    .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
                     .font(.body)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                     .listRowBackground(Theme.card(for: colorScheme))
-            }
-            Section("Specialist") {
-                specialistPicker
-            }
-            if providers.noneSelectable {
-                Section("Provider") {
-                    noProvidersSignedInPlaceholder
-                        .listRowBackground(Theme.card(for: colorScheme))
-                }
-            } else if !providers.isEmpty {
-                Section("Provider") {
-                    providerPicker
-                }
-            }
-            if !models.isEmpty {
-                Section("Model") {
-                    modelPicker
-                }
+            } header: {
+                Text("Message")
+            } footer: {
+                Text("Optional. Add instructions for the first agent in this workspace.")
             }
         }
         .listStyle(.insetGrouped)
@@ -94,6 +114,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             }
         }
         .pickerStyle(.menu)
+        .labelsHidden()
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
@@ -114,6 +135,7 @@ struct CreateWorkspaceSpecialistStepView: View {
             }
         }
         .pickerStyle(.menu)
+        .labelsHidden()
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
@@ -131,7 +153,54 @@ struct CreateWorkspaceSpecialistStepView: View {
             }
         }
         .pickerStyle(.menu)
+        .labelsHidden()
         .listRowBackground(Theme.card(for: colorScheme))
+    }
+
+    @ViewBuilder
+    private func adaptiveField<Content: View>(
+        _ label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
+            VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                content()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            LabeledContent(label) {
+                content()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func contextRow(_ row: CreateWorkspaceView.CreationContextRow) -> some View {
+        Group {
+            if CreateWorkspaceView.usesExpandedFormLayout(for: dynamicTypeSize) {
+                VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
+                    Text(row.label)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    Text(row.value)
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                LabeledContent(row.label) {
+                    Text(row.value)
+                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                        .multilineTextAlignment(.trailing)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: CreateWorkspaceView.creationContextAccessibilityDescription(row)))
     }
 
     private var noProvidersSignedInPlaceholder: some View {
@@ -163,6 +232,14 @@ struct CreateWorkspaceSpecialistStepView: View {
 }
 
 extension CreateWorkspaceView {
+    static var initialMessageLineCountRange: ClosedRange<Int> {
+        1...Constants.CreateWorkspace.messageLineCountRange.upperBound
+    }
+
+    static func creationContextAccessibilityDescription(_ row: CreationContextRow) -> String {
+        "\(row.label): \(row.value.isEmpty ? "Not specified" : row.value)"
+    }
+
     static func isCreateDisabled(isCreating: Bool, isLoadingProviders: Bool, providers: [ProviderInfo]) -> Bool {
         isCreating || isLoadingProviders || providers.noneSelectable
     }

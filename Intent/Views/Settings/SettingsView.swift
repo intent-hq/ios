@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(BackendSession.self) var session
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage("appThemePreference") private var themePreference: String = "system"
     @State private var showLogOffConfirmation = false
 
@@ -24,21 +25,23 @@ struct SettingsView: View {
                 // backend, never the default session's active connection.
                 if let connection = coordinator.windowConnection {
                     Section("Connected To") {
-                        HStack(spacing: Constants.Settings.connectionRowSpacing) {
-                            Image(systemName: "desktopcomputer")
-                                .font(.title2)
-                                .foregroundStyle(Theme.primary(for: colorScheme))
+                        connectionSummaryLayout {
+                            HStack(spacing: Constants.Settings.connectionRowSpacing) {
+                                Image(systemName: "desktopcomputer")
+                                    .font(.title2)
+                                    .foregroundStyle(Theme.primary(for: colorScheme))
 
-                            VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
-                                Text(connection.displayName)
-                                    .font(.body.weight(.medium))
-                                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(
-                                        for: colorScheme, contrast: colorSchemeContrast))
+                                VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
+                                    Text(connection.displayName)
+                                        .font(.body.weight(.medium))
+                                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
+                                        .font(.caption)
+                                        .foregroundStyle(Theme.mutedForeground(
+                                            for: colorScheme, contrast: colorSchemeContrast))
+                                }
                             }
-
-                            Spacer()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
 
                             HStack(spacing: Constants.Settings.statusSpacing) {
                                 Circle()
@@ -89,6 +92,18 @@ struct SettingsView: View {
                 Text("Are you sure? You'll need to pair again to reconnect.")
             }
         }
+    }
+
+    private var connectionSummaryLayout: AnyLayout {
+        if Self.stacksConnectionSummary(for: dynamicTypeSize) {
+            AnyLayout(VStackLayout(alignment: .leading, spacing: Constants.Settings.connectionRowSpacing))
+        } else {
+            AnyLayout(HStackLayout(spacing: Constants.Settings.connectionRowSpacing))
+        }
+    }
+
+    static func stacksConnectionSummary(for dynamicTypeSize: DynamicTypeSize) -> Bool {
+        dynamicTypeSize.isAccessibilitySize
     }
 }
 

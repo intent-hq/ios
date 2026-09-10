@@ -6,6 +6,13 @@ struct CreateWorkspaceView: View {
         case create
     }
 
+    struct CreationContextRow: Equatable, Identifiable {
+        let label: String
+        let value: String
+
+        var id: String { label }
+    }
+
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -49,7 +56,6 @@ struct CreateWorkspaceView: View {
         NavigationStack(path: $navigationPath) {
             CreateWorkspaceRepoStepView(
                 store: githubStore, selectedRepo: $selectedRepo,
-                colorScheme: colorScheme,
                 onClose: { dismiss() },
                 onNext: { navigationPath.append(.branches) },
                 onRepoChanged: resetRepositoryState
@@ -58,6 +64,7 @@ struct CreateWorkspaceView: View {
                     switch route {
                     case .branches:
                         CreateWorkspaceBranchStepView(
+                            repositoryFullName: selectedRepo?.fullName ?? "",
                             displayedBranches: displayedBranches, defaultBranch: defaultBranch,
                             isLoading: isLoadingBranches, loadError: branchLoadError,
                             selectedBranch: $selectedBranch, searchText: $branchSearchText,
@@ -69,6 +76,8 @@ struct CreateWorkspaceView: View {
                         )
                     case .create:
                         CreateWorkspaceSpecialistStepView(
+                            repositoryFullName: selectedRepo?.fullName ?? "",
+                            branch: selectedBranch ?? "",
                             specialists: specialists, isLoadingSpecialists: isLoadingSpecialists,
                             selectedSpecialist: $selectedSpecialist,
                             providers: providers, isLoadingProviders: isLoadingProviders,
@@ -217,6 +226,21 @@ struct CreateWorkspaceView: View {
     }
 
     static let createRequestTimeout: TimeInterval = 120
+
+    static func creationContextRows(
+        repositoryFullName: String,
+        branch: String? = nil
+    ) -> [CreationContextRow] {
+        var rows = [CreationContextRow(label: "Repository", value: repositoryFullName)]
+        if let branch {
+            rows.append(CreationContextRow(label: "Branch", value: branch))
+        }
+        return rows
+    }
+
+    static func usesExpandedFormLayout(for size: DynamicTypeSize) -> Bool {
+        size.isAccessibilitySize
+    }
 
     private func createWorkspace() {
         guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }

@@ -1,3 +1,4 @@
+import SwiftUI
 import Testing
 @testable import Intent
 
@@ -106,6 +107,53 @@ struct CreateWorkspaceParamsTests {
         let initialAgent = try #require(params["initialAgent"] as? [String: Any])
         #expect(initialAgent["model"] as? String == "opus4.6")
         #expect(initialAgent["prompt"] == nil)
+    }
+
+    @Test func initialMessageStartsCompactAndCanGrow() {
+        let range = CreateWorkspaceView.initialMessageLineCountRange
+        #expect(range.lowerBound == 1)
+        #expect(range.upperBound == Constants.CreateWorkspace.messageLineCountRange.upperBound)
+    }
+
+    @Test func creationContextCarriesRepositoryIntoBranchAndFinalSteps() {
+        let repository = "intent-hq/a-repository-name-that-needs-room-to-wrap"
+        let branch = "feature/a-long-branch-name-that-must-remain-complete"
+        #expect(CreateWorkspaceView.creationContextRows(repositoryFullName: repository) == [
+            .init(label: "Repository", value: repository)
+        ])
+        #expect(CreateWorkspaceView.creationContextRows(
+            repositoryFullName: repository,
+            branch: branch
+        ) == [
+            .init(label: "Repository", value: repository),
+            .init(label: "Branch", value: branch)
+        ])
+    }
+
+    @Test func creationContextAccessibilityDescriptionsPreserveLabelsAndFullValues() {
+        let repository = "intent-hq/a-repository-name-that-needs-room-to-wrap"
+        let branch = "feature/a-long-branch-name-that-must-remain-complete"
+        let descriptions = CreateWorkspaceView.creationContextRows(
+            repositoryFullName: repository,
+            branch: branch
+        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
+
+        #expect(descriptions == ["Repository: \(repository)", "Branch: \(branch)"])
+    }
+
+    @Test func creationContextAccessibilityDescriptionsNameEmptyValues() {
+        let descriptions = CreateWorkspaceView.creationContextRows(
+            repositoryFullName: "",
+            branch: ""
+        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
+
+        #expect(descriptions == ["Repository: Not specified", "Branch: Not specified"])
+    }
+
+    @Test func creationFormReflowsAtAccessibilitySizes() {
+        #expect(!CreateWorkspaceView.usesExpandedFormLayout(for: .xxxLarge))
+        #expect(CreateWorkspaceView.usesExpandedFormLayout(for: .accessibility1))
+        #expect(CreateWorkspaceView.usesExpandedFormLayout(for: .accessibility5))
     }
 
     // MARK: - Specialist / prompt / model behavior

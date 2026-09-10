@@ -17,11 +17,9 @@ struct WorkspaceStatusIconView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             statusIcon
-                .accessibilityLabel(displayStatus.label)
 
             if hasActiveAgents {
                 statusDot(color: .green, differentiatedSymbol: "bolt.fill")
-                    .accessibilityLabel("Active agent")
                     .offset(x: statusCueOffset, y: -statusCueOffset)
             }
 
@@ -30,7 +28,6 @@ struct WorkspaceStatusIconView: View {
             if hasUnreadAttention(workspace) {
                 statusDot(color: workspaceUnreadColor,
                           differentiatedSymbol: "exclamationmark.triangle.fill")
-                    .accessibilityLabel("Unread attention")
                     .offset(x: statusCueOffset,
                             y: hasActiveAgents ? unreadStatusCueStackOffset : -statusCueOffset)
             }
@@ -39,12 +36,20 @@ struct WorkspaceStatusIconView: View {
             // Lowest precedence — running and unread dots win.
             if showsWaitingDot(workspace) {
                 statusDot(color: .gray, differentiatedSymbol: "clock.fill")
-                    .accessibilityLabel("Waiting")
                     .offset(x: statusCueOffset, y: -statusCueOffset)
             }
         }
         .visionAttentionChipBrightness(workspaceNeedsInput(workspace))
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.accessibilitySummary(for: workspace))
+    }
+
+    static func accessibilitySummary(for workspace: Workspace) -> String {
+        var parts = [resolveDisplayStatus(for: workspace).label]
+        if hasRunningAgents(workspace) { parts.append("Active agent") }
+        if hasUnreadAttention(workspace) { parts.append("Unread attention") }
+        if showsWaitingDot(workspace) { parts.append("Waiting") }
+        return parts.joined(separator: ", ")
     }
 
     private var statusStrokeWidth: CGFloat {

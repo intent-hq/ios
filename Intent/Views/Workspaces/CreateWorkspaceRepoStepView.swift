@@ -3,7 +3,6 @@ import SwiftUI
 struct CreateWorkspaceRepoStepView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
-    let colorScheme: ColorScheme
     let onClose: () -> Void
     let onNext: () -> Void
     let onRepoChanged: () -> Void
@@ -13,14 +12,10 @@ struct CreateWorkspaceRepoStepView: View {
             .navigationTitle("Select Repository")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .foregroundStyle(Theme.foreground(for: colorScheme))
-                    }
-                    .accessibilityLabel("Close")
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", role: .cancel, action: onClose)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Next", action: onNext)
                         .disabled(selectedRepo == nil)
                 }
