@@ -141,6 +141,56 @@ struct WorkspaceRowPresentationTests {
         ])
     }
 
+    @Test func accessibilityGraphDiagnosticsRedactContentAndTraverseNonViewContainers() {
+        let container = NonViewAccessibilityContainer()
+        container.dynamicElement.accessibilityLabel = "Expected label"
+        container.dynamicElement.accessibilityValue = "private value"
+        container.dynamicElement.accessibilityHint = "private hint"
+
+        let snapshot = accessibilityGraphSnapshot(
+            root: container, expectedLabels: ["Expected label", "Other expected label"])
+
+        #expect(snapshot.contains("path=root.dynamic[0]"))
+        #expect(snapshot.contains("labelPresent=true labelMatches=[true,false]"))
+        #expect(!snapshot.contains("Expected label"))
+        #expect(!snapshot.contains("private value"))
+        #expect(!snapshot.contains("private hint"))
+    }
+
+    @Test func accessibilityGraphDiagnosticsAreCycleSafeAndBounded() {
+        let cycle = NSObject()
+        cycle.accessibilityElements = [cycle]
+        #expect(accessibilityGraphSnapshot(
+            root: cycle, expectedLabels: []).split(separator: "\n").count == 1)
+        cycle.accessibilityElements = nil
+
+        let wideRoot = NSObject()
+        wideRoot.accessibilityElements = (0..<100).map { _ in NSObject() }
+        let wideSnapshot = accessibilityGraphSnapshot(root: wideRoot, expectedLabels: [])
+        #expect(wideSnapshot.split(separator: "\n").count == 64)
+        #expect(wideSnapshot.count <= 32_768)
+
+        let deepRoot = NSObject()
+        var tail = deepRoot
+        for _ in 0..<12 {
+            let child = NSObject()
+            tail.accessibilityElements = [child]
+            tail = child
+        }
+        let deepSnapshot = accessibilityGraphSnapshot(root: deepRoot, expectedLabels: [])
+        #expect(deepSnapshot.contains("depth=8"))
+        #expect(!deepSnapshot.contains("depth=9"))
+    }
+
+    @Test func accessibilityGraphObservationCannotRescueAnInitialMissingLabel() {
+        let element = UIAccessibilityElement(accessibilityContainer: NSObject())
+        let initialBadges = initialBadgeFrames(labels: ["Expected label"], elements: [element])
+
+        element.accessibilityLabel = "Expected label"
+
+        #expect(initialBadges[0]?.label == nil)
+    }
+
     @Test func statusSummaryPreservesConcurrentStatusCues() {
         let workspace = makeWorkspace(
             displayStatus: "needs_attention",
@@ -233,12 +283,30 @@ struct WorkspaceRowPresentationTests {
 
             let labels = ["Merged pull request #123456789", "100 additional pull requests"]
             let elements = accessibilityElements(in: controller.view)
-            let badges = try labels.map { label in
-                let element = try #require(elements.first { $0.accessibilityLabel == label })
-                return (label, element.accessibilityFrame)
+            let initialBadges = initialBadgeFrames(labels: labels, elements: elements)
+            if initialBadges.contains(where: { $0?.label == nil }) {
+                let immediate = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
+                _ = RunLoop.current.run(
+                    mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+                let observed = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
+                print("SYNTHETIC PR badge accessibility graph immediate:\n\(immediate)")
+                print("SYNTHETIC PR badge accessibility graph after run-loop observation:\n\(observed)")
+            }
+            let badges = try initialBadges.map { initialBadge in
+                try #require(initialBadge)
             }
             let hostFrame = controller.view.convert(controller.view.bounds, to: nil)
             return RenderedBadges(hostFrame: hostFrame, badges: badges)
+        }
+    }
+
+    private func initialBadgeFrames(
+        labels: [String], elements: [NSObject]
+    ) -> [(label: String, frame: CGRect)?] {
+        labels.map { label in
+            elements.first { $0.accessibilityLabel == label }.map {
+                (label: label, frame: $0.accessibilityFrame)
+            }
         }
     }
 
@@ -253,12 +321,90 @@ struct WorkspaceRowPresentationTests {
             + view.subviews.flatMap(accessibilityElements(in:))
     }
 
+    private func accessibilityGraphSnapshot(
+        root: NSObject,
+        expectedLabels: [String],
+        maxNodes: Int = 64,
+        maxDepth: Int = 8,
+        maxOutputCharacters: Int = 32_768
+    ) -> String {
+        var visited: Set<ObjectIdentifier> = []
+        var lines: [String] = []
+
+        func visit(_ object: NSObject, path: String, depth: Int) {
+            guard depth <= maxDepth, visited.count < maxNodes else { return }
+            guard visited.insert(ObjectIdentifier(object)).inserted else { return }
+
+            let propertyChildren = (object.accessibilityElements ?? [])
+                .prefix(maxNodes)
+                .compactMap { $0 as? NSObject }
+            let elementCount = object.accessibilityElementCount()
+            let dynamicChildren: [NSObject]
+            if elementCount == NSNotFound || elementCount < 0 {
+                dynamicChildren = []
+            } else {
+                dynamicChildren = (0..<min(elementCount, maxNodes)).compactMap {
+                    object.accessibilityElement(at: $0) as? NSObject
+                }
+            }
+            let subviews = (object as? UIView).map {
+                Array($0.subviews.prefix(maxNodes))
+            } ?? []
+            let label = object.accessibilityLabel
+            let labelMatches = expectedLabels.map { label == $0 }
+                .map { String($0) }
+                .joined(separator: ",")
+            let countDescription = elementCount == NSNotFound ? "NSNotFound" : "\(elementCount)"
+            let className = String(String(describing: type(of: object)).prefix(80))
+            let viewFacts: String
+            if let view = object as? UIView {
+                viewFacts = "attached=\(view.window != nil) hidden=\(view.isHidden) bounds=\(view.bounds)"
+            } else {
+                viewFacts = "attached=na hidden=na bounds=na"
+            }
+            lines.append(
+                "depth=\(depth) path=\(path) class=\(className) \(viewFacts) "
+                    + "frame=\(object.accessibilityFrame) elementCount=\(countDescription) "
+                    + "children=[property:\(propertyChildren.count),dynamic:\(dynamicChildren.count),"
+                    + "subviews:\(subviews.count)] labelPresent=\(label != nil) "
+                    + "labelMatches=[\(labelMatches)]")
+
+            guard depth < maxDepth else { return }
+            for (index, child) in propertyChildren.enumerated() {
+                visit(child, path: "\(path).property[\(index)]", depth: depth + 1)
+            }
+            for (index, child) in dynamicChildren.enumerated() {
+                visit(child, path: "\(path).dynamic[\(index)]", depth: depth + 1)
+            }
+            for (index, child) in subviews.enumerated() {
+                visit(child, path: "\(path).subview[\(index)]", depth: depth + 1)
+            }
+        }
+
+        visit(root, path: "root", depth: 0)
+        return String(lines.joined(separator: "\n").prefix(maxOutputCharacters))
+    }
+
     private final class DynamicAccessibilityContainer: UIView {
         private lazy var dynamicElement: UIAccessibilityElement = {
             let element = UIAccessibilityElement(accessibilityContainer: self)
             element.accessibilityLabel = "Dynamic container element"
             return element
         }()
+
+        override func accessibilityElementCount() -> Int { 1 }
+
+        override func accessibilityElement(at index: Int) -> Any? {
+            index == 0 ? dynamicElement : nil
+        }
+
+        override func index(ofAccessibilityElement element: Any) -> Int {
+            element as AnyObject === dynamicElement ? 0 : NSNotFound
+        }
+    }
+
+    private final class NonViewAccessibilityContainer: NSObject {
+        lazy var dynamicElement = UIAccessibilityElement(accessibilityContainer: self)
 
         override func accessibilityElementCount() -> Int { 1 }
 
