@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 /// Full-screen launch splash using the supplied GIF's frames and timing.
@@ -19,11 +20,11 @@ struct SplashArtView: View {
                 TimelineView(.animation(
                     minimumInterval: animation?.minimumFrameDuration,
                     paused: !shouldAnimate
-                )) { timeline in
+                )) { _ in
                     if let animation {
                         SplashFrameView(
                             image: animation.image(
-                                at: playback.elapsedTime(at: timeline.date),
+                                at: playback.elapsedTime(at: CACurrentMediaTime()),
                                 animated: !reduceMotion),
                             colorScheme: colorScheme)
                     }
@@ -32,13 +33,13 @@ struct SplashArtView: View {
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .onAppear {
-            playback.setRunning(shouldAnimate, at: .now)
+            playback.setRunning(shouldAnimate, at: CACurrentMediaTime())
         }
         .onChange(of: shouldAnimate) { _, isRunning in
-            playback.setRunning(isRunning, at: .now)
+            playback.setRunning(isRunning, at: CACurrentMediaTime())
         }
         .onDisappear {
-            playback.setRunning(false, at: .now)
+            playback.setRunning(false, at: CACurrentMediaTime())
         }
     }
 }
