@@ -581,14 +581,14 @@ struct ToastInfo: Equatable {
             .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {
             // Currently viewing this exact agent's conversation — feedback, no toast
-            playFeedback(source: sourceBackendID)
+            playFeedback(source: sourceBackendID, workspaceId: workspaceId)
         } else if isWorkspaceOpen(workspaceId, connectionId: connectionId) {
             // Viewing this workspace (agent list) — feedback, no toast
             // The agent list will update via events, so the user will see the change
-            playFeedback(source: sourceBackendID)
+            playFeedback(source: sourceBackendID, workspaceId: workspaceId)
         } else {
             // Different workspace — feedback + toast
-            playFeedback(source: sourceBackendID)
+            playFeedback(source: sourceBackendID, workspaceId: workspaceId)
             showToast(agentId: agentId, workspaceId: workspaceId,
                       agentName: agentName, workspaceName: workspaceName,
                       sourceBackendID: sourceBackendID)
@@ -598,8 +598,17 @@ struct ToastInfo: Equatable {
     /// Plays alert feedback: on window-emitting platforms (visionOS) publish
     /// the request for the source backend's window to emit the chime from
     /// its own scene (`WindowFeedbackSoundEmitter`); elsewhere play the
-    /// global haptic + sound.
-    private func playFeedback(source: BackendID) {
+    /// global haptic + sound. Deduplicated against the source session's
+    /// workspace attention cue: one agent event (idle/blocker) often also
+    /// flips its workspace's attention, and both sounds within a second is
+    /// the "double chime" — the cue center arbitrates so at most one
+    /// audible trigger plays per workspace per event (no-op off visionOS,
+    /// where the cue center never sounds).
+    private func playFeedback(source: BackendID, workspaceId: String) {
+        if let cueCenter = observedSessions[source]?.session.attentionCueCenter,
+           !cueCenter.noteAlertChimeWillPlay(workspaceId: workspaceId) {
+            return
+        }
         if windowEmitsFeedbackSound {
             windowFeedbackEvent = FeedbackEvent(sourceBackendID: source)
         } else {

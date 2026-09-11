@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import Testing
 @testable import Intent
@@ -346,37 +347,37 @@ struct WorkspaceListViewModelTests {
     @Test func tracker_emptyUniverseNeverPrimes() {
         var tracker = WorkspaceAttentionCueTracker()
         let cued = tracker.observe(universe: [], attention: [])
-        #expect(!cued)
+        #expect(cued.isEmpty)
         #expect(!tracker.primed)
     }
 
     @Test func tracker_firstSnapshotPrimesSilently() {
         var tracker = WorkspaceAttentionCueTracker()
         let primingCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
-        #expect(!primingCue)
+        #expect(primingCue.isEmpty)
         #expect(tracker.primed)
         // Same set after priming: still no cue.
         let repeatCue = tracker.observe(universe: ["a", "b"], attention: ["a"])
-        #expect(!repeatCue)
+        #expect(repeatCue.isEmpty)
     }
 
     @Test func tracker_newAttentionCuesOnce() {
         var tracker = WorkspaceAttentionCueTracker()
         _ = tracker.observe(universe: ["a", "b"], attention: [])
         let newCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
-        #expect(newCue)
+        #expect(newCue == ["b"])
         // Persisting attention does not re-cue.
         let persistingCue = tracker.observe(universe: ["a", "b"], attention: ["b"])
-        #expect(!persistingCue)
+        #expect(persistingCue.isEmpty)
     }
 
     @Test func tracker_clearedThenRaisedAgainRecues() {
         var tracker = WorkspaceAttentionCueTracker()
         _ = tracker.observe(universe: ["a"], attention: ["a"])
         let clearedCue = tracker.observe(universe: ["a"], attention: [])
-        #expect(!clearedCue)
+        #expect(clearedCue.isEmpty)
         let raisedAgainCue = tracker.observe(universe: ["a"], attention: ["a"])
-        #expect(raisedAgainCue)
+        #expect(raisedAgainCue == ["a"])
     }
 
     // MARK: - WorkspaceAttentionCueCenter
@@ -406,6 +407,165 @@ struct WorkspaceListViewModelTests {
             makeWorkspace(id: "c", displayStatus: "needs_attention")
         ])
         #expect(sounds == 1)
+    }
+
+    @Test @MainActor func cueCenter_windowEmitsCue_publishesEventInsteadOfSound() {
+        var sounds = 0
+        let center = WorkspaceAttentionCueCenter(
+            playSound: { sounds += 1 }, windowEmitsCueSound: true)
+
+        // Priming snapshot: silent, no event.
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        #expect(center.windowCueEvent == nil)
+
+        // New attention: publishes a window cue event, never the global sound.
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        let first = center.windowCueEvent
+        #expect(first != nil)
+        #expect(sounds == 0)
+
+        // Idempotent re-observation: same event, no re-trigger.
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent == first)
+
+        // Cleared then raised again: a fresh event id re-triggers playback.
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent != nil)
+        #expect(center.windowCueEvent != first)
+        #expect(sounds == 0)
+    }
+
+    @Test @MainActor func cueCenter_globalSoundPath_neverPublishesWindowEvent() {
+        var sounds = 0
+        let center = WorkspaceAttentionCueCenter(
+            playSound: { sounds += 1 }, windowEmitsCueSound: false)
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(sounds == 1)
+        #expect(center.windowCueEvent == nil)
+    }
+
+    // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
+
+    private func makeDedupCenter(now: @escaping () -> Date)
+        -> WorkspaceAttentionCueCenter {
+        WorkspaceAttentionCueCenter(
+            playSound: {}, windowEmitsCueSound: true, now: now)
+    }
+
+    @Test @MainActor func cueCenter_unreadFlipAfterAlertChimeIsSilent() {
+        // One agent:idle → alert chime plays, then the same completion
+        // flips the workspace to unread: exactly one audible trigger.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += 1
+        center.observe(workspaces: [makeWorkspace(id: "a", attention: "unread")])
+        #expect(center.windowCueEvent == nil)
+    }
+
+    @Test @MainActor func cueCenter_blockerTransitionAfterAlertChimeIsSilent() {
+        // A raised blocker also emits agent:idle, so the blocked
+        // transition coincides with an alert chime: one audible trigger.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += 1
+        center.observe(workspaces: [makeWorkspace(id: "a", displayStatus: "blocked")])
+        #expect(center.windowCueEvent == nil)
+    }
+
+    @Test @MainActor func cueCenter_recentCueSuppressesAlertChimeSameWorkspaceOnly() {
+        // Reverse arrival order: the attention flip is observed before the
+        // chime — the chime is suppressed, but only for that workspace.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])
+
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"), makeWorkspace(id: "b")
+        ])
+        #expect(center.windowCueEvent != nil)
+        nowDate += 1
+        #expect(!center.noteAlertChimeWillPlay(workspaceId: "a"))
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "b"))
+    }
+
+    @Test @MainActor func cueCenter_pureAttentionTransitionStillSounds() {
+        // Attention raised with no coinciding alert (e.g. another
+        // workspace's chime, or attention without idle) still sounds.
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a"), makeWorkspace(id: "b")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "b"))
+        nowDate += 1
+        center.observe(workspaces: [
+            makeWorkspace(id: "a", attention: "unread"), makeWorkspace(id: "b")
+        ])
+        #expect(center.windowCueEvent != nil)
+    }
+
+    @Test @MainActor func cueCenter_dedupExpiresAfterInterval() {
+        var nowDate = Date(timeIntervalSinceReferenceDate: 0)
+        let center = makeDedupCenter(now: { nowDate })
+        center.observe(workspaces: [makeWorkspace(id: "a")])
+
+        #expect(center.noteAlertChimeWillPlay(workspaceId: "a"))
+        nowDate += WorkspaceAttentionCueCenter.dedupInterval + 0.1
+        center.observe(workspaces: [makeWorkspace(id: "a", attention: "unread")])
+        #expect(center.windowCueEvent != nil,
+                "An attention flip past the dedup window is a distinct event")
+    }
+}
+
+/// Duplicate windows bound to one backend all observe the same
+/// FeedbackEvent/WindowCueEvent; the claim registry lets exactly one
+/// window's emitter play each event.
+@Suite @MainActor struct WindowSoundClaimRegistryTests {
+
+    @Test func twoWindowsOnOneBackend_exactlyOnePlaybackPerEvent() {
+        let registry = WindowSoundClaimRegistry()
+        let event = UUID()
+        // Both duplicate windows observe the same event id; only the
+        // first observer plays.
+        #expect(registry.claim(event))
+        #expect(!registry.claim(event))
+    }
+
+    @Test func windowsOnDifferentBackends_unaffected() {
+        let registry = WindowSoundClaimRegistry()
+        // Different backends publish distinct events (fresh ids); each
+        // window's claim succeeds.
+        #expect(registry.claim(UUID()))
+        #expect(registry.claim(UUID()))
+    }
+
+    @Test func backToBackDistinctEvents_eachPlay() {
+        let registry = WindowSoundClaimRegistry()
+        let first = UUID()
+        let second = UUID()
+        #expect(registry.claim(first))
+        #expect(registry.claim(second),
+                "A fresh event id is a new sound, not a duplicate")
+        #expect(!registry.claim(first))
+        #expect(!registry.claim(second))
+    }
+
+    @Test func evictionKeepsRecentClaims() {
+        let registry = WindowSoundClaimRegistry(capacity: 2)
+        let old = UUID()
+        #expect(registry.claim(old))
+        #expect(registry.claim(UUID()))
+        #expect(registry.claim(UUID()))
+        // `old` was evicted (FIFO); the bound only needs to cover ids
+        // still observable within a MainActor turn of publication.
+        #expect(registry.claim(old))
     }
 }
 

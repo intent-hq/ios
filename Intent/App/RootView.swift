@@ -50,10 +50,13 @@ struct RootView: View {
         }
     }
 
-    /// visionOS: the scene-anchored chime emitter; empty elsewhere.
+    /// visionOS: the scene-anchored sound emitters — one for the
+    /// agent-completion chime, one for the workspace attention cue; empty
+    /// elsewhere.
     @ViewBuilder private var windowFeedbackEmitter: some View {
         #if os(visionOS)
-        WindowFeedbackSoundEmitter(event: feedbackEventForThisWindow)
+        WindowFeedbackSoundEmitter(eventID: feedbackEventForThisWindow?.id)
+        WindowFeedbackSoundEmitter(eventID: session.attentionCueCenter.windowCueEvent?.id)
         #endif
     }
 
@@ -155,10 +158,11 @@ struct RootView: View {
             }
         }
         .background {
-            // visionOS: the notification chime is emitted from within THIS
-            // window's scene (not a global system sound) so spatial audio
-            // localizes it to the source workspace's window. EmptyView on
-            // other platforms, which keep the manager's global feedback.
+            // visionOS: notification sounds (agent-completion chime and
+            // workspace attention cue) are emitted from within THIS window's
+            // scene (not global system sounds) so spatial audio localizes
+            // them to the source workspace's window. EmptyView on other
+            // platforms, which keep the global sounds.
             windowFeedbackEmitter
         }
         .overlay {
