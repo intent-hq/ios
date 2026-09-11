@@ -21,6 +21,7 @@ struct NewMessagesDividerView: View {
                     .lineLimit(1)
             }
             .padding(.horizontal, 4)
+            .layoutPriority(1)
             hairline
         }
         .padding(.horizontal, 8)
@@ -33,6 +34,6 @@ struct NewMessagesDividerView: View {
         Rectangle()
             .fill(Theme.border(for: colorScheme))
             .frame(height: 1 / max(displayScale, 1))
-            .frame(maxWidth: .infinity)
+            .frame(minWidth: 16, maxWidth: .infinity)
     }
 }
