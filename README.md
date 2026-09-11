@@ -15,19 +15,24 @@ An Xcode project with a SwiftUI app target plus unit and UI test targets, struct
 
 ```text
 Intent/
-├── IntentApp.swift, RootView.swift, AppCoordinator.swift
-│                              App lifecycle and navigation
+├── App/                       App lifecycle, root/navigation, and
+│                              backend session registry
 ├── Models/                    Domain and wire models
 ├── Services/                  JSON-RPC transport, live subscriptions,
 │                              feature stores, and attachment handling
 ├── ViewModels/                UI state and feature orchestration
+├── Presentation/              View-agnostic presentation logic
+│                              (scroll policy, partitioning, classifiers)
 ├── Views/                     Pairing, workspace, note, and settings UI
 │   └── Conversation/          Conversation presentation, transcript,
 │                              input, and content rendering
+├── DesignSystem/              Colors, theme, layout, and avatar design
 ├── Utils/                     Shared formatting, links, haptics, and notifications
 ├── Assets.xcassets            App icons and colors
+├── Resources/                 Bundled media (splash asset)
+├── Constants.swift, Models.swift
 ├── PrivacyInfo.xcprivacy      Privacy manifest
-└── PersistenceManager.swift   Local preferences, credentials, and cached state
+└── PersistenceManager.swift   Keychain credentials, cached state, and preferences
 IntentTests/                   Unit and integration tests
 IntentUITests/                 UI and screenshot tests
 ```
@@ -42,7 +47,7 @@ On first launch, the app shows a pairing flow:
 1. **QR, deep link, or manual entry**: the user scans a QR code from the desktop app containing the host, port, token, and cert fingerprint, opens an `intent://pair` deep link, or enters them manually. On visionOS there is no QR path (no third-party camera access): pairing is deep link or manual entry only.
 2. **TLS fingerprint verification**: the app computes the SHA-256 fingerprint of the server's self-signed certificate and compares it to the expected fingerprint (from QR or prompt). On mismatch, connection is rejected.
 3. **Bearer auth**: the token is sent in the `Authorization: Bearer <token>` header.
-4. **Persist credentials**: host, port, token, and fingerprint are saved to `UserDefaults` for reconnection.
+4. **Persist credentials**: the token, server info, and paired connections are stored in the **Keychain**; non-secret UI state (active connection id, drafts, last-screen navigation) is kept in `UserDefaults`.
 
 ## visionOS
 
