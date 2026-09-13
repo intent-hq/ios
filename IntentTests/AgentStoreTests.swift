@@ -181,6 +181,99 @@ struct AgentStoreTests {
         #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
     }
 
+    // MARK: - Cancelled refetch (view disappeared under the deferred refresh)
+
+    /// Loads one agent so subsequent fetches take the debounced path.
+    private func makeLoadedStore() async -> (FakeConnectionManager, AgentStore) {
+        let fake = FakeConnectionManager()
+        let store = AgentStore(connectionManager: fake)
+        fake.responseMap["agent.list"] = ["agents": [
+            ["id": "agent-1", "name": "Agent 1"]
+        ]]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.agents.map(\.id) == ["agent-1"])
+        #expect(fake.paramsForMethod("agent.list").count == 1)
+        return (fake, store)
+    }
+
+    @Test func cancellingRefetchDuringDebounceIssuesNoRequest() async throws {
+        let (fake, store) = await makeLoadedStore()
+
+        // Cancel the caller while the debounce sleep is still pending: the
+        // unstructured debounce task must be cancelled with it, so no
+        // agent.list request is issued once the window would have elapsed.
+        let refresh = Task { await store.fetchAgents(workspaceId: "ws-1") }
+        try await Task.sleep(for: .milliseconds(50))
+        refresh.cancel()
+        await refresh.value
+        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+
+        #expect(fake.paramsForMethod("agent.list").count == 1)
+        #expect(store.agents.map(\.id) == ["agent-1"])
+    }
+
+    @Test func cancellingRefetchWithRequestInFlightDoesNotPublish() async throws {
+        let (fake, store) = await makeLoadedStore()
+
+        // Let the debounce elapse and the request go out, then cancel while
+        // the response is still pending: a late response must not publish.
+        fake.pendingMethods.insert("agent.list")
+        let refresh = Task { await store.fetchAgents(workspaceId: "ws-1") }
+        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+        #expect(fake.paramsForMethod("agent.list").count == 2)
+
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.agents
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+        // Cancel and resolve back-to-back on the main actor: the fake's
+        // cancellation hop is asynchronous, so the request resumes with the
+        // real (changed) payload inside an already-cancelled task.
+        refresh.cancel()
+        fake.resolvePending("agent.list", with: ["agents": [
+            ["id": "agent-1", "name": "Agent 1"],
+            ["id": "agent-2", "name": "Agent 2"]
+        ]])
+        await refresh.value
+
+        #expect(changeCount.withLock { $0 } == 0)
+        #expect(store.agents.map(\.id) == ["agent-1"])
+        #expect(store.isLoading == false)
+
+        // The store is not poisoned: a later, uncancelled fetch publishes.
+        fake.pendingMethods.remove("agent.list")
+        fake.responseMap["agent.list"] = ["agents": [
+            ["id": "agent-1", "name": "Agent 1"],
+            ["id": "agent-2", "name": "Agent 2"]
+        ]]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
+    }
+
+    @Test func cancellingSupersededRefetchLeavesNewerFetchRunning() async throws {
+        let (fake, store) = await makeLoadedStore()
+        fake.responseMap["agent.list"] = ["agents": [
+            ["id": "agent-1", "name": "Agent 1"],
+            ["id": "agent-2", "name": "Agent 2"]
+        ]]
+
+        // A newer fetch supersedes the first one's debounce task. Cancelling
+        // the first caller afterwards must only cancel its own (already
+        // replaced) task, never the newer fetch.
+        let first = Task { await store.fetchAgents(workspaceId: "ws-1") }
+        try await Task.sleep(for: .milliseconds(50))
+        let second = Task { await store.fetchAgents(workspaceId: "ws-1") }
+        try await Task.sleep(for: .milliseconds(50))
+        first.cancel()
+        await first.value
+        await second.value
+
+        #expect(fake.paramsForMethod("agent.list").count == 2)
+        #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
+    }
+
     // MARK: - Refetch on connect (mirrors NoteStore.onConnected)
 
     @Test func refetchesOnConnectWithWorkspaceContext() async throws {

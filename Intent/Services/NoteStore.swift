@@ -145,6 +145,9 @@ import Observation
             // replace the current workspace's notes or flip hasLoaded. The
             // current workspace's own fetch manages isLoading.
             guard self.workspaceId == workspaceId else { return }
+            // A fetch cancelled while its request was in flight must not
+            // publish the late response either.
+            try Task.checkCancellation()
             // Only publish a changed list: an identical refetch (e.g. the
             // deferred refresh after swiping back to the workspace) must not
             // invalidate observers and rebuild the note list.
@@ -161,6 +164,8 @@ import Observation
             if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
                 _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
             }
+        } catch is CancellationError {
+            // Cancelled refresh: nothing to publish, nothing to log.
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
