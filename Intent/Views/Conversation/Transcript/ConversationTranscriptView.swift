@@ -119,22 +119,24 @@ struct ConversationTranscriptView: View {
                 transcriptRows(dividerAnchorId: dividerAnchorId)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
         }
-        .flippedUpsideDown()
+        .defaultScrollAnchor(.bottom)
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: Bool.self) { geometry in
-            let isScrolledAway = ConversationTranscriptScrollPolicy.isScrolledAway(
-                flippedContentOffsetY: geometry.contentOffset.y
+            ConversationTranscriptScrollPolicy.isScrolledAway(
+                distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
+                    contentHeight: geometry.contentSize.height,
+                    contentOffsetY: geometry.contentOffset.y,
+                    containerHeight: geometry.containerSize.height,
+                    bottomInset: geometry.contentInsets.bottom
+                )
             )
-            AppLog.ui.debug("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(!isScrolledAway)")
-            return isScrolledAway
         } action: { _, isScrolledAway in
-            AppLog.ui.debug("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
             if hasInitiallyScrolled && !isScrollingToBottom {
                 userIsScrolledAway = isScrolledAway
             }
@@ -143,35 +145,12 @@ struct ConversationTranscriptView: View {
 
     @ViewBuilder
     private func transcriptRows(dividerAnchorId: String?) -> some View {
-        Color.clear.frame(height: 8)
-            .flippedUpsideDown()
-            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
-            .id("scroll-bottom")
-
-        if viewModel.isStreaming {
-            thinkingIndicatorView
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .flippedUpsideDown()
-                .id("thinking-indicator")
+        if viewModel.isTruncated {
+            truncationBanner
+                .id("truncation-banner")
         }
 
-        #if !os(visionOS)
-        // On visionOS the composer renders these as large chips above the
-        // field instead (MessageInputView).
-        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
-            suggestedPromptsView
-                .flippedUpsideDown()
-                .id("suggested-prompts")
-        }
-        #endif
-
-        // Newest-first code order appears bottom-to-top in the flipped list.
-        ForEach(viewModel.filteredMessages.reversed()) { message in
-            if message.id == dividerAnchorId {
-                NewMessagesDividerView()
-                    .flippedUpsideDown()
-                    .id("new-messages-divider")
-            }
+        ForEach(viewModel.filteredMessages) { message in
             MessageView(
                 message: message,
                 workspaceId: viewModel.workspaceId,
@@ -188,15 +167,31 @@ struct ConversationTranscriptView: View {
                     }
                 }
             )
-            .flippedUpsideDown()
             .id(message.id)
+            if message.id == dividerAnchorId {
+                NewMessagesDividerView()
+                    .id("new-messages-divider")
+            }
         }
 
-        if viewModel.isTruncated {
-            truncationBanner
-                .flippedUpsideDown()
-                .id("truncation-banner")
+        #if !os(visionOS)
+        // On visionOS the composer renders these as large chips above the
+        // field instead (MessageInputView).
+        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
+            suggestedPromptsView
+                .id("suggested-prompts")
         }
+        #endif
+
+        if viewModel.isStreaming {
+            thinkingIndicatorView
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .id("thinking-indicator")
+        }
+
+        Color.clear.frame(height: 8)
+            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
+            .id("scroll-bottom")
     }
 
     private var goToEndButton: some View {
@@ -310,11 +305,11 @@ struct ConversationTranscriptView: View {
             scrollToBottom(proxy: proxy, animated: false)
             return
         }
-        proxy.scrollTo("new-messages-divider", anchor: .bottom)
+        proxy.scrollTo("new-messages-divider", anchor: .top)
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
-            let offsetY = scrollMomentumProxy.scrollView?.contentOffset.y ?? 0
+            let distanceToBottom = scrollMomentumProxy.distanceToBottom ?? 0
             if NewMessagesDivider.followDisabledAfterEntryScroll(
-                flippedContentOffsetY: offsetY
+                distanceToBottom: distanceToBottom
             ) {
                 userIsScrolledAway = true
             }
@@ -328,10 +323,10 @@ struct ConversationTranscriptView: View {
             guard !Task.isCancelled else { return }
             if animated {
                 withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
-                    proxy.scrollTo("scroll-bottom", anchor: .top)
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
                 }
             } else {
-                proxy.scrollTo("scroll-bottom", anchor: .top)
+                proxy.scrollTo("scroll-bottom", anchor: .bottom)
             }
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
             guard !Task.isCancelled else { return }

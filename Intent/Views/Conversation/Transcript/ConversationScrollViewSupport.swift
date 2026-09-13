@@ -7,6 +7,18 @@ import UIKit
 class ScrollViewMomentumProxy {
     @ObservationIgnored weak var scrollView: UIScrollView?
 
+    /// Gap between the viewport's bottom edge and the end of the content, or
+    /// nil before the scroll view has been found.
+    var distanceToBottom: CGFloat? {
+        guard let scrollView else { return nil }
+        return ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: scrollView.contentSize.height,
+            contentOffsetY: scrollView.contentOffset.y,
+            containerHeight: scrollView.bounds.height,
+            bottomInset: scrollView.adjustedContentInset.bottom
+        )
+    }
+
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
         AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")

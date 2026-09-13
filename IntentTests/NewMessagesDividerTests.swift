@@ -75,40 +75,61 @@ struct NewMessagesDividerLatchedTests {
     }
 }
 
-/// Entry-scroll follow decision in the flipped list (contentOffset.y ≈ 0 is
-/// the visual bottom; threshold mirrors the list's at-bottom detection).
+/// Entry-scroll follow decision in the bottom-anchored list (distance to
+/// bottom ≈ 0 is the visual bottom; threshold mirrors the list's at-bottom
+/// detection).
 struct NewMessagesDividerEntryScrollTests {
     @Test func followStaysEnabledWhenClampedAtBottom() {
         // Unseen tail fits on screen: the divider scroll clamps at the
         // bottom, so follow-to-bottom keeps today's behavior.
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 0))
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 50))
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 0))
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 50))
     }
 
-    @Test func followStaysEnabledAtSafeAreaRestingOffset() {
-        // A scroll view at rest can sit at a negative offset (adjusted
-        // content inset) — still the visual bottom.
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: -59))
+    @Test func followStaysEnabledWhileBouncedPastBottom() {
+        // A scroll view can rest or bounce past the end of its content
+        // (negative distance) — still the visual bottom.
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: -59))
     }
 
     @Test func followDisabledWhenLandedOnDividerAwayFromBottom() {
-        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 51))
-        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 2_000))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 51))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 2_000))
     }
 
     @Test func honorsCustomThreshold() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 10))
+            distanceToBottom: 30, atBottomThreshold: 10))
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 100))
+            distanceToBottom: 30, atBottomThreshold: 100))
     }
 }
 
 struct ConversationTranscriptScrollPolicyTests {
     @Test func tracksAwayStateAcrossBottomThreshold() {
-        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: -20))
-        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 50))
-        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 51))
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -20))
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 50))
+        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 51))
+    }
+
+    @Test func distanceToBottomIsZeroAtRestAtBottom() {
+        // contentOffset.y at the bottom = contentSize + bottomInset - container.
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 300, containerHeight: 700) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 334, containerHeight: 700, bottomInset: 34) == 0)
+    }
+
+    @Test func distanceToBottomGrowsAsViewportScrollsUp() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 100, containerHeight: 700) == 200)
+    }
+
+    @Test func distanceToBottomIsNegativeForShortContentAndOverscroll() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 400, contentOffsetY: 0, containerHeight: 700) == -300)
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 360, containerHeight: 700) == -60)
     }
 
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
