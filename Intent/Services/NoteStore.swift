@@ -265,6 +265,10 @@ import Observation
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
+            // A fetch cancelled while note.get was in flight (e.g. the
+            // deferred swipe-back refresh hydrating the spec after the view
+            // disappeared) must not publish the late body.
+            try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let noteDict = dict["note"] as? [String: Any],
                let note = Note.parseNote(noteDict) {
@@ -284,6 +288,9 @@ import Observation
                 }
                 return .found(note)
             }
+            return .transientError
+        } catch is CancellationError {
+            // Cancelled fetch: nothing to publish, nothing to log.
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
             return .notFound
