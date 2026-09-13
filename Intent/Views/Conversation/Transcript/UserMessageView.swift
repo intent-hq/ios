@@ -8,13 +8,39 @@ struct UserMessageView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
 
-    private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
+    /// Derived once per message value in `init` rather than on every `body`
+    /// evaluation (the body also re-runs on the expansion toggle): the wake /
+    /// agent attributions, the partitioned blocks, and the copy-menu text.
+    private let hookWake: HookWakeAttribution?
+    private let prWake: PrMonitorWakeAttribution?
+    private let agentMessage: AgentMessageAttribution?
+    private let partitioned: (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock])
+    private let agentMessagePreview: String
+    private let copyText: String
 
-    var body: some View {
+    init(
+        message: ConversationMessage,
+        workspaceId: String,
+        onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?,
+        isAgentMessageExpanded: Binding<Bool>
+    ) {
+        self.message = message
+        self.workspaceId = workspaceId
+        self.onNavigateToAgent = onNavigateToAgent
+        self._isAgentMessageExpanded = isAgentMessageExpanded
+        let blocks = message.contentBlocks ?? []
         let hookWake = message.hookWakeAttribution
         let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
-        let agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
+        self.hookWake = hookWake
+        self.prWake = prWake
+        self.agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
+        self.partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
+        self.agentMessagePreview = MessageBlockPartitioning.agentMessagePreview(from: blocks)
+        self.copyText = MessageBlockPartitioning.userCopyText(
+            from: blocks, hookWake: hookWake, prWake: prWake)
+    }
 
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let hookWake {
                 HookWakeAttributionView(attribution: hookWake)
@@ -23,7 +49,7 @@ struct UserMessageView: View {
             } else if let agentMessage {
                 AgentMessageAttributionView(
                     attribution: agentMessage,
-                    preview: MessageBlockPartitioning.agentMessagePreview(from: blocks),
+                    preview: agentMessagePreview,
                     isExpanded: $isAgentMessageExpanded,
                     onOpenAgent: onNavigateToAgent.map { navigate in
                         { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
@@ -36,8 +62,6 @@ struct UserMessageView: View {
             }
 
             if agentMessage == nil || isAgentMessageExpanded {
-                let partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
-
                 ForEach(partitioned.text) { block in
                     if let text = block.resolvedText {
                         userTextBlock(text, hookWake: hookWake, prWake: prWake)
@@ -72,8 +96,7 @@ struct UserMessageView: View {
         .background(Theme.muted(for: colorScheme).opacity(0.4))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .modifier(MessageCopyContextMenu(
-            text: MessageBlockPartitioning.userCopyText(
-                from: blocks, hookWake: hookWake, prWake: prWake),
+            text: copyText,
             userStyled: true,
             isStreaming: false
         ))

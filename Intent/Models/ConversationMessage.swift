@@ -15,7 +15,7 @@ enum MessageRole: String, Codable {
 }
 
 /// A tool call within a conversation message.
-struct ToolCall: Identifiable, Codable {
+struct ToolCall: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     var arguments: AnyCodable?
@@ -71,7 +71,7 @@ struct ToolCall: Identifiable, Codable {
 }
 
 /// A tool result within a conversation message.
-struct ToolResult: Codable {
+struct ToolResult: Codable, Equatable {
     let toolCallId: String
     var content: AnyCodable?
     var isError: Bool?
@@ -126,7 +126,11 @@ struct QueuedMessage: Identifiable, Codable {
 }
 
 /// A single message in an agent conversation.
-struct ConversationMessage: Identifiable, Codable {
+///
+/// `Equatable` is synthesized over every stored field so transcript rows can
+/// be compared by value and skip re-rendering when a streaming delta did not
+/// touch them (see `MessageRowContent`).
+struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
     let role: MessageRole
     var contentBlocks: [ContentBlock]?
