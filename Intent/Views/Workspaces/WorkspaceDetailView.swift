@@ -407,9 +407,13 @@ struct WorkspaceDetailView: View {
         deferredRefreshTask = Task {
             try? await Task.sleep(for: Self.reappearRefreshDelay)
             guard !Task.isCancelled else { return }
-            await agentStore.fetchAgents(workspaceId: workspaceId)
-            guard !Task.isCancelled else { return }
-            await noteStore.fetchNotes(workspaceId: workspaceId)
+            // Run both refreshes concurrently (as the first-appearance path
+            // does) so a slow agent.list cannot hold up the notes refresh.
+            // Structured children: cancelling the deferred task still cancels
+            // both fetches.
+            async let agents: Void = agentStore.fetchAgents(workspaceId: workspaceId)
+            async let notes: Void = noteStore.fetchNotes(workspaceId: workspaceId)
+            _ = await (agents, notes)
         }
     }
 
