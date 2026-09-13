@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Placement decisions for the presentation-only "New messages" divider
@@ -66,8 +67,8 @@ enum NewMessagesDivider {
     /// the scroll targeted a divider with unread rows below it, so follow is
     /// disabled rather than risking a later follow pulling the user off it.
     static func followDisabledAfterEntryScroll(
-        distanceToBottom: Double?,
-        atBottomThreshold: Double = Double(Constants.Conversation.Transcript.atBottomThreshold)
+        distanceToBottom: CGFloat?,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
         guard let distanceToBottom else { return true }
         return distanceToBottom > atBottomThreshold
