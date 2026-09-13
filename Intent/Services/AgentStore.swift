@@ -179,13 +179,23 @@ extension SpecialistInfo {
             guard self.workspaceId == workspaceId else { return }
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
-                agents = items.compactMap { AgentSession.parseAgent($0) }
+                // Only publish a changed list: an identical refetch (e.g. the
+                // deferred refresh after swiping back to the workspace) must
+                // not invalidate observers and rebuild the agent list.
+                let parsed = items.compactMap { AgentSession.parseAgent($0) }
+                if parsed != agents {
+                    agents = parsed
+                }
             }
-            hasLoaded = true
+            if !hasLoaded {
+                hasLoaded = true
+            }
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
         }
-        isLoading = false
+        if isLoading {
+            isLoading = false
+        }
     }
 
     func startObservingEvents() {

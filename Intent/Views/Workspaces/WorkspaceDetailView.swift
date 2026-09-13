@@ -14,8 +14,15 @@ struct WorkspaceDetailView: View {
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var progressWidth: CGFloat = 0
+    @State private var deferredRefreshTask: Task<Void, Never>?
     @State var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
+
+    /// Delay before refreshing the stores when the view re-appears for a
+    /// workspace it has already loaded (e.g. underneath the interactive
+    /// swipe-back from a conversation), so the fetch and any resulting list
+    /// update land after the transition has settled rather than during it.
+    private static let reappearRefreshDelay: Duration = .milliseconds(500)
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
@@ -177,15 +184,24 @@ struct WorkspaceDetailView: View {
             }
             // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
             // Clearing here causes an empty list flash when swiping back from conversation.
-            agentStore.startObservingEvents()
-            noteStore.startObservingEvents()
-            Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
-            Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
-            if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
-                selectedTab = savedTab
+            if agentStore.hasLoaded {
+                // Re-appearing for a workspace this view already loaded: the
+                // event handlers are still registered and the saved tab is
+                // already applied. Stay idle during the pop transition and
+                // only refresh once it has settled.
+                scheduleDeferredRefresh()
+            } else {
+                agentStore.startObservingEvents()
+                noteStore.startObservingEvents()
+                Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
+                Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
+                if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
+                    selectedTab = savedTab
+                }
             }
         }
         .onDisappear {
+            cancelDeferredRefresh()
             // Keyed by (workspace, connection): removing this pair never
             // clobbers another window's visibility.
             if let connectionId = session.backendID?.connectionID {
@@ -194,6 +210,7 @@ struct WorkspaceDetailView: View {
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
+            cancelDeferredRefresh()
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
                     workspaceId: oldId, connectionId: connectionId)
@@ -382,6 +399,23 @@ struct WorkspaceDetailView: View {
         .refreshable {
             await agentStore.fetchAgents(workspaceId: workspaceId)
         }
+    }
+
+    private func scheduleDeferredRefresh() {
+        deferredRefreshTask?.cancel()
+        let workspaceId = workspaceId
+        deferredRefreshTask = Task {
+            try? await Task.sleep(for: Self.reappearRefreshDelay)
+            guard !Task.isCancelled else { return }
+            await agentStore.fetchAgents(workspaceId: workspaceId)
+            guard !Task.isCancelled else { return }
+            await noteStore.fetchNotes(workspaceId: workspaceId)
+        }
+    }
+
+    private func cancelDeferredRefresh() {
+        deferredRefreshTask?.cancel()
+        deferredRefreshTask = nil
     }
 
     private func toggleDelegates(_ agentId: String) {

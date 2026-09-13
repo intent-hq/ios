@@ -145,8 +145,16 @@ import Observation
             // replace the current workspace's notes or flip hasLoaded. The
             // current workspace's own fetch manages isLoading.
             guard self.workspaceId == workspaceId else { return }
-            notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
-            hasLoaded = true
+            // Only publish a changed list: an identical refetch (e.g. the
+            // deferred refresh after swiping back to the workspace) must not
+            // invalidate observers and rebuild the note list.
+            let merged = mergeSlimRows(items.compactMap { Note.parseNote($0) })
+            if merged != notes {
+                notes = merged
+            }
+            if !hasLoaded {
+                hasLoaded = true
+            }
             // The spec is the one structural exception (its content links task
             // notes for the progress ring), so hydrate it full when its slim
             // row is stale. Fail-soft: a miss keeps the slim row as-is.
@@ -156,7 +164,9 @@ import Observation
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
-        isLoading = false
+        if isLoading {
+            isLoading = false
+        }
         // Note: live-state subscription is owned by onConnected() lifecycle.
         // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
     }

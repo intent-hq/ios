@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import Synchronization
 import Testing
 import Combine
 @testable import Intent
@@ -139,6 +141,44 @@ struct AgentStoreTests {
         store.prepareForWorkspaceChange(to: "ws-2")
         #expect(store.hasLoaded == false)
         #expect(store.agents.isEmpty)
+    }
+
+    // MARK: - Identical refetch stays quiet (no re-render underneath swipe-back)
+
+    @Test func identicalRefetchDoesNotReassignAgents() async {
+        let fake = FakeConnectionManager()
+        let store = AgentStore(connectionManager: fake)
+        fake.responseMap["agent.list"] = ["agents": [
+            ["id": "agent-1", "name": "Agent 1"]
+        ]]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(store.hasLoaded == true)
+        #expect(store.agents.count == 1)
+
+        // The deferred refresh after re-appearing for the same workspace
+        // returns the same list: no observed property may be invalidated,
+        // or the agent list rebuilds during the pop transition.
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.agents
+            _ = store.hasLoaded
+            _ = store.isLoading
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(fake.paramsForMethod("agent.list").count == 2)
+        #expect(changeCount.withLock { $0 } == 0)
+        #expect(store.agents.count == 1)
+
+        // A genuinely different list must still publish.
+        fake.responseMap["agent.list"] = ["agents": [
+            ["id": "agent-1", "name": "Agent 1"],
+            ["id": "agent-2", "name": "Agent 2"]
+        ]]
+        await store.fetchAgents(workspaceId: "ws-1")
+        #expect(changeCount.withLock { $0 } == 1)
+        #expect(store.agents.map(\.id) == ["agent-1", "agent-2"])
     }
 
     // MARK: - Refetch on connect (mirrors NoteStore.onConnected)
