@@ -640,6 +640,47 @@ struct ConversationMessageTests {
         #expect(decoded.contentBlocks?.first?.resolvedText == "test")
         #expect(decoded.turnNumber == 1)
     }
+
+    /// Transcript rows compare messages by value (`MessageRowContent`): equal
+    /// content must compare equal, and any changed block must not.
+    @Test func equalityTracksContentBlockChanges() {
+        let base = ConversationMessage(
+            id: "msg-eq",
+            role: .assistant,
+            contentBlocks: [
+                ContentBlock(id: "b1", type: .text, text: "Hello"),
+                ContentBlock(
+                    id: "b2", type: .toolUse, name: "read_file",
+                    input: ["path": AnyCodable("a.txt")]),
+            ],
+            timestamp: "2025-01-01T00:00:00Z",
+            isStreaming: true
+        )
+        var same = base
+        same.contentBlocks = [
+            ContentBlock(id: "b1", type: .text, text: "Hello"),
+            ContentBlock(
+                id: "b2", type: .toolUse, name: "read_file",
+                input: ["path": AnyCodable("a.txt")]),
+        ]
+        #expect(base == same)
+
+        var textDelta = base
+        textDelta.contentBlocks?[0].text = "Hello, world"
+        #expect(base != textDelta)
+
+        var inputChanged = base
+        inputChanged.contentBlocks?[1].input = ["path": AnyCodable("b.txt")]
+        #expect(base != inputChanged)
+
+        var appended = base
+        appended.contentBlocks?.append(ContentBlock(id: "b3", type: .text, text: "more"))
+        #expect(base != appended)
+
+        var finished = base
+        finished.isStreaming = false
+        #expect(base != finished)
+    }
 }
 
 // MARK: - QueuedMessage Tests

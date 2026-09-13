@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Placement decisions for the presentation-only "New messages" divider
@@ -52,18 +53,24 @@ enum NewMessagesDivider {
     /// divider has settled (iOS translation of the FE's
     /// `dividerVisibleWhenScrolledToBottom`, inverted).
     ///
-    /// The conversation list is flipped, so `contentOffset.y ≈ 0` is the
-    /// visual bottom. The entry scroll targets the divider row pinned to the
-    /// visual top of the screen; when the whole unseen tail fits on screen the
-    /// scroll clamps at the bottom (offset stays within the at-bottom
-    /// threshold) and follow-to-bottom must stay enabled — today's behavior.
-    /// A larger offset means the viewport actually landed on the divider away
-    /// from the bottom, so follow is disabled. The threshold matches the
-    /// list's existing at-bottom detection (contentOffset.y <= 50).
+    /// `distanceToBottom` is the gap between the viewport's bottom edge and
+    /// the end of the content (`ConversationTranscriptScrollPolicy.distanceToBottom`),
+    /// ≈ 0 at the visual bottom. The entry scroll targets the divider row
+    /// pinned to the top of the screen; when the whole unseen tail fits on
+    /// screen the scroll clamps at the bottom (distance stays within the
+    /// at-bottom threshold) and follow-to-bottom must stay enabled — today's
+    /// behavior. A larger distance means the viewport actually landed on the
+    /// divider away from the bottom, so follow is disabled. The threshold
+    /// matches the list's existing at-bottom detection (distance <= 50).
+    ///
+    /// A nil distance (scroll view not found yet) is unknown, not bottom:
+    /// the scroll targeted a divider with unread rows below it, so follow is
+    /// disabled rather than risking a later follow pulling the user off it.
     static func followDisabledAfterEntryScroll(
-        flippedContentOffsetY: Double,
-        atBottomThreshold: Double = Double(Constants.Conversation.Transcript.atBottomThreshold)
+        distanceToBottom: CGFloat?,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
-        flippedContentOffsetY > atBottomThreshold
+        guard let distanceToBottom else { return true }
+        return distanceToBottom > atBottomThreshold
     }
 }

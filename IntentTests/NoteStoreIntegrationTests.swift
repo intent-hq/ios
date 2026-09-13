@@ -1,4 +1,6 @@
 import Foundation
+import Observation
+import Synchronization
 import Testing
 import Combine
 @testable import Intent
@@ -467,6 +469,57 @@ struct NoteStoreIntegrationTests {
         #expect(store.note(byId: "note-1")?.isContentStale == true)
     }
 
+    @Test func cancelledFetchDoesNotPublishHydratedSpecBody() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "spec", "title": "Spec", "isDefault": true,
+             "contentPreview": "- [x] done", "contentLength": 40,
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        func fullSpec() -> [String: Any] {
+            ["note": [
+                "id": "spec", "title": "Spec", "isDefault": true,
+                "content": "- [x] done\n- [ ] todo item that overflows",
+                "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"
+            ]]
+        }
+
+        // The list lands and publishes the slim spec row; the hydrating
+        // note.get stays in flight.
+        fake.pendingMethods.insert("note.get")
+        let fetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(store.note(byId: "spec")?.isContentStale == true)
+        #expect(fake.paramsForMethod("note.get").count == 1)
+
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.notes
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+        // Cancel and resolve back-to-back on the main actor: the fake's
+        // cancellation hop is asynchronous, so note.get resumes with the
+        // real body inside an already-cancelled fetch.
+        fetch.cancel()
+        fake.resolvePending("note.get", with: fullSpec())
+        await fetch.value
+
+        #expect(changeCount.withLock { $0 } == 0)
+        #expect(store.note(byId: "spec")?.isContentStale == true)
+        #expect(store.note(byId: "spec")?.content == "")
+        #expect(store.isLoading == false)
+
+        // A later, uncancelled fetch hydrates normally.
+        fake.pendingMethods.remove("note.get")
+        fake.responseMap["note.get"] = fullSpec()
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(fake.paramsForMethod("note.get").count == 2)
+        #expect(store.note(byId: "spec")?.content == "- [x] done\n- [ ] todo item that overflows")
+        #expect(store.note(byId: "spec")?.isContentStale == false)
+    }
+
     @Test func fetchNoteUpsertsFullBodyIntoCachedSlimRow() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)
@@ -649,6 +702,46 @@ struct NoteStoreIntegrationTests {
         }
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
+    }
+
+    // MARK: - Identical refetch stays quiet (no re-render underneath swipe-back)
+
+    @Test func identicalRefetchDoesNotReassignNotes() async {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(store.hasLoaded == true)
+        #expect(store.notes.count == 1)
+
+        // The deferred refresh after re-appearing for the same workspace
+        // returns the same list: no observed property may be invalidated.
+        let changeCount = Mutex(0)
+        withObservationTracking {
+            _ = store.notes
+            _ = store.hasLoaded
+            _ = store.isLoading
+        } onChange: {
+            changeCount.withLock { $0 += 1 }
+        }
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(fake.paramsForMethod("note.list").count == 2)
+        #expect(changeCount.withLock { $0 } == 0)
+        #expect(store.notes.count == 1)
+
+        // A genuinely different list must still publish.
+        fake.responseMap["note.list"] = ["notes": [
+            ["id": "note-1", "title": "Note 1", "content": "",
+             "createdAt": "2024-01-01T00:00:00Z", "updatedAt": "2024-01-01T00:00:00Z"],
+            ["id": "note-2", "title": "Note 2", "content": "",
+             "createdAt": "2024-01-02T00:00:00Z", "updatedAt": "2024-01-02T00:00:00Z"]
+        ]]
+        await store.fetchNotes(workspaceId: "ws-1")
+        #expect(changeCount.withLock { $0 } == 1)
+        #expect(store.notes.map(\.id) == ["note-1", "note-2"])
     }
 
     // MARK: - hasLoaded gating (empty state waits for first completed load)

@@ -37,6 +37,14 @@ enum Constants {
             static let dividerProbeDelay: Double = 0.15
             static let scrollDebounceMilliseconds = 100
             static let scrollCompletionMilliseconds = 300
+            /// Minimum spacing between follow-to-bottom scrolls issued for
+            /// streaming deltas. The bottom-anchored ScrollView keeps a pinned
+            /// viewport on the bottom as content grows, so deltas only re-pin a
+            /// viewport that drifted, and never more than once per interval.
+            static let streamingFollowMinimumInterval: TimeInterval = 0.5
+            /// Distance from the bottom (points) at or under which the viewport
+            /// counts as pinned and a streaming delta issues no scroll at all.
+            static let streamingFollowDriftTolerance: CGFloat = 1
         }
 
         enum QuestionWizard {}

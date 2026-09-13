@@ -21,7 +21,7 @@ enum ContentBlockType: String, Codable {
 /// Nested contents of a standalone `resource` content block (PROTOCOL §7.1):
 /// `{ type: "resource", resource: { uri?, mimeType, text } }`. Decoded leniently —
 /// consumers validate the fields they need (e.g. question parsing is MIME-gated).
-struct ResourceContents: Codable {
+struct ResourceContents: Codable, Equatable {
     var uri: String?
     var mimeType: String?
     var text: String?
@@ -30,7 +30,11 @@ struct ResourceContents: Codable {
 /// A content block within a conversation message.
 /// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
 /// with backward-compatible field aliases.
-struct ContentBlock: Identifiable, Codable {
+///
+/// `Equatable` is synthesized over every stored field (legacy aliases
+/// included) so a `ConversationMessage` compares by value; `AnyCodable`
+/// fields compare via their JSON encoding.
+struct ContentBlock: Identifiable, Codable, Equatable {
     /// Auto-generated if not present in JSON
     let id: String
     let type: ContentBlockType

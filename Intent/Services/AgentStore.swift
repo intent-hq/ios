@@ -159,7 +159,16 @@ extension SpecialistInfo {
                 await _fetchAgents(workspaceId: workspaceId)
             }
             fetchDebounceTask = task
-            await task.value
+            // The debounce task is unstructured, so cancelling the caller (e.g.
+            // the view's deferred swipe-back refresh on disappear) must be
+            // forwarded to it explicitly. Each debounce task belongs to exactly
+            // one caller — a newer fetch already cancelled and replaced it — so
+            // this never cancels a newer, unrelated fetch.
+            await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
         }
     }
 
@@ -177,15 +186,30 @@ extension SpecialistInfo {
             // replace the current workspace's agents or flip hasLoaded. The
             // current workspace's own fetch manages isLoading.
             guard self.workspaceId == workspaceId else { return }
+            // A fetch cancelled while its request was in flight must not
+            // publish the late response either.
+            try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
-                agents = items.compactMap { AgentSession.parseAgent($0) }
+                // Only publish a changed list: an identical refetch (e.g. the
+                // deferred refresh after swiping back to the workspace) must
+                // not invalidate observers and rebuild the agent list.
+                let parsed = items.compactMap { AgentSession.parseAgent($0) }
+                if parsed != agents {
+                    agents = parsed
+                }
             }
-            hasLoaded = true
+            if !hasLoaded {
+                hasLoaded = true
+            }
+        } catch is CancellationError {
+            // Cancelled refresh: nothing to publish, nothing to log.
         } catch {
             AppLog.agents.error("[AgentStore] Failed to fetch agents: \(error)")
         }
-        isLoading = false
+        if isLoading {
+            isLoading = false
+        }
     }
 
     func startObservingEvents() {

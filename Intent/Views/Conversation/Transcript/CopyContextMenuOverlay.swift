@@ -337,11 +337,12 @@ extension UIView {
 
 /// Corrective transforms for targeted previews anchored inside transformed
 /// (flipped) hierarchies. UIKit places a `UITargetedPreview` in its
-/// container's coordinate space, so a container sitting under the
-/// transcript's FlippedUpsideDown transforms would flip the preview with it.
-/// The corrective transform is the inverse of the container's accumulated
-/// layer transform: an upright result regardless of how the flips are
-/// distributed across ancestors, and the identity when they cancel out.
+/// container's coordinate space, so a container sitting under a flipped
+/// ancestor would flip the preview with it. The transcript is a natural-order
+/// ScrollView today and applies no transforms, so this resolves to the
+/// identity there; it stays as the general inverse of the container's
+/// accumulated layer transform, upright regardless of how any flips are
+/// distributed across ancestors.
 enum UprightPreviewTransform {
     /// Linear part (translation stripped — the preview target's `center`
     /// supplies the position) of the accumulated transform from `layer` out

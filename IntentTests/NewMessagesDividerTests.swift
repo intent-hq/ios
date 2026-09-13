@@ -75,40 +75,70 @@ struct NewMessagesDividerLatchedTests {
     }
 }
 
-/// Entry-scroll follow decision in the flipped list (contentOffset.y ≈ 0 is
-/// the visual bottom; threshold mirrors the list's at-bottom detection).
+/// Entry-scroll follow decision in the bottom-anchored list (distance to
+/// bottom ≈ 0 is the visual bottom; threshold mirrors the list's at-bottom
+/// detection).
 struct NewMessagesDividerEntryScrollTests {
     @Test func followStaysEnabledWhenClampedAtBottom() {
         // Unseen tail fits on screen: the divider scroll clamps at the
         // bottom, so follow-to-bottom keeps today's behavior.
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 0))
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 50))
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 0))
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 50))
     }
 
-    @Test func followStaysEnabledAtSafeAreaRestingOffset() {
-        // A scroll view at rest can sit at a negative offset (adjusted
-        // content inset) — still the visual bottom.
-        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: -59))
+    @Test func followStaysEnabledWhileBouncedPastBottom() {
+        // A scroll view can rest or bounce past the end of its content
+        // (negative distance) — still the visual bottom.
+        #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: -59))
     }
 
     @Test func followDisabledWhenLandedOnDividerAwayFromBottom() {
-        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 51))
-        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 2_000))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 51))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 2_000))
+    }
+
+    /// Regression: an unknown distance after landing on the divider must not
+    /// be read as bottom-pinned (which hid Go to End and let a later follow
+    /// pull the user off the divider).
+    @Test func followDisabledWhenDistanceIsUnknownAfterDividerLanding() {
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: nil))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
+            distanceToBottom: nil, atBottomThreshold: 10_000))
     }
 
     @Test func honorsCustomThreshold() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 10))
+            distanceToBottom: 30, atBottomThreshold: 10))
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 100))
+            distanceToBottom: 30, atBottomThreshold: 100))
     }
 }
 
 struct ConversationTranscriptScrollPolicyTests {
     @Test func tracksAwayStateAcrossBottomThreshold() {
-        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: -20))
-        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 50))
-        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(flippedContentOffsetY: 51))
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -20))
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 50))
+        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 51))
+    }
+
+    @Test func distanceToBottomIsZeroAtRestAtBottom() {
+        // contentOffset.y at the bottom = contentSize + bottomInset - container.
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 300, containerHeight: 700) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 334, containerHeight: 700, bottomInset: 34) == 0)
+    }
+
+    @Test func distanceToBottomGrowsAsViewportScrollsUp() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 100, containerHeight: 700) == 200)
+    }
+
+    @Test func distanceToBottomIsNegativeForShortContentAndOverscroll() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 400, contentOffsetY: 0, containerHeight: 700) == -300)
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_000, contentOffsetY: 360, containerHeight: 700) == -60)
     }
 
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
@@ -124,6 +154,139 @@ struct ConversationTranscriptScrollPolicyTests {
             hasInitiallyScrolled: true,
             userIsScrolledAway: true
         ))
+    }
+
+    @Test func streamingStartScrollsOnlyWhileFollowing() {
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: false))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: false, userIsScrolledAway: false))
+    }
+
+    @Test func streamingEndNeverScrolls() {
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: false, hasInitiallyScrolled: true, userIsScrolledAway: false))
+    }
+
+    private func streamingDelta(
+        hasInitiallyScrolled: Bool = true,
+        userIsScrolledAway: Bool = false,
+        distanceToBottom: CGFloat? = 20,
+        now: TimeInterval = 10,
+        lastFollowAt: TimeInterval? = nil
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldFollowStreamingDelta(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            distanceToBottom: distanceToBottom,
+            now: now,
+            lastFollowAt: lastFollowAt,
+            driftTolerance: 1,
+            atBottomThreshold: 50,
+            minimumInterval: 0.5
+        )
+    }
+
+    @Test func streamingDeltaNeverScrollsWhilePinnedAtBottom() {
+        #expect(!streamingDelta(distanceToBottom: 0))
+        #expect(!streamingDelta(distanceToBottom: 1))
+        #expect(!streamingDelta(distanceToBottom: -30))
+    }
+
+    @Test func streamingDeltaRePinsDriftedViewport() {
+        #expect(streamingDelta(distanceToBottom: 2))
+        #expect(streamingDelta(distanceToBottom: 40))
+    }
+
+    @Test func streamingDeltaHonorsFollowGates() {
+        #expect(!streamingDelta(hasInitiallyScrolled: false))
+        #expect(!streamingDelta(userIsScrolledAway: true, distanceToBottom: 400))
+    }
+
+    /// `userIsScrolledAway` lags the geometry; a live distance past the
+    /// at-bottom band is treated as scrolled away even while the flag is false.
+    @Test func streamingDeltaStaysInsideAtBottomBand() {
+        #expect(streamingDelta(distanceToBottom: 50))
+        #expect(!streamingDelta(distanceToBottom: 51))
+        #expect(!streamingDelta(distanceToBottom: 400))
+    }
+
+    @Test func streamingDeltaSkipsUntilScrollViewIsFound() {
+        #expect(!streamingDelta(distanceToBottom: nil))
+    }
+
+    @Test func streamingDeltaIsRateLimitedToOneScrollPerInterval() {
+        #expect(streamingDelta(now: 10, lastFollowAt: nil))
+        #expect(!streamingDelta(now: 10, lastFollowAt: 10))
+        #expect(!streamingDelta(now: 10.49, lastFollowAt: 10))
+        #expect(streamingDelta(now: 10.5, lastFollowAt: 10))
+        #expect(streamingDelta(now: 12, lastFollowAt: 10))
+    }
+
+    private func executeFollow(
+        forced: Bool = false,
+        userIsScrolledAway: Bool = false,
+        distanceToBottom: CGFloat? = 20
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldExecuteFollow(
+            forced: forced,
+            userIsScrolledAway: userIsScrolledAway,
+            distanceToBottom: distanceToBottom,
+            driftTolerance: 1,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression: a drifted delta requests a follow, then the user scrolls
+    /// away during the debounce; the delayed execution must not snap back,
+    /// whether the flag has caught up or only the live distance shows it.
+    @Test func automaticFollowIsDroppedWhenUserScrolledAwayDuringDebounce() {
+        #expect(streamingDelta(distanceToBottom: 20))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: 400))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!executeFollow(userIsScrolledAway: false, distanceToBottom: 400))
+    }
+
+    @Test func automaticFollowExecutesOnlyInsideAtBottomBand() {
+        #expect(executeFollow(distanceToBottom: 50))
+        #expect(!executeFollow(distanceToBottom: 51))
+    }
+
+    /// Regression: the viewport re-pinned on its own (bottom anchor) while the
+    /// follow was debouncing; there is nothing left to scroll.
+    @Test func automaticFollowIsDroppedWhenAlreadyPinnedAtExecution() {
+        #expect(streamingDelta(distanceToBottom: 20))
+        #expect(!executeFollow(distanceToBottom: 0))
+        #expect(!executeFollow(distanceToBottom: 1))
+        #expect(!executeFollow(distanceToBottom: -30))
+        #expect(executeFollow(distanceToBottom: 2))
+        #expect(executeFollow(distanceToBottom: nil))
+    }
+
+    @Test func forcedFollowAlwaysExecutes() {
+        #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
+        #expect(executeFollow(forced: true, distanceToBottom: 0))
+        #expect(executeFollow(forced: true, distanceToBottom: nil))
+    }
+
+    /// An unknown distance never releases a scrolled-away state: every
+    /// automatic path stays suppressed until the geometry proves otherwise.
+    @Test func unknownDistanceDoesNotFlipScrolledAwayBackToPinned() {
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
+            hasInitiallyScrolled: true, userIsScrolledAway: true))
+        #expect(!streamingDelta(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: true))
+    }
+
+    @Test func streamingFollowConstantsAreDocumentedDefaults() {
+        #expect(Constants.Conversation.Transcript.streamingFollowMinimumInterval > 0)
+        #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance >= 0)
+        #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance
+            < Constants.Conversation.Transcript.atBottomThreshold)
     }
 }
 

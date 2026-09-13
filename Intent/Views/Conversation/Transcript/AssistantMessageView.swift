@@ -7,14 +7,35 @@ struct AssistantMessageView: View {
     var hydratingBlockIds: Set<String>
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
-    private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
+    /// Derived once per message value in `init` rather than on every `body`
+    /// evaluation: the raw blocks, the prompt-stripped blocks grouped into
+    /// render blocks, and the copy-menu text.
+    private let blocks: [ContentBlock]
+    private let renderBlocks: [RenderBlock]
+    private let copyText: String
+
+    init(
+        message: ConversationMessage,
+        workspaceId: String,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?,
+        hydratingBlockIds: Set<String>,
+        onHydrateBlock: ((_ blockId: String) -> Void)?
+    ) {
+        self.message = message
+        self.workspaceId = workspaceId
+        self.onNavigateToNote = onNavigateToNote
+        self.hydratingBlockIds = hydratingBlockIds
+        self.onHydrateBlock = onHydrateBlock
+        let blocks = message.contentBlocks ?? []
+        self.blocks = blocks
+        let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+        self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
+            strippedBlocks, isStreaming: message.isStreaming == true)
+        self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
-            let renderBlocks = MessageBlockPartitioning.groupContentBlocks(
-                strippedBlocks, isStreaming: message.isStreaming == true)
-
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
@@ -38,7 +59,7 @@ struct AssistantMessageView: View {
         }
         .padding(.vertical, 4)
         .modifier(MessageCopyContextMenu(
-            text: MessageBlockPartitioning.assistantCopyText(from: blocks),
+            text: copyText,
             userStyled: false,
             isStreaming: message.isStreaming == true
         ))

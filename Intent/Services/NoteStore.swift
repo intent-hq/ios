@@ -145,18 +145,33 @@ import Observation
             // replace the current workspace's notes or flip hasLoaded. The
             // current workspace's own fetch manages isLoading.
             guard self.workspaceId == workspaceId else { return }
-            notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
-            hasLoaded = true
+            // A fetch cancelled while its request was in flight must not
+            // publish the late response either.
+            try Task.checkCancellation()
+            // Only publish a changed list: an identical refetch (e.g. the
+            // deferred refresh after swiping back to the workspace) must not
+            // invalidate observers and rebuild the note list.
+            let merged = mergeSlimRows(items.compactMap { Note.parseNote($0) })
+            if merged != notes {
+                notes = merged
+            }
+            if !hasLoaded {
+                hasLoaded = true
+            }
             // The spec is the one structural exception (its content links task
             // notes for the progress ring), so hydrate it full when its slim
             // row is stale. Fail-soft: a miss keeps the slim row as-is.
             if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
                 _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
             }
+        } catch is CancellationError {
+            // Cancelled refresh: nothing to publish, nothing to log.
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
-        isLoading = false
+        if isLoading {
+            isLoading = false
+        }
         // Note: live-state subscription is owned by onConnected() lifecycle.
         // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
     }
@@ -250,6 +265,10 @@ import Observation
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
+            // A fetch cancelled while note.get was in flight (e.g. the
+            // deferred swipe-back refresh hydrating the spec after the view
+            // disappeared) must not publish the late body.
+            try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let noteDict = dict["note"] as? [String: Any],
                let note = Note.parseNote(noteDict) {
@@ -269,6 +288,9 @@ import Observation
                 }
                 return .found(note)
             }
+            return .transientError
+        } catch is CancellationError {
+            // Cancelled fetch: nothing to publish, nothing to log.
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
             return .notFound

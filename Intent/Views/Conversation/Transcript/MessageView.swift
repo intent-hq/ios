@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// One transcript row. A thin shell over `MessageRowContent`: the transcript
+/// hands every row fresh closures on each evaluation, so the row body is
+/// gated by `.equatable()` and only re-renders when its message, workspace,
+/// or hydration set actually changed — not on every streaming delta.
 struct MessageView: View {
     let message: ConversationMessage
     let workspaceId: String
@@ -10,10 +14,40 @@ struct MessageView: View {
     var hydratingBlockIds: Set<String> = []
     /// Fetch the full body of a slim-truncated block of this message by id.
     var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+
+    var body: some View {
+        MessageRowContent(
+            message: message,
+            workspaceId: workspaceId,
+            onNavigateToNote: onNavigateToNote,
+            onNavigateToAgent: onNavigateToAgent,
+            hydratingBlockIds: hydratingBlockIds,
+            onHydrateBlock: onHydrateBlock
+        )
+        .equatable()
+    }
+}
+
+/// The value-compared row body behind `MessageView`.
+struct MessageRowContent: View, Equatable {
+    let message: ConversationMessage
+    let workspaceId: String
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
+    var hydratingBlockIds: Set<String>
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
     /// Agent-to-agent rows render as a collapsed disclosure card; the body
     /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
     /// `isAgentMessageExpanded`, collapsed by default).
     @State private var isAgentMessageExpanded = false
+
+    /// Manual `==`: closures are excluded on purpose — the transcript builds
+    /// new ones per evaluation, and they only capture stable identifiers.
+    static func == (lhs: MessageRowContent, rhs: MessageRowContent) -> Bool {
+        lhs.message == rhs.message
+            && lhs.workspaceId == rhs.workspaceId
+            && lhs.hydratingBlockIds == rhs.hydratingBlockIds
+    }
 
     private var isUser: Bool { message.role == .user }
     var body: some View {

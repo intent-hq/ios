@@ -9,11 +9,26 @@ struct MarkdownTextView: View {
     /// Intent-file images render even when nil if the link carries its own
     /// workspace ID (long form).
     var workspaceId: String?
+    /// `text` with GFM task-list markers swapped for glyphs, derived once per
+    /// view value in `init` instead of on every `body` evaluation (the body
+    /// also re-runs on lightbox state changes).
+    private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
     /// The window's session, when present: intent-file images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
+
+    init(
+        text: String,
+        onOpenURL: ((URL) -> OpenURLAction.Result)? = nil,
+        workspaceId: String? = nil
+    ) {
+        self.text = text
+        self.onOpenURL = onOpenURL
+        self.workspaceId = workspaceId
+        self.markdownSource = Self.replacingTaskListMarkers(text)
+    }
 
     /// Intent-file image fetcher bound to the session's loader when one is in
     /// the environment, else the shared (default-backend) loader.
@@ -25,7 +40,7 @@ struct MarkdownTextView: View {
     }
 
     var body: some View {
-        let markdownView = StructuredText(markdown: Self.replacingTaskListMarkers(text))
+        let markdownView = StructuredText(markdown: markdownSource)
             .textual.structuredTextStyle(.compact)
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
