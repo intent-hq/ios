@@ -127,6 +127,9 @@ struct ConversationTranscriptView: View {
             .padding(.horizontal, 16)
             .padding(.top, 24)
             .padding(.bottom, 12)
+            // Hosted on the stack itself, not a lazily realized row, so the
+            // UIScrollView is found regardless of which rows exist.
+            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
         }
         .defaultScrollAnchor(.bottom)
         .scrollIndicators(.hidden)
@@ -196,7 +199,6 @@ struct ConversationTranscriptView: View {
         }
 
         Color.clear.frame(height: 8)
-            .background(ScrollViewFinder(proxy: scrollMomentumProxy))
             .id("scroll-bottom")
     }
 
@@ -312,10 +314,11 @@ struct ConversationTranscriptView: View {
             return
         }
         proxy.scrollTo("new-messages-divider", anchor: .top)
+        // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
+        // no automatic follow can be queued ahead of this decision.
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
-            let distanceToBottom = scrollMomentumProxy.distanceToBottom ?? 0
             if NewMessagesDivider.followDisabledAfterEntryScroll(
-                distanceToBottom: distanceToBottom
+                distanceToBottom: scrollMomentumProxy.distanceToBottom
             ) {
                 userIsScrolledAway = true
             }

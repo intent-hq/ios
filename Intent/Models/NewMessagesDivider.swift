@@ -61,10 +61,15 @@ enum NewMessagesDivider {
     /// behavior. A larger distance means the viewport actually landed on the
     /// divider away from the bottom, so follow is disabled. The threshold
     /// matches the list's existing at-bottom detection (distance <= 50).
+    ///
+    /// A nil distance (scroll view not found yet) is unknown, not bottom:
+    /// the scroll targeted a divider with unread rows below it, so follow is
+    /// disabled rather than risking a later follow pulling the user off it.
     static func followDisabledAfterEntryScroll(
-        distanceToBottom: Double,
+        distanceToBottom: Double?,
         atBottomThreshold: Double = Double(Constants.Conversation.Transcript.atBottomThreshold)
     ) -> Bool {
-        distanceToBottom > atBottomThreshold
+        guard let distanceToBottom else { return true }
+        return distanceToBottom > atBottomThreshold
     }
 }

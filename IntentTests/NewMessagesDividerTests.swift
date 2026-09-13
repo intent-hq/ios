@@ -97,6 +97,15 @@ struct NewMessagesDividerEntryScrollTests {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: 2_000))
     }
 
+    /// Regression: an unknown distance after landing on the divider must not
+    /// be read as bottom-pinned (which hid Go to End and let a later follow
+    /// pull the user off the divider).
+    @Test func followDisabledWhenDistanceIsUnknownAfterDividerLanding() {
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: nil))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
+            distanceToBottom: nil, atBottomThreshold: 10_000))
+    }
+
     @Test func honorsCustomThreshold() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
             distanceToBottom: 30, atBottomThreshold: 10))
@@ -260,6 +269,17 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
         #expect(executeFollow(forced: true, distanceToBottom: 0))
         #expect(executeFollow(forced: true, distanceToBottom: nil))
+    }
+
+    /// An unknown distance never releases a scrolled-away state: every
+    /// automatic path stays suppressed until the geometry proves otherwise.
+    @Test func unknownDistanceDoesNotFlipScrolledAwayBackToPinned() {
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
+            hasInitiallyScrolled: true, userIsScrolledAway: true))
+        #expect(!streamingDelta(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: true))
     }
 
     @Test func streamingFollowConstantsAreDocumentedDefaults() {
