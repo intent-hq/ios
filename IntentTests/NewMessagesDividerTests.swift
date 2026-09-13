@@ -175,6 +175,7 @@ struct ConversationTranscriptScrollPolicyTests {
             now: now,
             lastFollowAt: lastFollowAt,
             driftTolerance: 1,
+            atBottomThreshold: 50,
             minimumInterval: 0.5
         )
     }
@@ -193,6 +194,14 @@ struct ConversationTranscriptScrollPolicyTests {
     @Test func streamingDeltaHonorsFollowGates() {
         #expect(!streamingDelta(hasInitiallyScrolled: false))
         #expect(!streamingDelta(userIsScrolledAway: true, distanceToBottom: 400))
+    }
+
+    /// `userIsScrolledAway` lags the geometry; a live distance past the
+    /// at-bottom band is treated as scrolled away even while the flag is false.
+    @Test func streamingDeltaStaysInsideAtBottomBand() {
+        #expect(streamingDelta(distanceToBottom: 50))
+        #expect(!streamingDelta(distanceToBottom: 51))
+        #expect(!streamingDelta(distanceToBottom: 400))
     }
 
     @Test func streamingDeltaSkipsUntilScrollViewIsFound() {
@@ -216,21 +225,33 @@ struct ConversationTranscriptScrollPolicyTests {
             forced: forced,
             userIsScrolledAway: userIsScrolledAway,
             distanceToBottom: distanceToBottom,
-            driftTolerance: 1
+            driftTolerance: 1,
+            atBottomThreshold: 50
         )
     }
 
     /// Regression: a drifted delta requests a follow, then the user scrolls
-    /// away during the debounce; the delayed execution must not snap back.
+    /// away during the debounce; the delayed execution must not snap back,
+    /// whether the flag has caught up or only the live distance shows it.
     @Test func automaticFollowIsDroppedWhenUserScrolledAwayDuringDebounce() {
         #expect(streamingDelta(distanceToBottom: 20))
         #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: 400))
         #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: nil))
+        #expect(!executeFollow(userIsScrolledAway: false, distanceToBottom: 400))
     }
 
+    @Test func automaticFollowExecutesOnlyInsideAtBottomBand() {
+        #expect(executeFollow(distanceToBottom: 50))
+        #expect(!executeFollow(distanceToBottom: 51))
+    }
+
+    /// Regression: the viewport re-pinned on its own (bottom anchor) while the
+    /// follow was debouncing; there is nothing left to scroll.
     @Test func automaticFollowIsDroppedWhenAlreadyPinnedAtExecution() {
+        #expect(streamingDelta(distanceToBottom: 20))
         #expect(!executeFollow(distanceToBottom: 0))
         #expect(!executeFollow(distanceToBottom: 1))
+        #expect(!executeFollow(distanceToBottom: -30))
         #expect(executeFollow(distanceToBottom: 2))
         #expect(executeFollow(distanceToBottom: nil))
     }

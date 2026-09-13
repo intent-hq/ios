@@ -45,6 +45,22 @@ enum ConversationTranscriptScrollPolicy {
         )
     }
 
+    /// The band an automatic follow may re-pin from: drifted past
+    /// `driftTolerance` but not past `atBottomThreshold`. `userIsScrolledAway`
+    /// lags the geometry (and is frozen during a programmatic scroll), so the
+    /// live distance is checked against the same threshold rather than
+    /// trusting the flag alone.
+    static func isDriftedWithinBottomBand(
+        distanceToBottom: CGFloat,
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Bool {
+        distanceToBottom > driftTolerance && !isScrolledAway(
+            distanceToBottom: distanceToBottom,
+            atBottomThreshold: atBottomThreshold
+        )
+    }
+
     /// Streaming deltas grow content that `.defaultScrollAnchor(.bottom)`
     /// already keeps pinned, so a viewport at the bottom is never scrolled for
     /// them. A delta only re-pins a viewport that drifted past
@@ -59,13 +75,18 @@ enum ConversationTranscriptScrollPolicy {
         now: TimeInterval,
         lastFollowAt: TimeInterval?,
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         minimumInterval: TimeInterval = Constants.Conversation.Transcript.streamingFollowMinimumInterval
     ) -> Bool {
         guard shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return false }
-        guard let distanceToBottom, distanceToBottom > driftTolerance else { return false }
+        guard let distanceToBottom, isDriftedWithinBottomBand(
+            distanceToBottom: distanceToBottom,
+            driftTolerance: driftTolerance,
+            atBottomThreshold: atBottomThreshold
+        ) else { return false }
         guard let lastFollowAt else { return true }
         return now - lastFollowAt >= minimumInterval
     }
@@ -73,18 +94,24 @@ enum ConversationTranscriptScrollPolicy {
     /// Re-validated when a debounced follow finally runs. Forced follows (Go to
     /// End, a new user message, the entry scroll, the thinking indicator
     /// appearing) always land. An automatic follow is dropped when the user
-    /// scrolled away during the debounce, or when the viewport is already
-    /// pinned; an unknown distance (scroll view not found yet) proves neither,
-    /// so the follow still runs.
+    /// scrolled away during the debounce — by the flag or by the live distance
+    /// having left the at-bottom band — or when the viewport is already pinned;
+    /// an unknown distance (scroll view not found yet) proves neither, so the
+    /// follow still runs.
     static func shouldExecuteFollow(
         forced: Bool,
         userIsScrolledAway: Bool,
         distanceToBottom: CGFloat?,
-        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
         if forced { return true }
         if userIsScrolledAway { return false }
         guard let distanceToBottom else { return true }
-        return distanceToBottom > driftTolerance
+        return isDriftedWithinBottomBand(
+            distanceToBottom: distanceToBottom,
+            driftTolerance: driftTolerance,
+            atBottomThreshold: atBottomThreshold
+        )
     }
 }
