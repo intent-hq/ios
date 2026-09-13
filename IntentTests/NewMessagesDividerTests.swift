@@ -146,6 +146,73 @@ struct ConversationTranscriptScrollPolicyTests {
             userIsScrolledAway: true
         ))
     }
+
+    @Test func streamingStartScrollsOnlyWhileFollowing() {
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: false))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: false, userIsScrolledAway: false))
+    }
+
+    @Test func streamingEndNeverScrolls() {
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: false, hasInitiallyScrolled: true, userIsScrolledAway: false))
+    }
+
+    private func streamingDelta(
+        hasInitiallyScrolled: Bool = true,
+        userIsScrolledAway: Bool = false,
+        distanceToBottom: CGFloat? = 20,
+        now: TimeInterval = 10,
+        lastFollowAt: TimeInterval? = nil
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldFollowStreamingDelta(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            distanceToBottom: distanceToBottom,
+            now: now,
+            lastFollowAt: lastFollowAt,
+            driftTolerance: 1,
+            minimumInterval: 0.5
+        )
+    }
+
+    @Test func streamingDeltaNeverScrollsWhilePinnedAtBottom() {
+        #expect(!streamingDelta(distanceToBottom: 0))
+        #expect(!streamingDelta(distanceToBottom: 1))
+        #expect(!streamingDelta(distanceToBottom: -30))
+    }
+
+    @Test func streamingDeltaRePinsDriftedViewport() {
+        #expect(streamingDelta(distanceToBottom: 2))
+        #expect(streamingDelta(distanceToBottom: 40))
+    }
+
+    @Test func streamingDeltaHonorsFollowGates() {
+        #expect(!streamingDelta(hasInitiallyScrolled: false))
+        #expect(!streamingDelta(userIsScrolledAway: true, distanceToBottom: 400))
+    }
+
+    @Test func streamingDeltaSkipsUntilScrollViewIsFound() {
+        #expect(!streamingDelta(distanceToBottom: nil))
+    }
+
+    @Test func streamingDeltaIsRateLimitedToOneScrollPerInterval() {
+        #expect(streamingDelta(now: 10, lastFollowAt: nil))
+        #expect(!streamingDelta(now: 10, lastFollowAt: 10))
+        #expect(!streamingDelta(now: 10.49, lastFollowAt: 10))
+        #expect(streamingDelta(now: 10.5, lastFollowAt: 10))
+        #expect(streamingDelta(now: 12, lastFollowAt: 10))
+    }
+
+    @Test func streamingFollowConstantsAreDocumentedDefaults() {
+        #expect(Constants.Conversation.Transcript.streamingFollowMinimumInterval > 0)
+        #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance >= 0)
+        #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance
+            < Constants.Conversation.Transcript.atBottomThreshold)
+    }
 }
 
 /// Latch-once-per-viewing-session semantics on ConversationViewModel.

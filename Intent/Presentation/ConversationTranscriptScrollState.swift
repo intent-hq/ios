@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 
 @Observable
@@ -8,4 +9,6 @@ final class ConversationTranscriptScrollState {
     var hasInitiallyScrolled = false
     var initialScrollScheduled = false
     var isScrollingToBottom = false
+    /// Uptime of the last follow-to-bottom request; rate-limits streaming follows.
+    var lastFollowToBottomAt: TimeInterval?
 }

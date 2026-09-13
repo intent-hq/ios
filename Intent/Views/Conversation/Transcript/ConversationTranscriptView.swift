@@ -52,6 +52,8 @@ struct ConversationTranscriptView: View {
 
     /// The follow handlers stay gated until the entry-scroll decision finishes,
     /// so stream updates cannot yank the viewport away from the unread divider.
+    /// Only discrete transitions scroll; streaming deltas ride the bottom anchor
+    /// and at most re-pin a drifted viewport (see the policy).
     private func transcriptScrollView(
         proxy: ScrollViewProxy,
         dividerAnchorId: String?
@@ -67,15 +69,17 @@ struct ConversationTranscriptView: View {
                     scrollToBottom(proxy: proxy)
                 }
             }
-            .onChange(of: viewModel.isStreaming) { _, _ in
-                if shouldFollowToBottom {
+            .onChange(of: viewModel.isStreaming) { _, isStreaming in
+                if ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+                    isStreaming: isStreaming,
+                    hasInitiallyScrolled: hasInitiallyScrolled,
+                    userIsScrolledAway: userIsScrolledAway
+                ) {
                     scrollToBottom(proxy: proxy)
                 }
             }
             .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
-                if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy)
-                }
+                followStreamingDeltaIfDrifted(proxy: proxy)
             }
             .onChange(of: viewModel.queuedMessages.count) { _, _ in
                 if shouldFollowToBottom {
@@ -316,7 +320,21 @@ struct ConversationTranscriptView: View {
         }
     }
 
+    private func followStreamingDeltaIfDrifted(proxy: ScrollViewProxy) {
+        guard ConversationTranscriptScrollPolicy.shouldFollowStreamingDelta(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            distanceToBottom: scrollMomentumProxy.distanceToBottom,
+            now: ProcessInfo.processInfo.systemUptime,
+            lastFollowAt: scrollState.lastFollowToBottomAt
+        ) else { return }
+        scrollToBottom(proxy: proxy)
+    }
+
+    /// Stamps the request time up front so deltas arriving inside the debounce
+    /// window are rejected by the policy instead of restarting the debounce.
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+        scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
         scrollDebounceTask?.cancel()
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))

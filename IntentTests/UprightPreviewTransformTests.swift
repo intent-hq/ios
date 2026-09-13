@@ -8,8 +8,9 @@ import UIKit
 /// must stay out of the way (identity) when the per-row un-flip already
 /// cancels the scroll view's flip.
 struct UprightPreviewTransformTests {
-    /// The FlippedUpsideDown transform: rotation π followed by an x-mirror
-    /// (net vertical flip).
+    /// The vertical flip the transcript applied before it became a
+    /// natural-order ScrollView: rotation π followed by an x-mirror. Kept as
+    /// the representative transform the correction must cancel.
     private var flip: CGAffineTransform {
         CGAffineTransform(rotationAngle: .pi)
             .concatenating(CGAffineTransform(scaleX: -1, y: 1))
