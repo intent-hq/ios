@@ -60,13 +60,13 @@ struct ConversationTranscriptView: View {
     ) -> some View {
         transcriptScrollBase(dividerAnchorId: dividerAnchorId)
             .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
-                if newCount > oldCount,
-                   let lastMessage = viewModel.filteredMessages.last,
-                   lastMessage.role == .user {
+                let appendedUserMessage = newCount > oldCount
+                    && viewModel.filteredMessages.last?.role == .user
+                if appendedUserMessage {
                     userIsScrolledAway = false
                 }
                 if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, forced: appendedUserMessage)
                 }
             }
             .onChange(of: viewModel.isStreaming) { _, isStreaming in
@@ -75,7 +75,7 @@ struct ConversationTranscriptView: View {
                     hasInitiallyScrolled: hasInitiallyScrolled,
                     userIsScrolledAway: userIsScrolledAway
                 ) {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, forced: true)
                 }
             }
             .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
@@ -83,12 +83,12 @@ struct ConversationTranscriptView: View {
             }
             .onChange(of: viewModel.queuedMessages.count) { _, _ in
                 if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, forced: false)
                 }
             }
             .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
                 if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy)
+                    scrollToBottom(proxy: proxy, forced: false)
                 }
             }
             .onChange(of: viewModel.isLoading) { _, isLoading in
@@ -104,8 +104,10 @@ struct ConversationTranscriptView: View {
                 }
             }
             .onChange(of: userIsScrolledAway) { _, scrolledAway in
-                if !scrolledAway {
-                    scrollToBottom(proxy: proxy)
+                if scrolledAway {
+                    cancelPendingAutomaticFollow()
+                } else {
+                    scrollToBottom(proxy: proxy, forced: true)
                 }
             }
     }
@@ -306,7 +308,7 @@ struct ConversationTranscriptView: View {
 
     private func performInitialScroll(proxy: ScrollViewProxy) {
         guard viewModel.newMessagesDividerAnchorId != nil else {
-            scrollToBottom(proxy: proxy, animated: false)
+            scrollToBottom(proxy: proxy, animated: false, forced: true)
             return
         }
         proxy.scrollTo("new-messages-divider", anchor: .top)
@@ -328,27 +330,49 @@ struct ConversationTranscriptView: View {
             now: ProcessInfo.processInfo.systemUptime,
             lastFollowAt: scrollState.lastFollowToBottomAt
         ) else { return }
-        scrollToBottom(proxy: proxy)
+        scrollToBottom(proxy: proxy, forced: false)
+    }
+
+    /// The user scrolling away drops an automatic follow still in its debounce;
+    /// a forced one (Go to End sets `isScrollingToBottom`, so geometry cannot
+    /// flip this flag during it anyway) keeps going.
+    private func cancelPendingAutomaticFollow() {
+        guard !scrollState.pendingFollowIsForced else { return }
+        scrollDebounceTask?.cancel()
+        scrollDebounceTask = nil
     }
 
     /// Stamps the request time up front so deltas arriving inside the debounce
     /// window are rejected by the policy instead of restarting the debounce.
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true) {
+    /// Forced follows always land and are never preempted by automatic ones;
+    /// automatic follows are re-validated by the policy once the debounce
+    /// elapses, so a user who scrolled away meanwhile is not snapped back.
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
+        if !forced && scrollState.pendingFollowIsForced { return }
         scrollDebounceTask?.cancel()
+        scrollState.pendingFollowIsForced = forced
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
             guard !Task.isCancelled else { return }
-            if animated {
-                withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
+            let shouldExecute = ConversationTranscriptScrollPolicy.shouldExecuteFollow(
+                forced: forced,
+                userIsScrolledAway: userIsScrolledAway,
+                distanceToBottom: scrollMomentumProxy.distanceToBottom
+            )
+            if shouldExecute {
+                if animated {
+                    withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
+                        proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    }
+                } else {
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                 }
-            } else {
-                proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
+                guard !Task.isCancelled else { return }
             }
-            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
-            guard !Task.isCancelled else { return }
             isScrollingToBottom = false
+            scrollState.pendingFollowIsForced = false
         }
     }
 }

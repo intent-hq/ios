@@ -69,4 +69,22 @@ enum ConversationTranscriptScrollPolicy {
         guard let lastFollowAt else { return true }
         return now - lastFollowAt >= minimumInterval
     }
+
+    /// Re-validated when a debounced follow finally runs. Forced follows (Go to
+    /// End, a new user message, the entry scroll, the thinking indicator
+    /// appearing) always land. An automatic follow is dropped when the user
+    /// scrolled away during the debounce, or when the viewport is already
+    /// pinned; an unknown distance (scroll view not found yet) proves neither,
+    /// so the follow still runs.
+    static func shouldExecuteFollow(
+        forced: Bool,
+        userIsScrolledAway: Bool,
+        distanceToBottom: CGFloat?,
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance
+    ) -> Bool {
+        if forced { return true }
+        if userIsScrolledAway { return false }
+        guard let distanceToBottom else { return true }
+        return distanceToBottom > driftTolerance
+    }
 }

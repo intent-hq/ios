@@ -207,6 +207,40 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(streamingDelta(now: 12, lastFollowAt: 10))
     }
 
+    private func executeFollow(
+        forced: Bool = false,
+        userIsScrolledAway: Bool = false,
+        distanceToBottom: CGFloat? = 20
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldExecuteFollow(
+            forced: forced,
+            userIsScrolledAway: userIsScrolledAway,
+            distanceToBottom: distanceToBottom,
+            driftTolerance: 1
+        )
+    }
+
+    /// Regression: a drifted delta requests a follow, then the user scrolls
+    /// away during the debounce; the delayed execution must not snap back.
+    @Test func automaticFollowIsDroppedWhenUserScrolledAwayDuringDebounce() {
+        #expect(streamingDelta(distanceToBottom: 20))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: 400))
+        #expect(!executeFollow(userIsScrolledAway: true, distanceToBottom: nil))
+    }
+
+    @Test func automaticFollowIsDroppedWhenAlreadyPinnedAtExecution() {
+        #expect(!executeFollow(distanceToBottom: 0))
+        #expect(!executeFollow(distanceToBottom: 1))
+        #expect(executeFollow(distanceToBottom: 2))
+        #expect(executeFollow(distanceToBottom: nil))
+    }
+
+    @Test func forcedFollowAlwaysExecutes() {
+        #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
+        #expect(executeFollow(forced: true, distanceToBottom: 0))
+        #expect(executeFollow(forced: true, distanceToBottom: nil))
+    }
+
     @Test func streamingFollowConstantsAreDocumentedDefaults() {
         #expect(Constants.Conversation.Transcript.streamingFollowMinimumInterval > 0)
         #expect(Constants.Conversation.Transcript.streamingFollowDriftTolerance >= 0)
