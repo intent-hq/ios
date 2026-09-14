@@ -9,8 +9,11 @@ class ScrollViewMomentumProxy {
         didSet { hasResolvedScrollView = scrollView != nil }
     }
 
-    /// Observable edge for "the transcript is hosted": flips when the finder
-    /// resolves, so the entry scroll can wait for it instead of a fixed timer.
+    /// Observable edge for "the transcript has been hosted": flips when the
+    /// finder resolves, so the entry scroll can wait for it instead of a fixed
+    /// timer. Sticky, not a liveness signal: weak zeroing skips `didSet`, so
+    /// it stays true after the scroll view deallocates while `scrollView` and
+    /// `distanceToBottom` are nil again.
     private(set) var hasResolvedScrollView = false
 
     /// Gap between the viewport's bottom edge and the end of the content, or
@@ -61,7 +64,14 @@ struct ScrollViewFinder: UIViewRepresentable {
     }
 
     final class FinderView: UIView {
-        var proxy: ScrollViewMomentumProxy?
+        /// A proxy swapped in while already hosted is resolved immediately;
+        /// otherwise resolution waits for the window attach.
+        var proxy: ScrollViewMomentumProxy? {
+            didSet {
+                guard proxy !== oldValue, window != nil else { return }
+                resolveScrollView()
+            }
+        }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()

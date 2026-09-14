@@ -167,6 +167,36 @@ struct ScrollViewFinderTests {
         #expect(proxy.scrollView === scrollView)
         #expect(tapCount() == installed)
     }
+
+    @Test func finderWithoutProxyAttachesWithoutInstallingAnything() {
+        let finder = ScrollViewFinder.FinderView()
+        let scrollView = UIScrollView()
+        scrollView.addSubview(finder)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+        #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+    }
+
+    /// The `updateUIView` path: a proxy handed to an already-hosted finder
+    /// resolves at once rather than on the next window move.
+    @Test func finderResolvesProxyAssignedAfterWindowAttach() {
+        let finder = ScrollViewFinder.FinderView()
+        let scrollView = UIScrollView()
+        scrollView.addSubview(finder)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+
+        let proxy = ScrollViewMomentumProxy()
+        finder.proxy = proxy
+        #expect(proxy.scrollView === scrollView)
+        #expect(proxy.hasResolvedScrollView)
+        #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+        let installed = scrollView.gestureRecognizers?.count ?? 0
+
+        // Re-assigning the same proxy is a no-op.
+        finder.proxy = proxy
+        #expect(scrollView.gestureRecognizers?.count == installed)
+    }
 }
 
 struct ConversationTranscriptScrollPolicyTests {
@@ -206,9 +236,14 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(initialStep(alreadyPerformed: true) == .skip)
     }
 
-    @Test func entryScrollScrollViewTimeoutOutlastsEntryDelay() {
-        #expect(Constants.Conversation.Transcript.initialScrollScrollViewTimeout
+    /// The hosting wait must outlast the entry timer it replaces, and the
+    /// divider probe must run before `hasInitiallyScrolled` flips so no
+    /// automatic follow can be queued ahead of its decision.
+    @Test func entryScrollDelaysAreOrdered() {
+        #expect(Constants.Conversation.Transcript.initialScrollHostingTimeout
             > Constants.Conversation.Transcript.initialScrollDelay)
+        #expect(Constants.Conversation.Transcript.dividerProbeDelay
+            < Constants.Conversation.Transcript.initialScrollSettleDelay)
     }
 
     @Test func tracksAwayStateAcrossBottomThreshold() {
