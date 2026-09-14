@@ -585,6 +585,51 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 
+    /// Same as above, but A's stale initial fetch *fails* (cancellation, as
+    /// the real ConnectionManager throws on task cancellation): the error is
+    /// still reported, yet it must not finish B's in-flight initial load.
+    @Test func staleInitialFetchFailureDoesNotFinishNewAgentInFlightInitialLoad() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchA = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while fake.paramsForMethod("agent.getConversation").count < 1 {
+            await Task.yield()
+        }
+
+        let fetchB = Task { await store.fetchConversation(agentId: "agent-b", workspaceId: "ws-1") }
+        while fake.paramsForMethod("agent.getConversation").count < 2 {
+            await Task.yield()
+        }
+        #expect(store.isLoading)
+
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:stream:activity",
+                      "data": ["agentId": "agent-b"]] as [String: Any]
+        ])
+
+        fetchA.cancel()
+        await fetchA.value
+
+        #expect(store.isLoading, "a failed stale A must not clear B's in-flight initial load")
+        #expect(store.isStreaming == false, "buffered replay must wait for B's page")
+
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [
+                [
+                    "id": "msg-b1", "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-b1:0", "text": "Hello B"]],
+                    "timestamp": "2026-06-27T02:00:00.000Z"
+                ]
+            ]
+        ])
+        await fetchB.value
+
+        #expect(store.isLoading == false)
+        #expect(store.isStreaming)
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+    }
+
     @Test func staleFetchRebindDuringDecodeDoesNotOverwriteNewAgent() async throws {
         let (store, fake) = makeStore()
         fake.pendingMethods = ["agent.getConversation"]

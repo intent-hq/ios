@@ -93,43 +93,53 @@ final class ConversationLiveTranscript {
             isLoading = true
             inFlightInitialLoads += 1
         }
-        var stale = false
 
-        do {
-            var params: [String: Any] = [
-                "agentId": agentId,
-                "projection": "slim",
-            ]
-            if let workspaceId = workspaceId ?? self.workspaceId {
-                params["workspaceId"] = workspaceId
-            }
-            // Both awaits (RPC and off-main decode) yield MainActor; a rebind
-            // to another agent in either window makes this page stale, so it
-            // must not touch the new agent's transcript or streaming state.
-            let page = try await whileBound {
+        var params: [String: Any] = [
+            "agentId": agentId,
+            "projection": "slim",
+        ]
+        if let workspaceId = workspaceId ?? self.workspaceId {
+            params["workspaceId"] = workspaceId
+        }
+        // Both awaits (RPC and off-main decode) yield MainActor; a rebind to
+        // another agent in either window makes this page stale, so it must
+        // not touch the new agent's transcript or streaming state. The error
+        // is carried as a value so a stale failure is recognised as stale too.
+        let outcome: Result<ConversationPage?, Error>? = await whileBound {
+            do {
                 let result = try await connectionManager.request(
                     "agent.getConversation",
                     params: params
                 )
-                return await Self.decodeConversationPage(InboundJSONValue(value: result))
+                return .success(await Self.decodeConversationPage(InboundJSONValue(value: result)))
+            } catch {
+                return .failure(error)
             }
-            stale = page == nil
-            if case let page?? = page {
-                isTruncated = page.truncated
-                totalMessageCount = page.totalMessages ?? page.messages.count
-                mergeFetchedMessages(page.messages)
-                remergeHydratedBlocks()
+        } onStale: { outcome in
+            // A stale failure still surfaces (intent-hq/ios#283 tracks gating it).
+            if case .failure(let error) = outcome {
+                reportFetchError(error)
+            }
+        }
 
-                if let last = messages.last,
-                   last.role == .assistant,
-                   last.isStreaming == true {
-                    isStreaming = true
-                }
+        switch outcome {
+        case .success(let page?):
+            isTruncated = page.truncated
+            totalMessageCount = page.totalMessages ?? page.messages.count
+            mergeFetchedMessages(page.messages)
+            remergeHydratedBlocks()
+
+            if let last = messages.last,
+               last.role == .assistant,
+               last.isStreaming == true {
+                isStreaming = true
             }
-        } catch {
-            onFetchError?(error)
-            AppLog.conversation.error(
-                "[ConversationStore] Failed to fetch conversation: \(error)")
+        case .success(nil):
+            break
+        case .failure(let error):
+            reportFetchError(error)
+        case nil:
+            break
         }
 
         if isInitialLoad {
@@ -137,11 +147,17 @@ final class ConversationLiveTranscript {
             // A stale initial fetch must not finish the new binding's own
             // in-flight initial load; with none pending it still releases
             // `isLoading` so buffered events are not held forever.
-            if !stale || inFlightInitialLoads == 0 {
+            if outcome != nil || inFlightInitialLoads == 0 {
                 onInitialLoadCompleted?()
                 isLoading = false
             }
         }
+    }
+
+    private func reportFetchError(_ error: Error) {
+        onFetchError?(error)
+        AppLog.conversation.error(
+            "[ConversationStore] Failed to fetch conversation: \(error)")
     }
 
     /// Decoded `agent.getConversation` response.
