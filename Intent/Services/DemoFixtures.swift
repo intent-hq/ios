@@ -1,9 +1,11 @@
 import Foundation
 
 /// Launch-argument-driven demo mode for screenshot UI tests: with
-/// `--demo-data` the app skips pairing and serves fixture data from
-/// `DemoFixtures` instead of a live daemon connection. Zero-impact when the
-/// arguments are absent.
+/// `--demo-data` the app skips pairing, serves fixture data from
+/// `DemoFixtures` instead of a live daemon connection, and runs
+/// `PersistenceManager.shared` over an ephemeral store (see
+/// `PersistenceManager.ephemeral()`). Zero-impact when the arguments are
+/// absent.
 enum DemoMode {
     /// True when fixture data should be served (`--demo-data`).
     static let isEnabled = demoDataRequested(by: ProcessInfo.processInfo.arguments)

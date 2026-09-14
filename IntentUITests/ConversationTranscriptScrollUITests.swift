@@ -45,9 +45,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let transcript = app.scrollViews.firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
 
-        // 1. At rest at the bottom the button must stay hidden.
+        // 1. At rest at the bottom the button must stay hidden. Wait for the
+        //    initial scroll to land (last message hittable), then require the
+        //    button not to appear over a window that outlasts the scroll
+        //    settle delays — waitForNonExistence would pass immediately
+        //    before the transcript had measured anything.
         XCTAssertTrue(
-            goToEnd.waitForNonExistence(timeout: 3),
+            waitUntilHittable(lastMessage, timeout: 10),
+            "transcript did not settle on the last message after opening")
+        XCTAssertFalse(
+            goToEnd.waitForExistence(timeout: 2),
             "Go to End is visible while the transcript rests at the bottom")
 
         // 2. Scrolling up (content moves down) reveals it.
