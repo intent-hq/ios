@@ -531,6 +531,58 @@ struct ConversationStoreLiveStateTests {
         await fetchTask.value
 
         expectAgentBTranscriptIntact(store)
+        // B has no initial load in flight, so the stale fetch still releases
+        // the shared loading flag it raised.
+        #expect(store.isLoading == false)
+    }
+
+    /// A stale initial fetch for agent A must not finish agent B's own
+    /// in-flight initial load: `isLoading` stays up and buffered firehose
+    /// events are replayed only when B's page lands.
+    @Test func staleInitialFetchDoesNotFinishNewAgentInFlightInitialLoad() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchA = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while fake.paramsForMethod("agent.getConversation").count < 1 {
+            await Task.yield()
+        }
+
+        // Rebind to B via its own initial fetch (no snapshot: messages stay empty).
+        let fetchB = Task { await store.fetchConversation(agentId: "agent-b", workspaceId: "ws-1") }
+        while fake.paramsForMethod("agent.getConversation").count < 2 {
+            await Task.yield()
+        }
+        #expect(store.isLoading)
+
+        // Buffered while loading; a replay would flip isStreaming.
+        store.handleStreamEvent("events.event", params: [
+            "event": ["type": "agent:stream:activity",
+                      "data": ["agentId": "agent-b"]] as [String: Any]
+        ])
+        #expect(store.isStreaming == false)
+
+        fake.resolvePending("agent.getConversation", with: stalePageForAgentA)
+        await fetchA.value
+
+        #expect(store.isLoading, "stale A must not clear B's in-flight initial load")
+        #expect(store.isStreaming == false, "buffered replay must wait for B's page")
+        #expect(store.messages.isEmpty)
+
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [
+                [
+                    "id": "msg-b1", "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-b1:0", "text": "Hello B"]],
+                    "timestamp": "2026-06-27T02:00:00.000Z"
+                ]
+            ]
+        ])
+        await fetchB.value
+
+        #expect(store.isLoading == false)
+        #expect(store.isStreaming, "buffered activity replays once B's initial load completes")
+        #expect(store.messages.map(\.id) == ["msg-b1"])
     }
 
     @Test func staleFetchRebindDuringDecodeDoesNotOverwriteNewAgent() async throws {

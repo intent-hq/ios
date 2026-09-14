@@ -31,6 +31,9 @@ final class ConversationLiveTranscript {
     /// same-agent rebind. `whileBound` compares against it so work started
     /// under an earlier binding cannot publish into a later one.
     @ObservationIgnored private var bindingGeneration = 0
+    /// Initial fetches (`isLoading = true`) still awaiting their page. A stale
+    /// initial fetch only finishes the load when none is left in flight.
+    @ObservationIgnored private var inFlightInitialLoads = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
     private var chatChannelActive = false
@@ -88,7 +91,9 @@ final class ConversationLiveTranscript {
         let isInitialLoad = messages.isEmpty
         if isInitialLoad {
             isLoading = true
+            inFlightInitialLoads += 1
         }
+        var stale = false
 
         do {
             var params: [String: Any] = [
@@ -108,7 +113,8 @@ final class ConversationLiveTranscript {
                 )
                 return await Self.decodeConversationPage(InboundJSONValue(value: result))
             }
-            if let page = page ?? nil {
+            stale = page == nil
+            if case let page?? = page {
                 isTruncated = page.truncated
                 totalMessageCount = page.totalMessages ?? page.messages.count
                 mergeFetchedMessages(page.messages)
@@ -127,8 +133,14 @@ final class ConversationLiveTranscript {
         }
 
         if isInitialLoad {
-            onInitialLoadCompleted?()
-            isLoading = false
+            inFlightInitialLoads -= 1
+            // A stale initial fetch must not finish the new binding's own
+            // in-flight initial load; with none pending it still releases
+            // `isLoading` so buffered events are not held forever.
+            if !stale || inFlightInitialLoads == 0 {
+                onInitialLoadCompleted?()
+                isLoading = false
+            }
         }
     }
 
