@@ -202,7 +202,7 @@ struct ConversationTranscriptScrollPolicyTests {
     }
 
     private func resolved(
-        live: Bool, current: Bool,
+        live: Bool?, current: Bool,
         hasInitiallyScrolled: Bool = true, isScrollingToBottom: Bool = false
     ) -> Bool {
         ConversationTranscriptScrollPolicy.resolvedScrolledAway(
@@ -237,6 +237,20 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(!resolved(live: true, current: false, isScrollingToBottom: true))
         #expect(resolved(live: true, current: false, isScrollingToBottom: false))
         #expect(!resolved(live: false, current: false, isScrollingToBottom: false))
+    }
+
+    /// Regression: with `live` defaulting to `false`, the gate-open sync after
+    /// the divider probe set "scrolled away" would flip it back and force-follow
+    /// off the "New messages" divider whenever the entry scroll's geometry edge
+    /// had not been delivered yet. An unobserved edge must keep `current`.
+    @Test func unobservedGeometryEdgeKeepsCurrentFlag() {
+        #expect(resolved(live: nil, current: true))
+        #expect(!resolved(live: nil, current: false))
+        #expect(resolved(live: nil, current: true, hasInitiallyScrolled: false))
+        #expect(!resolved(live: nil, current: false, isScrollingToBottom: true))
+        // Divider scenario: the probe marks scrolled away, the gate opens, and
+        // the geometry has emitted nothing yet.
+        #expect(resolved(live: nil, current: true, hasInitiallyScrolled: true, isScrollingToBottom: false))
     }
 
     @Test func distanceToBottomIsNegativeForShortContentAndOverscroll() {

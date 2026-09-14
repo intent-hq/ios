@@ -27,13 +27,16 @@ enum ConversationTranscriptScrollPolicy {
     /// that lands while gated would otherwise be lost for good, because the
     /// geometry emits no new edge until the threshold is crossed again. The
     /// live value is therefore kept and re-applied whenever the gate opens.
+    /// A nil `live` means no edge has been observed yet, so `current` stands
+    /// (e.g. the divider probe's flag before the entry scroll's edge lands).
     static func resolvedScrolledAway(
-        live: Bool,
+        live: Bool?,
         current: Bool,
         hasInitiallyScrolled: Bool,
         isScrollingToBottom: Bool
     ) -> Bool {
-        hasInitiallyScrolled && !isScrollingToBottom ? live : current
+        guard let live, hasInitiallyScrolled, !isScrollingToBottom else { return current }
+        return live
     }
 
     /// Discrete, user-visible transitions (a message appended, "Go to End",
