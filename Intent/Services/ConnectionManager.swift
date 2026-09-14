@@ -1256,11 +1256,17 @@ nonisolated enum InboundFrame: Sendable {
         }
     }
 
+    /// The one global `events.subscribe` list. Every channel a store classifies
+    /// (`handledChannels`) must appear here as `<channel>*`, or that store's
+    /// classification never receives an event — enforced by
+    /// `IntentTests/EventCatalogCoverageTests.swift`.
+    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
+
     private func subscribeToAllEvents() {
         Task {
             do {
                 let _ = try await self.request("events.subscribe", params: [
-                    "eventTypes": ["workspace:*", "note:*", "agent:*"],
+                    "eventTypes": Self.globalEventTypes,
                     "replaceGroup": "global"
                 ])
                 AppLog.connection.debug("[ConnectionManager] Subscribed to all events")

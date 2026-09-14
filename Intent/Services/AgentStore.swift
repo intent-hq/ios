@@ -338,39 +338,79 @@ extension SpecialistInfo {
         let eventWorkspaceId = event["workspaceId"] as? String
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
-        switch eventType {
-        // Explicit allowlist (mirrors WorkspaceStore): only events that can
-        // change a field an `AgentSession` row renders refetch `agent.list`.
-        // Lifecycle events cover status and the streaming/processing/
-        // responding flags at turn boundaries; `agent:updated` carries
-        // name/model/effort, the pending-questions markers, digest and
-        // attention-cleared; `agent:retired`/`agent:restored` change list
-        // membership; `agent:last-message` fires once per persisted
-        // transcript row and feeds lastAgentResponse/lastUserMessage/
-        // lastMessageRole; `agent:attention-requested` feeds the pending
-        // attention request.
-        //
-        // Deliberately excluded (no rendered field depends on them, and
-        // several fire per token or per tool call mid-turn): `agent:stream:*`
-        // — including `agent:stream:end`, since the turn's persisted row
-        // arrives as `agent:last-message` and the flag flip as
+        switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
+        case .refetch:
+            guard let workspaceId = workspaceId else { return }
+            Task { await fetchAgents(workspaceId: workspaceId) }
+        case .patchInPlace, .ignore, nil:
+            break
+        }
+    }
+
+    // MARK: - Event classification
+
+    /// Bus channels this store consumes. Every catalog type on them must be in
+    /// exactly one table below (`IntentTests/EventCatalogCoverageTests.swift`).
+    nonisolated static let handledChannels = ["agent:"]
+
+    /// Explicit allowlist (mirrors WorkspaceStore): only events that can
+    /// change a field an `AgentSession` row renders refetch `agent.list`.
+    /// Lifecycle events cover status and the streaming/processing/
+    /// responding flags at turn boundaries; `agent:updated` carries
+    /// name/model/effort, the pending-questions markers, digest and
+    /// attention-cleared; `agent:retired`/`agent:restored` change list
+    /// membership; `agent:last-message` fires once per persisted
+    /// transcript row and feeds lastAgentResponse/lastUserMessage/
+    /// lastMessageRole; `agent:attention-requested` feeds the pending
+    /// attention request.
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "agent:started", "agent:completed", "agent:failed", "agent:created",
+        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
+        "agent:updated", "agent:retired", "agent:restored",
+        "agent:last-message", "agent:attention-requested",
+    ]
+
+    /// Deliberately ignored: no rendered field depends on them, and several
+    /// fire per token or per tool call mid-turn.
+    nonisolated static let ignoredEventTypes: Set<String> = [
+        // `agent:stream:*` — including `agent:stream:end`, since the turn's
+        // persisted row arrives as `agent:last-message` and the flag flip as
         // `agent:idle`/`agent:status-changed`. This is an accepted trade-off:
         // a row's last-message preview refreshes at `agent:last-message` /
         // `agent:idle` rather than on every mid-turn activity tick, in
-        // exchange for not refetching the list per token — `agent:tool:call`,
-        // `agent:message` (lean echo; `agent:last-message` is the
-        // content-bearing companion), `agent:permission:*`, `agent:process:*`,
-        // `agent:queue:*` and `agent:subscriptions-*` (isWaitingForOtherAgents
-        // is picked up at the adjacent idle/status-changed boundary).
-        case "agent:started", "agent:completed", "agent:failed", "agent:created",
-             "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
-             "agent:updated", "agent:retired", "agent:restored",
-             "agent:last-message", "agent:attention-requested":
-            guard let workspaceId = workspaceId else { return }
-            Task { await fetchAgents(workspaceId: workspaceId) }
-        default:
-            break
-        }
+        // exchange for not refetching the list per token.
+        "agent:stream:activity", "agent:stream:end", "agent:stream:start",
+        "agent:stream:status", "agent:tool:call",
+        // `agent:message` is a lean echo (`agent:last-message` is the
+        // content-bearing companion); the `agent:message:*` /
+        // `agent:user-message:sent` delivery markers carry no row field.
+        "agent:message", "agent:message:delivery-failed", "agent:message:received",
+        "agent:message:sent", "agent:user-message:sent",
+        // `agent:permission:*`, `agent:process:*`, `agent:queue:*`,
+        // `agent:subscriptions-*` and the subscription wake bookkeeping:
+        // isWaitingForOtherAgents is picked up at the adjacent
+        // idle/status-changed boundary.
+        "agent:permission:request", "agent:permission:resolved",
+        "agent:process:evicted", "agent:process:queued", "agent:process:resumed",
+        "agent:queue:processing", "agent:queue:processing-cancelled",
+        "agent:queue:stale-message", "agent:queue:updated",
+        "agent:subscribed", "agent:unsubscribed", "agent:subscriptions-changed",
+        "agent:subscriptions-restored", "agent:woken-by-subscription",
+        // Event-delivery bookkeeping between agents; nothing rendered.
+        "agent:delivery-confirmed", "agent:event-delivery-failed",
+        "agent:event-delivery-timeout",
+        // Deletion scheduling: list membership only changes at `agent:deleted`.
+        "agent:delete-cancelled", "agent:delete-scheduled",
+        // Session token/cost stats are not part of the list row.
+        "agent:session-stats-changed",
+    ]
+
+    /// Pure classification of one event; `nil` means the tables above do not
+    /// name the type, which `handleEvent` treats as ignore.
+    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        return nil
     }
 }
 
