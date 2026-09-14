@@ -27,6 +27,10 @@ final class ConversationLiveTranscript {
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
     private var workspaceId: String?
+    /// Advances whenever the bound agent changes (or on `reset()`), never on a
+    /// same-agent rebind. `whileBound` compares against it so work started
+    /// under an earlier binding cannot publish into a later one.
+    @ObservationIgnored private var bindingGeneration = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
     private var chatChannelActive = false
@@ -49,11 +53,38 @@ final class ConversationLiveTranscript {
         }
     }
 
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
-        self.agentId = agentId
+    // MARK: - Binding
+
+    private func bind(agentId newAgentId: String, workspaceId: String?) {
+        if agentId != newAgentId {
+            bindingGeneration &+= 1
+        }
+        agentId = newAgentId
         if let workspaceId {
             self.workspaceId = workspaceId
         }
+    }
+
+    /// Runs `work` and returns its value only if the transcript is still bound
+    /// to the same agent it was when `work` started; otherwise the value is
+    /// stale and `nil` is returned (after `onStale` had a chance to clean up
+    /// side-effects the value carries, e.g. a server-side subscription).
+    /// Errors thrown by `work` propagate regardless of staleness.
+    func whileBound<T: Sendable>(
+        _ work: () async throws -> T,
+        onStale: (T) async -> Void = { _ in }
+    ) async rethrows -> T? {
+        let generation = bindingGeneration
+        let value = try await work()
+        guard generation == bindingGeneration else {
+            await onStale(value)
+            return nil
+        }
+        return value
+    }
+
+    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+        bind(agentId: agentId, workspaceId: workspaceId)
         let isInitialLoad = messages.isEmpty
         if isInitialLoad {
             isLoading = true
@@ -67,17 +98,17 @@ final class ConversationLiveTranscript {
             if let workspaceId = workspaceId ?? self.workspaceId {
                 params["workspaceId"] = workspaceId
             }
-            let result = try await connectionManager.request(
-                "agent.getConversation",
-                params: params
-            )
             // Both awaits (RPC and off-main decode) yield MainActor; a rebind
             // to another agent in either window makes this page stale, so it
             // must not touch the new agent's transcript or streaming state.
-            guard self.agentId == agentId else { return }
-            let page = await Self.decodeConversationPage(InboundJSONValue(value: result))
-            guard self.agentId == agentId else { return }
-            if let page {
+            let page = try await whileBound {
+                let result = try await connectionManager.request(
+                    "agent.getConversation",
+                    params: params
+                )
+                return await Self.decodeConversationPage(InboundJSONValue(value: result))
+            }
+            if let page = page ?? nil {
                 isTruncated = page.truncated
                 totalMessageCount = page.totalMessages ?? page.messages.count
                 mergeFetchedMessages(page.messages)
@@ -178,17 +209,19 @@ final class ConversationLiveTranscript {
         defer { hydratingBlockKeys.remove(key) }
 
         do {
-            let result = try await connectionManager.request(
-                "agent.getMessageBlock",
-                params: [
-                    "agentId": agentId,
-                    "messageId": messageId,
-                    "blockId": blockId,
-                ]
-            )
-            let block = await Self.decodeMessageBlock(InboundJSONValue(value: result))
-            guard self.agentId == agentId else { return }
-            guard let block else {
+            let decoded = try await whileBound {
+                let result = try await connectionManager.request(
+                    "agent.getMessageBlock",
+                    params: [
+                        "agentId": agentId,
+                        "messageId": messageId,
+                        "blockId": blockId,
+                    ]
+                )
+                return await Self.decodeMessageBlock(InboundJSONValue(value: result))
+            }
+            guard let decoded else { return }
+            guard let block = decoded else {
                 AppLog.conversation.error(
                     "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
                 return
@@ -235,26 +268,33 @@ final class ConversationLiveTranscript {
     }
 
     func subscribe(agentId: String, workspaceId: String? = nil) async {
-        self.agentId = agentId
-        if let workspaceId {
-            self.workspaceId = workspaceId
-        }
+        bind(agentId: agentId, workspaceId: workspaceId)
         chatChannelActive = true
         chatSeeded = false
 
-        do {
-            let result = try await connectionManager.request("chat.subscribe", params: [
-                "agentId": agentId,
-                "replaceGroup": "ios-chat-\(agentId)",
-                "projection": "slim",
-            ])
-            guard let response = result as? [String: Any],
-                  let subscriptionId = response["subscriptionId"] as? String
-            else {
-                clearChannelForLegacyFallback()
-                return
+        // A reply (or failure) that lands after a rebind to another agent must
+        // leave the new binding's channel state untouched, so the error is
+        // carried as a value and only inspected on the still-bound path.
+        let outcome: Result<String?, Error>? = await whileBound {
+            do {
+                let result = try await connectionManager.request("chat.subscribe", params: [
+                    "agentId": agentId,
+                    "replaceGroup": "ios-chat-\(agentId)",
+                    "projection": "slim",
+                ])
+                return .success((result as? [String: Any])?["subscriptionId"] as? String)
+            } catch {
+                return .failure(error)
             }
+        } onStale: { outcome in
+            if case .success(let orphanedId?) = outcome {
+                await releaseOrphanedSubscription(orphanedId)
+            }
+        }
+        guard let outcome else { return }
 
+        switch outcome {
+        case .success(let subscriptionId?):
             if let previous = chatSubscriptionId, previous != subscriptionId {
                 connectionManager.unregisterSubscriptionHandler(id: previous)
             }
@@ -264,10 +304,26 @@ final class ConversationLiveTranscript {
             }
             AppLog.conversation.info(
                 "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)")
-        } catch {
+        case .success(nil):
+            clearChannelForLegacyFallback()
+        case .failure(let error):
             clearChannelForLegacyFallback()
             AppLog.conversation.warning(
                 "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
+        }
+    }
+
+    /// Best-effort release of a subscription the daemon opened for a binding
+    /// we have since left, so it does not keep pushing for the old agent.
+    private func releaseOrphanedSubscription(_ subscriptionId: String) async {
+        guard subscriptionId != chatSubscriptionId else { return }
+        do {
+            _ = try await connectionManager.request("chat.unsubscribe", params: [
+                "subscriptionId": subscriptionId,
+            ])
+        } catch {
+            AppLog.conversation.error(
+                "[ConversationStore] chat.unsubscribe of orphaned \(subscriptionId) failed: \(error)")
         }
     }
 
@@ -479,6 +535,7 @@ final class ConversationLiveTranscript {
         totalMessageCount = 0
         agentId = nil
         workspaceId = nil
+        bindingGeneration &+= 1
         hydratingBlockKeys = []
         hydratedBlocks = [:]
         hydratedBlockOrder = []
