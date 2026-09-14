@@ -459,23 +459,12 @@ import Observation
         let eventWorkspaceId = event["workspaceId"] as? String
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
-        // Explicit allowlist (mirrors AgentStore / WorkspaceStore). intentd
-        // emits exactly three note types — `note:created`, `note:updated`,
-        // `note:deleted` — each with a `{ noteId, title, action }` payload that
-        // does not distinguish a body edit from a title/metadata write, so any
-        // of them can change a slim list row (title, updatedAt, contentPreview)
-        // or list membership. Comment/thread activity is its own `comment:*`
-        // family and never reaches this store; a `comment.add` that rewrites
-        // the note markdown rides `note:updated` and legitimately refreshes
-        // the row's preview/updatedAt. Any other `note:`-prefixed type a newer
-        // daemon may add is ignored rather than refetching by prefix.
-        //
         // The refetch below runs only in the non-live fallback (no
         // `note.subscribe` snapshot yet, or after a subscription loss); while
         // live, deltas arrive via the subscription push and a refetch here
         // would double-apply.
-        switch eventType {
-        case "note:created", "note:updated", "note:deleted":
+        switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
+        case .refetch:
             if !noteLive {
                 guard let workspaceId = workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
@@ -487,9 +476,41 @@ import Observation
             if eventType != "note:created" {
                 onNoteChanged?()
             }
-        default:
+        case .patchInPlace, .ignore, nil:
             break
         }
+    }
+
+    // MARK: - Event classification
+
+    /// Bus channels this store consumes. Every catalog type on them must be in
+    /// exactly one table below (`IntentTests/EventCatalogCoverageTests.swift`).
+    nonisolated static let handledChannels = ["note:"]
+
+    /// Explicit allowlist (mirrors AgentStore / WorkspaceStore). intentd
+    /// emits exactly three note types — `note:created`, `note:updated`,
+    /// `note:deleted` — each with a `{ noteId, title, action }` payload that
+    /// does not distinguish a body edit from a title/metadata write, so any
+    /// of them can change a slim list row (title, updatedAt, contentPreview)
+    /// or list membership. Comment/thread activity is its own `comment:*`
+    /// family and never reaches this store; a `comment.add` that rewrites
+    /// the note markdown rides `note:updated` and legitimately refreshes
+    /// the row's preview/updatedAt.
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "note:created", "note:updated", "note:deleted",
+    ]
+
+    /// No `note:` type is currently dropped. Any other `note:`-prefixed type
+    /// a newer daemon adds is unclassified (ignored at runtime) until it is
+    /// placed here or in `refetchEventTypes`.
+    nonisolated static let ignoredEventTypes: Set<String> = []
+
+    /// Pure classification of one event; `nil` means the tables above do not
+    /// name the type, which `handleEvent` treats as ignore.
+    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {

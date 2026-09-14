@@ -8,6 +8,20 @@ enum ConnectionState: Equatable {
     case reconnecting(attempt: Int)
 }
 
+/// How a store reacts to one bus event type (or one discriminating payload
+/// value of it). Each store exposes a pure `classify(type:data:)` returning
+/// `nil` for anything its tables do not name, so the coverage test in
+/// `IntentTests/EventCatalogCoverageTests.swift` can prove every type intentd
+/// emits on the store's channels is a deliberate decision.
+nonisolated enum EventClassification: Equatable, Sendable {
+    /// Refetch the store's list (non-live fallback only).
+    case refetch
+    /// Apply the payload to the row in place; no refetch.
+    case patchInPlace
+    /// Deliberately dropped: no rendered field depends on it.
+    case ignore
+}
+
 /// The subset of ConnectionManager surface that subscribe-channel stores depend on.
 /// Exists to allow tests to inject a fake; ConnectionManager conforms as-is.
 @MainActor

@@ -183,76 +183,138 @@ import Observation
 
         let eventWorkspaceId = event["workspaceId"] as? String
 
-        switch eventType {
-        // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
-        // lastActivity is never bumped locally: intentd derives it and pushes
-        // workspace:updated { changes.lastActivity } at turn boundaries.
-        case "agent:started", "agent:completed", "agent:failed", "agent:created",
-             "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed":
+        let data = event["data"] as? [String: Any]
+
+        // In-place patches apply in every mode (live or not) and before the
+        // refetch decision, since they are the complete application of the
+        // event for the row.
+        //
+        // workspace:updated carrying lastActivity is an intentd-derived value —
+        // patch the row in place as received. lastActivity is never bumped
+        // locally: intentd derives it and pushes this delta at turn boundaries.
+        if eventType == "workspace:updated",
+           let changes = data?["changes"] as? [String: Any],
+           let lastActivity = changes["lastActivity"] as? String,
+           let wsId = eventWorkspaceId {
+            updateLastActivity(workspaceId: wsId, lastActivity: lastActivity)
+        }
+        // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
+        // transition-only, protocol 6.17) — patch the row in place, no refetch.
+        if eventType == "workspace:waiting-changed",
+           let data,
+           let waiting = data["waiting"] as? Bool,
+           let wsId = (data["workspaceId"] as? String) ?? eventWorkspaceId {
+            updateWaiting(workspaceId: wsId, waiting: waiting)
+        }
+
+        switch Self.classify(type: eventType, data: data) {
+        case .refetch:
             // Only refetch if not in live mode (avoid double-apply)
             if !workspaceLive {
                 Task { await fetchAll() }
             }
-
-        case let t where t.hasPrefix("workspace:"):
-            let changes = (event["data"] as? [String: Any])?["changes"] as? [String: Any]
-            // workspace:updated carrying lastActivity is an intentd-derived value —
-            // patch the row in place as received.
-            if eventType == "workspace:updated",
-               let lastActivity = changes?["lastActivity"] as? String,
-               let wsId = eventWorkspaceId {
-                updateLastActivity(workspaceId: wsId, lastActivity: lastActivity)
-            }
-            // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
-            // transition-only, protocol 6.17) — patch the row in place, no refetch.
-            if eventType == "workspace:waiting-changed",
-               let data = event["data"] as? [String: Any],
-               let waiting = data["waiting"] as? Bool,
-               let wsId = (data["workspaceId"] as? String) ?? eventWorkspaceId {
-                updateWaiting(workspaceId: wsId, waiting: waiting)
-            }
-            // Only refetch if not in live mode (avoid double-apply)
-            guard !workspaceLive else { return }
-
-            // Explicit allowlist: only events that can change a field a
-            // `Workspace` row renders (title/branch/status/activity/
-            // displayStatus/attention/lastActivity/repo/taskStats/
-            // agentSummary) or list membership refetch `workspace.list`.
-            // `workspace:created` is included because a workspace created on
-            // another client otherwise never appears in the non-live fallback.
-            // PR link changes ride `pr:linked` / `pr:unlinked`, which this
-            // store has never handled, so the PR badge is not kept fresh by
-            // this path (pre-existing gap, unchanged here).
-            //
-            // Deliberately excluded (no rendered field, or already patched in
-            // place above): `workspace:waiting-changed`, the debounced
-            // `lastActivity`-only `workspace:updated` delta (≤1 per 3 s per
-            // workspace — the patch above is the complete application),
-            // `workspace:delete-scheduled` / `:delete-cancelled`,
-            // `workspace:opened` / `:closed` / `:activity` (raw, pre-derivation),
-            // `workspace:setup:*`, `workspace:transfer:*`,
-            // `workspace:tokenUsage-changed`, `workspace:context-changed`.
-            switch eventType {
-            case "workspace:updated":
-                if let changes, changes.count == 1, changes["lastActivity"] != nil {
-                    return
-                }
-                Task { await fetchAll() }
-            case "workspace:created", "workspace:deleted",
-                 "workspace:activity-changed", "workspace:displayStatus-changed",
-                 "workspace:attention-changed":
-                Task { await fetchAll() }
-            default:
-                break
-            }
-
-        case let t where t.hasPrefix("agent:"):
-            // Unknown agent event — log and ignore (all known types handled above)
-            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(t)")
-
-        default:
+        case .patchInPlace, .ignore:
             break
+        case nil:
+            AppLog.workspace.debug("[WorkspaceStore] Ignoring unclassified event: \(eventType)")
         }
+    }
+
+    // MARK: - Event classification
+
+    /// Bus channels this store consumes. Every catalog type on them must be in
+    /// exactly one table below (`IntentTests/EventCatalogCoverageTests.swift`).
+    nonisolated static let handledChannels = ["workspace:", "agent:"]
+
+    /// Explicit allowlist: only events that can change a field a `Workspace`
+    /// row renders (title/branch/status/activity/displayStatus/attention/
+    /// lastActivity/repo/taskStats/agentSummary) or list membership refetch
+    /// `workspace.list`. `workspace:created` is included because a workspace
+    /// created on another client otherwise never appears in the non-live
+    /// fallback. PR link changes ride `pr:linked` / `pr:unlinked`, which this
+    /// store has never handled, so the PR badge is not kept fresh by this
+    /// path (pre-existing gap, unchanged here).
+    ///
+    /// The 8 agent lifecycle events (matching cloudlands-fe
+    /// AGENT_LIFECYCLE_EVENTS) feed the row's `agentSummary`.
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "workspace:created", "workspace:deleted",
+        "workspace:activity-changed", "workspace:displayStatus-changed",
+        "workspace:attention-changed",
+        "agent:started", "agent:completed", "agent:failed", "agent:created",
+        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
+    ]
+
+    /// Applied to the row in place by `handleEvent`; never refetched.
+    nonisolated static let patchInPlaceEventTypes: Set<String> = [
+        "workspace:waiting-changed",
+    ]
+
+    /// Deliberately ignored: no rendered field depends on them.
+    nonisolated static let ignoredEventTypes: Set<String> = [
+        "workspace:delete-scheduled", "workspace:delete-cancelled",
+        // Raw, pre-derivation; `workspace:activity-changed` is the derived one.
+        "workspace:opened", "workspace:closed", "workspace:activity",
+        "workspace:setup:started", "workspace:setup:completed",
+        "workspace:transfer:failed", "workspace:transfer:progress",
+        "workspace:transfer:ready",
+        "workspace:tokenUsage-changed", "workspace:context-changed",
+        // Every non-lifecycle agent type: `agentSummary` only changes at the
+        // lifecycle boundaries above (AgentStore owns the per-agent row).
+        "agent:attention-requested", "agent:delete-cancelled",
+        "agent:delete-scheduled", "agent:delivery-confirmed",
+        "agent:event-delivery-failed", "agent:event-delivery-timeout",
+        "agent:last-message", "agent:message", "agent:message:delivery-failed",
+        "agent:message:received", "agent:message:sent",
+        "agent:permission:request", "agent:permission:resolved",
+        "agent:process:evicted", "agent:process:queued", "agent:process:resumed",
+        "agent:queue:processing", "agent:queue:processing-cancelled",
+        "agent:queue:stale-message", "agent:queue:updated",
+        "agent:restored", "agent:retired", "agent:session-stats-changed",
+        "agent:stream:activity", "agent:stream:end", "agent:stream:start",
+        "agent:stream:status", "agent:subscribed", "agent:subscriptions-changed",
+        "agent:subscriptions-restored", "agent:tool:call", "agent:unsubscribed",
+        "agent:updated", "agent:user-message:sent", "agent:woken-by-subscription",
+    ]
+
+    /// `workspace:updated` is classified per `data.changes` key (the golden's
+    /// `discriminators` entry for this type). The debounced `lastActivity`
+    /// delta (≤1 per 3 s per workspace) is fully applied by the in-place patch
+    /// in `handleEvent`; every other key may change a rendered field or is
+    /// not distinguishable cheaply from one, so the row is refetched.
+    nonisolated static let workspaceUpdatedChangeKeyClassification: [String: EventClassification] = [
+        "lastActivity": .patchInPlace,
+        "activePullRequest": .refetch, "archived": .refetch, "archivedAt": .refetch,
+        "attention": .refetch, "autoCommitEnabled": .refetch, "autoUnarchive": .refetch,
+        "baseCommitSha": .refetch, "baseRef": .refetch, "branch": .refetch,
+        "browserClientId": .refetch, "defaultModel": .refetch, "isRemote": .refetch,
+        "mcpServerToggled": .refetch, "path": .refetch, "prNumber": .refetch,
+        "prStatus": .refetch, "prUrl": .refetch, "pullRequests": .refetch,
+        "repositoryName": .refetch, "repositoryOwner": .refetch,
+        "repositoryPath": .refetch, "scope": .refetch, "setupScript": .refetch,
+        "skipIsolation": .refetch, "status": .refetch, "statusImageAssetId": .refetch,
+        "statusMessage": .refetch, "tags": .refetch, "title": .refetch,
+        "worktreePath": .refetch,
+    ]
+
+    /// Pure classification of one event; `nil` means the tables above do not
+    /// name the type, which `handleEvent` treats as ignore. `workspace:updated`
+    /// is `.patchInPlace` only when every `changes` key is; a missing or empty
+    /// `changes`, or any key not in the table, refetches conservatively.
+    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if patchInPlaceEventTypes.contains(type) { return .patchInPlace }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        if type == "workspace:updated" {
+            guard let changes = data?["changes"] as? [String: Any], !changes.isEmpty else {
+                return .refetch
+            }
+            let allPatched = changes.keys.allSatisfy {
+                workspaceUpdatedChangeKeyClassification[$0] == .patchInPlace
+            }
+            return allPatched ? .patchInPlace : .refetch
+        }
+        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
