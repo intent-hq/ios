@@ -42,6 +42,22 @@ enum ConversationTranscriptScrollPolicy {
         distanceToBottom > atBottomThreshold
     }
 
+    /// `onScrollGeometryChange` compares successive transformed values and
+    /// runs its action on a change, but a value flipping twice inside one
+    /// layout pass (a lazily realized row re-measuring mid-drag read 52, 46,
+    /// then 172 points from the bottom within 8 ms) had only the first flip
+    /// delivered while the observer recorded the second, so the scrolled-away
+    /// flag stayed frozen for the rest of that scroll (#280). Observing the
+    /// distance in bands of `atBottomThreshold` next to the flag makes the
+    /// next band crossing deliver the current flag again, bounding the loss
+    /// to one band of travel.
+    static func distanceBand(
+        distanceToBottom: CGFloat,
+        bandHeight: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Int {
+        Int((distanceToBottom / bandHeight).rounded(.down))
+    }
+
     /// The viewport sits past the end of content that is taller than its
     /// container: the last rows are hidden above a blank band, yet
     /// `isScrolledAway` reads "at bottom". Content shorter than the container
@@ -154,6 +170,19 @@ enum ConversationTranscriptScrollPolicy {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
+    }
+
+    /// `userIsScrolledAway` clearing is a follow only when Go to End cleared
+    /// it: the button sits outside the `ScrollViewReader`, so it raises
+    /// `isScrollingToBottom` and clears the flag for the `onChange` to scroll.
+    /// A geometry edge clearing the flag means the viewport already rests
+    /// within `atBottomThreshold` and nothing is to be scrolled. Such an edge
+    /// can also be a transient mid-drag reading (a lazily realized row
+    /// re-measuring), and a forced scroll then fights the user's pan: the
+    /// interrupted animation left the geometry observer silent, so the next
+    /// swipes reached far up the transcript without Go to End (#280).
+    static func shouldFollowOnScrolledAwayCleared(isScrollingToBottom: Bool) -> Bool {
+        isScrollingToBottom
     }
 
     /// The band an automatic follow may re-pin from: drifted past

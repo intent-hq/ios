@@ -103,7 +103,9 @@ struct ConversationTranscriptView: View {
             .onChange(of: userIsScrolledAway) { _, scrolledAway in
                 if scrolledAway {
                     cancelPendingAutomaticFollow()
-                } else {
+                } else if ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+                    isScrollingToBottom: isScrollingToBottom
+                ) {
                     scrollToBottom(proxy: proxy, forced: true)
                 }
             }
@@ -118,9 +120,12 @@ struct ConversationTranscriptView: View {
 
     /// The scrolled-away edge is sampled together with the container height so
     /// a footer row resizing the container and the edge that resize causes
-    /// arrive in one action (#272).
+    /// arrive in one action (#272), and with the distance band so an edge the
+    /// observer drops is re-delivered at the next band crossing (#280, see
+    /// `ConversationTranscriptScrollPolicy.distanceBand`).
     private struct ScrolledAwayGeometry: Equatable {
         let isScrolledAway: Bool
+        let distanceBand: Int
         let containerHeight: CGFloat
     }
 
@@ -154,6 +159,7 @@ struct ConversationTranscriptView: View {
             )
             return ScrolledAwayGeometry(
                 isScrolledAway: ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance),
+                distanceBand: ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: distance),
                 containerHeight: geometry.visibleRect.height
             )
         } action: { old, new in

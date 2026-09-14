@@ -492,6 +492,32 @@ struct ConversationTranscriptScrollPolicyTests {
         ))
     }
 
+    /// #280: the observed geometry changes at every band crossing so a flag
+    /// edge the observer drops is re-delivered within one band of travel;
+    /// the band is sized to the at-bottom threshold.
+    @Test func distanceBandStepsAtEveryThreshold() {
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 0, bandHeight: 50) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 46.7, bandHeight: 50) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 52.7, bandHeight: 50) == 1)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 172.7, bandHeight: 50) == 3)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 210, bandHeight: 50) == 4)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: -10, bandHeight: 50) == -1)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 120)
+            == ConversationTranscriptScrollPolicy.distanceBand(
+                distanceToBottom: 120,
+                bandHeight: Constants.Conversation.Transcript.atBottomThreshold))
+    }
+
+    /// #280: a geometry edge clearing the flag (the viewport already at the
+    /// bottom, or a transient mid-drag reading) must not start a forced scroll;
+    /// only the Go to End tap, which raises `isScrollingToBottom` first, does.
+    @Test func scrolledAwayClearedFollowsOnlyFromGoToEnd() {
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            isScrollingToBottom: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            isScrollingToBottom: false))
+    }
+
     @Test func streamingStartScrollsOnlyWhileFollowing() {
         #expect(ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
             isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: false))
