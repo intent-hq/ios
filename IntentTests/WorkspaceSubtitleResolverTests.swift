@@ -4,14 +4,14 @@ import Testing
 
 @MainActor
 struct WorkspaceSubtitleResolverTests {
-    private func makeWorkspace(id: String, title: String) -> Workspace {
-        WorkspaceStore.parseWorkspace(["id": id, "title": title])!
+    private func makeWorkspace(id: String, title: String) throws -> Workspace {
+        try #require(WorkspaceStore.parseWorkspace(["id": id, "title": title]))
     }
 
-    @Test func resolvesTitleForKnownWorkspace() async {
+    @Test func resolvesTitleForKnownWorkspace() async throws {
         let workspaces = [
-            makeWorkspace(id: "ws-1", title: "Alpha"),
-            makeWorkspace(id: "ws-2", title: "Beta")
+            try makeWorkspace(id: "ws-1", title: "Alpha"),
+            try makeWorkspace(id: "ws-2", title: "Beta")
         ]
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-2",
@@ -19,8 +19,8 @@ struct WorkspaceSubtitleResolverTests {
         ) == "Beta")
     }
 
-    @Test func returnsNilForUnknownWorkspace() async {
-        let workspaces = [makeWorkspace(id: "ws-1", title: "Alpha")]
+    @Test func returnsNilForUnknownWorkspace() async throws {
+        let workspaces = [try makeWorkspace(id: "ws-1", title: "Alpha")]
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-missing",
             in: workspaces
@@ -35,18 +35,18 @@ struct WorkspaceSubtitleResolverTests {
         ) == nil)
     }
 
-    @Test func returnsNilForBlankTitle() async {
+    @Test func returnsNilForBlankTitle() async throws {
         // Never show a blank subtitle line — hide it instead.
-        let workspaces = [makeWorkspace(id: "ws-1", title: "   ")]
+        let workspaces = [try makeWorkspace(id: "ws-1", title: "   ")]
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-1",
             in: workspaces
         ) == nil)
     }
 
-    @Test func resolvesAgainstTestStoreWorkspaces() async {
+    @Test func resolvesAgainstTestStoreWorkspaces() async throws {
         let store = WorkspaceStore(forTesting: true)
-        store.publishFetchedWorkspaces([makeWorkspace(id: "ws-1", title: "My Workspace")])
+        store.publishFetchedWorkspaces([try makeWorkspace(id: "ws-1", title: "My Workspace")])
         #expect(WorkspaceSubtitleResolver.subtitle(
             forWorkspaceId: "ws-1",
             in: store.workspaces

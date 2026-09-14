@@ -4,6 +4,16 @@ import SwiftUI
 
 @MainActor
 @Observable class ConversationStore {
+    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
+    private static let invalidParametersErrorCode = -32_602
+    // FE parity: `MARKED_QUESTION_RETRY_DELAYS_MS = [250, 1_000]`.
+    private static let initialMarkedRetryDelayMilliseconds = 250
+    private static let finalMarkedRetryDelayMilliseconds = 1000
+    private static let defaultMarkedQuestionRetryDelays: [Duration] = [
+        .milliseconds(initialMarkedRetryDelayMilliseconds),
+        .milliseconds(finalMarkedRetryDelayMilliseconds)
+    ]
+
     var messages: [ConversationMessage] {
         get { liveTranscript.messages }
         set { liveTranscript.messages = newValue }
@@ -128,7 +138,8 @@ import SwiftUI
     @ObservationIgnored private var pendingQuestionRecoveryTask: Task<Void, Never>?
     /// FE parity: `MARKED_QUESTION_RETRY_DELAYS_MS = [250, 1_000]`. Instance
     /// property so tests can shorten the retry schedule.
-    @ObservationIgnored var markedQuestionRetryDelays: [Duration] = [.milliseconds(250), .milliseconds(1000)]
+    @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
+        ConversationStore.defaultMarkedQuestionRetryDelays
 
     /// Tracks the last failed send so retrying the same content reuses the messageId
     /// (preventing duplicate messages on the server).
@@ -276,7 +287,7 @@ import SwiftUI
                     + "treating as deleted: \(nsError.localizedDescription)"
             )
             agentNotFound = true
-        } else if nsError.domain == "WebSocket", nsError.code == -32_602 {
+        } else if nsError.domain == "WebSocket", nsError.code == Self.invalidParametersErrorCode {
             AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "agent \(agentId ?? "?") (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
@@ -379,7 +390,7 @@ import SwiftUI
             } catch {
                 guard isPendingQuestionRecoveryCurrent(messageId) else { return }
                 let nsError = error as NSError
-                if nsError.domain == "WebSocket", nsError.code == -32_602 {
+                if nsError.domain == "WebSocket", nsError.code == Self.invalidParametersErrorCode {
                     if nsError.isEntityNotFound {
                         raiseAgentNotFoundIfDefinitive(error)
                         clearPendingQuestionRecovery()

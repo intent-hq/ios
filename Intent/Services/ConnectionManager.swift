@@ -90,22 +90,22 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     static let shared = ConnectionManager()
 
     var connectionState: ConnectionState = .disconnected {
-        didSet { connectionStateSubject?.send(connectionState) }
+        didSet { connectionStateSubject.send(connectionState) }
     }
     var certMismatchDetected = false {
-        didSet { certMismatchSubject?.send(certMismatchDetected) }
+        didSet { certMismatchSubject.send(certMismatchDetected) }
     }
     /// Every per-host certificate mismatch observed while racing hosts for the
     /// current target, keeping the latest fingerprint per host. Accumulates
     /// across reconnect attempts; cleared on a fresh `connect()` to a different
     /// target and on explicit `disconnect()`.
     var certMismatches: [HostCertMismatch] = [] {
-        didSet { certMismatchesSubject?.send(certMismatches) }
+        didSet { certMismatchesSubject.send(certMismatches) }
     }
 
-    @ObservationIgnored private var connectionStateSubject: CurrentValueSubject<ConnectionState, Never>!
-    @ObservationIgnored private var certMismatchSubject: CurrentValueSubject<Bool, Never>!
-    @ObservationIgnored private var certMismatchesSubject: CurrentValueSubject<[HostCertMismatch], Never>!
+    @ObservationIgnored private let connectionStateSubject = CurrentValueSubject<ConnectionState, Never>(.disconnected)
+    @ObservationIgnored private let certMismatchSubject = CurrentValueSubject<Bool, Never>(false)
+    @ObservationIgnored private let certMismatchesSubject = CurrentValueSubject<[HostCertMismatch], Never>([])
     @ObservationIgnored private let subscriptionRouter = ConnectionSubscriptionRouter()
 
     @ObservationIgnored private var socket: WebSocketConnection?
@@ -127,6 +127,13 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     private static let pingInterval: TimeInterval = 15  // Send ping every 15s
     private static let pongTimeout: TimeInterval = 30   // Dead if no pong in 30s
     private static let stableConnectionThreshold: TimeInterval = 10
+    nonisolated private static let millisecondsPerSecond: CFTimeInterval = 1000
+    private static let initialReconnectAttempt: Int = 1
+    private static let minimumBackedOffReconnectAttempt: Int = 2
+    private static let webSocketErrorDomain = "WebSocket"
+    private static let requestTimedOutErrorCode = -2
+    private static let connectionClosedErrorCode = -3
+    private static let notConnectedErrorCode = -4
     @ObservationIgnored private(set) var hosts: [String] = []
     @ObservationIgnored private var host: String?
     @ObservationIgnored private(set) var port: Int?
@@ -157,11 +164,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     /// Internal (not private) so `BackendSessionRegistry` can construct one
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
-    init() {
-        connectionStateSubject = CurrentValueSubject(connectionState)
-        certMismatchSubject = CurrentValueSubject(certMismatchDetected)
-        certMismatchesSubject = CurrentValueSubject(certMismatches)
-    }
+    init() {}
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
@@ -221,7 +224,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         let myAttempt = connectAttempt
 
         let raceStart = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * 1000))ms")
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * Self.millisecondsPerSecond))ms")
 
         let raced: WonHostRace
         do {
@@ -254,7 +257,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         }
 
         let raceEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms (at +\(Int((raceEnd - connectStart) * 1000))ms)")
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(myGeneration)")
 
         do {
@@ -291,7 +294,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         configureSocketMessagePump()
 
         let setupEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * 1000))ms (at +\(Int((setupEnd - connectStart) * 1000))ms)")
+        AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * Self.millisecondsPerSecond))ms (at +\(Int((setupEnd - connectStart) * Self.millisecondsPerSecond))ms)")
 
         connectionState = .connected
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
@@ -301,7 +304,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         scheduleHostRoutesRefresh()
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
-        AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * 1000))ms, connected to \(self.host ?? "?")")
+        AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * Self.millisecondsPerSecond))ms, connected to \(self.host ?? "?")")
     }
 
     /// Adopt registry-merged fields for the ACTIVE connection (called when a
@@ -396,8 +399,8 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         }
         guard let currentSocket = socket else {
             throw NSError(
-                domain: "WebSocket",
-                code: -4,
+                domain: Self.webSocketErrorDomain,
+                code: Self.notConnectedErrorCode,
                 userInfo: [NSLocalizedDescriptionKey: "Not connected"]
             )
         }
@@ -410,13 +413,18 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
             rpcDict["params"] = params
         }
         let data = try JSONSerialization.data(withJSONObject: rpcDict)
-        let str = String(data: data, encoding: .utf8)!
+        guard let requestText = String(data: data, encoding: .utf8) else {
+            throw WebSocketTransportError.failed(
+                host: currentSocket.host,
+                message: "JSON-RPC request was not valid UTF-8"
+            )
+        }
 
         return try await awaitResponse(id: id, timeout: timeout) { [weak self] in
             AppLog.connection.debug("[ConnectionManager] Writing request id=\(id) method=\(method), socket=\(self?.socket != nil ? "exists" : "nil")")
             return Task { [weak self] in
                 do {
-                    try await currentSocket.send(str)
+                    try await currentSocket.send(requestText)
                     guard !Task.isCancelled else { return }
                     AppLog.connection.debug("[ConnectionManager] Write completed for request id=\(id) method=\(method)")
                 } catch {
@@ -450,8 +458,8 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
             guard !Task.isCancelled else { return }
             if let continuation = self?.pendingRequests.removeValue(forKey: id) {
                 continuation.resume(throwing: NSError(
-                    domain: "WebSocket",
-                    code: -2,
+                    domain: Self.webSocketErrorDomain,
+                    code: Self.requestTimedOutErrorCode,
                     userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
                 ))
             }
@@ -685,8 +693,8 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         previousAttempt: Int
     ) -> Int {
         guard let connectionLifetime,
-              connectionLifetime < stableConnectionThreshold else { return 1 }
-        return max(previousAttempt + 1, 2)
+              connectionLifetime < stableConnectionThreshold else { return initialReconnectAttempt }
+        return max(previousAttempt + initialReconnectAttempt, minimumBackedOffReconnectAttempt)
     }
 
     // MARK: - Private
@@ -724,7 +732,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
                     token: token,
                     certFingerprint: certFingerprint
                 )
-                let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
+                let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * Self.millisecondsPerSecond)
                 AppLog.connection.debug("[ConnectionManager] Tunnel connected in \(elapsed)ms")
                 return connection
             }
@@ -735,7 +743,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
                 token: token,
                 certFingerprint: certFingerprint
             )
-            let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
+            let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * Self.millisecondsPerSecond)
             AppLog.connection.debug("[ConnectionManager] Host \(candidate) connected in \(elapsed)ms")
             return RacedConnection(socket: connection, tunnel: nil, host: candidate)
         }
@@ -1084,7 +1092,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
             previousAttempt: lastReconnectAttempt
         )
         lastSuccessfulConnectAt = nil
-        if startingAttempt == 1 {
+        if startingAttempt == Self.initialReconnectAttempt {
             lastReconnectAttempt = 0
         }
         connectionState = .reconnecting(attempt: startingAttempt)
@@ -1095,7 +1103,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
 
     private func startReconnection(
         disconnectTime: CFAbsoluteTime? = nil,
-        startingAttempt: Int = 1
+        startingAttempt: Int = ConnectionManager.initialReconnectAttempt
     ) {
         reconnectTask?.cancel()
         let myGeneration = connectionGeneration
@@ -1103,9 +1111,12 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         reconnectTask = Task { [weak self] in
             var attempt = startingAttempt
             while !Task.isCancelled {
-                if attempt > 1 {
+                if attempt > Self.initialReconnectAttempt {
                     let delay = min(
-                        Double(1 << min(attempt - 2, Constants.Connection.reconnectBackoffExponentCap)),
+                        Double(1 << min(
+                            attempt - Self.minimumBackedOffReconnectAttempt,
+                            Constants.Connection.reconnectBackoffExponentCap
+                        )),
                         Constants.Connection.reconnectBackoffMaximum
                     )
                     try? await Task.sleep(for: .seconds(delay))
@@ -1113,7 +1124,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
                 }
 
                 let attemptStart = CFAbsoluteTimeGetCurrent()
-                AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * 1000))ms")
+                AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * Self.millisecondsPerSecond))ms")
 
                 // Check freshness before mutating observable state, then read the connection parameters.
                 let parameters: ([String], Int, String, String?, String?)?
@@ -1137,7 +1148,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
 
                 do {
                     let raceStart = CFAbsoluteTimeGetCurrent()
-                    AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
+                    AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * Self.millisecondsPerSecond))ms")
 
                     let raced = try await self?.raceHosts(
                         hostsToTry,
@@ -1148,7 +1159,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
                     )
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
-                    AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
+                    AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms")
 
                     guard let raced else { continue }
                     let winner = raced.winner
@@ -1185,7 +1196,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
                         return
                     }
 
-                    let elapsed = (CFAbsoluteTimeGetCurrent() - reconnectStart) * 1000
+                    let elapsed = (CFAbsoluteTimeGetCurrent() - reconnectStart) * Self.millisecondsPerSecond
                     AppLog.connection.debug("[ConnectionManager] Reconnect complete in \(Int(elapsed))ms")
                     return
                 } catch {
@@ -1268,8 +1279,8 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         pendingRequests.removeAll()
         for (_, continuation) in pending {
             continuation.resume(throwing: NSError(
-                domain: "WebSocket",
-                code: -3,
+                domain: Self.webSocketErrorDomain,
+                code: Self.connectionClosedErrorCode,
                 userInfo: [NSLocalizedDescriptionKey: message]
             ))
         }

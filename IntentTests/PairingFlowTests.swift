@@ -9,9 +9,9 @@ import Testing
 struct PairingFlowTests {
     private func makePersistence(
         storage: InMemoryKeychainStorage
-    ) -> (manager: PersistenceManager, suiteName: String) {
+    ) throws -> (manager: PersistenceManager, suiteName: String) {
         let suiteName = "PairingFlowTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
     }
@@ -58,9 +58,9 @@ struct PairingFlowTests {
         ))
     }
 
-    @Test @MainActor func failedNewPairSaveDisconnectsAndPublishesNoPairing() async {
+    @Test @MainActor func failedNewPairSaveDisconnectsAndPublishesNoPairing() async throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let existing = setup.manager.upsertConnection(StoredConnection(
             server: PairedServer(
@@ -94,7 +94,7 @@ struct PairingFlowTests {
 
     @Test @MainActor func successfulPairSavePersistsAndKeepsConnectionLive() async throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["hostname": "test.local"]

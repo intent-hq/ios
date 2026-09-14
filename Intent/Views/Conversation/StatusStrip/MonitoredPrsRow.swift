@@ -18,6 +18,11 @@ struct MonitoredPrsRow: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
+    private static let pendingIndicatorOpacity = 0.8
+    private static let pendingIndicatorSide: CGFloat = 6
+    private static let chipVerticalPadding: CGFloat = 5
+    private static let chipBackgroundOpacity = 0.3
+
     init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
         self.viewModel = viewModel
         self.monitoredPrStore = monitoredPrStore
@@ -95,14 +100,14 @@ struct MonitoredPrsRow: View {
                 .lineLimit(1)
             if monitor.hasPendingChanges {
                 Circle()
-                    .fill(Color.orange.opacity(0.8))
-                    .frame(width: 6, height: 6)
+                    .fill(Color.orange.opacity(Self.pendingIndicatorOpacity))
+                    .frame(width: Self.pendingIndicatorSide, height: Self.pendingIndicatorSide)
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.vertical, 5)
-        .background(Theme.muted(for: colorScheme).opacity(0.3))
+        .padding(.vertical, Self.chipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)

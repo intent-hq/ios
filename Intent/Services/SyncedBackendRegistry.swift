@@ -76,13 +76,16 @@ extension SyncedBackendRecord {
     /// (~30 days): the desktop purges expired tombstones from the keychain,
     /// so a straggler item the purge has not reached yet must not still act
     /// as a delete here.
-    static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000
+    static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000 // swiftlint:disable:this no_magic_numbers
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: Double = 1000
 
     /// Whether this record is a tombstone past its TTL (`deletedAt`,
     /// falling back to `updatedAt`, anchors the TTL — same as the fe's
     /// `isExpiredTombstone`).
     func isExpiredTombstone(now: Date) -> Bool {
-        deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs <= now.timeIntervalSince1970 * 1000
+        deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs
+            <= now.timeIntervalSince1970 * Self.millisecondsPerSecond
     }
 }
 
@@ -140,8 +143,10 @@ enum SyncedBackendPayload {
     /// NSNumber; the wire contract's `typeof x === "number"` must reject
     /// booleans). Compared as Double: the fe compares `v` numerically, so
     /// e.g. `v: 1.5` must count as newer than 1, never truncate to 1.
-    private static func number(_ value: Any?) -> NSNumber? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID()
+    /// NSNumber remains required to distinguish CFBoolean from numeric JSON values.
+    private static func number(_ value: Any?) -> NSNumber? { // swiftlint:disable:this legacy_objc_type
+        guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
+              CFGetTypeID(value) != CFBooleanGetTypeID()
         else { return nil }
         return value
     }
@@ -156,7 +161,8 @@ enum SyncedBackendPayload {
 
     /// JSON bool (never a JSON number).
     private static func bool(_ value: Any?) -> Bool? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID()
+        guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
+              CFGetTypeID(value) == CFBooleanGetTypeID()
         else { return nil }
         return value.boolValue
     }

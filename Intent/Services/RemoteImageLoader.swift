@@ -24,12 +24,16 @@ final class RemoteImageLoader {
     /// workspace-file images.
     nonisolated static let maxFileBytes = WorkspaceFileImageLoader.maxFileBytes
 
+    // NSCache requires a reference-type key; NSString preserves that Foundation contract.
+    // swiftlint:disable:next legacy_objc_type
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: URLs whose fetch/decode failed, so a
     /// persistently broken image doesn't refetch on every scroll-into-view.
     private var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let fetchData: DataFetcher
+    // The inclusive HTTP success range is defined by the protocol.
+    nonisolated private static let successfulHTTPStatusCodes: ClosedRange<Int> = 200...299
 
     init(
         fetchData: @escaping DataFetcher = { url in
@@ -43,6 +47,8 @@ final class RemoteImageLoader {
     /// Cached-or-fetched image for a remote http(s) URL.
     func image(for url: URL) async throws -> UIImage {
         let key = url.absoluteString
+        // NSString is the concrete reference key required by NSCache.
+        // swiftlint:disable:next legacy_objc_type
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
@@ -58,6 +64,8 @@ final class RemoteImageLoader {
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(
                 image,
+                // NSString is the concrete reference key required by NSCache.
+                // swiftlint:disable:next legacy_objc_type
                 forKey: key as NSString,
                 cost: WorkspaceFileImageLoader.decodedCost(of: image)
             )
@@ -85,7 +93,8 @@ final class RemoteImageLoader {
         url: URL
     ) async throws -> UIImage {
         let (data, response) = try await fetchData(url)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+        if let http = response as? HTTPURLResponse,
+           !Self.successfulHTTPStatusCodes.contains(http.statusCode) {
             throw LoadError.badStatus(http.statusCode)
         }
         guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }

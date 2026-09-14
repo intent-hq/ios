@@ -12,6 +12,11 @@ struct QuestionWizardView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private static let backgroundIncreasedOpacity = 0.7
+    private static let backgroundOpacity = 0.4
+    private static let cornerRadius: CGFloat = 12
+    private static let standardBorderOpacity = 0.3
+
     private struct DraftAnswer {
         var sel: [Int] = []
         var text: String = ""
@@ -105,14 +110,14 @@ struct QuestionWizardView: View {
             }
         }
         .background(Theme.muted(for: colorScheme).opacity(
-            colorSchemeContrast == .increased ? 0.7 : 0.4
+            colorSchemeContrast == .increased ? Self.backgroundIncreasedOpacity : Self.backgroundOpacity
         ))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: Self.cornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
-                        colorSchemeContrast == .increased ? 1 : 0.3
+                        colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity
                     ),
                     lineWidth: colorSchemeContrast == .increased ? 2 : 1
                 )

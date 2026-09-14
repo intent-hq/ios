@@ -12,6 +12,16 @@ struct QuestionWizardHeaderRow: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private static let progressSegmentSpacing: CGFloat = 4
+    private static let multiSelectHorizontalPadding: CGFloat = 7
+    private static let multiSelectFillOpacity = 0.8
+    private static let minimumContentSpacing: CGFloat = 8
+    private static let topPadding: CGFloat = 10
+    private static let completedSegmentIncreasedOpacity = 0.7
+    private static let completedSegmentOpacity = 0.4
+    private static let pendingSegmentIncreasedOpacity = 0.55
+    private static let pendingSegmentOpacity = 0.25
+
     private var multiStep: Bool { questionCount > 1 }
 
     var body: some View {
@@ -27,7 +37,7 @@ struct QuestionWizardHeaderRow: View {
                 Text("\(index + 1) of \(questionCount)")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                HStack(spacing: 4) {
+                HStack(spacing: Self.progressSegmentSpacing) {
                     ForEach(0..<questionCount, id: \.self) { i in
                         RoundedRectangle(
                             cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius
@@ -44,11 +54,11 @@ struct QuestionWizardHeaderRow: View {
                 Text("Select all that apply")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .padding(.horizontal, 7)
+                    .padding(.horizontal, Self.multiSelectHorizontalPadding)
                     .padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(0.8)))
+                    .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(Self.multiSelectFillOpacity)))
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: Self.minimumContentSpacing)
             Button(action: onIgnore) {
                 Text("Ignore")
                     .font(.caption)
@@ -64,13 +74,15 @@ struct QuestionWizardHeaderRow: View {
             }
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-        .padding(.top, 10)
+        .padding(.top, Self.topPadding)
     }
 
     private func segmentColor(_ segment: Int) -> Color {
         if segment < index {
             return Theme.primary(for: colorScheme).opacity(
-                colorSchemeContrast == .increased ? 0.7 : 0.4
+                colorSchemeContrast == .increased
+                    ? Self.completedSegmentIncreasedOpacity
+                    : Self.completedSegmentOpacity
             )
         }
         if segment == index { return Theme.primary(for: colorScheme) }
@@ -78,6 +90,10 @@ struct QuestionWizardHeaderRow: View {
             for: colorScheme,
             contrast: colorSchemeContrast
         )
-            .opacity(colorSchemeContrast == .increased ? 0.55 : 0.25)
+            .opacity(
+                colorSchemeContrast == .increased
+                    ? Self.pendingSegmentIncreasedOpacity
+                    : Self.pendingSegmentOpacity
+            )
     }
 }

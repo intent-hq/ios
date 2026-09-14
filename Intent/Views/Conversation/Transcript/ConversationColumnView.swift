@@ -10,6 +10,18 @@ struct ConversationColumnView: View {
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
 
+    private enum Layout {
+        static let questionBannerBackgroundOpacity: Double = 0.4
+        static let questionBannerCornerRadius: CGFloat = 12
+        static let questionBannerHorizontalPadding: CGFloat = 8
+        static let questionBannerVerticalPadding: CGFloat = 8
+        static let questionWizardHorizontalPadding: CGFloat = 8
+        static let questionWizardTopPadding: CGFloat = 8
+        static let collapsedQuestionWizardBottomPadding: CGFloat = 4
+        static let expandedQuestionWizardBottomPadding: CGFloat = 8
+        static let questionSheetPadding: CGFloat = 24
+    }
+
     #if os(visionOS)
     // visionOS presents structured questions as a deliberate sheet instead
     // of the inline composer-slot wizard; the inline slot shows an opener.
@@ -132,10 +144,10 @@ struct ConversationColumnView: View {
                 onExpand: { questionSheetPresented = true },
                 onDismiss: {}
             )
-            .background(Theme.muted(for: colorScheme).opacity(0.4))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
+            .background(Theme.muted(for: colorScheme).opacity(Layout.questionBannerBackgroundOpacity))
+            .clipShape(RoundedRectangle(cornerRadius: Layout.questionBannerCornerRadius))
+            .padding(.horizontal, Layout.questionBannerHorizontalPadding)
+            .padding(.vertical, Layout.questionBannerVerticalPadding)
             #else
             QuestionWizardView(
                 questions: pendingSet.questions,
@@ -158,9 +170,14 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(.horizontal, 8)
-            .padding(.top, 8)
-            .padding(.bottom, questionWizardCollapsed ? 4 : 8)
+            .padding(.horizontal, Layout.questionWizardHorizontalPadding)
+            .padding(.top, Layout.questionWizardTopPadding)
+            .padding(
+                .bottom,
+                questionWizardCollapsed
+                    ? Layout.collapsedQuestionWizardBottomPadding
+                    : Layout.expandedQuestionWizardBottomPadding
+            )
             #endif
         }
 
@@ -223,7 +240,7 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(24)
+            .padding(Layout.questionSheetPadding)
             .presentationDetents([.medium, .large])
         }
     }
@@ -233,8 +250,13 @@ struct ConversationColumnView: View {
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 8
+        static let verticalPadding: CGFloat = 12
+    }
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Layout.contentSpacing) {
             ProgressView()
                 .controlSize(.small)
             Text("Loading questions...")
@@ -242,7 +264,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(.vertical, Layout.verticalPadding)
         .accessibilityElement(children: .combine)
     }
 }
@@ -250,8 +272,12 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 private struct ConversationLoadingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 12
+    }
+
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Layout.contentSpacing) {
             ProgressView()
             Text("Loading conversation...")
                 .font(.subheadline)
@@ -264,9 +290,16 @@ private struct ConversationEmptyView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 12
+        static let descriptionHorizontalPadding: CGFloat = 32
+        static let modelCaptionOpacity: Double = 0.7
+        static let modelCaptionTopPadding: CGFloat = 4
+    }
+
     var body: some View {
         if let name = viewModel.specialistName {
-            VStack(spacing: 12) {
+            VStack(spacing: Layout.contentSpacing) {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -279,18 +312,18 @@ private struct ConversationEmptyView: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, Layout.descriptionHorizontalPadding)
                 }
                 if let modelId = viewModel.currentModelId {
                     let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
                     Text("Using \(displayName)")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
-                        .padding(.top, 4)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
+                        .padding(.top, Layout.modelCaptionTopPadding)
                 }
             }
         } else {
-            VStack(spacing: 12) {
+            VStack(spacing: Layout.contentSpacing) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -305,8 +338,8 @@ private struct ConversationEmptyView: View {
                     let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
                     Text("Using \(displayName)")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
-                        .padding(.top, 4)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
+                        .padding(.top, Layout.modelCaptionTopPadding)
                 }
             }
         }

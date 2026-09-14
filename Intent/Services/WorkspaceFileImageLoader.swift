@@ -50,18 +50,20 @@ final class WorkspaceFileImageLoader {
 
     /// Bytes requested per `file.readChunk` call (well under the daemon's
     /// 16 MiB decoded cap; most images resolve in a single round-trip).
-    static let chunkLength = 4 * 1024 * 1024
+    static let chunkLength = 4 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
-    nonisolated static let maxFileBytes = 32 * 1024 * 1024
+    nonisolated static let maxFileBytes = 32 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
     /// Longest decoded edge in pixels. Decoding goes through ImageIO's
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
     /// Total decoded-byte budget for the image cache (a 2048×2048 BGRA image
     /// is ~16 MB, so this holds a handful before NSCache evicts).
-    static let cacheTotalCostLimit = 64 * 1024 * 1024
+    static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
 
+    // NSCache requires a reference-type key; NSString preserves that Foundation contract.
+    // swiftlint:disable:next legacy_objc_type
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
     /// persistently broken link doesn't refetch on every scroll-into-view.
@@ -77,6 +79,8 @@ final class WorkspaceFileImageLoader {
     /// Cached-or-fetched image for a workspace-relative file path.
     func image(workspaceId: String, path: String) async throws -> UIImage {
         let key = "\(workspaceId)\u{0}\(path)"
+        // NSString is the concrete reference key required by NSCache.
+        // swiftlint:disable:next legacy_objc_type
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
@@ -94,6 +98,8 @@ final class WorkspaceFileImageLoader {
             )
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
+            // NSString is the concrete reference key required by NSCache.
+            // swiftlint:disable:next legacy_objc_type
             cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
             return image
         }

@@ -15,22 +15,35 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
-    @State var showingWorkspaceDetail = false
-    @State var showingConversation = false
-    @State var conversationAgentId: String = ""
-    @State var conversationWorkspaceId: String = ""
-    @State var conversationAgentName: String = ""
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingConversation = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationAgentId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var conversationAgentName: String = "" // swiftlint:disable:this private_swiftui_state
     // Compact (iPhone) note detail navigation — uses isPresented instead of noteStack
-    @State var showingNoteDetail = false
-    @State var noteDetailNoteId: String = ""
-    @State var noteDetailWorkspaceId: String = ""
-    @State var noteDetailNoteTitle: String = ""
-    @State var pendingConversationPush = false
-    @State var pendingNoteDetailPush = false
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var showingNoteDetail = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailNoteId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteDetailNoteTitle: String = "" // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var pendingConversationPush = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var pendingNoteDetailPush = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     /// True while syncNavigationState() tears down the conversation for the iPad
     /// re-push dance, so the user-back onChange handler doesn't misfire.
-    @State var programmaticConversationDismiss = false
-    @State var noteStack = NavigationPath()
+    @State var programmaticConversationDismiss = false // swiftlint:disable:this private_swiftui_state
+    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
+    @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
 
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {

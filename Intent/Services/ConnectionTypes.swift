@@ -33,6 +33,9 @@ extension ConnectionManagerRouting {
 }
 
 extension NSError {
+    private static let webSocketErrorDomain = "WebSocket"
+    private static let jsonRPCInvalidParamsErrorCode = -32_602
+
     /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
     static let intentErrorDataCodeKey = "intentErrorDataCode"
 
@@ -43,6 +46,8 @@ extension NSError {
 
     /// True only for a definitive entity-not-found JSON-RPC error.
     var isEntityNotFound: Bool {
-        domain == "WebSocket" && code == -32_602 && intentErrorDataCode == "not-found"
+        domain == Self.webSocketErrorDomain
+            && code == Self.jsonRPCInvalidParamsErrorCode
+            && intentErrorDataCode == "not-found"
     }
 }

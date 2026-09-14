@@ -41,6 +41,19 @@ struct ResponseGroupView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
 
+    private enum Layout {
+        static let groupSpacing: CGFloat = 4
+        static let headerSpacing: CGFloat = 6
+        static let iconOpacity: Double = 0.6
+        static let countHorizontalPadding: CGFloat = 5
+        static let countVerticalPadding: CGFloat = 1
+        static let disclosureOpacity: Double = 0.4
+        static let headerVerticalPadding: CGFloat = 4
+        static let railOpacity: Double = 0.15
+        static let bottomPadding: CGFloat = 8
+        static let childSpacing: CGFloat = 8
+    }
+
     init(
         group: ResponseGroup,
         isLast: Bool,
@@ -59,17 +72,17 @@ struct ResponseGroupView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Layout.groupSpacing) {
             // Header button
             Button {
                 withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
                     isExpanded.toggle()
                 }
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: Layout.headerSpacing) {
                     Image(systemName: "rectangle.stack")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
                         .accessibilityHidden(true)
 
                     Text(group.name)
@@ -80,8 +93,8 @@ struct ResponseGroupView: View {
                         Text("\(group.toolCallCount)")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(Theme.background(for: colorScheme))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
+                            .padding(.horizontal, Layout.countHorizontalPadding)
+                            .padding(.vertical, Layout.countVerticalPadding)
                             .background(Theme.mutedForeground(for: colorScheme))
                             .clipShape(Capsule())
                     }
@@ -90,10 +103,10 @@ struct ResponseGroupView: View {
 
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.4))
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
                         .accessibilityHidden(true)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, Layout.headerVerticalPadding)
             }
             .buttonStyle(.plain)
 
@@ -103,7 +116,7 @@ struct ResponseGroupView: View {
                     .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
                     .overlay(alignment: .leading) {
                         Rectangle()
-                            .fill(Theme.mutedForeground(for: colorScheme).opacity(0.15))
+                            .fill(Theme.mutedForeground(for: colorScheme).opacity(Layout.railOpacity))
                             .frame(width: Constants.Conversation.ResponseGroup.railWidth)
                             .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
                     }
@@ -135,19 +148,19 @@ struct ResponseGroupView: View {
                 .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
                 .overlay(alignment: .leading) {
                     Rectangle()
-                        .fill(Theme.mutedForeground(for: colorScheme).opacity(0.15))
+                        .fill(Theme.mutedForeground(for: colorScheme).opacity(Layout.railOpacity))
                         .frame(width: Constants.Conversation.ResponseGroup.railWidth)
                         .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
                 }
                 .transition(.opacity)
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, Layout.bottomPadding)
     }
 
     @ViewBuilder
     private var groupChildrenView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Layout.childSpacing) {
             ForEach(group.children) { block in
                 ContentBlockView(
                     block: block,

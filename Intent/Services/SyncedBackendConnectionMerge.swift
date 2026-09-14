@@ -12,6 +12,9 @@ import Foundation
 /// sync are never removed just because the registry doesn't list them (they
 /// get pushed to the registry by the write-back path instead).
 enum SyncedBackendConnectionMerge {
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: TimeInterval = 1000
+
     /// Outcome of one merge pass over a saved-connections list.
     struct Result: Equatable {
         /// The full post-merge list (existing order preserved; new records
@@ -45,7 +48,7 @@ enum SyncedBackendConnectionMerge {
                 // delete the fresh pairing.
                 let localClock =
                     existing.syncUpdatedAt
-                    ?? existing.server.pairedAt.timeIntervalSince1970 * 1000
+                    ?? existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond
                 if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
                 result.connections.remove(at: index)
@@ -60,7 +63,7 @@ enum SyncedBackendConnectionMerge {
                 if let applied = existing.syncUpdatedAt {
                     if record.updatedAt <= applied { continue }
                 } else if record.updatedAt
-                    < existing.server.pairedAt.timeIntervalSince1970 * 1000 {
+                    < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
                     continue
                 }
                 result.connections[index] = apply(record, to: existing)

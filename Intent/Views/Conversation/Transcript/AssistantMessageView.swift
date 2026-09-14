@@ -7,10 +7,15 @@ struct AssistantMessageView: View {
     var hydratingBlockIds: Set<String>
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 8
+        static let verticalPadding: CGFloat = 4
+    }
+
     private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
             let renderBlocks = MessageBlockPartitioning.groupContentBlocks(
                 strippedBlocks,
@@ -44,7 +49,7 @@ struct AssistantMessageView: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Layout.verticalPadding)
         .modifier(MessageCopyContextMenu(
             text: MessageBlockPartitioning.assistantCopyText(from: blocks),
             userStyled: false,
@@ -57,8 +62,15 @@ struct ErrorMessageView: View {
     let message: ConversationMessage
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 6
+        static let containerPadding: CGFloat = 10
+        static let backgroundOpacity: Double = 0.1
+        static let cornerRadius: CGFloat = 8
+    }
+
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.contentSpacing) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.destructive(for: colorScheme))
                 .accessibilityHidden(true)
@@ -66,9 +78,9 @@ struct ErrorMessageView: View {
                 .font(.callout)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
         }
-        .padding(10)
+        .padding(Layout.containerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.destructive(for: colorScheme).opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Theme.destructive(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
     }
 }

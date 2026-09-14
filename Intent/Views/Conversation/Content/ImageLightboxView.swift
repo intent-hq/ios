@@ -22,6 +22,12 @@ struct ImageLightboxView: View {
     private static let maxScale: CGFloat = 5
     private static let doubleTapScale: CGFloat = 2.5
     private static let dismissDragThreshold: CGFloat = 120
+    private static let zoomPercentageMultiplier: CGFloat = 100
+    private static let accessibilityPanDistance: CGFloat = 50
+    private static let actionSpacing: CGFloat = 8
+    private static let actionContainerPadding: CGFloat = 12
+    private static let actionButtonPadding: CGFloat = 10
+    private static let actionButtonBackgroundOpacity: Double = 0.15
 
     var body: some View {
         ZStack {
@@ -41,23 +47,23 @@ struct ImageLightboxView: View {
                     y: offset.height + dragTranslation.height
                 )
                 .accessibilityLabel("Image preview")
-                .accessibilityValue("\(Int(scale * 100)) percent zoom")
+                .accessibilityValue("\(Int(scale * Self.zoomPercentageMultiplier)) percent zoom")
                 .accessibilityAdjustableAction { direction in
                     adjustZoom(direction, in: viewportSize)
                 }
                 .accessibilityActions {
                     if scale > Self.minScale {
                         Button("Pan left") {
-                            panImage(by: CGSize(width: -50, height: 0), in: viewportSize)
+                            panImage(by: CGSize(width: -Self.accessibilityPanDistance, height: 0), in: viewportSize)
                         }
                         Button("Pan right") {
-                            panImage(by: CGSize(width: 50, height: 0), in: viewportSize)
+                            panImage(by: CGSize(width: Self.accessibilityPanDistance, height: 0), in: viewportSize)
                         }
                         Button("Pan up") {
-                            panImage(by: CGSize(width: 0, height: -50), in: viewportSize)
+                            panImage(by: CGSize(width: 0, height: -Self.accessibilityPanDistance), in: viewportSize)
                         }
                         Button("Pan down") {
-                            panImage(by: CGSize(width: 0, height: 50), in: viewportSize)
+                            panImage(by: CGSize(width: 0, height: Self.accessibilityPanDistance), in: viewportSize)
                         }
                         Button("Reset zoom") {
                             scale = Self.minScale
@@ -78,11 +84,11 @@ struct ImageLightboxView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 8) {
+            HStack(spacing: Self.actionSpacing) {
                 actionsMenu
                 closeButton
             }
-            .padding(12)
+            .padding(Self.actionContainerPadding)
         }
     }
 
@@ -93,8 +99,8 @@ struct ImageLightboxView: View {
             Image(systemName: "ellipsis")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(10)
-                .background(.white.opacity(0.15), in: Circle())
+                .padding(Self.actionButtonPadding)
+                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget
@@ -108,8 +114,8 @@ struct ImageLightboxView: View {
             Image(systemName: "xmark")
                 .font(.body.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(10)
-                .background(.white.opacity(0.15), in: Circle())
+                .padding(Self.actionButtonPadding)
+                .background(.white.opacity(Self.actionButtonBackgroundOpacity), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     minHeight: Constants.Accessibility.minimumTapTarget

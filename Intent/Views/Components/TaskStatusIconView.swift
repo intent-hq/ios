@@ -15,18 +15,45 @@ import SwiftUI
 /// All geometry is defined in the fe's 24×24 viewBox space and scaled to `size`.
 struct TaskStatusIconView: View {
     let status: TaskDisplayStatus
-    var size: CGFloat = 16
+    var size: CGFloat = Metrics.defaultSize
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private enum Metrics {
+        static let defaultSize: CGFloat = 16
+        static let referenceSize: CGFloat = 24
+        static let standardStrokeWidth: CGFloat = 2.5
+        static let increasedContrastStrokeWidth: CGFloat = 3.5
+        static let increasedContrastNeutralOpacity: Double = 0.75
+        static let fullFillRadius: CGFloat = 12
+        static let inProgressFillRadius: CGFloat = 6.6
+        static let outerCircleDiameter: CGFloat = 21.6
+        static let inProgressInnerStrokeWidth: CGFloat = 2
+        static let inProgressInnerDiameter: CGFloat = 20
+        static let diameterMultiplier: CGFloat = 2
+        static let inProgressClipLeadingX: CGFloat = 11.52
+        static let secondaryGlyphSize: CGFloat = 11
+        static let questionGlyphSize: CGFloat = 12
+        static let eyeGlyphSize: CGFloat = 10
+        static let blockedGlyphStrokeWidth: CGFloat = 3
+        static let blockedDotDiameter: CGFloat = 3.2
+        static let blockedDotOffset: CGFloat = 5.5
+        static let completeGlyphStrokeWidth: CGFloat = 3.5
+    }
+
     /// Scale factor from the 24×24 reference space to the rendered size.
-    private var scale: CGFloat { size / 24 }
+    private var scale: CGFloat { size / Metrics.referenceSize }
 
     private var statusStrokeWidth: CGFloat {
-        (colorSchemeContrast == .increased ? 3.5 : 2.5) * scale
+        let referenceWidth = colorSchemeContrast == .increased
+            ? Metrics.increasedContrastStrokeWidth
+            : Metrics.standardStrokeWidth
+        return referenceWidth * scale
     }
 
     private var neutralColor: Color {
-        colorSchemeContrast == .increased ? .primary.opacity(0.75) : Palette.gray
+        colorSchemeContrast == .increased
+            ? .primary.opacity(Metrics.increasedContrastNeutralOpacity)
+            : Palette.gray
     }
 
     /// Shared task-status palette; `amber` doubles as the warning color for
@@ -66,11 +93,11 @@ struct TaskStatusIconView: View {
     private var fill: (color: Color, radius: CGFloat)? {
         switch status {
         case .notStarted, .waiting, .cancelled, .unknown: return nil
-        case .discussionNeeded: return (Palette.amber, 12)
-        case .blocked: return (Palette.red, 12)
-        case .inProgress: return (Palette.skyBlue, 6.6)
-        case .reviewRequired: return (Palette.blue, 12)
-        case .complete: return (Palette.greenFill, 12)
+        case .discussionNeeded: return (Palette.amber, Metrics.fullFillRadius)
+        case .blocked: return (Palette.red, Metrics.fullFillRadius)
+        case .inProgress: return (Palette.skyBlue, Metrics.inProgressFillRadius)
+        case .reviewRequired: return (Palette.blue, Metrics.fullFillRadius)
+        case .complete: return (Palette.greenFill, Metrics.fullFillRadius)
         }
     }
 
@@ -81,13 +108,19 @@ struct TaskStatusIconView: View {
             }
             Circle()
                 .stroke(strokeColor, lineWidth: statusStrokeWidth)
-                .frame(width: 21.6 * scale, height: 21.6 * scale)
+                .frame(
+                    width: Metrics.outerCircleDiameter * scale,
+                    height: Metrics.outerCircleDiameter * scale
+                )
             if status == .inProgress {
                 // fe draws an extra inner ring (r=10, width 2) that thickens
                 // the in-progress outline inward.
                 Circle()
-                    .stroke(strokeColor, lineWidth: 2 * scale)
-                    .frame(width: 20 * scale, height: 20 * scale)
+                    .stroke(strokeColor, lineWidth: Metrics.inProgressInnerStrokeWidth * scale)
+                    .frame(
+                        width: Metrics.inProgressInnerDiameter * scale,
+                        height: Metrics.inProgressInnerDiameter * scale
+                    )
             }
             glyph
         }
@@ -99,7 +132,10 @@ struct TaskStatusIconView: View {
     private func fillCircle(color: Color, radius: CGFloat) -> some View {
         let circle = Circle()
             .fill(color)
-            .frame(width: radius * 2 * scale, height: radius * 2 * scale)
+            .frame(
+                width: radius * Metrics.diameterMultiplier * scale,
+                height: radius * Metrics.diameterMultiplier * scale
+            )
         if status == .inProgress {
             // Half fill: only the part right of x = 11.52 (48% of 24) is visible.
             // The fill circle spans x ∈ [12 − radius, 12 + radius]. The mask is
@@ -107,7 +143,10 @@ struct TaskStatusIconView: View {
             // clip is an absolute x=48% rect).
             circle.mask(
                 Rectangle()
-                    .padding(.leading, (11.52 - (12 - radius)) * scale)
+                    .padding(
+                        .leading,
+                        (Metrics.inProgressClipLeadingX - (Metrics.fullFillRadius - radius)) * scale
+                    )
                     .environment(\.layoutDirection, .leftToRight)
             )
         } else {
@@ -122,49 +161,68 @@ struct TaskStatusIconView: View {
             EmptyView()
         case .unknown:
             Image(systemName: "questionmark")
-                .font(.system(size: 11 * scale, weight: .bold))
+                .font(.system(size: Metrics.secondaryGlyphSize * scale, weight: .bold))
                 .foregroundStyle(neutralColor)
                 .accessibilityHidden(true)
         case .waiting:
             Image(systemName: "clock")
-                .font(.system(size: 11 * scale, weight: .medium))
+                .font(.system(size: Metrics.secondaryGlyphSize * scale, weight: .medium))
                 .foregroundStyle(neutralColor)
                 .accessibilityHidden(true)
         case .discussionNeeded:
             Image(systemName: "questionmark")
-                .font(.system(size: 12 * scale, weight: .bold))
+                .font(.system(size: Metrics.questionGlyphSize * scale, weight: .bold))
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         case .blocked:
+            // Path coordinates are intrinsic vector artwork data.
+            // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(12, 5.5))
                 p.addLine(to: point(12, 13.5))
             }
-            .stroke(.white, style: StrokeStyle(lineWidth: 3 * scale, lineCap: .round))
+            // swiftlint:enable no_magic_numbers
+            .stroke(
+                .white,
+                style: StrokeStyle(lineWidth: Metrics.blockedGlyphStrokeWidth * scale, lineCap: .round)
+            )
             Circle()
                 .fill(.white)
-                .frame(width: 3.2 * scale, height: 3.2 * scale)
-                .offset(y: 5.5 * scale)
+                .frame(
+                    width: Metrics.blockedDotDiameter * scale,
+                    height: Metrics.blockedDotDiameter * scale
+                )
+                .offset(y: Metrics.blockedDotOffset * scale)
         case .reviewRequired:
             Image(systemName: "eye.fill")
-                .font(.system(size: 10 * scale, weight: .regular))
+                .font(.system(size: Metrics.eyeGlyphSize * scale, weight: .regular))
                 .foregroundStyle(.white)
                 .accessibilityHidden(true)
         case .complete:
+            // Path coordinates are intrinsic vector artwork data.
+            // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(7, 12.5))
                 p.addLine(to: point(10.5, 16))
                 p.addLine(to: point(17, 9))
             }
+            // swiftlint:enable no_magic_numbers
             .stroke(
                 .white,
-                style: StrokeStyle(lineWidth: 3.5 * scale, lineCap: .round, lineJoin: .round)
+                style: StrokeStyle(
+                    lineWidth: Metrics.completeGlyphStrokeWidth * scale,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
             )
         case .cancelled:
+            // Path coordinates are intrinsic vector artwork data.
+            // swiftlint:disable no_magic_numbers
             Path { p in
                 p.move(to: point(5, 19))
                 p.addLine(to: point(19, 5))
             }
+            // swiftlint:enable no_magic_numbers
             .stroke(neutralColor, style: StrokeStyle(lineWidth: statusStrokeWidth, lineCap: .round))
         }
     }
@@ -175,6 +233,9 @@ struct TaskStatusIconView: View {
 }
 
 #Preview("All statuses") {
+    let statusStackSpacing: CGFloat = 12
+    let renderedSizes: [CGFloat] = [16, 24, 48]
+    let statusRowSpacing: CGFloat = 8
     let statuses: [TaskDisplayStatus] = [
         .notStarted,
         .waiting,
@@ -186,9 +247,9 @@ struct TaskStatusIconView: View {
         .cancelled,
         .unknown
     ]
-    VStack(spacing: 12) {
-        ForEach([16, 24, 48] as [CGFloat], id: \.self) { size in
-            HStack(spacing: 8) {
+    VStack(spacing: statusStackSpacing) {
+        ForEach(renderedSizes, id: \.self) { size in
+            HStack(spacing: statusRowSpacing) {
                 ForEach(Array(statuses.enumerated()), id: \.offset) { _, status in
                     TaskStatusIconView(status: status, size: size)
                 }

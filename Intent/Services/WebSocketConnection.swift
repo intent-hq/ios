@@ -63,6 +63,9 @@ actor WebSocketConnection {
     /// Connect handshake deadline, matching the URLRequest.timeoutInterval the
     /// URLSession-based transport used.
     static let connectTimeout: Duration = .seconds(4)
+    private static let maximumMessageSize = 40 * 1024 * 1024
+    private static let abnormalClosureCode = 1006
+    private static let missingCloseStatusCode = 1005
 
     private init(
         host: String,
@@ -161,7 +164,7 @@ actor WebSocketConnection {
         // same); the app's own liveness pings stay explicit via sendPing().
         wsOptions.autoReplyPing = true
         // Match the daemon's 40 MiB outbound JSON-RPC cap (docs/protocol §1.3).
-        wsOptions.maximumMessageSize = 40 * 1024 * 1024
+        wsOptions.maximumMessageSize = maximumMessageSize
         wsOptions.setAdditionalHeaders(additionalHeaders(token: token))
         parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
         return parameters
@@ -372,7 +375,7 @@ actor WebSocketConnection {
                 // without a close frame (RFC 6455 abnormal closure).
                 throw WebSocketTransportError.disconnected(
                     host: host,
-                    code: 1006,
+                    code: Self.abnormalClosureCode,
                     reason: "Connection closed"
                 )
             case .control:
@@ -419,7 +422,7 @@ actor WebSocketConnection {
         case .privateCode(let value):
             return Int(value)
         @unknown default:
-            return 1005  // no status received
+            return missingCloseStatusCode
         }
     }
 

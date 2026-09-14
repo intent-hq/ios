@@ -52,14 +52,14 @@ final class AppCoordinatorTests {
     /// tests is safe: each test's persistence uses its own UserDefaults suite.
     private static let windowBackend = BackendID(UUID())
 
-    init() {
+    init() throws {
         // The coordinator under test uses the injected per-test persistence,
         // but non-injected globals (e.g. ConnectionManager.shared's route
         // refresh) can still reach PersistenceManager.shared — keep its
         // keychain in-memory so SecItem is never hit in headless CI.
         _ = TestKeychainStorage.installed
         suiteName = "AppCoordinatorTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
             defaults: defaults,

@@ -10,7 +10,10 @@ import UniformTypeIdentifiers
 /// removal, clear after a successful send/queue, or deinitialization.
 @MainActor
 @Observable final class ConversationAttachmentPipeline {
-    static let maxImageReferenceBytes = 30 * 1024 * 1024
+    // This named aggregate limit mirrors the daemon-facing image contract.
+    static let maxImageReferenceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: TimeInterval = 1000
 
     enum ImagePlacementError: LocalizedError {
         case encodingFailed(index: Int)
@@ -153,7 +156,7 @@ import UniformTypeIdentifiers
             do {
                 placed = try await uploadService.placeData(
                     workspaceId: workspaceId,
-                    fileName: "image-\(Int(Date().timeIntervalSince1970 * 1000))-\(index + 1).jpg",
+                    fileName: "image-\(Int(Date().timeIntervalSince1970 * Self.millisecondsPerSecond))-\(index + 1).jpg",
                     data: data,
                     mimeType: "image/jpeg"
                 )

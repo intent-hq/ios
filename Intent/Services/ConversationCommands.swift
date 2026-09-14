@@ -4,6 +4,9 @@ import Observation
 @MainActor
 @Observable
 final class ConversationCommands {
+    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
+    private static let invalidParametersErrorCode = -32_602
+
     struct AgentState {
         let isStreaming: Bool
         let attentionRequest: PendingAttentionRequest?
@@ -258,7 +261,8 @@ final class ConversationCommands {
                 AppLog.conversation.error("[ConversationStore] Failed to fetch queue: \(error)")
             }
             throw error
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32_602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "queued message \(messageId) (data.code: \(error.intentErrorDataCode ?? "absent")): "

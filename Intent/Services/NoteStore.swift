@@ -4,6 +4,9 @@ import Observation
 
 @MainActor
 @Observable class NoteStore {
+    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
+    private static let invalidParametersErrorCode = -32_602
+
     var notes: [Note] = []
     var isLoading = false
     /// True once a `note.list` for the current workspace has completed
@@ -175,7 +178,8 @@ import Observation
                 "note.list",
                 params: ["workspaceId": workspaceId, "projection": "slim"]
             )
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32_602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             AppLog.notes.warning(
                 "[NoteStore] note.list rejected projection param, retrying full: \(error)"
             )
@@ -273,7 +277,8 @@ import Observation
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
             return .notFound
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32_602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
             // client params bug doesn't silently masquerade as deletion.

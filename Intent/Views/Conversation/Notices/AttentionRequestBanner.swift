@@ -6,15 +6,27 @@ struct AttentionRequestBanner: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private static let contentSpacing: CGFloat = 8
+    private static let detailSpacing: CGFloat = 1
+    private static let labelSpacing: CGFloat = 6
+    private static let horizontalPadding: CGFloat = 16
+    private static let verticalPadding: CGFloat = 8
+    private static let backgroundOpacity: Double = 0.1
+    private static let increasedContrastBackgroundOpacity: Double = 0.18
+    private static let dividerOpacity: Double = 0.45
+    private static let increasedContrastDividerOpacity: Double = 1
+    private static let dividerHeight: CGFloat = 1
+    private static let increasedContrastDividerHeight: CGFloat = 2
+
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.contentSpacing) {
             Image(systemName: attention.kind.systemImage)
                 .font(.subheadline)
                 .foregroundStyle(attention.kind.color)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VStack(alignment: .leading, spacing: Self.detailSpacing) {
+                HStack(alignment: .firstTextBaseline, spacing: Self.labelSpacing) {
                     Text(attention.kind.label)
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -43,13 +55,19 @@ struct AttentionRequestBanner: View {
 
             Spacer()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(attention.kind.color.opacity(colorSchemeContrast == .increased ? 0.18 : 0.1))
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.verticalPadding)
+        .background(attention.kind.color.opacity(colorSchemeContrast == .increased
+            ? Self.increasedContrastBackgroundOpacity
+            : Self.backgroundOpacity))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(attention.kind.color.opacity(colorSchemeContrast == .increased ? 1 : 0.45))
-                .frame(height: colorSchemeContrast == .increased ? 2 : 1)
+                .fill(attention.kind.color.opacity(colorSchemeContrast == .increased
+                    ? Self.increasedContrastDividerOpacity
+                    : Self.dividerOpacity))
+                .frame(height: colorSchemeContrast == .increased
+                    ? Self.increasedContrastDividerHeight
+                    : Self.dividerHeight)
         }
     }
 }

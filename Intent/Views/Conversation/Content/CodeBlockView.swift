@@ -5,6 +5,12 @@ struct CodeBlockView: View {
     let language: String?
     @State private var copied = false
 
+    private static let copyLabelSpacing: CGFloat = 4
+    private static let horizontalPadding: CGFloat = 12
+    private static let headerVerticalPadding: CGFloat = 8
+    private static let codeBottomPadding: CGFloat = 12
+    private static let cornerRadius: CGFloat = 8
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header with language label and copy button
@@ -25,7 +31,7 @@ struct CodeBlockView: View {
                         copied = false
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Self.copyLabelSpacing) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
                             .accessibilityHidden(true)
                         Text(copied ? "Copied" : "Copy")
@@ -35,8 +41,8 @@ struct CodeBlockView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Self.horizontalPadding)
+            .padding(.vertical, Self.headerVerticalPadding)
 
             // Code content
             ScrollView(.horizontal) {
@@ -44,13 +50,13 @@ struct CodeBlockView: View {
                     .font(.system(.callout, design: .monospaced))
                     .foregroundStyle(Constants.Colors.CodeBlock.foreground)
                     .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 12)
+                    .padding(.horizontal, Self.horizontalPadding)
+                    .padding(.bottom, Self.codeBottomPadding)
             }
             .scrollIndicators(.hidden)
         }
         .background(Constants.Colors.CodeBlock.background)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
         .contextMenu {
             Button {
                 HapticManager.impact(.light)

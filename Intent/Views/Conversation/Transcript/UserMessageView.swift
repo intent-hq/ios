@@ -8,6 +8,24 @@ struct UserMessageView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(BackendSession.self) private var session
 
+    private enum Layout {
+        static let contentSpacing: CGFloat = 4
+        static let attachmentGridSpacing: CGFloat = 6
+        static let attachmentSectionTopPadding: CGFloat = 4
+        static let fileAttachmentListSpacing: CGFloat = 4
+        static let containerPadding: CGFloat = 12
+        static let backgroundOpacity: Double = 0.4
+        static let cornerRadius: CGFloat = 8
+        static let textRowSpacing: CGFloat = 6
+        static let mentionChipSpacing: CGFloat = 6
+        static let textOpacity: Double = 0.85
+        static let fileChipSpacing: CGFloat = 6
+        static let fileChipHorizontalPadding: CGFloat = 8
+        static let fileChipVerticalPadding: CGFloat = 5
+        static let fileChipBackgroundOpacity: Double = 0.6
+        static let fileChipCornerRadius: CGFloat = 8
+    }
+
     private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
 
     var body: some View {
@@ -15,7 +33,7 @@ struct UserMessageView: View {
         let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
         let agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
 
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             if let hookWake {
                 HookWakeAttributionView(attribution: hookWake)
             } else if let prWake {
@@ -46,31 +64,39 @@ struct UserMessageView: View {
 
                 if !partitioned.images.isEmpty {
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: ImageAttachmentThumbnail.side, maximum: ImageAttachmentThumbnail.side), spacing: 6)],
+                        columns: [
+                            GridItem(
+                                .adaptive(
+                                    minimum: ImageAttachmentThumbnail.side,
+                                    maximum: ImageAttachmentThumbnail.side
+                                ),
+                                spacing: Layout.attachmentGridSpacing
+                            )
+                        ],
                         alignment: .leading,
-                        spacing: 6
+                        spacing: Layout.attachmentGridSpacing
                     ) {
                         ForEach(partitioned.images) { block in
                             ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, Layout.attachmentSectionTopPadding)
                 }
 
                 if !partitioned.files.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Layout.fileAttachmentListSpacing) {
                         ForEach(partitioned.files) { block in
                             fileAttachmentChip(block)
                         }
                     }
-                    .padding(.top, 4)
+                    .padding(.top, Layout.attachmentSectionTopPadding)
                 }
             }
         }
-        .padding(12)
+        .padding(Layout.containerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.muted(for: colorScheme).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         .modifier(MessageCopyContextMenu(
             text: MessageBlockPartitioning.userCopyText(
                 from: blocks,
@@ -107,13 +133,13 @@ struct UserMessageView: View {
                 if case .chips = row { return true }
                 return false
             }) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Layout.textRowSpacing) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         switch row {
                         case .text(let run):
                             userText(run)
                         case .chips(let mentions):
-                            ChipFlowLayout(spacing: 6) {
+                            ChipFlowLayout(spacing: Layout.mentionChipSpacing) {
                                 ForEach(Array(mentions.enumerated()), id: \.offset) { _, mention in
                                     ContextMentionChipView(mention: mention)
                                 }
@@ -130,12 +156,12 @@ struct UserMessageView: View {
     private func userText(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
+            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
 
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.fileChipSpacing) {
             Image(systemName: "doc.fill")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -149,10 +175,10 @@ struct UserMessageView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Theme.muted(for: colorScheme).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, Layout.fileChipHorizontalPadding)
+        .padding(.vertical, Layout.fileChipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Layout.fileChipBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.fileChipCornerRadius))
     }
 
     private var workspaceRepo: String? {

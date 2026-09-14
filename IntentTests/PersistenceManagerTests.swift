@@ -272,9 +272,9 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
 struct ConnectionPersistenceFailureTests {
     private func makePersistence(
         storage: InMemoryKeychainStorage
-    ) -> (manager: PersistenceManager, suiteName: String) {
+    ) throws -> (manager: PersistenceManager, suiteName: String) {
         let suiteName = "ConnectionPersistenceFailureTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
     }
@@ -293,9 +293,9 @@ struct ConnectionPersistenceFailureTests {
         )
     }
 
-    @Test func failedRemovalPreservesRecordAndActivePointer() {
+    @Test func failedRemovalPreservesRecordAndActivePointer() throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let stored = setup.manager.upsertConnection(connection())
         setup.manager.setActiveConnection(id: stored.id)
@@ -306,9 +306,9 @@ struct ConnectionPersistenceFailureTests {
         #expect(setup.manager.activeConnection()?.id == stored.id)
     }
 
-    @Test func failedSyncedMergePreservesRecordPointerAndReportsNoChange() {
+    @Test func failedSyncedMergePreservesRecordPointerAndReportsNoChange() throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let stored = setup.manager.upsertConnection(connection())
         setup.manager.setActiveConnection(id: stored.id)
@@ -334,9 +334,9 @@ struct ConnectionPersistenceFailureTests {
         #expect(setup.manager.activeConnection()?.id == stored.id)
     }
 
-    @Test func failedMetadataRefreshKeepsPreviouslySavedRecord() {
+    @Test func failedMetadataRefreshKeepsPreviouslySavedRecord() throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let stored = setup.manager.upsertConnection(connection())
         storage.setSaveFailure(true)
@@ -1227,10 +1227,10 @@ final class LastScreenPersistenceTests {
     private let persistenceManager: PersistenceManager
     private let suiteName: String
 
-    init() {
+    init() throws {
         _ = TestKeychainStorage.installed
         suiteName = "LastScreenPersistenceTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         persistenceManager = PersistenceManager(
             defaults: defaults,

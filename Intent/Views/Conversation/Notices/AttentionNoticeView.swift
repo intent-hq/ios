@@ -10,6 +10,8 @@ struct AttentionNoticeView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
+    private static let increasedContrastBackgroundMultiplier: Double = 1.75
+
     private var tint: Color {
         switch notice.kind {
         case .discussionRequest: return .orange
@@ -60,7 +62,7 @@ struct AttentionNoticeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tint.opacity(
             colorSchemeContrast == .increased
-                ? Constants.Conversation.NoticeCard.backgroundOpacity * 1.75
+                ? Constants.Conversation.NoticeCard.backgroundOpacity * Self.increasedContrastBackgroundMultiplier
                 : Constants.Conversation.NoticeCard.backgroundOpacity
         ))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))

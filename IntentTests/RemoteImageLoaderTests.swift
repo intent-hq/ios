@@ -20,8 +20,8 @@ struct RemoteImageLoaderTests {
         }
     }
 
-    nonisolated private static func response(_ status: Int = 200) -> URLResponse {
-        HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+    nonisolated private static func response(_ status: Int = 200) throws -> URLResponse {
+        try #require(HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil))
     }
 
     /// Lock-guarded fetch counter usable from the `@Sendable` data fetcher.
@@ -44,7 +44,7 @@ struct RemoteImageLoaderTests {
 
     @Test func fetchDecodesImage() async throws {
         let png = Self.pngBytes()
-        let loader = RemoteImageLoader { _ in (png, Self.response()) }
+        let loader = RemoteImageLoader { _ in (png, try Self.response()) }
 
         let image = try await loader.image(for: Self.url)
 
@@ -56,7 +56,7 @@ struct RemoteImageLoaderTests {
         let counter = FetchCounter()
         let loader = RemoteImageLoader { _ in
             counter.increment()
-            return (png, Self.response())
+            return (png, try Self.response())
         }
 
         let first = try await loader.image(for: Self.url)
@@ -67,7 +67,7 @@ struct RemoteImageLoaderTests {
     }
 
     @Test func non2xxStatusThrowsBadStatus() async {
-        let loader = RemoteImageLoader { _ in (Data(), Self.response(404)) }
+        let loader = RemoteImageLoader { _ in (Data(), try Self.response(404)) }
 
         await #expect(throws: LoadError.badStatus(404)) {
             _ = try await loader.image(for: Self.url)
@@ -75,7 +75,7 @@ struct RemoteImageLoaderTests {
     }
 
     @Test func undecodableBytesThrowNotAnImage() async {
-        let loader = RemoteImageLoader { _ in (Data([1, 2, 3]), Self.response()) }
+        let loader = RemoteImageLoader { _ in (Data([1, 2, 3]), try Self.response()) }
 
         await #expect(throws: LoadError.notAnImage) {
             _ = try await loader.image(for: Self.url)
@@ -84,7 +84,7 @@ struct RemoteImageLoaderTests {
 
     @Test func oversizedResponseThrowsFileTooLarge() async {
         let big = Data(count: RemoteImageLoader.maxFileBytes + 1)
-        let loader = RemoteImageLoader { _ in (big, Self.response()) }
+        let loader = RemoteImageLoader { _ in (big, try Self.response()) }
 
         await #expect(throws: LoadError.fileTooLarge) {
             _ = try await loader.image(for: Self.url)
@@ -95,7 +95,7 @@ struct RemoteImageLoaderTests {
         let counter = FetchCounter()
         let loader = RemoteImageLoader { _ in
             counter.increment()
-            return (Data(), Self.response(500))
+            return (Data(), try Self.response(500))
         }
 
         await #expect(throws: LoadError.badStatus(500)) {

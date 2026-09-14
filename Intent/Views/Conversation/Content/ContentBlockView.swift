@@ -19,6 +19,17 @@ struct ContentBlockView: View {
     /// automatically once the full block merges in (dataTruncated clears).
     @State private var lightboxPendingHydration = false
 
+    private static let thinkingTopPadding: CGFloat = 4
+    private static let thinkingLabelSpacing: CGFloat = 4
+    private static let hydratingImageOpacity: Double = 0.6
+    private static let loadedImageOpacity: Double = 1
+    private static let loadingLabelSpacing: CGFloat = 4
+    private static let fileLabelSpacing: CGFloat = 6
+    private static let fileHorizontalPadding: CGFloat = 10
+    private static let fileVerticalPadding: CGFloat = 6
+    private static let fileBackgroundOpacity: Double = 0.5
+    private static let fileCornerRadius: CGFloat = 6
+
     var body: some View {
         switch block.type {
         case .text:
@@ -96,9 +107,9 @@ struct ContentBlockView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .italic()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 4)
+                .padding(.top, Self.thinkingTopPadding)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: Self.thinkingLabelSpacing) {
                 Image(systemName: "brain")
                     .font(.caption)
                     .accessibilityHidden(true)
@@ -144,7 +155,9 @@ struct ContentBlockView: View {
                 }
             } label: {
                 SquareImageThumbnail(image: uiImage, side: SquareImageThumbnail.transcriptSide)
-                    .opacity(isHydratingImage ? 0.6 : 1)
+                    .opacity(isHydratingImage
+                        ? Self.hydratingImageOpacity
+                        : Self.loadedImageOpacity)
                     .copyContextMenuPassthrough()
             }
             .buttonStyle(.plain)
@@ -183,7 +196,7 @@ struct ContentBlockView: View {
             Button {
                 onHydrateBlock?(block.id)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Self.loadingLabelSpacing) {
                     if isHydratingImage {
                         ProgressView()
                             .controlSize(.mini)
@@ -207,7 +220,7 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var fileView: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Self.fileLabelSpacing) {
             Image(systemName: "doc")
                 .font(.caption)
                 .accessibilityHidden(true)
@@ -215,10 +228,10 @@ struct ContentBlockView: View {
                 .font(.caption.monospaced())
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, Self.fileHorizontalPadding)
+        .padding(.vertical, Self.fileVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.fileBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Self.fileCornerRadius))
     }
 
     /// Decode an image block's base64 payload bytes; nil when absent or
@@ -276,8 +289,10 @@ struct ContentBlockView: View {
 struct ImageDecodeFailureView: View {
     @Environment(\.colorScheme) var colorScheme
 
+    private static let labelSpacing: CGFloat = 4
+
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Self.labelSpacing) {
             Image(systemName: "photo")
                 .accessibilityHidden(true)
             Text("Image")

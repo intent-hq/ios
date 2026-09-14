@@ -8,6 +8,37 @@ struct ConversationTranscriptView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    private enum Layout {
+        static let transcriptRowSpacing: CGFloat = 16
+        static let transcriptHorizontalPadding: CGFloat = 16
+        static let transcriptTopPadding: CGFloat = 12
+        static let transcriptBottomPadding: CGFloat = 24
+        static let bottomAnchorHeight: CGFloat = 8
+        static let goToEndSpacing: CGFloat = 4
+        static let goToEndHorizontalPadding: CGFloat = 14
+        static let goToEndVerticalPadding: CGFloat = 8
+        static let goToEndShadowOpacity: Double = 0.15
+        static let goToEndShadowRadius: CGFloat = 4
+        static let goToEndShadowYOffset: CGFloat = 2
+        static let goToEndBottomPadding: CGFloat = 8
+        static let thinkingIndicatorSpacing: CGFloat = 6
+        static let thinkingIndicatorScale: CGFloat = 0.7
+        static let thinkingIndicatorSide: CGFloat = 16
+        static let thinkingIndicatorHorizontalPadding: CGFloat = 12
+        static let thinkingIndicatorVerticalPadding: CGFloat = 4
+        static let suggestedPromptSpacing: CGFloat = 8
+        static let suggestedPromptContentSpacing: CGFloat = 8
+        static let suggestedPromptHorizontalPadding: CGFloat = 14
+        static let suggestedPromptVerticalPadding: CGFloat = 10
+        static let suggestedPromptBackgroundOpacity: Double = 0.4
+        static let suggestedPromptCornerRadius: CGFloat = 10
+        static let suggestedPromptBorderOpacity: Double = 0.3
+        static let truncationBannerSpacing: CGFloat = 8
+        static let truncationBannerHorizontalPadding: CGFloat = 16
+        static let truncationBannerVerticalPadding: CGFloat = 12
+        static let truncationBannerCornerRadius: CGFloat = 10
+    }
+
     private var scrollMomentumProxy: ScrollViewMomentumProxy {
         scrollState.momentumProxy
     }
@@ -115,12 +146,12 @@ struct ConversationTranscriptView: View {
 
     private func transcriptScrollBase(dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: Layout.transcriptRowSpacing) {
                 transcriptRows(dividerAnchorId: dividerAnchorId)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .padding(.horizontal, Layout.transcriptHorizontalPadding)
+            .padding(.top, Layout.transcriptTopPadding)
+            .padding(.bottom, Layout.transcriptBottomPadding)
         }
         .flippedUpsideDown()
         .scrollIndicators(.hidden)
@@ -143,7 +174,7 @@ struct ConversationTranscriptView: View {
 
     @ViewBuilder
     private func transcriptRows(dividerAnchorId: String?) -> some View {
-        Color.clear.frame(height: 8)
+        Color.clear.frame(height: Layout.bottomAnchorHeight)
             .flippedUpsideDown()
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
             .id("scroll-bottom")
@@ -204,21 +235,25 @@ struct ConversationTranscriptView: View {
             isScrollingToBottom = true
             userIsScrolledAway = false
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: Layout.goToEndSpacing) {
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
                     .accessibilityHidden(true)
                 Text("Go to End")
                     .font(.caption.weight(.medium))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Layout.goToEndHorizontalPadding)
+            .padding(.vertical, Layout.goToEndVerticalPadding)
             .background(.ultraThinMaterial)
             .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            .shadow(
+                color: .black.opacity(Layout.goToEndShadowOpacity),
+                radius: Layout.goToEndShadowRadius,
+                y: Layout.goToEndShadowYOffset
+            )
         }
         .buttonStyle(.plain)
-        .padding(.bottom, 8)
+        .padding(.bottom, Layout.goToEndBottomPadding)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
         .animation(
             .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
@@ -227,27 +262,27 @@ struct ConversationTranscriptView: View {
     }
 
     private var thinkingIndicatorView: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.thinkingIndicatorSpacing) {
             ProgressView()
-                .scaleEffect(0.7)
-                .frame(width: 16, height: 16)
+                .scaleEffect(Layout.thinkingIndicatorScale)
+                .frame(width: Layout.thinkingIndicatorSide, height: Layout.thinkingIndicatorSide)
             Text("Thinking...")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.horizontal, Layout.thinkingIndicatorHorizontalPadding)
+        .padding(.vertical, Layout.thinkingIndicatorVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     #if !os(visionOS)
     private var suggestedPromptsView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Layout.suggestedPromptSpacing) {
             ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
                 Button {
                     Task { await viewModel.sendSuggestedPrompt(prompt) }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Layout.suggestedPromptContentSpacing) {
                         Image(systemName: "paperplane")
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -257,14 +292,14 @@ struct ConversationTranscriptView: View {
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Theme.muted(for: colorScheme).opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, Layout.suggestedPromptHorizontalPadding)
+                    .padding(.vertical, Layout.suggestedPromptVerticalPadding)
+                    .background(Theme.muted(for: colorScheme).opacity(Layout.suggestedPromptBackgroundOpacity))
+                    .clipShape(RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius)
                             .strokeBorder(
-                                Theme.border(for: colorScheme).opacity(0.3),
+                                Theme.border(for: colorScheme).opacity(Layout.suggestedPromptBorderOpacity),
                                 lineWidth: 1
                             )
                     )
@@ -276,7 +311,7 @@ struct ConversationTranscriptView: View {
     #endif
 
     private var truncationBanner: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Layout.truncationBannerSpacing) {
             Image(systemName: "info.circle")
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -286,11 +321,11 @@ struct ConversationTranscriptView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Layout.truncationBannerHorizontalPadding)
+        .padding(.vertical, Layout.truncationBannerVerticalPadding)
         .frame(maxWidth: .infinity)
         .background(Theme.muted(for: colorScheme).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.truncationBannerCornerRadius))
     }
 
     /// Runs exactly once per transcript lifetime from whichever loading trigger

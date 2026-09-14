@@ -880,10 +880,10 @@ final class NotificationSessionAggregationTests {
     private let persistence: PersistenceManager
     private let suiteName: String
 
-    init() {
+    init() throws {
         _ = TestKeychainStorage.installed
         suiteName = "NotificationManagerSessionAggregationTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
             defaults: defaults,

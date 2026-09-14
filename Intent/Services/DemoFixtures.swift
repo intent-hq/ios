@@ -30,6 +30,8 @@ enum DemoMode {
 /// default: a response without a `subscriptionId` makes every store fall
 /// back to its legacy fetch path, which is exactly right for static data.
 enum DemoFixtures {
+    private static let secondsPerMinute: TimeInterval = 60
+
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
@@ -68,11 +70,16 @@ enum DemoFixtures {
     /// ISO 8601 timestamp relative to now, so relative-time labels
     /// ("12m ago") always look fresh in screenshots.
     private static func iso(minutesAgo: Double) -> String {
-        ISO8601DateFormatter().string(from: Date(timeIntervalSinceNow: -minutesAgo * 60))
+        ISO8601DateFormatter().string(
+            from: Date(timeIntervalSinceNow: -minutesAgo * secondsPerMinute)
+        )
     }
 
     // MARK: - Workspaces
 
+    // Numeric values below are intentional fixture payload data. Keeping them
+    // literal makes the simulated daemon responses readable and auditable.
+    // swiftlint:disable no_magic_numbers
     static var workspaces: [[String: Any]] {
         [
             [
@@ -417,4 +424,5 @@ enum DemoFixtures {
             ]
         ]
     }
+    // swiftlint:enable no_magic_numbers
 }

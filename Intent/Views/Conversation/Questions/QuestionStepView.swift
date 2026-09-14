@@ -18,10 +18,21 @@ struct QuestionStepView: View {
     @ScaledMetric(relativeTo: .caption) private var checkboxSide =
         Constants.Conversation.QuestionWizard.checkboxSide
 
+    private static let titleSpacing: CGFloat = 3
+    private static let contentTopPadding: CGFloat = 10
+    private static let contentBottomPadding: CGFloat = 8
+    private static let secondaryLabelOpacity = 0.6
+    private static let selectedHighContrastOpacity = 0.2
+    private static let selectedOpacity = 0.1
+    private static let optionBackgroundOpacity = 0.6
+    private static let standardBorderOpacity = 0.4
+    private static let otherFieldSpacing: CGFloat = 8
+    private static let otherFieldBackgroundOpacity = 0.7
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: Self.titleSpacing) {
                     Text(question.header.uppercased())
                         .font(.caption.weight(.semibold))
                         .kerning(0.5)
@@ -40,8 +51,8 @@ struct QuestionStepView: View {
                 otherField
             }
             .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-            .padding(.top, 10)
-            .padding(.bottom, 8)
+            .padding(.top, Self.contentTopPadding)
+            .padding(.bottom, Self.contentBottomPadding)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
@@ -80,7 +91,7 @@ struct QuestionStepView: View {
                 if !isMulti {
                     Image(systemName: "arrow.right")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.secondaryLabelOpacity))
                         .accessibilityHidden(true)
                 }
             }
@@ -94,9 +105,9 @@ struct QuestionStepView: View {
             .background(
                 selected
                     ? Theme.primary(for: colorScheme).opacity(
-                        colorSchemeContrast == .increased ? 0.2 : 0.1
+                        colorSchemeContrast == .increased ? Self.selectedHighContrastOpacity : Self.selectedOpacity
                     )
-                    : Theme.background(for: colorScheme).opacity(0.6)
+                    : Theme.background(for: colorScheme).opacity(Self.optionBackgroundOpacity)
             )
             .clipShape(RoundedRectangle(
                 cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
@@ -112,7 +123,7 @@ struct QuestionStepView: View {
                                 for: colorScheme,
                                 contrast: colorSchemeContrast
                             )
-                                .opacity(colorSchemeContrast == .increased ? 1 : 0.4),
+                                .opacity(colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity),
                         lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
                     )
             )
@@ -154,10 +165,10 @@ struct QuestionStepView: View {
     }
 
     private var otherField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.otherFieldSpacing) {
             Image(systemName: "pencil")
                 .font(.caption)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.secondaryLabelOpacity))
                 .accessibilityHidden(true)
             TextField("Type your own answer…", text: $freeText)
                 .font(.body)
@@ -173,7 +184,7 @@ struct QuestionStepView: View {
         .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
         .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
         .frame(minHeight: Constants.Accessibility.minimumTapTarget)
-        .background(Theme.background(for: colorScheme).opacity(0.7))
+        .background(Theme.background(for: colorScheme).opacity(Self.otherFieldBackgroundOpacity))
         .clipShape(RoundedRectangle(
             cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
         ))

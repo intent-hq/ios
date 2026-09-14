@@ -7,9 +7,9 @@ import Testing
 struct ConnectionPairingTests {
     private func makePersistence(
         storage: InMemoryKeychainStorage
-    ) -> (manager: PersistenceManager, suiteName: String) {
+    ) throws -> (manager: PersistenceManager, suiteName: String) {
         let suiteName = "ConnectionPairingTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
     }
@@ -66,9 +66,9 @@ struct ConnectionPairingTests {
         #expect(stored.displayName == "10.0.0.1:4242")
     }
 
-    @Test @MainActor func failedRepairKeepsOldRecordAndActivePointer() async {
+    @Test @MainActor func failedRepairKeepsOldRecordAndActivePointer() async throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let old = setup.manager.upsertConnection(StoredConnection(
             server: PairedServer(

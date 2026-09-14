@@ -12,6 +12,19 @@ struct ToolCallView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
 
+    private enum Layout {
+        static let headerSpacing: CGFloat = 4
+        static let pathOpacity: Double = 0.6
+        static let disclosureFontSize: CGFloat = 8
+        static let disclosureOpacity: Double = 0.4
+        static let headerLeadingPadding: CGFloat = 8
+        static let headerVerticalPadding: CGFloat = 3
+        static let expandedContentSpacing: CGFloat = 8
+        static let hydrationStatusSpacing: CGFloat = 4
+        static let expandedHorizontalPadding: CGFloat = 10
+        static let expandedBottomPadding: CGFloat = 10
+    }
+
     private var toolName: String {
         block.resolvedName ?? "tool"
     }
@@ -54,7 +67,7 @@ struct ToolCallView: View {
                     onHydrate?()
                 }
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: Layout.headerSpacing) {
                     Text(classified.icon)
                         .font(.caption2)
                     Text(classified.verb)
@@ -69,17 +82,17 @@ struct ToolCallView: View {
                     if let path = classified.path {
                         Text(path)
                             .font(.caption2)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                            .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.pathOpacity))
                             .lineLimit(1)
                     }
                     Spacer()
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 8))
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.4))
+                        .font(.system(size: Layout.disclosureFontSize))
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
                         .accessibilityHidden(true)
                 }
-                .padding(.leading, 8)
-                .padding(.vertical, 3)
+                .padding(.leading, Layout.headerLeadingPadding)
+                .padding(.vertical, Layout.headerVerticalPadding)
             }
             .buttonStyle(.plain)
 
@@ -96,14 +109,14 @@ struct ToolCallView: View {
 
     @ViewBuilder
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Layout.expandedContentSpacing) {
             // While the full block is hydrating (PROTOCOL §5.5), the slim
             // preview below stays visible with a loading hint on top; once
             // the full block merges in, the truncation flags disappear and
             // this hint retires. A tap retries a failed fetch.
             if isTruncated {
                 Button { onHydrate?() } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Layout.hydrationStatusSpacing) {
                         if isHydrating {
                             ProgressView()
                                 .controlSize(.mini)
@@ -150,8 +163,8 @@ struct ToolCallView: View {
                 }
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 10)
+        .padding(.horizontal, Layout.expandedHorizontalPadding)
+        .padding(.bottom, Layout.expandedBottomPadding)
     }
 
     private func formatJSON(_ dict: [String: AnyCodable]) -> String {

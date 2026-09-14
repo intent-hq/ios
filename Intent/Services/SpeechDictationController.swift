@@ -239,6 +239,9 @@ import Speech
 /// and hop back to the main actor with only Sendable values.
 @Observable
 final class SpeechDictationController {
+    /// AVAudioEngine tap buffer size in audio frames.
+    private static let recognitionTapBufferSize: AVAudioFrameCount = 1024
+
     /// Start-window state machine (idle / starting / recording).
     private var startState = DictationStartState()
 
@@ -397,7 +400,11 @@ final class SpeechDictationController {
         // called from the tap thread, hence the nonisolated(unsafe) capture
         // of the non-Sendable request.
         nonisolated(unsafe) let tapRequest = request
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { @Sendable buffer, _ in
+        inputNode.installTap(
+            onBus: 0,
+            bufferSize: Self.recognitionTapBufferSize,
+            format: format
+        ) { @Sendable buffer, _ in
             tapRequest.append(buffer)
         }
 

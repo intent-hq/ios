@@ -65,6 +65,7 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
     /// slow-path candidate and only needs to finish, not finish fast —
     /// reachable direct hosts win the race long before this.
     static let establishTimeoutMs = 20_000
+    private static let millisecondsPerSecond: CFTimeInterval = 1000
 
     /// Bridges task cancellation to the blocking gomobile dial: `cancel()`
     /// records the cancellation and closes the in-flight client so a blocked
@@ -133,7 +134,9 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                 let inFlight = client
                 lock.unlock()
                 try? inFlight?.close()
-                let closeMs = Int((CFAbsoluteTimeGetCurrent() - cancelTime) * 1000)
+                let closeMs = Int(
+                    (CFAbsoluteTimeGetCurrent() - cancelTime) * TailcatTunnelDialer.millisecondsPerSecond
+                )
                 AppLog.connection.debug("[TailcatTunnel] Dial cancelled: client.close() returned \(closeMs)ms after cancel")
             }
         }
@@ -148,9 +151,9 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                 DispatchQueue.global(qos: .userInitiated).async {
                     func logFinished(_ outcome: String) {
                         let now = CFAbsoluteTimeGetCurrent()
-                        var detail = "\(outcome) in \(Int((now - dialStart) * 1000))ms"
+                        var detail = "\(outcome) in \(Int((now - dialStart) * Self.millisecondsPerSecond))ms"
                         if let cancelledAt = handle.cancelledAt {
-                            detail += " (cancelled at +\(Int((cancelledAt - dialStart) * 1000))ms, cancel→teardown \(Int((now - cancelledAt) * 1000))ms)"
+                            detail += " (cancelled at +\(Int((cancelledAt - dialStart) * Self.millisecondsPerSecond))ms, cancel→teardown \(Int((now - cancelledAt) * Self.millisecondsPerSecond))ms)"
                         }
                         AppLog.connection.debug("[TailcatTunnel] Dial \(detail)")
                     }
@@ -175,12 +178,14 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                         // deadline would tick against tunnel establishment.
                         let pingStart = CFAbsoluteTimeGetCurrent()
                         let pingResult = Result { try client.ping(Self.establishTimeoutMs) }
-                        let pingMs = Int((CFAbsoluteTimeGetCurrent() - pingStart) * 1000)
+                        let pingMs = Int((CFAbsoluteTimeGetCurrent() - pingStart) * Self.millisecondsPerSecond)
                         if let cancelledAt = handle.cancelledAt {
                             // Measures whether close() interrupted the ping: a
                             // latency near zero means it did, a latency near the
                             // ping's own timeout means the ping ran to completion.
-                            let latencyMs = Int((CFAbsoluteTimeGetCurrent() - cancelledAt) * 1000)
+                            let latencyMs = Int(
+                                (CFAbsoluteTimeGetCurrent() - cancelledAt) * Self.millisecondsPerSecond
+                            )
                             AppLog.connection.debug("[TailcatTunnel] Dial cancelled before ping returned: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
                             // The cancel's close may have been a no-op if the
                             // client had not started yet; close again (idempotent

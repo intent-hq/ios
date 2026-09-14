@@ -4,6 +4,14 @@ struct QueuedMessagesView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) var colorScheme
 
+    private static let headerHorizontalPadding: CGFloat = 16
+    private static let headerTopPadding: CGFloat = 8
+    private static let headerBottomPadding: CGFloat = 4
+    private static let backgroundOpacity = 0.8
+    private static let rowSpacing: CGFloat = 8
+    private static let rowHorizontalPadding: CGFloat = 16
+    private static let rowVerticalPadding: CGFloat = 6
+
     @State private var editingId: String?
     @State private var editText = ""
 
@@ -19,20 +27,20 @@ struct QueuedMessagesView: View {
                 Spacer()
             }
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            .padding(.horizontal, Self.headerHorizontalPadding)
+            .padding(.top, Self.headerTopPadding)
+            .padding(.bottom, Self.headerBottomPadding)
 
             ForEach(viewModel.queuedMessages) { message in
                 queuedMessageRow(message)
             }
         }
-        .background(Theme.card(for: colorScheme).opacity(0.8))
+        .background(Theme.card(for: colorScheme).opacity(Self.backgroundOpacity))
     }
 
     @ViewBuilder
     private func queuedMessageRow(_ message: QueuedMessage) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.rowSpacing) {
             if editingId == message.id {
                 // Inline editing
                 TextField("Edit message", text: $editText)
@@ -95,8 +103,8 @@ struct QueuedMessagesView: View {
                 removeButton(message)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Self.rowHorizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
     }
 
     private func sendNowButton(_ message: QueuedMessage) -> some View {

@@ -21,10 +21,10 @@ final class BackendSessionRegistryTests {
     private var createdConnections: [SessionFakeConnectionManager] = []
     private var createdBackendIDs: [BackendID?] = []
 
-    init() {
+    init() throws {
         _ = TestKeychainStorage.installed
         suiteName = "BackendSessionRegistryTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
             defaults: defaults,

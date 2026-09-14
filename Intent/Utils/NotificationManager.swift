@@ -115,7 +115,7 @@ struct ToastInfo: Equatable {
         },
         presentFeedback: @escaping () -> Void = {
             HapticManager.notification(.success)
-            AudioServicesPlaySystemSound(Self.agentIdleFeedbackSoundID)
+            AudioServicesPlaySystemSound(NotificationManager.agentIdleFeedbackSoundID)
         },
         windowEmitsFeedbackSound: Bool = NotificationManager.platformWindowEmitsFeedbackSound,
         connection: ConnectionManagerRouting = ConnectionManager.shared,

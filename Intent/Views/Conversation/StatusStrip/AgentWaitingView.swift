@@ -6,6 +6,13 @@ struct AgentWaitingView: View {
     let onNavigateToAgent: ((String, String, String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
+    private static let headerSpacing: CGFloat = 8
+    private static let horizontalPadding: CGFloat = 16
+    private static let headerVerticalPadding: CGFloat = 8
+    private static let fallbackRowSpacing: CGFloat = 10
+    private static let rowVerticalPadding: CGFloat = 6
+    private static let agentRowSpacing: CGFloat = 8
+
     init(
         viewModel: ConversationViewModel,
         store: ConversationStore,
@@ -20,7 +27,7 @@ struct AgentWaitingView: View {
         if store.isWaitingForAgents {
             VStack(spacing: 0) {
                 // Header
-                HStack(spacing: 8) {
+                HStack(spacing: Self.headerSpacing) {
                     ProgressView()
                         .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
 
@@ -30,13 +37,13 @@ struct AgentWaitingView: View {
 
                     Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Self.horizontalPadding)
+                .padding(.vertical, Self.headerVerticalPadding)
 
                 // Agent rows
                 if !store.watchedAgents.isEmpty {
                     Divider()
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, Self.horizontalPadding)
 
                     ScrollView {
                         VStack(spacing: 0) {
@@ -69,7 +76,7 @@ struct AgentWaitingView: View {
                     ScrollView {
                         VStack(spacing: 0) {
                             ForEach(store.watchedAgentIds, id: \.self) { agentId in
-                                HStack(spacing: 10) {
+                                HStack(spacing: Self.fallbackRowSpacing) {
                                     ProgressView()
                                         .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
                                     Text(agentId.prefix(
@@ -79,8 +86,8 @@ struct AgentWaitingView: View {
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     Spacer()
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 6)
+                                .padding(.horizontal, Self.horizontalPadding)
+                                .padding(.vertical, Self.rowVerticalPadding)
                             }
                         }
                     }
@@ -96,7 +103,7 @@ struct AgentWaitingView: View {
 
     @ViewBuilder
     private func agentRow(_ agent: AgentSession, showChevron: Bool = false) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Self.agentRowSpacing) {
             // Avatar with status indicator
             ZStack(alignment: .topTrailing) {
                 AgentAvatarView(
@@ -195,8 +202,8 @@ struct AgentWaitingView: View {
                     .accessibilityHidden(true)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
         .contentShape(Rectangle())
     }
 
