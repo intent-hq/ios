@@ -115,16 +115,18 @@ enum ConversationTranscriptScrollPolicy {
     /// the bottom. Scrolled away, the container resizes at its bottom edge and
     /// the content under the reader does not move, so nothing is adjusted;
     /// before the entry scroll the viewport is not following yet. A viewport
-    /// under the user's finger is left alone too: the pan would fight the
-    /// re-pin, and the edge then shows Go to End as usual.
+    /// under the user's finger, or still decelerating from a fling released
+    /// just before the row lands (the scrolled-away flag may not have crossed
+    /// the threshold yet), is left alone too: the re-pin would fight the pan
+    /// or snap the fling back, and the edge then shows Go to End as usual.
     static func shouldRePinOnContainerHeightChange(
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
-        isDragging: Bool,
+        isInteracting: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
     ) -> Bool {
-        oldContainerHeight != newContainerHeight && !isDragging && shouldFollowToBottom(
+        oldContainerHeight != newContainerHeight && !isInteracting && shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )

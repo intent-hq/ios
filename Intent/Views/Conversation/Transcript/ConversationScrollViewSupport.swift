@@ -75,11 +75,12 @@ class ScrollViewMomentumProxy {
         }
     }
 
-    /// True while the user's finger is on the scroll view (not while it is
-    /// only decelerating); false before the scroll view has been found.
-    var isDragging: Bool {
+    /// True while the user's finger is on the scroll view or a fling is
+    /// still decelerating (the bounce back included); false before the
+    /// scroll view has been found.
+    var isInteracting: Bool {
         guard let scrollView else { return false }
-        return scrollView.isTracking || scrollView.isDragging
+        return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
     }
 
     struct RestingGeometry: Equatable {

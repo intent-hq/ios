@@ -250,7 +250,7 @@ struct ConversationTranscriptView: View {
         guard ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
             oldContainerHeight: oldContainerHeight,
             newContainerHeight: newContainerHeight,
-            isDragging: scrollMomentumProxy.isDragging,
+            isInteracting: scrollMomentumProxy.isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return false }

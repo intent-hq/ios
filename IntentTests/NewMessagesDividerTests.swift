@@ -417,13 +417,13 @@ struct ConversationTranscriptScrollPolicyTests {
 
     private func rePinOnContainerChange(
         from oldHeight: CGFloat, to newHeight: CGFloat,
-        isDragging: Bool = false,
+        isInteracting: Bool = false,
         hasInitiallyScrolled: Bool = true, userIsScrolledAway: Bool = false
     ) -> Bool {
         ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
             oldContainerHeight: oldHeight,
             newContainerHeight: newHeight,
-            isDragging: isDragging,
+            isInteracting: isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
@@ -452,8 +452,19 @@ struct ConversationTranscriptScrollPolicyTests {
     /// The pan would fight a re-pin under the user's finger; the edge then
     /// shows Go to End as usual.
     @Test func containerChangeUnderFingerIsLeftAlone() {
-        #expect(!rePinOnContainerChange(from: 780, to: 700, isDragging: true))
-        #expect(rePinOnContainerChange(from: 780, to: 700, isDragging: false))
+        #expect(!rePinOnContainerChange(from: 780, to: 700, isInteracting: true))
+        #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: false))
+    }
+
+    /// A fling released just before the row lands is still decelerating while
+    /// the scrolled-away flag has not crossed the threshold yet; the re-pin
+    /// would snap it back to the bottom. `isInteracting` covers deceleration
+    /// (and the bounce back) exactly as the #271 past-end clamp does.
+    @Test func containerChangeWhileDeceleratingIsLeftAlone() {
+        #expect(!rePinOnContainerChange(
+            from: 780, to: 700, isInteracting: true, userIsScrolledAway: false))
+        #expect(!rePinOnContainerChange(
+            from: 700, to: 780, isInteracting: true, userIsScrolledAway: false))
     }
 
     /// Scrolled away, the container resizes at its bottom edge and the content
