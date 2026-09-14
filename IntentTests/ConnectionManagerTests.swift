@@ -712,6 +712,116 @@ struct ConnectionManagerTests {
         manager.dispatchMessage("{}")
     }
 
+    // MARK: - Inbound frame parsing (off-main pure function)
+
+    @Test func parseInboundFrameResponseWithResult() throws {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":7,"result":{"workspaces":[{"id":"ws-1"}]}}
+        """)
+        guard case .response(let id, let result)? = frame else {
+            Issue.record("Expected .response, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == 7)
+        let dictionary = try #require(result.value as? [String: Any])
+        let workspaces = try #require(dictionary["workspaces"] as? [[String: Any]])
+        #expect(workspaces.first?["id"] as? String == "ws-1")
+        #expect(frame?.label == "id=7")
+    }
+
+    @Test func parseInboundFrameResponseWithoutResultFieldStillResolves() {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":8}
+        """)
+        guard case .response(let id, let result)? = frame else {
+            Issue.record("Expected .response, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == 8)
+        #expect(result.value as? [String: Any] == nil)
+    }
+
+    @Test func parseInboundFrameErrorWithDataCodeAndDataMessage() {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":9,"error":{"code":-32602,"message":"Invalid params","data":{"code":"not-found","message":"unknown agent id: gone"}}}
+        """)
+        guard case .error(let id, let error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == 9)
+        #expect(error.domain == "WebSocket")
+        #expect(error.code == -32602)
+        #expect(error.intentErrorDataCode == "not-found")
+        #expect(error.isEntityNotFound)
+        // error.data.message takes precedence over the top-level message.
+        #expect(error.localizedDescription == "unknown agent id: gone (-32602)")
+        #expect(frame?.label == "id=9")
+    }
+
+    @Test func parseInboundFrameErrorWithoutDataOmitsDataCode() {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":10,"error":{"code":-32602,"message":"unknown agent id: gone"}}
+        """)
+        guard case .error(let id, let error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == 10)
+        #expect(error.code == -32602)
+        #expect(error.intentErrorDataCode == nil)
+        #expect(!error.isEntityNotFound)
+        #expect(error.localizedDescription == "unknown agent id: gone (-32602)")
+    }
+
+    @Test func parseInboundFrameErrorWithoutCodeUsesFallbackAndPlainDescription() {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":11,"error":{"message":"boom"}}
+        """)
+        guard case .error(_, let error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(error.code == -1)
+        #expect(error.localizedDescription == "boom")
+    }
+
+    @Test func parseInboundFrameNotification() throws {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","method":"events.event","params":{"type":"workspace:updated","data":{"id":"ws-1"}}}
+        """)
+        guard case .notification(let method, let params)? = frame else {
+            Issue.record("Expected .notification, got \(String(describing: frame))")
+            return
+        }
+        #expect(method == "events.event")
+        let dictionary = try #require(params.value as? [String: Any])
+        #expect(dictionary["type"] as? String == "workspace:updated")
+        #expect(frame?.label == "method=events.event")
+    }
+
+    @Test func parseInboundFrameRejectsMalformedAndNonObjectInput() {
+        #expect(ConnectionManager.parseInboundFrame("not valid json") == nil)
+        #expect(ConnectionManager.parseInboundFrame("") == nil)
+        #expect(ConnectionManager.parseInboundFrame("[1,2,3]") == nil)
+        #expect(ConnectionManager.parseInboundFrame("\"a string\"") == nil)
+        #expect(ConnectionManager.parseInboundFrame("{}") == nil)
+        // A non-integer id is not a response; without a method it is dropped.
+        #expect(ConnectionManager.parseInboundFrame("{\"id\":\"abc\",\"result\":1}") == nil)
+    }
+
+    @Test func parseInboundFrameRunsOffMainActor() async {
+        let frame = await Task.detached {
+            ConnectionManager.parseInboundFrame("{\"jsonrpc\":\"2.0\",\"id\":12,\"result\":true}")
+        }.value
+        guard case .response(let id, let result)? = frame else {
+            Issue.record("Expected .response, got \(String(describing: frame))")
+            return
+        }
+        #expect(id == 12)
+        #expect(result.value as? Bool == true)
+    }
+
     // MARK: - Subscription Push Routing
 
     @Test @MainActor func registerSubscriptionHandlerStoresHandler() async {

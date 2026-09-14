@@ -31,7 +31,7 @@ extension ConnectionManagerRouting {
     }
 }
 
-extension NSError {
+nonisolated extension NSError {
     /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
     static let intentErrorDataCodeKey = "intentErrorDataCode"
 

@@ -84,6 +84,35 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     }
 }
 
+/// Carries an immutable Foundation JSON object (the output of
+/// `JSONSerialization.jsonObject`) across isolation domains. `@unchecked
+/// Sendable`: parsed JSON containers are never mutated after parse — the
+/// message pump parses off MainActor and hands the value over for dispatch.
+nonisolated struct InboundJSONValue: @unchecked Sendable {
+    let value: Any
+}
+
+/// One inbound JSON-RPC frame, parsed off MainActor by
+/// `ConnectionManager.parseInboundFrame(_:)` and dispatched on it.
+nonisolated enum InboundFrame: Sendable {
+    /// A successful response: `result` is the raw `result` field (may wrap a
+    /// nil `Any` when absent), delivered to the pending continuation as-is.
+    case response(id: Int, result: InboundJSONValue)
+    /// An error response, already shaped into the `NSError` the pending
+    /// continuation throws.
+    case error(id: Int, error: NSError)
+    /// A server notification (`subscription.push`, `events.event`, ...).
+    case notification(method: String, params: InboundJSONValue)
+
+    /// The method or response id, for slow-frame logging.
+    var label: String {
+        switch self {
+        case .response(let id, _), .error(let id, _): return "id=\(id)"
+        case .notification(let method, _): return "method=\(method)"
+        }
+    }
+}
+
 @MainActor
 @Observable class ConnectionManager: ConnectionManagerRouting {
     static let shared = ConnectionManager()
@@ -918,23 +947,32 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         }
     }
 
+    /// Starts the single serial message pump for `socket`. The pump is
+    /// detached so receive + JSON parse run off MainActor (a chat snapshot or
+    /// `agent.list` response can be megabytes); it hops to MainActor only to
+    /// dispatch the already-parsed frame, awaiting each dispatch before the
+    /// next receive so frames are dispatched in receive order.
     private func configureSocketMessagePump() {
         let currentSocket = socket
         messagePumpTask?.cancel()
         guard let currentSocket else { return }
-        messagePumpTask = Task { [weak self] in
+        messagePumpTask = Task.detached { [weak self] in
             do {
                 while !Task.isCancelled {
                     let message = try await currentSocket.receive()
-                    guard let self, self.socket === currentSocket else {
-                        AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
-                        return
-                    }
+                    guard let self else { return }
                     switch message {
                     case .string(let text):
                         let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
                         AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
-                        self.handleTextMessage(text)
+                        let parseStart = CFAbsoluteTimeGetCurrent()
+                        let frame = Self.parseInboundFrame(text)
+                        let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
+                        guard let frame else { continue }
+                        let accepted = await self.acceptInboundFrame(
+                            frame, byteCount: text.utf8.count, parseElapsed: parseElapsed,
+                            from: currentSocket)
+                        if !accepted { return }
                     case .data(let data):
                         AppLog.connection.debug("[ConnectionManager] Received binary: \(data.count) bytes")
                     @unknown default:
@@ -942,60 +980,110 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     }
                 }
             } catch {
-                guard !Task.isCancelled, let self, self.socket === currentSocket else { return }
-                AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
-                self.handleDisconnection()
+                guard !Task.isCancelled, let self else { return }
+                await self.handleSocketFailure(error, from: currentSocket)
             }
         }
     }
 
-    @MainActor
-    private func handleTextMessage(_ text: String) {
+    /// MainActor half of the pump: dispatches `frame` unless `origin` is no
+    /// longer the live socket. Returns `false` when the pump should stop.
+    private func acceptInboundFrame(
+        _ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval,
+        from origin: WebSocketConnection
+    ) -> Bool {
+        guard socket === origin else {
+            AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
+            return false
+        }
+        dispatchInboundFrame(frame, byteCount: byteCount, parseElapsed: parseElapsed)
+        return true
+    }
+
+    private func handleSocketFailure(_ error: any Error, from origin: WebSocketConnection) {
+        guard socket === origin else { return }
+        AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
+        handleDisconnection()
+    }
+
+    /// Turns one inbound frame's text into an `InboundFrame`, or nil for
+    /// malformed JSON, a non-object top level, or a frame that is neither a
+    /// response (integer `id`) nor a notification (`method`). Pure and
+    /// nonisolated: the message pump calls it off MainActor.
+    nonisolated static func parseInboundFrame(_ text: String) -> InboundFrame? {
         guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
         if let id = json["id"] as? Int {
-            if let continuation = pendingRequests.removeValue(forKey: id) {
-                if let error = json["error"] as? [String: Any] {
-                    let parsedCode = error["code"] as? Int
-                    let code = parsedCode ?? -1
-                    let hasCode = parsedCode != nil
-                    let topMessage = error["message"] as? String ?? "Unknown error"
-                    let errorData = error["data"] as? [String: Any]
+            guard let error = json["error"] as? [String: Any] else {
+                return .response(id: id, result: InboundJSONValue(value: json["result"] as Any))
+            }
+            let parsedCode = error["code"] as? Int
+            let code = parsedCode ?? -1
+            let hasCode = parsedCode != nil
+            let topMessage = error["message"] as? String ?? "Unknown error"
+            let errorData = error["data"] as? [String: Any]
 
-                    // Extract error.data.message if present (daemon stashes real cause there)
-                    var effectiveMessage = topMessage
-                    if let dataMessage = errorData?["message"] as? String,
-                       !dataMessage.isEmpty {
-                        effectiveMessage = dataMessage
-                    }
+            // Extract error.data.message if present (daemon stashes real cause there)
+            var effectiveMessage = topMessage
+            if let dataMessage = errorData?["message"] as? String,
+               !dataMessage.isEmpty {
+                effectiveMessage = dataMessage
+            }
 
-                    let description = hasCode ? "\(effectiveMessage) (\(code))" : effectiveMessage
-                    var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
-                    // Preserve the error.data.code discriminator (PROTOCOL §3.3) so
-                    // callers can distinguish "not-found" from "invalid-params".
-                    if let dataCode = errorData?["code"] as? String {
-                        userInfo[NSError.intentErrorDataCodeKey] = dataCode
-                    }
-                    continuation.resume(throwing: NSError(
-                        domain: "WebSocket",
-                        code: code,
-                        userInfo: userInfo))
-                } else {
-                    continuation.resume(returning: json["result"] as Any)
+            let description = hasCode ? "\(effectiveMessage) (\(code))" : effectiveMessage
+            var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
+            // Preserve the error.data.code discriminator (PROTOCOL §3.3) so
+            // callers can distinguish "not-found" from "invalid-params".
+            if let dataCode = errorData?["code"] as? String {
+                userInfo[NSError.intentErrorDataCodeKey] = dataCode
+            }
+            return .error(id: id, error: NSError(
+                domain: "WebSocket",
+                code: code,
+                userInfo: userInfo))
+        }
+        if let method = json["method"] as? String {
+            return .notification(method: method, params: InboundJSONValue(value: json["params"] as Any))
+        }
+        return nil
+    }
+
+    /// Synchronous parse + dispatch on MainActor (the `dispatchMessage` test
+    /// entry point); the live pump parses off-main instead.
+    @MainActor
+    private func handleTextMessage(_ text: String) {
+        let parseStart = CFAbsoluteTimeGetCurrent()
+        guard let frame = Self.parseInboundFrame(text) else { return }
+        let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
+        dispatchInboundFrame(frame, byteCount: text.utf8.count, parseElapsed: parseElapsed)
+    }
+
+    /// Dispatches a parsed frame — resumes the pending request, routes a
+    /// subscription push, or broadcasts to the legacy event handlers — and
+    /// logs a single slow-frame line when the parse or this dispatch exceeded
+    /// `Constants.Connection.slowFrameLogThreshold`.
+    @MainActor
+    private func dispatchInboundFrame(_ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval) {
+        let dispatchStart = CFAbsoluteTimeGetCurrent()
+        switch frame {
+        case .response(let id, let result):
+            pendingRequests.removeValue(forKey: id)?.resume(returning: result.value)
+        case .error(let id, let error):
+            pendingRequests.removeValue(forKey: id)?.resume(throwing: error)
+        case .notification(let method, let params):
+            if !subscriptionRouter.route(method: method, params: params.value) {
+                // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)
+                for handler in eventHandlers.values {
+                    handler(method, params.value)
                 }
             }
-        } else if let method = json["method"] as? String {
-            let params = json["params"] as Any
-
-            if subscriptionRouter.route(method: method, params: params) {
-                return
-            }
-
-            // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)
-            for handler in eventHandlers.values {
-                handler(method, params)
-            }
+        }
+        let dispatchElapsed = CFAbsoluteTimeGetCurrent() - dispatchStart
+        let threshold = Constants.Connection.slowFrameLogThreshold
+        if parseElapsed > threshold || dispatchElapsed > threshold {
+            AppLog.connection.info(
+                "[ConnectionManager] slow frame \(frame.label) bytes=\(byteCount) parse=\(Int(parseElapsed * 1000))ms dispatch=\(Int(dispatchElapsed * 1000))ms")
         }
     }
 
