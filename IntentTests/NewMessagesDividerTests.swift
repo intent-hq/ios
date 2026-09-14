@@ -415,6 +415,68 @@ struct ConversationTranscriptScrollPolicyTests {
             distanceToBottom: -20, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
     }
 
+    private func rePinOnContainerChange(
+        from oldHeight: CGFloat, to newHeight: CGFloat,
+        isDragging: Bool = false,
+        hasInitiallyScrolled: Bool = true, userIsScrolledAway: Bool = false
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
+            oldContainerHeight: oldHeight,
+            newContainerHeight: newHeight,
+            isDragging: isDragging,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    /// Regression (#272): a footer row appearing under the transcript shrank
+    /// the container (simulator: 757.7 → 677.3 for an 80 pt row) while
+    /// `contentOffset` stayed put, so the geometry read 80 pt from the bottom
+    /// and Go to End appeared instead of the transcript staying at the end.
+    @Test func containerShrinkWhilePinnedRePinsToBottom() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 780) == 0)
+        let shrunk = ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 700)
+        #expect(shrunk == 80)
+        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: shrunk))
+        #expect(rePinOnContainerChange(from: 780, to: 700))
+    }
+
+    /// The row disappearing grows the container back; a pinned viewport is
+    /// re-pinned the other way rather than left past the end.
+    @Test func containerGrowthWhilePinnedRePinsToBottom() {
+        #expect(rePinOnContainerChange(from: 700, to: 780))
+    }
+
+    /// The pan would fight a re-pin under the user's finger; the edge then
+    /// shows Go to End as usual.
+    @Test func containerChangeUnderFingerIsLeftAlone() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, isDragging: true))
+        #expect(rePinOnContainerChange(from: 780, to: 700, isDragging: false))
+    }
+
+    /// Scrolled away, the container resizes at its bottom edge and the content
+    /// under the reader does not move (observed in the simulator: the anchored
+    /// row kept its frame across both edges), so nothing is adjusted.
+    @Test func containerChangeWhileScrolledAwayLeavesContentInPlace() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, userIsScrolledAway: true))
+        #expect(!rePinOnContainerChange(from: 700, to: 780, userIsScrolledAway: true))
+    }
+
+    @Test func unchangedContainerNeverRePins() {
+        #expect(!rePinOnContainerChange(from: 780, to: 780))
+        #expect(!rePinOnContainerChange(from: 780, to: 780, userIsScrolledAway: true))
+    }
+
+    /// Before the entry scroll the viewport is not following yet; the entry
+    /// scroll decides where it lands.
+    @Test func containerChangeBeforeEntryScrollIsIgnored() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, hasInitiallyScrolled: false))
+        #expect(!rePinOnContainerChange(
+            from: 780, to: 700, hasInitiallyScrolled: false, userIsScrolledAway: true))
+    }
+
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
             hasInitiallyScrolled: false,

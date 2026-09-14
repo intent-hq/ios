@@ -92,6 +92,28 @@ enum ConversationTranscriptScrollPolicy {
         return isInteracting ? .deferred : .rePin(offsetY: contentOffsetY + distanceToBottom)
     }
 
+    /// A footer row appearing or disappearing under the transcript resizes
+    /// its container while `contentOffset` stays where it was (#272). At rest
+    /// at the bottom that slides the last rows under the new row and the
+    /// geometry reads scrolled away, so a following viewport is re-pinned to
+    /// the bottom. Scrolled away, the container resizes at its bottom edge and
+    /// the content under the reader does not move, so nothing is adjusted;
+    /// before the entry scroll the viewport is not following yet. A viewport
+    /// under the user's finger is left alone too: the pan would fight the
+    /// re-pin, and the edge then shows Go to End as usual.
+    static func shouldRePinOnContainerHeightChange(
+        oldContainerHeight: CGFloat,
+        newContainerHeight: CGFloat,
+        isDragging: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool
+    ) -> Bool {
+        oldContainerHeight != newContainerHeight && !isDragging && shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
     /// The scrolled-away flag driving "Go to End" and follow-to-bottom.
     /// `onScrollGeometryChange` is edge-triggered and its edges are ignored
     /// while the entry scroll or a programmatic follow is in flight; an edge

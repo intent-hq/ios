@@ -53,12 +53,14 @@ struct ConversationTranscriptView: View {
     /// The follow handlers stay gated until the entry-scroll decision finishes,
     /// so stream updates cannot yank the viewport away from the unread divider.
     /// Only discrete transitions scroll; streaming deltas ride the bottom anchor
-    /// and at most re-pin a drifted viewport (see the policy).
+    /// and at most re-pin a drifted viewport (see the policy). Footer rows
+    /// resizing the container are handled by the geometry observation in
+    /// `transcriptScrollBase`, not per source.
     private func transcriptScrollView(
         proxy: ScrollViewProxy,
         dividerAnchorId: String?
     ) -> some View {
-        transcriptScrollBase(dividerAnchorId: dividerAnchorId)
+        transcriptScrollBase(proxy: proxy, dividerAnchorId: dividerAnchorId)
             .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
                 let appendedUserMessage = newCount > oldCount
                     && viewModel.filteredMessages.last?.role == .user
@@ -80,16 +82,6 @@ struct ConversationTranscriptView: View {
             }
             .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
                 followStreamingDeltaIfDrifted(proxy: proxy)
-            }
-            .onChange(of: viewModel.queuedMessages.count) { _, _ in
-                if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy, forced: false)
-                }
-            }
-            .onChange(of: viewModel.store.isWaitingForAgents) { _, _ in
-                if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy, forced: false)
-                }
             }
             .onChange(of: viewModel.isLoading) { _, isLoading in
                 if !isLoading {
@@ -124,7 +116,15 @@ struct ConversationTranscriptView: View {
         )
     }
 
-    private func transcriptScrollBase(dividerAnchorId: String?) -> some View {
+    /// The scrolled-away edge is sampled together with the container height so
+    /// a footer row resizing the container and the edge that resize causes
+    /// arrive in one action (#272).
+    private struct ScrolledAwayGeometry: Equatable {
+        let isScrolledAway: Bool
+        let containerHeight: CGFloat
+    }
+
+    private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
                 transcriptRows(dividerAnchorId: dividerAnchorId)
@@ -141,7 +141,7 @@ struct ConversationTranscriptView: View {
         .scrollBounceBehavior(.always)
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
-        .onScrollGeometryChange(for: Bool.self) { geometry in
+        .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
             // `containerSize` excludes the safe-area insets while
             // `contentOffset` includes them, so measuring with it reads the
             // top inset (the navigation bar) at rest at the bottom.
@@ -152,9 +152,15 @@ struct ConversationTranscriptView: View {
                 containerHeight: geometry.visibleRect.height,
                 bottomInset: geometry.contentInsets.bottom
             )
-            return ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance)
-        } action: { _, isScrolledAway in
-            scrollState.liveIsScrolledAway = isScrolledAway
+            return ScrolledAwayGeometry(
+                isScrolledAway: ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance),
+                containerHeight: geometry.visibleRect.height
+            )
+        } action: { old, new in
+            scrollState.liveIsScrolledAway = new.isScrolledAway
+            if rePinAfterContainerHeightChange(
+                from: old.containerHeight, to: new.containerHeight, proxy: proxy
+            ) { return }
             syncScrolledAwayFromGeometry()
         }
         // A viewport resting past the end of content taller than the container
@@ -204,6 +210,37 @@ struct ConversationTranscriptView: View {
                 break
             }
         }
+    }
+
+    /// A footer row appearing or disappearing under the transcript resizes its
+    /// container while UIKit keeps `contentOffset`, so at rest at the bottom
+    /// the last rows slide under the new row and the geometry reads scrolled
+    /// away (#272). While following, the viewport is pinned straight back to
+    /// the bottom and a follow in flight is restarted so it targets the new
+    /// bottom; the edge this geometry carries is recorded but not applied,
+    /// the pinned geometry that follows carries the real one. The pin goes
+    /// through SwiftUI's own layout: when this action runs the UIScrollView's
+    /// bounds still read the old height, so an offset computed from it lands
+    /// at the old bottom. Scrolled away, the content under the reader already
+    /// stays put (the container resizes at its bottom edge). Returns false
+    /// when the edge is to be applied as usual.
+    private func rePinAfterContainerHeightChange(
+        from oldContainerHeight: CGFloat,
+        to newContainerHeight: CGFloat,
+        proxy: ScrollViewProxy
+    ) -> Bool {
+        guard ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
+            oldContainerHeight: oldContainerHeight,
+            newContainerHeight: newContainerHeight,
+            isDragging: scrollMomentumProxy.isDragging,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        ) else { return false }
+        proxy.scrollTo("scroll-bottom", anchor: .bottom)
+        if scrollDebounceTask != nil {
+            scrollToBottom(proxy: proxy, forced: scrollState.pendingFollowIsForced)
+        }
+        return true
     }
 
     /// Applies the latest geometry edge to `userIsScrolledAway` when the gate
