@@ -633,6 +633,41 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(executeFollow(forced: true, distanceToBottom: nil))
     }
 
+    private func retryLanding(
+        forced: Bool = true,
+        distanceToBottom: CGFloat? = 379,
+        isInteracting: Bool = false,
+        retriesLeft: Int = 2
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
+            forced: forced,
+            distanceToBottom: distanceToBottom,
+            isInteracting: isInteracting,
+            retriesLeft: retriesLeft,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression: Go to End's scroll came to rest 379 points above the
+    /// bottom because rows realized during the animation grew the content,
+    /// and the button came straight back once the gate reopened.
+    @Test func forcedFollowLandingShortIsScrolledAgain() {
+        #expect(retryLanding(distanceToBottom: 379))
+        #expect(retryLanding(distanceToBottom: 51))
+        #expect(!retryLanding(distanceToBottom: 50))
+        #expect(!retryLanding(distanceToBottom: 0))
+        #expect(!retryLanding(distanceToBottom: -30))
+    }
+
+    @Test func followLandingRetryIsBoundedForcedOnlyAndYieldsToTheUser() {
+        #expect(!retryLanding(forced: false))
+        #expect(!retryLanding(retriesLeft: 0))
+        #expect(retryLanding(retriesLeft: 1))
+        #expect(!retryLanding(isInteracting: true))
+        #expect(!retryLanding(distanceToBottom: nil))
+        #expect(Constants.Conversation.Transcript.followLandingRetries > 0)
+    }
+
     /// An unknown distance never releases a scrolled-away state: every
     /// automatic path stays suppressed until the geometry proves otherwise.
     @Test func unknownDistanceDoesNotFlipScrolledAwayBackToPinned() {

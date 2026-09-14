@@ -254,4 +254,26 @@ enum ConversationTranscriptScrollPolicy {
             atBottomThreshold: atBottomThreshold
         )
     }
+
+    /// `scrollTo` targets the bottom as laid out when the animation starts, and
+    /// rows the lazy stack realizes during it grow the content underneath, so
+    /// a forced follow can come to rest above the real bottom (Go to End on
+    /// the 32-row demo transcript landed 379 points short). The follow used to
+    /// be re-issued by the geometry edge clearing the flag, which #280 stopped
+    /// so it would not fight the user's pan; the follow itself now re-scrolls
+    /// while its landing still reads scrolled away, a bounded number of times.
+    /// Automatic follows are not retried (the bottom anchor keeps a pinned
+    /// viewport pinned and the next delta re-pins a drifted one), nor is any
+    /// follow once the user has taken over the scroll view, and an unknown
+    /// distance proves nothing.
+    static func shouldRetryFollowLanding(
+        forced: Bool,
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool,
+        retriesLeft: Int,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Bool {
+        guard forced, retriesLeft > 0, !isInteracting, let distanceToBottom else { return false }
+        return isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold)
+    }
 }

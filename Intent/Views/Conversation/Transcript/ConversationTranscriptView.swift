@@ -524,6 +524,10 @@ struct ConversationTranscriptView: View {
     /// Forced follows always land and are never preempted by automatic ones;
     /// automatic follows are re-validated by the policy once the debounce
     /// elapses, so a user who scrolled away meanwhile is not snapped back.
+    /// A forced follow that came to rest short of the bottom (rows realized
+    /// during the animation grew the content under it) is issued again before
+    /// the gate reopens, so the geometry it reopens on is the real bottom
+    /// (see `ConversationTranscriptScrollPolicy.shouldRetryFollowLanding`).
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
         if !forced && scrollState.pendingFollowIsForced { return }
@@ -538,15 +542,26 @@ struct ConversationTranscriptView: View {
                 distanceToBottom: scrollMomentumProxy.distanceToBottom
             )
             if shouldExecute {
-                if animated {
-                    withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
+                var retriesLeft = Constants.Conversation.Transcript.followLandingRetries
+                while true {
+                    if animated {
+                        withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
+                            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                        }
+                    } else {
                         proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     }
-                } else {
-                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
+                    guard !Task.isCancelled else { return }
+                    guard ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
+                        forced: forced,
+                        distanceToBottom: scrollMomentumProxy.distanceToBottom,
+                        isInteracting: scrollMomentumProxy.isDragging,
+                        retriesLeft: retriesLeft
+                    ) else { break }
+                    retriesLeft -= 1
+                    AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
                 }
-                try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
-                guard !Task.isCancelled else { return }
             }
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
