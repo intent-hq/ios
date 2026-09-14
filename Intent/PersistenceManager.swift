@@ -2,7 +2,20 @@ import Foundation
 import Security
 
 class PersistenceManager {
-    static let shared = PersistenceManager()
+    /// Under `--demo-data` the shared manager runs over an ephemeral store so
+    /// a simulator's real pairing state can never bind the window or restore
+    /// a saved screen out from under the fixture flow (UI tests reuse
+    /// simulators that `scripts/xcodebuild.sh test-ios` does not erase).
+    static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
+
+    /// A manager over a demo defaults suite wiped on creation plus an
+    /// in-memory keychain: starts unpaired and leaves no state behind.
+    static func ephemeral() -> PersistenceManager {
+        let suiteName = "com.intent.companion.demo-data"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        return PersistenceManager(defaults: defaults, keychainStorage: EphemeralKeychainStorage())
+    }
 
     let serverKey = "pairedServer"
     private let keychainService = "com.intent.companion"
@@ -493,6 +506,36 @@ protocol KeychainStorage {
     func save(data: Data, service: String, account: String) -> Bool
     func load(service: String, account: String) -> Data?
     func delete(service: String, account: String)
+}
+
+/// Process-local backend for `--demo-data`: never touches the real Keychain,
+/// so demo launches start unpaired regardless of the simulator's saved
+/// connections.
+final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
+    private var items: [String: Data] = [:]
+    private let lock = NSLock()
+
+    private func key(_ service: String, _ account: String) -> String { "\(service)\u{1F}\(account)" }
+
+    @discardableResult
+    func save(data: Data, service: String, account: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        items[key(service, account)] = data
+        return true
+    }
+
+    func load(service: String, account: String) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
+        return items[key(service, account)]
+    }
+
+    func delete(service: String, account: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        items.removeValue(forKey: key(service, account))
+    }
 }
 
 /// Production backend over the Security framework.

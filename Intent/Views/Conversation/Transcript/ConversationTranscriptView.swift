@@ -237,6 +237,7 @@ struct ConversationTranscriptView: View {
             .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("transcript.goToEnd")
         .padding(.bottom, 8)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
         .animation(
