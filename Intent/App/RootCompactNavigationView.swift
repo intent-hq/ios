@@ -9,13 +9,7 @@ extension RootView {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
                             .navigationDestination(isPresented: $showingConversation) {
-                                ConversationView(
-                                    agentId: conversationAgentId,
-                                    workspaceId: conversationWorkspaceId,
-                                    agentName: conversationAgentName,
-                                    session: session
-                                )
-                                .id(conversationAgentId)
+                                conversationDestination
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
                                 NoteDetailView(

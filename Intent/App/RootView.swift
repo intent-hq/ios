@@ -30,6 +30,24 @@ struct RootView: View {
     @State var programmaticConversationDismiss = false
     @State var noteStack = NavigationPath()
 
+    /// The pushed conversation page. The target is resolved in the page's own
+    /// body, not in the destination closure: a sole-agent auto-open pushes the
+    /// conversation while the workspace push is still in flight, and the page
+    /// then shows the closure's value from when the workspace page was built —
+    /// before `syncNavigationState` wrote the ids, so a ConversationView bound
+    /// to the "" defaults (#275). The `conversation*` state is the fallback
+    /// once the coordinator has moved on (the pop animation).
+    var conversationDestination: some View {
+        ConversationDestinationView(
+            fallback: conversationAgentId.isEmpty ? nil : ConversationDestinationView.Target(
+                agentId: conversationAgentId,
+                workspaceId: conversationWorkspaceId,
+                agentName: conversationAgentName
+            ),
+            session: session
+        )
+    }
+
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {
         case .workspaceList, .workspaceDetail, .agentConversation, .noteDetail:
@@ -246,6 +264,41 @@ struct RootView: View {
             guard let backendID = session.backendID,
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
+        }
+    }
+}
+
+/// The conversation page pushed by `RootView`; see `conversationDestination`.
+/// Reads the coordinator's screen when its body runs, so the page built by
+/// the push shows the conversation the coordinator navigated to, whatever the
+/// enclosing destination closure evaluated to earlier.
+struct ConversationDestinationView: View {
+    struct Target: Equatable {
+        let agentId: String
+        let workspaceId: String
+        let agentName: String
+    }
+
+    let fallback: Target?
+    let session: BackendSession
+    @Environment(AppCoordinator.self) private var coordinator
+
+    private var target: Target? {
+        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+            return Target(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+        }
+        return fallback
+    }
+
+    var body: some View {
+        if let target {
+            ConversationView(
+                agentId: target.agentId,
+                workspaceId: target.workspaceId,
+                agentName: target.agentName,
+                session: session
+            )
+            .id(target.agentId)
         }
     }
 }
