@@ -47,23 +47,33 @@ struct AgentRowView: View {
             // needs-user states always keep their symbol (never color alone),
             // so Differentiate Without Color needs no extra branch here.
             ZStack(alignment: .topTrailing) {
-                AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.avatarSize,
-                                specialist: agent.specialist, isActive: avatarState == .running,
-                                state: avatarState)
+                AgentAvatarView(
+                    agentId: agent.id,
+                    size: Constants.AgentRow.avatarSize,
+                    specialist: agent.specialist,
+                    isActive: avatarState == .running,
+                    state: avatarState
+                )
 
                 if avatarState == .running {
                     Circle()
                         .fill(.green)
-                        .frame(width: Constants.AgentRow.activeDotSize,
-                               height: Constants.AgentRow.activeDotSize)
-                        .offset(x: Constants.AgentRow.activeDotOffset,
-                                y: -Constants.AgentRow.activeDotOffset)
+                        .frame(
+                            width: Constants.AgentRow.activeDotSize,
+                            height: Constants.AgentRow.activeDotSize
+                        )
+                        .offset(
+                            x: Constants.AgentRow.activeDotOffset,
+                            y: -Constants.AgentRow.activeDotOffset
+                        )
                 } else if let symbol = avatarState.cornerSymbol {
                     Image(systemName: symbol)
                         .font(.system(size: Constants.AgentRow.attentionIconSize))
                         .foregroundStyle(avatarState.cornerColor)
-                        .offset(x: Constants.AgentRow.attentionIconOffset,
-                                y: -Constants.AgentRow.attentionIconOffset)
+                        .offset(
+                            x: Constants.AgentRow.attentionIconOffset,
+                            y: -Constants.AgentRow.attentionIconOffset
+                        )
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -86,7 +96,9 @@ struct AgentRowView: View {
                     Text(message)
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(
-                            for: colorScheme, contrast: colorSchemeContrast))
+                            for: colorScheme,
+                            contrast: colorSchemeContrast
+                        ))
                         .lineLimit(1)
                 }
             }
@@ -123,18 +135,26 @@ struct AgentRowView: View {
                 Text("BG")
                     .font(.system(size: Constants.AgentRow.badgeFontSize, weight: .bold))
                     .foregroundStyle(Theme.mutedForeground(
-                        for: colorScheme, contrast: colorSchemeContrast))
+                        for: colorScheme,
+                        contrast: colorSchemeContrast
+                    ))
                     .padding(.horizontal, Constants.AgentRow.badgeHorizontalPadding)
                     .padding(.vertical, Constants.AgentRow.badgeVerticalPadding)
-                    .background(Theme.mutedForeground(
-                        for: colorScheme, contrast: colorSchemeContrast).opacity(
-                            Constants.AgentRow.badgeBackgroundOpacity))
+                    .background(
+                        Theme.mutedForeground(
+                            for: colorScheme,
+                            contrast: colorSchemeContrast
+                        )
+                        .opacity(Constants.AgentRow.badgeBackgroundOpacity)
+                    )
                     .clipShape(.rect(cornerRadius: Constants.AgentRow.badgeCornerRadius))
                     .overlay {
                         if colorSchemeContrast == .increased {
                             RoundedRectangle(cornerRadius: Constants.AgentRow.badgeCornerRadius)
                                 .strokeBorder(Theme.border(
-                                    for: colorScheme, contrast: colorSchemeContrast))
+                                    for: colorScheme,
+                                    contrast: colorSchemeContrast
+                                ))
                         }
                     }
                     .fixedSize()
@@ -148,7 +168,9 @@ struct AgentRowView: View {
             Text(relativeDate(from: timestamp))
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(
-                    for: colorScheme, contrast: colorSchemeContrast))
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
                 .fixedSize()
         }
     }
@@ -204,12 +226,15 @@ struct DelegatedAgentsRow: View {
         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
             .font(.caption)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .accessibilityHidden(true)
     }
 
     private var summaryTitle: String {
         let runningCount = agents.count { AgentAvatarState.state(for: $0) == .running }
         return AgentGroupSummary.delegatedRunningTitle(
-            runningCount: runningCount, totalCount: agents.count)
+            runningCount: runningCount,
+            totalCount: agents.count
+        )
     }
 }
 
@@ -234,9 +259,12 @@ struct BackgroundAgentsHeader: View {
             HStack(spacing: Constants.AgentRow.headerSpacing) {
                 HStack(spacing: Constants.AgentRow.avatarOverlap) {
                     ForEach(Array(agents.prefix(Constants.AgentRow.maximumHeaderAvatars))) { agent in
-                        AgentAvatarView(agentId: agent.id, size: Constants.AgentRow.headerAvatarSize,
-                                        specialist: agent.specialist,
-                                        state: AgentAvatarState.state(for: agent))
+                        AgentAvatarView(
+                            agentId: agent.id,
+                            size: Constants.AgentRow.headerAvatarSize,
+                            specialist: agent.specialist,
+                            state: AgentAvatarState.state(for: agent)
+                        )
                     }
                 }
 
@@ -249,11 +277,12 @@ struct BackgroundAgentsHeader: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             .padding(.vertical, Constants.AgentRow.backgroundVerticalPadding)
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
         .visionListRowHitTarget()
     }
 }
-

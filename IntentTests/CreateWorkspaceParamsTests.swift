@@ -1,6 +1,6 @@
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 struct CreateWorkspaceParamsTests {
     private func makeSpecialist(
@@ -9,8 +9,11 @@ struct CreateWorkspaceParamsTests {
         resolvedProvider: String? = nil
     ) -> SpecialistInfo {
         SpecialistInfo(
-            id: id, name: "Implementor", description: "Implements tasks",
-            resolvedModel: resolvedModel, resolvedProvider: resolvedProvider
+            id: id,
+            name: "Implementor",
+            description: "Implements tasks",
+            resolvedModel: resolvedModel,
+            resolvedProvider: resolvedProvider
         )
     }
 
@@ -136,7 +139,8 @@ struct CreateWorkspaceParamsTests {
         let descriptions = CreateWorkspaceView.creationContextRows(
             repositoryFullName: repository,
             branch: branch
-        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
+        )
+        .map(CreateWorkspaceView.creationContextAccessibilityDescription)
 
         #expect(descriptions == ["Repository: \(repository)", "Branch: \(branch)"])
     }
@@ -145,7 +149,8 @@ struct CreateWorkspaceParamsTests {
         let descriptions = CreateWorkspaceView.creationContextRows(
             repositoryFullName: "",
             branch: ""
-        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
+        )
+        .map(CreateWorkspaceView.creationContextAccessibilityDescription)
 
         #expect(descriptions == ["Repository: Not specified", "Branch: Not specified"])
     }
@@ -303,7 +308,7 @@ struct CreateWorkspaceParamsTests {
     @Test func createDisabledWhenNoProviderSelectable() {
         let providers = [
             makeProvider(id: "auggie", authenticated: false),
-            makeProvider(id: "codex", authenticated: false),
+            makeProvider(id: "codex", authenticated: false)
         ]
         #expect(isCreateDisabled(providers: providers))
     }
@@ -329,26 +334,36 @@ struct CreateWorkspaceParamsTests {
 
     @Test func preselectedBranchKeepsStillValidSelection() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: "dev", branches: ["main", "dev"], defaultBranch: "main"
+            current: "dev",
+            branches: ["main", "dev"],
+            defaultBranch: "main"
         ) == "dev")
     }
 
     @Test func preselectedBranchPrefersDefaultWhenSelectionInvalid() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil, branches: ["dev", "main"], defaultBranch: "main"
+            current: nil,
+            branches: ["dev", "main"],
+            defaultBranch: "main"
         ) == "main")
         // A stale selection from a previously picked repo is dropped
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: "feature/x", branches: ["dev", "main"], defaultBranch: "main"
+            current: "feature/x",
+            branches: ["dev", "main"],
+            defaultBranch: "main"
         ) == "main")
     }
 
     @Test func preselectedBranchFallsBackToFirstBranch() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil, branches: ["dev", "main"], defaultBranch: nil
+            current: nil,
+            branches: ["dev", "main"],
+            defaultBranch: nil
         ) == "dev")
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil, branches: [], defaultBranch: "main"
+            current: nil,
+            branches: [],
+            defaultBranch: "main"
         ) == nil)
     }
 
@@ -356,7 +371,8 @@ struct CreateWorkspaceParamsTests {
 
     @Test func orderedBranchesPinsDefaultFirstAndDedupes() {
         #expect(CreateWorkspaceView.orderedBranches(
-            ["dev", "main", "feature/x"], defaultBranch: "main"
+            ["dev", "main", "feature/x"],
+            defaultBranch: "main"
         ) == ["main", "dev", "feature/x"])
     }
 
@@ -364,7 +380,8 @@ struct CreateWorkspaceParamsTests {
         // "main" can fall outside the fetched page (alphabetical 50-branch
         // cap); it is still pinned first so it stays visible and selectable.
         #expect(CreateWorkspaceView.orderedBranches(
-            ["a", "b"], defaultBranch: "main"
+            ["a", "b"],
+            defaultBranch: "main"
         ) == ["main", "a", "b"])
     }
 
@@ -372,16 +389,19 @@ struct CreateWorkspaceParamsTests {
         // An empty repo can still report a default_branch in metadata; no
         // nonexistent ref is fabricated for it.
         #expect(CreateWorkspaceView.orderedBranches(
-            [], defaultBranch: "main"
-        ) == [])
+            [],
+            defaultBranch: "main"
+        ).isEmpty)
     }
 
     @Test func orderedBranchesWithoutDefaultLeavesOrderUnchanged() {
         #expect(CreateWorkspaceView.orderedBranches(
-            ["b", "a"], defaultBranch: nil
+            ["b", "a"],
+            defaultBranch: nil
         ) == ["b", "a"])
         #expect(CreateWorkspaceView.orderedBranches(
-            ["b", "a"], defaultBranch: ""
+            ["b", "a"],
+            defaultBranch: ""
         ) == ["b", "a"])
     }
 
@@ -389,15 +409,20 @@ struct CreateWorkspaceParamsTests {
 
     @Test func displayedBranchesEmptyQueryShowsDefaultFirst() {
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["dev", "main"], defaultBranch: "main",
-            query: "  ", searchResults: ["ignored"], completedQuery: nil
+            loaded: ["dev", "main"],
+            defaultBranch: "main",
+            query: "  ",
+            searchResults: ["ignored"],
+            completedQuery: nil
         ) == ["main", "dev"])
     }
 
     @Test func displayedBranchesUsesServerResultsWhenQueryAnswered() {
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["main", "dev"], defaultBranch: "main",
-            query: "feature/", searchResults: ["feature/x", "feature/y"],
+            loaded: ["main", "dev"],
+            defaultBranch: "main",
+            query: "feature/",
+            searchResults: ["feature/x", "feature/y"],
             completedQuery: "feature/"
         ) == ["feature/x", "feature/y"])
     }
@@ -406,8 +431,11 @@ struct CreateWorkspaceParamsTests {
         // Stale results (answering an older query) are never shown; the
         // loaded page is locally prefix-filtered as an interim instead.
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["main", "dev", "develop"], defaultBranch: "main",
-            query: "dev", searchResults: ["feature/x"], completedQuery: "feature/"
+            loaded: ["main", "dev", "develop"],
+            defaultBranch: "main",
+            query: "dev",
+            searchResults: ["feature/x"],
+            completedQuery: "feature/"
         ) == ["dev", "develop"])
     }
 
@@ -416,8 +444,11 @@ struct CreateWorkspaceParamsTests {
         // out-of-page default branch matches while the search is in flight
         // (and if the server search fails).
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["a", "b"], defaultBranch: "main",
-            query: "ma", searchResults: [], completedQuery: nil
+            loaded: ["a", "b"],
+            defaultBranch: "main",
+            query: "ma",
+            searchResults: [],
+            completedQuery: nil
         ) == ["main"])
     }
 
@@ -425,8 +456,11 @@ struct CreateWorkspaceParamsTests {
         // Graceful fallback: a daemon that ignores `prefix` returns the
         // unfiltered page, so the local prefix filter applies on top.
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: [], defaultBranch: nil,
-            query: "dev", searchResults: ["main", "dev"], completedQuery: "dev"
+            loaded: [],
+            defaultBranch: nil,
+            query: "dev",
+            searchResults: ["main", "dev"],
+            completedQuery: "dev"
         ) == ["dev"])
     }
 }

@@ -21,7 +21,7 @@ struct PairingPayload: Equatable {
 
     /// Parse a scanned QR payload. Returns nil when the payload is not a
     /// well-formed `intent://pair` URI with token, host, and numeric port.
-    static func parse(_ code: String) -> PairingPayload? {
+    static func parse(_ code: String) -> Self? {
         guard let components = URLComponents(string: code),
               components.scheme == "intent",
               components.host == "pair",
@@ -41,17 +41,21 @@ struct PairingPayload: Equatable {
         // Empty values are normalized to nil so callers take the cert-probe
         // path instead of pinning an empty string.
         let fingerprint = [
-            items.first(where: { $0.name == "fp" })?.value,
-            items.first(where: { $0.name == "certFingerprint" })?.value,
+            items.first { $0.name == "fp" }?.value,
+            items.first { $0.name == "certFingerprint" }?.value
         ]
         .compactMap { $0 }
-        .first(where: { !$0.isEmpty })
+        .first { !$0.isEmpty }
 
-        let tcAddress = items.first(where: { $0.name == "tc" })?.value
+        let tcAddress = items.first { $0.name == "tc" }?.value
             .flatMap { $0.isEmpty ? nil : $0 }
 
-        return PairingPayload(
-            hosts: hosts, port: port, token: token, certFingerprint: fingerprint,
-            tcAddress: tcAddress)
+        return Self(
+            hosts: hosts,
+            port: port,
+            token: token,
+            certFingerprint: fingerprint,
+            tcAddress: tcAddress
+        )
     }
 }

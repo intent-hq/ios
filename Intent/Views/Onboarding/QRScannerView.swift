@@ -93,6 +93,7 @@ struct QRScannerView: View {
                         } else if let error = errorMessage {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundStyle(.orange)
+                                .accessibilityHidden(true)
                             Text(error)
                                 .foregroundStyle(.white)
                                 .font(.subheadline)
@@ -215,8 +216,10 @@ struct QRScannerView: View {
         Task {
             do {
                 let stored = try await PairingFlow.connect(
-                    payload: payload, certFingerprint: certFingerprint,
-                    connectionManager: session.connection)
+                    payload: payload,
+                    certFingerprint: certFingerprint,
+                    connectionManager: session.connection
+                )
                 dismiss()
                 if let onPaired {
                     onPaired(stored)
@@ -295,15 +298,19 @@ struct QRCameraPreview: UIViewControllerRepresentable {
             }
         }
 
-        func dataScanner(_ dataScanner: DataScannerViewController,
-                         didAdd addedItems: [RecognizedItem],
-                         allItems: [RecognizedItem]) {
+        func dataScanner(
+            _: DataScannerViewController,
+            didAdd addedItems: [RecognizedItem],
+            allItems _: [RecognizedItem]
+        ) {
             process(addedItems)
         }
 
-        func dataScanner(_ dataScanner: DataScannerViewController,
-                         didUpdate updatedItems: [RecognizedItem],
-                         allItems: [RecognizedItem]) {
+        func dataScanner(
+            _: DataScannerViewController,
+            didUpdate updatedItems: [RecognizedItem],
+            allItems _: [RecognizedItem]
+        ) {
             process(updatedItems)
         }
 
@@ -323,16 +330,18 @@ struct QRCameraPreview: UIViewControllerRepresentable {
                 try? await Task.sleep(for: Constants.QRScanner.duplicateScanResetDelay)
                 guard !Task.isCancelled,
                       let self,
-                      self.lastScannedCode == code else { return }
-                self.lastScannedCode = nil
-                guard self.isActive, let scanner = self.scanner else { return }
+                      lastScannedCode == code else { return }
+                lastScannedCode = nil
+                guard isActive, let scanner else { return }
                 scanner.stopScanning()
-                self.startScanning(scanner)
+                startScanning(scanner)
             }
         }
 
-        func dataScanner(_ dataScanner: DataScannerViewController,
-                         becameUnavailableWithError error: DataScannerViewController.ScanningUnavailable) {
+        func dataScanner(
+            _ dataScanner: DataScannerViewController,
+            becameUnavailableWithError _: DataScannerViewController.ScanningUnavailable
+        ) {
             reportUnavailableIfNeeded(for: dataScanner)
         }
 
@@ -351,4 +360,3 @@ struct QRCameraPreview: UIViewControllerRepresentable {
     }
 }
 #endif
-

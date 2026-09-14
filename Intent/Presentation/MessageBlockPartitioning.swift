@@ -16,14 +16,16 @@ enum MessageBlockPartitioning {
                     text = PrMonitorWakeAttribution.displayText(text)
                 }
                 let plain = ContextMention.replacingTokensWithTitles(
-                    in: stripSupervisorTags(text))
+                    in: stripSupervisorTags(text)
+                )
                 return plain.isEmpty ? nil : plain
             case .code:
                 return block.resolvedText
             default:
                 return nil
             }
-        }.joined(separator: "\n\n")
+        }
+        .joined(separator: "\n\n")
     }
 
     static func userCopyText(
@@ -34,7 +36,8 @@ enum MessageBlockPartitioning {
         plainTextContent(
             from: partitionUserBlocks(blocks).text,
             hookWake: hookWake,
-            prWake: prWake)
+            prWake: prWake
+        )
     }
 
     static func agentMessagePreview(from blocks: [ContentBlock]) -> String {
@@ -63,7 +66,8 @@ enum MessageBlockPartitioning {
             default:
                 return nil
             }
-        }.joined(separator: "\n\n")
+        }
+        .joined(separator: "\n\n")
     }
 
     static func stripSupervisorTags(_ text: String) -> String {
@@ -71,15 +75,18 @@ enum MessageBlockPartitioning {
             of: "<supervisor>[\\s\\S]*?</supervisor>",
             with: "",
             options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func partitionUserBlocks(
         _ blocks: [ContentBlock]
     ) -> (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock]) {
-        (blocks.filter { $0.type == .text },
-         blocks.filter { $0.type == .image },
-         blocks.filter { $0.type == .file })
+        (
+            blocks.filter { $0.type == .text },
+            blocks.filter { $0.type == .image },
+            blocks.filter { $0.type == .file }
+        )
     }
 
     private static let groupTagRegex = #/<group:([^>\r\n<]+)>|<\/group(:[^>\r\n<]+)?>/#
@@ -96,7 +103,7 @@ enum MessageBlockPartitioning {
 
         func addBlock(_ block: ContentBlock) {
             if currentGroup != nil {
-                currentGroup!.children.append(block)
+                currentGroup?.children.append(block)
             } else {
                 result.append(.contentBlock(block))
             }
@@ -112,14 +119,20 @@ enum MessageBlockPartitioning {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 addBlock(ContentBlock(
-                    id: nextSegmentId(from: source), type: .text, text: trimmed))
+                    id: nextSegmentId(from: source),
+                    type: .text,
+                    text: trimmed
+                ))
             }
         }
 
         func closeCurrentGroup() {
             if let group = currentGroup {
                 result.append(.group(ResponseGroup(
-                    id: group.id, name: group.name, children: group.children)))
+                    id: group.id,
+                    name: group.name,
+                    children: group.children
+                )))
                 currentGroup = nil
             }
         }
@@ -144,7 +157,10 @@ enum MessageBlockPartitioning {
                     addBlock(block)
                 } else {
                     addBlock(ContentBlock(
-                        id: nextSegmentId(from: block), type: .text, text: processedText))
+                        id: nextSegmentId(from: block),
+                        type: .text,
+                        text: processedText
+                    ))
                 }
                 continue
             }
@@ -159,7 +175,9 @@ enum MessageBlockPartitioning {
                         .trimmingCharacters(in: .whitespaces)
                     if matchStart > lastIndex {
                         addTextIfNonEmpty(
-                            String(processedText[lastIndex..<matchStart]), from: block)
+                            String(processedText[lastIndex..<matchStart]),
+                            from: block
+                        )
                     }
                     closeCurrentGroup()
                     let ordinal = groupOrdinals[block.id, default: 0]
@@ -167,11 +185,14 @@ enum MessageBlockPartitioning {
                     currentGroup = (
                         id: "\(block.id)#group\(ordinal):\(groupName)",
                         name: groupName,
-                        children: [])
+                        children: []
+                    )
                 } else {
                     if matchStart > lastIndex {
                         addTextIfNonEmpty(
-                            String(processedText[lastIndex..<matchStart]), from: block)
+                            String(processedText[lastIndex..<matchStart]),
+                            from: block
+                        )
                     }
                     closeCurrentGroup()
                 }
@@ -195,7 +216,10 @@ extension MessageView {
         prWake: PrMonitorWakeAttribution? = nil
     ) -> String {
         MessageBlockPartitioning.plainTextContent(
-            from: blocks, hookWake: hookWake, prWake: prWake)
+            from: blocks,
+            hookWake: hookWake,
+            prWake: prWake
+        )
     }
 
     static func userCopyText(
@@ -204,7 +228,10 @@ extension MessageView {
         prWake: PrMonitorWakeAttribution? = nil
     ) -> String {
         MessageBlockPartitioning.userCopyText(
-            from: blocks, hookWake: hookWake, prWake: prWake)
+            from: blocks,
+            hookWake: hookWake,
+            prWake: prWake
+        )
     }
 
     static func agentMessagePreview(from blocks: [ContentBlock]) -> String {

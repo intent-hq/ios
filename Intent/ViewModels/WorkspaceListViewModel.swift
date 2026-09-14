@@ -8,6 +8,21 @@ enum ViewMode: String, CaseIterable {
 }
 
 enum WorkspaceDisplayStatus: String, CaseIterable {
+    private enum SortOrder {
+        static let failed = 0
+        static let blocked = 1
+        static let needsAttention = 2
+        static let idle = 3
+        static let notStarted = 4
+        static let inProgress = 5
+        static let complete = 6
+        static let prOpen = 7
+        static let prReady = 8
+        static let prQueued = 9
+        static let prMerged = 10
+        static let unknown = 11
+    }
+
     case failed
     case blocked
     case needsAttention
@@ -89,18 +104,18 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     /// status). Unknown values sort last.
     var sortOrder: Int {
         switch self {
-        case .failed: return 0
-        case .blocked: return 1
-        case .needsAttention: return 2
-        case .idle: return 3
-        case .notStarted: return 4
-        case .inProgress: return 5
-        case .complete: return 6
-        case .prOpen: return 7
-        case .prReady: return 8
-        case .prQueued: return 9
-        case .prMerged: return 10
-        case .unknown: return 11
+        case .failed: return SortOrder.failed
+        case .blocked: return SortOrder.blocked
+        case .needsAttention: return SortOrder.needsAttention
+        case .idle: return SortOrder.idle
+        case .notStarted: return SortOrder.notStarted
+        case .inProgress: return SortOrder.inProgress
+        case .complete: return SortOrder.complete
+        case .prOpen: return SortOrder.prOpen
+        case .prReady: return SortOrder.prReady
+        case .prQueued: return SortOrder.prQueued
+        case .prMerged: return SortOrder.prMerged
+        case .unknown: return SortOrder.unknown
         }
     }
 }
@@ -169,14 +184,14 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
 
     var filteredWorkspaces: [Workspace] {
         let query = normalizedSearchText
-        let active = workspaces.filter { ws in
-            let s = ws.status?.lowercased() ?? ""
-            return s != "archived" && s != "deleted"
+        let active = workspaces.filter { workspace in
+            let status = workspace.status?.lowercased() ?? ""
+            return status != "archived" && status != "deleted"
         }
-        let filtered = query.isEmpty ? active : active.filter { ws in
-            ws.title.localizedCaseInsensitiveContains(query) ||
-            (ws.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
-            (ws.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
+        let filtered = query.isEmpty ? active : active.filter { workspace in
+            workspace.title.localizedCaseInsensitiveContains(query) ||
+            (workspace.branch?.localizedCaseInsensitiveContains(query) ?? false) ||
+            (workspace.repositoryName?.localizedCaseInsensitiveContains(query) ?? false)
         }
         return filtered.sorted(by: isWorkspaceActivityMoreRecent)
     }
@@ -187,21 +202,22 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
     var groupedByRepo: [(String, [Workspace])] {
         var keys: [String] = []
         var groups: [String: [Workspace]] = [:]
-        for ws in filteredWorkspaces {
+        for workspace in filteredWorkspaces {
             let key: String
-            if let owner = ws.repositoryOwner, let name = ws.repositoryName {
+            if let owner = workspace.repositoryOwner, let name = workspace.repositoryName {
                 key = "\(owner)/\(name)"
             } else {
-                key = ws.repositoryName ?? "Unknown"
+                key = workspace.repositoryName ?? "Unknown"
             }
             if groups[key] == nil { keys.append(key) }
-            groups[key, default: []].append(ws)
+            groups[key, default: []].append(workspace)
         }
         return keys
             .map { ($0, groups[$0] ?? []) }
             .sorted { lhs, rhs in
-                guard let l = lhs.1.first, let r = rhs.1.first else { return false }
-                return isWorkspaceActivityMoreRecent(l, than: r)
+                guard let leftWorkspace = lhs.1.first,
+                      let rightWorkspace = rhs.1.first else { return false }
+                return isWorkspaceActivityMoreRecent(leftWorkspace, than: rightWorkspace)
             }
     }
 
@@ -215,4 +231,3 @@ func resolveDisplayStatus(for workspace: Workspace) -> WorkspaceDisplayStatus {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
-

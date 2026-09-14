@@ -14,6 +14,7 @@ enum ConnectionState: Equatable {
 protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
+
     func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)
@@ -37,11 +38,11 @@ extension NSError {
 
     /// The JSON-RPC `error.data.code` discriminator attached by the daemon, if any.
     var intentErrorDataCode: String? {
-        userInfo[NSError.intentErrorDataCodeKey] as? String
+        userInfo[Self.intentErrorDataCodeKey] as? String
     }
 
     /// True only for a definitive entity-not-found JSON-RPC error.
     var isEntityNotFound: Bool {
-        domain == "WebSocket" && code == -32602 && intentErrorDataCode == "not-found"
+        domain == "WebSocket" && code == -32_602 && intentErrorDataCode == "not-found"
     }
 }

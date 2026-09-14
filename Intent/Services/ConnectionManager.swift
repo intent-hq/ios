@@ -7,6 +7,7 @@ import os
 /// connection candidate, letting tests race fakes instead of live sockets.
 nonisolated protocol HostRacingConnection: Sendable {
     var host: String { get }
+
     func disconnect() async
 }
 
@@ -50,7 +51,7 @@ nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
 /// loser would cause — and awaits them here. Unlike `AsyncStream`, delivery
 /// keeps working after the consuming task is cancelled, so cleanup can still
 /// drain every candidate.
-private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
+nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     private struct State: Sendable {
         var pending: [Result<Connection, any Error>] = []
         var waiter: CheckedContinuation<Result<Connection, any Error>, Never>?
@@ -120,7 +121,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var pingTimer: Timer?
-    @ObservationIgnored private var lastPongReceived: Date = Date()
+    @ObservationIgnored private var lastPongReceived = Date()
     @ObservationIgnored private var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored private var lastReconnectAttempt = 0
     private static let pingInterval: TimeInterval = 15  // Send ping every 15s
@@ -145,6 +146,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     #else
     @ObservationIgnored var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
     #endif
+
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
 
     /// The candidate label the tunnel route races under (also the host shown
@@ -179,7 +181,10 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     // MARK: - Connection lifecycle
 
     func connect(
-        hosts: [String], port: Int, token: String, certFingerprint: String? = nil,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String? = nil,
         tcAddress: String? = nil
     ) async throws {
         let connectStart = CFAbsoluteTimeGetCurrent()
@@ -221,8 +226,12 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         let raced: WonHostRace
         do {
             raced = try await raceHosts(
-                hosts, port: port, token: token, certFingerprint: certFingerprint,
-                tcAddress: tcAddress)
+                hosts,
+                port: port,
+                token: token,
+                certFingerprint: certFingerprint,
+                tcAddress: tcAddress
+            )
         } catch {
             // Failed preserving connect: the live connection keeps serving,
             // so restore its mismatch bookkeeping (unless a newer connect or
@@ -302,7 +311,10 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// stale cache. The live socket is kept — the daemon checks the token at
     /// the WebSocket upgrade only, so an established connection stays valid.
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) {
         self.hosts = hosts
@@ -350,7 +362,9 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// pinless targets fall back to host overlap. Internal for test
     /// visibility.
     func resetCertMismatchesIfTargetChanged(
-        hosts: [String], port: Int, certFingerprint: String?
+        hosts: [String],
+        port: Int,
+        certFingerprint: String?
     ) {
         let sameTarget = port == self.port
             && certFingerprint == self.certFingerprint
@@ -372,14 +386,20 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     ///   bound above the daemon's own budget so the daemon's structured result
     ///   (success or error) wins over a client-side transport timeout —
     ///   mirrors the per-call `timeoutMs` override in cloudlands-fe.
-    func request(_ method: String, params: [String: Any] = [:],
-                 timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
+    func request(
+        _ method: String,
+        params: [String: Any] = [:],
+        timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
+    ) async throws -> Any {
         if DemoMode.isEnabled {
             return DemoFixtures.response(for: method, params: params)
         }
         guard let currentSocket = socket else {
-            throw NSError(domain: "WebSocket", code: -4,
-                          userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+            throw NSError(
+                domain: "WebSocket",
+                code: -4,
+                userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+            )
         }
 
         let id = nextRequestId
@@ -420,15 +440,20 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// never-responding daemon still produces the timeout error instead of
     /// suspending forever (a suspended CheckedContinuation does not observe
     /// task cancellation).
-    func awaitResponse(id: Int, timeout: TimeInterval,
-                       write: @escaping @MainActor () -> Task<Void, Never>?) async throws -> Any {
+    func awaitResponse(
+        id: Int,
+        timeout: TimeInterval,
+        write: @escaping @MainActor () -> Task<Void, Never>?
+    ) async throws -> Any {
         let timeoutTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(max(0, timeout)))
             guard !Task.isCancelled else { return }
             if let continuation = self?.pendingRequests.removeValue(forKey: id) {
                 continuation.resume(throwing: NSError(
-                    domain: "WebSocket", code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]))
+                    domain: "WebSocket",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+                ))
             }
         }
         var writeTask: Task<Void, Never>?
@@ -516,7 +541,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// Failures are non-fatal: older daemons without `localIps` and transport
     /// errors are skipped silently and the connection proceeds unchanged.
     func refreshHostRoutes() async {
-        guard connectionState == .connected, let token = token, let port = port else { return }
+        guard connectionState == .connected, let token, let port else { return }
         let myGeneration = connectionGeneration
 
         // Refresh the stored display name first: it must run even when the
@@ -547,7 +572,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             stored.token == token, stored.server.port == port,
             stored.server.tcAddress != reportedTc {
             if !PersistenceManager.shared.updateConnectionTcAddress(
-                id: stored.id, tcAddress: reportedTc
+                id: stored.id,
+                tcAddress: reportedTc
             ) {
                 AppLog.connection.warning("[ConnectionManager] Could not persist refreshed tunnel route")
             }
@@ -582,7 +608,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             let persistedHosts = Self.mergeHosts(existing: stored.server.hosts, reported: merged)
             if stored.server.hosts != persistedHosts {
                 if !PersistenceManager.shared.updateConnectionHosts(
-                    id: stored.id, hosts: persistedHosts
+                    id: stored.id,
+                    hosts: persistedHosts
                 ) {
                     AppLog.connection.warning("[ConnectionManager] Could not persist refreshed host routes")
                 }
@@ -612,7 +639,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             stored.displayName != name {
             AppLog.connection.debug("[ConnectionManager] Display name refresh: \(stored.displayName) -> \(name)")
             if !PersistenceManager.shared.updateConnectionDisplayName(
-                id: stored.id, displayName: name
+                id: stored.id,
+                displayName: name
             ) {
                 AppLog.connection.warning("[ConnectionManager] Could not persist refreshed display name")
             }
@@ -643,8 +671,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     static func mergeHosts(existing: [String], reported: [String]) -> [String] {
         var merged = existing
         var seen = Set(existing)
-        for ip in reported {
-            let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
+        for ipAddress in reported {
+            let trimmed = ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, !seen.contains(trimmed) else { continue }
             merged.append(trimmed)
             seen.insert(trimmed)
@@ -668,7 +696,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// caller because only it knows which connection generation the drain's
     /// late mismatches belong to (see `recordLateCertMismatches`).
     private typealias WonHostRace = (
-        winner: RacedConnection, drain: Task<[HostCertMismatch], Never>?
+        winner: RacedConnection,
+        drain: Task<[HostCertMismatch], Never>?
     )
 
     private func raceHosts(
@@ -684,14 +713,17 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             candidates.append(Self.tunnelCandidateLabel)
         }
         let dialer = tunnelDialer
-        let outcome = await Self.raceCandidates(candidates) {
-            [certFingerprint, token, tcAddress] candidate in
+        let outcome = await Self.raceCandidates(candidates) { [certFingerprint, token, tcAddress] candidate in
             let candidateStart = CFAbsoluteTimeGetCurrent()
             if candidate == Self.tunnelCandidateLabel, let tcAddress {
                 AppLog.connection.debug("[ConnectionManager] Racing tailcat tunnel")
                 let connection = try await Self.connectViaTunnel(
-                    dialer: dialer, tcAddress: tcAddress, remotePort: port,
-                    token: token, certFingerprint: certFingerprint)
+                    dialer: dialer,
+                    tcAddress: tcAddress,
+                    remotePort: port,
+                    token: token,
+                    certFingerprint: certFingerprint
+                )
                 let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
                 AppLog.connection.debug("[ConnectionManager] Tunnel connected in \(elapsed)ms")
                 return connection
@@ -701,7 +733,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 host: candidate,
                 port: port,
                 token: token,
-                certFingerprint: certFingerprint)
+                certFingerprint: certFingerprint
+            )
             let elapsed = Int((CFAbsoluteTimeGetCurrent() - candidateStart) * 1000)
             AppLog.connection.debug("[ConnectionManager] Host \(candidate) connected in \(elapsed)ms")
             return RacedConnection(socket: connection, tunnel: nil, host: candidate)
@@ -716,7 +749,9 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         }
         recordLateCertMismatches(from: outcome.drain, generation: myGeneration)
         throw outcome.failure ?? WebSocketTransportError.failed(
-            host: hosts.first ?? "unknown", message: "No reachable host found")
+            host: hosts.first ?? "unknown",
+            message: "No reachable host found"
+        )
     }
 
     /// Records the mismatches from candidates still in flight when a race
@@ -724,13 +759,14 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     /// `connectionGeneration` moved past `generation` by then (a newer
     /// connect() or disconnect() superseded the race).
     private func recordLateCertMismatches(
-        from drain: Task<[HostCertMismatch], Never>?, generation: Int
+        from drain: Task<[HostCertMismatch], Never>?,
+        generation: Int
     ) {
         guard let drain else { return }
         Task { [weak self] in
             let lateMismatches = await drain.value
-            guard let self, self.connectionGeneration == generation else { return }
-            self.recordCertMismatches(lateMismatches)
+            guard let self, connectionGeneration == generation else { return }
+            recordCertMismatches(lateMismatches)
         }
     }
 
@@ -753,9 +789,13 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 host: "127.0.0.1",
                 port: tunnel.localPort,
                 token: token,
-                certFingerprint: certFingerprint)
+                certFingerprint: certFingerprint
+            )
             return RacedConnection(
-                socket: socket, tunnel: tunnel, host: tunnelCandidateLabel)
+                socket: socket,
+                tunnel: tunnel,
+                host: tunnelCandidateLabel
+            )
         } catch {
             await tunnel.close()
             // Re-label loopback transport errors to the tunnel candidate so
@@ -766,17 +806,24 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 switch transportError {
                 case .certificateMismatch(_, let fingerprint):
                     throw WebSocketTransportError.certificateMismatch(
-                        host: tunnelCandidateLabel, fingerprint: fingerprint)
+                        host: tunnelCandidateLabel,
+                        fingerprint: fingerprint
+                    )
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
                 case .failed(_, let message):
                     throw WebSocketTransportError.failed(
-                        host: tunnelCandidateLabel, message: message)
-                case .disconnected(_, let code, let reason):
+                        host: tunnelCandidateLabel,
+                        message: message
+                    )
+                case let .disconnected(_, code, reason):
                     throw WebSocketTransportError.disconnected(
-                        host: tunnelCandidateLabel, code: code, reason: reason)
+                        host: tunnelCandidateLabel,
+                        code: code,
+                        reason: reason
+                    )
                 case .certificateMismatches:
                     throw transportError
                 }
@@ -860,7 +907,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     }
                     lastError = error
                     if let transportError = error as? WebSocketTransportError,
-                       case .certificateMismatch(let host, let fingerprint) = transportError {
+                       case let .certificateMismatch(host, fingerprint) = transportError {
                         mismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
                     }
                     AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
@@ -880,7 +927,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                             await loser.disconnect()
                         case .failure(let error):
                             if let transportError = error as? WebSocketTransportError,
-                               case .certificateMismatch(let host, let fingerprint) = transportError {
+                               case let .certificateMismatch(host, fingerprint) = transportError {
                                 lateMismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
                             }
                             AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
@@ -895,24 +942,37 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     await winner.disconnect()
                 }
                 return HostRaceOutcome(
-                    winner: nil, mismatches: mismatches, failure: CancellationError(),
-                    drain: drain)
+                    winner: nil,
+                    mismatches: mismatches,
+                    failure: CancellationError(),
+                    drain: drain
+                )
             }
             if let winner {
                 return HostRaceOutcome(
-                    winner: winner, mismatches: mismatches, failure: nil, drain: drain)
+                    winner: winner,
+                    mismatches: mismatches,
+                    failure: nil,
+                    drain: drain
+                )
             }
             if !mismatches.isEmpty {
                 return HostRaceOutcome(
-                    winner: nil, mismatches: mismatches,
+                    winner: nil,
+                    mismatches: mismatches,
                     failure: WebSocketTransportError.certificateMismatches(mismatches: mismatches),
-                    drain: drain)
+                    drain: drain
+                )
             }
             return HostRaceOutcome(
-                winner: nil, mismatches: mismatches,
+                winner: nil,
+                mismatches: mismatches,
                 failure: lastError ?? WebSocketTransportError.failed(
-                    host: hosts.first ?? "unknown", message: "No reachable host found"),
-                drain: drain)
+                    host: hosts.first ?? "unknown",
+                    message: "No reachable host found"
+                ),
+                drain: drain
+            )
         } onCancel: {
             cancelAll()
         }
@@ -926,7 +986,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
             do {
                 while !Task.isCancelled {
                     let message = try await currentSocket.receive()
-                    guard let self, self.socket === currentSocket else {
+                    guard let self, socket === currentSocket else {
                         AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
                         return
                     }
@@ -934,7 +994,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     case .string(let text):
                         let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
                         AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
-                        self.handleTextMessage(text)
+                        handleTextMessage(text)
                     case .data(let data):
                         AppLog.connection.debug("[ConnectionManager] Received binary: \(data.count) bytes")
                     @unknown default:
@@ -942,9 +1002,9 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     }
                 }
             } catch {
-                guard !Task.isCancelled, let self, self.socket === currentSocket else { return }
+                guard !Task.isCancelled, let self, socket === currentSocket else { return }
                 AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
-                self.handleDisconnection()
+                handleDisconnection()
             }
         }
     }
@@ -980,7 +1040,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     continuation.resume(throwing: NSError(
                         domain: "WebSocket",
                         code: code,
-                        userInfo: userInfo))
+                        userInfo: userInfo
+                    ))
                 } else {
                     continuation.resume(returning: json["result"] as Any)
                 }
@@ -1020,7 +1081,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         let connectionLifetime = lastSuccessfulConnectAt.map { disconnectTime - $0 }
         let startingAttempt = Self.reconnectStartingAttempt(
             connectionLifetime: connectionLifetime,
-            previousAttempt: lastReconnectAttempt)
+            previousAttempt: lastReconnectAttempt
+        )
         lastSuccessfulConnectAt = nil
         if startingAttempt == 1 {
             lastReconnectAttempt = 0
@@ -1044,7 +1106,8 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 if attempt > 1 {
                     let delay = min(
                         Double(1 << min(attempt - 2, Constants.Connection.reconnectBackoffExponentCap)),
-                        Constants.Connection.reconnectBackoffMaximum)
+                        Constants.Connection.reconnectBackoffMaximum
+                    )
                     try? await Task.sleep(for: .seconds(delay))
                     if Task.isCancelled { break }
                 }
@@ -1056,11 +1119,15 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                 let parameters: ([String], Int, String, String?, String?)?
                 if !Task.isCancelled,
                    let self,
-                   self.connectionGeneration == myGeneration {
-                    self.connectionState = .reconnecting(attempt: attempt)
+                   connectionGeneration == myGeneration {
+                    connectionState = .reconnecting(attempt: attempt)
                     parameters = (
-                        self.hosts, self.port ?? 0, self.token ?? "",
-                        self.certFingerprint, self.tcAddress)
+                        hosts,
+                        port ?? 0,
+                        token ?? "",
+                        certFingerprint,
+                        tcAddress
+                    )
                 } else {
                     parameters = nil
                 }
@@ -1073,8 +1140,12 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * 1000))ms")
 
                     let raced = try await self?.raceHosts(
-                        hostsToTry, port: currentPort, token: currentToken,
-                        certFingerprint: currentCertFingerprint, tcAddress: currentTcAddress)
+                        hostsToTry,
+                        port: currentPort,
+                        token: currentToken,
+                        certFingerprint: currentCertFingerprint,
+                        tcAddress: currentTcAddress
+                    )
 
                     let raceEnd = CFAbsoluteTimeGetCurrent()
                     AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * 1000))ms")
@@ -1094,17 +1165,17 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
                     let genOk: Bool
                     if !Task.isCancelled,
                        let self,
-                       self.connectionGeneration == myGeneration {
-                        self.socket = winner.socket
-                        self.activeTunnel = winner.tunnel
-                        self.host = winner.host
-                        self.configureSocketMessagePump()
-                        self.connectionState = .connected
-                        self.lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
-                        self.lastReconnectAttempt = attempt
-                        self.subscribeToAllEvents()
-                        self.startPingTimer()
-                        self.scheduleHostRoutesRefresh()
+                       connectionGeneration == myGeneration {
+                        socket = winner.socket
+                        activeTunnel = winner.tunnel
+                        host = winner.host
+                        configureSocketMessagePump()
+                        connectionState = .connected
+                        lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
+                        lastReconnectAttempt = attempt
+                        subscribeToAllEvents()
+                        startPingTimer()
+                        scheduleHostRoutesRefresh()
                         genOk = true
                     } else {
                         genOk = false
@@ -1137,7 +1208,7 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
     private func subscribeToAllEvents() {
         Task {
             do {
-                let _ = try await self.request("events.subscribe", params: [
+                _ = try await self.request("events.subscribe", params: [
                     "eventTypes": ["workspace:*", "note:*", "agent:*"],
                     "replaceGroup": "global"
                 ])
@@ -1197,8 +1268,10 @@ private nonisolated final class RaceMailbox<Connection: Sendable>: Sendable {
         pendingRequests.removeAll()
         for (_, continuation) in pending {
             continuation.resume(throwing: NSError(
-                domain: "WebSocket", code: -3,
-                userInfo: [NSLocalizedDescriptionKey: message]))
+                domain: "WebSocket",
+                code: -3,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            ))
         }
     }
 }

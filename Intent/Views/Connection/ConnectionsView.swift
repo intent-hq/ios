@@ -33,7 +33,9 @@ enum ConnectionPairing {
     /// over, so a pinned session names and refreshes its own backend.
     @discardableResult
     static func finalize(
-        server: PairedServer, token: String, connection: any SessionConnectionManaging,
+        server: PairedServer,
+        token: String,
+        connection: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
         var displayName: String?
@@ -42,8 +44,12 @@ enum ConnectionPairing {
         }
         let outcome = persistence.upsertConnectionWithOutcome(
             StoredConnection(
-                server: server, token: token,
-                displayName: displayName, lastConnectedAt: Date()))
+                server: server,
+                token: token,
+                displayName: displayName,
+                lastConnectedAt: Date()
+            )
+        )
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
         persistence.setActiveConnection(id: stored.id)
@@ -118,7 +124,8 @@ struct ConnectionsView: View {
                 "Delete Connection?",
                 isPresented: Binding(
                     get: { connectionPendingDelete != nil },
-                    set: { if !$0 { connectionPendingDelete = nil } }),
+                    set: { if !$0 { connectionPendingDelete = nil } }
+                ),
                 presenting: connectionPendingDelete
             ) { connection in
                 Button("Cancel", role: .cancel) {}
@@ -160,6 +167,7 @@ struct ConnectionsView: View {
                 Image(systemName: "desktopcomputer")
                     .font(.title3)
                     .foregroundStyle(Theme.primary(for: colorScheme))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Connections.rowTextSpacing) {
                     Text(connection.displayName)
@@ -188,8 +196,10 @@ struct ConnectionsView: View {
                     HStack(spacing: Constants.Connections.statusSpacing) {
                         Circle()
                             .fill(.green)
-                            .frame(width: Constants.Connections.statusDotSize,
-                                   height: Constants.Connections.statusDotSize)
+                            .frame(
+                                width: Constants.Connections.statusDotSize,
+                                height: Constants.Connections.statusDotSize
+                            )
                         Text("Connected")
                             .font(.caption)
                             .foregroundStyle(.primary)

@@ -1,6 +1,8 @@
 import Foundation
 import Security
 
+// MARK: - Payload codec (v1 wire contract)
+
 /// Read-only view of the iCloud-synced backend registry written by the
 /// desktop app's keychain helper (cloudlands-fe `keychain-sync.ts` +
 /// `sync-helper.swift`): ONE generic-password item per backend under the
@@ -9,8 +11,6 @@ import Security
 /// versioned JSON payload. This layer only LISTS records — no writes, no
 /// reconcile — and is fail-soft: any SecItem failure (including entitlement
 /// rejection) surfaces as `.unavailable`, never as "no items".
-
-// MARK: - Payload codec (v1 wire contract)
 
 /// One synced backend record — the decoded keychain payload. Tombstones keep
 /// the identity fields but always carry an empty `token`.
@@ -46,8 +46,8 @@ extension SyncedBackendRecord {
     /// Prefixed so a colon-separated fingerprint can never collide with a
     /// `host:port` key.
     var registryKey: String {
-        let fp = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if !fp.isEmpty { return "fp:\(fp)" }
+        let normalizedFingerprint = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !normalizedFingerprint.isEmpty { return "fp:\(normalizedFingerprint)" }
         return "addr:\(accountKey)"
     }
 
@@ -106,8 +106,8 @@ enum SyncedBackendPayload {
             let raw = try? JSONSerialization.jsonObject(with: data),
             let object = raw as? [String: Any]
         else { return .invalid }
-        guard let v = number(object["v"])?.doubleValue else { return .invalid }
-        if v > Double(version) { return .newerVersion }
+        guard let payloadVersion = number(object["v"])?.doubleValue else { return .invalid }
+        if payloadVersion > Double(version) { return .newerVersion }
         guard let label = object["label"] as? String,
             let host = object["host"] as? String,
             !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -225,7 +225,7 @@ struct SyncedBackendRegistry {
     static let sharedAccessGroupSuffix = "dev.intentapp.backends"
 
     var keychain: SyncedKeychainListing = SecItemSyncedKeychain()
-    var accessGroup: String? = SyncedBackendRegistry.resolveSharedAccessGroup()
+    var accessGroup: String? = Self.resolveSharedAccessGroup()
 
     /// Team-prefixed shared access group. iOS has no public entitlement
     /// introspection (the Mac helper uses SecTaskCopyValueForEntitlement),
@@ -234,7 +234,8 @@ struct SyncedBackendRegistry {
     static func resolveSharedAccessGroup(bundle: Bundle = .main) -> String? {
         sharedAccessGroup(
             appIdentifierPrefix: bundle.object(forInfoDictionaryKey: "AppIdentifierPrefix")
-                as? String)
+                as? String
+        )
     }
 
     /// Pure assembly: "TEAMID." prefix + group suffix, nil when the prefix
@@ -260,7 +261,7 @@ struct SyncedBackendRegistry {
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
             kSecMatchLimit as String: kSecMatchLimitAll,
             kSecReturnAttributes as String: true,
-            kSecReturnData as String: true,
+            kSecReturnData as String: true
         ]
     }
 

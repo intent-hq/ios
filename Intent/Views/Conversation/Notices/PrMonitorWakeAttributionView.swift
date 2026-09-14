@@ -19,6 +19,7 @@ struct PrMonitorWakeAttributionView: View {
             Image(systemName: "arrow.triangle.pull")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Button {
                 if let url = URL(string: attribution.resolvedUrl) {
                     openURL(url)

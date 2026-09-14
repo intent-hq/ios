@@ -29,13 +29,16 @@ struct MarkdownTextView: View {
             .textual.structuredTextStyle(.compact)
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
-                    workspaceId: workspaceId, fallback: .image(),
-                    fileImage: fileImageFetcher)
+                    workspaceId: workspaceId,
+                    fallback: .image(),
+                    fileImage: fileImageFetcher
+                )
             )
             .textual.listItemSpacing(
                 .fontScaled(
                     top: 2 / CompactMarkdownStyle.baseFontSize,
-                    bottom: 4 / CompactMarkdownStyle.baseFontSize)
+                    bottom: 4 / CompactMarkdownStyle.baseFontSize
+                )
             )
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
@@ -83,41 +86,43 @@ struct MarkdownTextView: View {
         guard text.contains("[") else { return text }
         var fenceMarker: Character?
         var inList = false
-        return text.components(separatedBy: "\n").map { line -> String in
-            let indent = leadingIndentWidth(of: line)
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return text.components(separatedBy: "\n")
+            .map { line -> String in
+                let indent = leadingIndentWidth(of: line)
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-            if let marker = fenceMarker {
-                if indent <= 3, trimmed.count >= 3, trimmed.allSatisfy({ $0 == marker }) {
-                    fenceMarker = nil
+                if let marker = fenceMarker {
+                    if indent <= 3, trimmed.count >= 3, trimmed.allSatisfy({ $0 == marker }) {
+                        fenceMarker = nil
+                    }
+                    return line
+                }
+                if indent <= 3 || inList {
+                    if trimmed.hasPrefix("```") {
+                        fenceMarker = "`"
+                        return line
+                    }
+                    if trimmed.hasPrefix("~~~") {
+                        fenceMarker = "~"
+                        return line
+                    }
+                }
+                if trimmed.isEmpty { return line }
+                if indent >= 4, !inList { return line }
+
+                if let match = line.prefixMatch(of: taskListMarker) {
+                    inList = true
+                    let box = match.output.2.lowercased() == "x" ? "☑" : "☐"
+                    return "\(match.output.1)\(box) \(line[match.range.upperBound...])"
+                }
+                if line.prefixMatch(of: listItemMarker) != nil {
+                    inList = true
+                } else if indent < 2 {
+                    inList = false
                 }
                 return line
             }
-            if indent <= 3 || inList {
-                if trimmed.hasPrefix("```") {
-                    fenceMarker = "`"
-                    return line
-                }
-                if trimmed.hasPrefix("~~~") {
-                    fenceMarker = "~"
-                    return line
-                }
-            }
-            if trimmed.isEmpty { return line }
-            if indent >= 4, !inList { return line }
-
-            if let match = line.prefixMatch(of: taskListMarker) {
-                inList = true
-                let box = match.output.2.lowercased() == "x" ? "☑" : "☐"
-                return "\(match.output.1)\(box) \(line[match.range.upperBound...])"
-            }
-            if line.prefixMatch(of: listItemMarker) != nil {
-                inList = true
-            } else if indent < 2 {
-                inList = false
-            }
-            return line
-        }.joined(separator: "\n")
+            .joined(separator: "\n")
     }
 
     /// Leading indentation in columns; a tab advances to the next multiple
@@ -143,4 +148,3 @@ private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage
 }
-

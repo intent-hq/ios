@@ -20,9 +20,9 @@ struct AnyCodable: Codable, Equatable {
             value = double
         } else if let string = try? container.decode(String.self) {
             value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
+        } else if let array = try? container.decode([Self].self) {
             value = array.map { $0.value }
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
+        } else if let dict = try? container.decode([String: Self].self) {
             value = dict.mapValues { $0.value }
         } else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
@@ -43,15 +43,15 @@ struct AnyCodable: Codable, Equatable {
         case let string as String:
             try container.encode(string)
         case let array as [Any]:
-            try container.encode(array.map { AnyCodable($0) })
+            try container.encode(array.map { Self($0) })
         case let dict as [String: Any]:
-            try container.encode(dict.mapValues { AnyCodable($0) })
+            try container.encode(dict.mapValues { Self($0) })
         default:
             try container.encodeNil()
         }
     }
 
-    static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         // Simple equality based on JSON representation
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
@@ -70,4 +70,3 @@ struct AnyCodable: Codable, Equatable {
     var dictValue: [String: Any]? { value as? [String: Any] }
     var isNull: Bool { value is NSNull }
 }
-

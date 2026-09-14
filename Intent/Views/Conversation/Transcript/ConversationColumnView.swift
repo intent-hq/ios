@@ -9,6 +9,7 @@ struct ConversationColumnView: View {
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
+
     #if os(visionOS)
     // visionOS presents structured questions as a deliberate sheet instead
     // of the inline composer-slot wizard; the inline slot shows an opener.
@@ -45,13 +46,16 @@ struct ConversationColumnView: View {
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.store.isWaitingForAgents)
+            value: viewModel.store.isWaitingForAgents
+        )
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.activeAgentHooks.map(\.hookId))
+            value: viewModel.activeAgentHooks.map(\.hookId)
+        )
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.activeAgentMonitors.map(\.monitorId))
+            value: viewModel.activeAgentMonitors.map(\.monitorId)
+        )
     }
 
     @ViewBuilder
@@ -61,7 +65,7 @@ struct ConversationColumnView: View {
             Divider()
         }
 
-        if viewModel.isLoading && viewModel.filteredMessages.isEmpty {
+        if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if viewModel.filteredMessages.isEmpty {
@@ -141,7 +145,9 @@ struct ConversationColumnView: View {
                     let answeredId = pendingSet.messageId
                     Task {
                         await viewModel.submitQuestionAnswers(
-                            answers, answeredQuestionsMessageId: answeredId)
+                            answers,
+                            answeredQuestionsMessageId: answeredId
+                        )
                     }
                 },
                 onDismiss: {
@@ -163,7 +169,7 @@ struct ConversationColumnView: View {
         // or the daemon clears/replaces the marker (FE parity: ChatPanel's
         // `pendingQuestionRecoveryLoading`). Collapse still reveals the
         // composer, as with a rendered wizard.
-        if viewModel.isPendingQuestionRecoveryLoading && !questionWizardCollapsed {
+        if viewModel.isPendingQuestionRecoveryLoading, !questionWizardCollapsed {
             PendingQuestionRecoveryPlaceholder()
         }
 
@@ -203,7 +209,9 @@ struct ConversationColumnView: View {
                     questionSheetPresented = false
                     Task {
                         await viewModel.submitQuestionAnswers(
-                            answers, answeredQuestionsMessageId: answeredId)
+                            answers,
+                            answeredQuestionsMessageId: answeredId
+                        )
                     }
                 },
                 onDismiss: {
@@ -262,6 +270,7 @@ private struct ConversationEmptyView: View {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text(name)
                     .font(.headline)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -273,7 +282,7 @@ private struct ConversationEmptyView: View {
                         .padding(.horizontal, 32)
                 }
                 if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+                    let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
                     Text("Using \(displayName)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
@@ -285,6 +294,7 @@ private struct ConversationEmptyView: View {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text("No messages yet")
                     .font(.headline)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -292,7 +302,7 @@ private struct ConversationEmptyView: View {
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+                    let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
                     Text("Using \(displayName)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))

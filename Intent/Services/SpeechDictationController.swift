@@ -107,7 +107,7 @@ enum DictationStopAction: Equatable {
     /// recognition lingering from an earlier graceful stop.
     case cancelStart
 
-    static func action(for reason: DictationStopReason, phase: DictationPhase) -> DictationStopAction {
+    static func action(for reason: DictationStopReason, phase: DictationPhase) -> Self {
         switch (phase, reason.acceptsFinalResult) {
         case (.starting, _): return .cancelStart
         case (.recording, true): return .finish
@@ -190,7 +190,8 @@ struct DictationSession: Equatable {
     init(baseText: String, insertionOffset: Int?) {
         self.transcript = DictationTranscript(
             baseText: baseText,
-            insertionOffset: insertionOffset ?? baseText.utf16.count)
+            insertionOffset: insertionOffset ?? baseText.utf16.count
+        )
     }
 
     enum MergeOutcome: Equatable {

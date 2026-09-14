@@ -27,7 +27,9 @@ struct QuestionWizardCollapsedBanner: View {
                         .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(0.12)))
                         .overlay(
                             Capsule().strokeBorder(
-                                Theme.primary(for: colorScheme).opacity(0.35), lineWidth: 1)
+                                Theme.primary(for: colorScheme).opacity(0.35),
+                                lineWidth: 1
+                            )
                         )
                     Spacer(minLength: 8)
                     Text("Tap to expand")
@@ -65,7 +67,8 @@ struct QuestionWizardDismissButton: View {
                 .padding(.vertical, 4)
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget)
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

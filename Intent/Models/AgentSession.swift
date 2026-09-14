@@ -34,12 +34,17 @@ struct AgentSession: Identifiable, Equatable {
     /// are unanswered; the empty string is the authoritative "nothing pending"
     /// clear, and both are omitted by legacy marker-less sessions. Defaulted so
     /// existing memberwise construction sites keep compiling.
-    var pendingQuestionsMessageId: String? = nil
-    var dismissedQuestionsMessageId: String? = nil
+    var pendingQuestionsMessageId: String?
+    var dismissedQuestionsMessageId: String?
 
     private static let activeStatuses: Set<String> = [
-        "active", "pending", "processing",
-        "streaming", "busy", "responding", "waiting"
+        "active",
+        "pending",
+        "processing",
+        "streaming",
+        "busy",
+        "responding",
+        "waiting"
     ]
 
     var isActive: Bool {
@@ -132,7 +137,8 @@ struct AgentSession: Identifiable, Equatable {
             of: "\\s+",
             with: " ",
             options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
         return collapsed.isEmpty ? nil : collapsed
     }
 
@@ -148,8 +154,8 @@ struct AgentSession: Identifiable, Equatable {
     /// overlay: the role flips with the response overlay only (a digest-only
     /// payload keeps the persisted role, same as the daemon), so the
     /// agent-side preview resumes once streamed response text is derivable.
-    func applyingPreview(lastAgentResponse: String?, digest: String?) -> AgentSession {
-        AgentSession(
+    func applyingPreview(lastAgentResponse: String?, digest: String?) -> Self {
+        Self(
             id: id,
             name: name,
             status: status,
@@ -176,12 +182,12 @@ struct AgentSession: Identifiable, Equatable {
         )
     }
 
-    static func parseAgent(_ dict: [String: Any]) -> AgentSession? {
+    static func parseAgent(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }
         let metadata = dict["metadata"] as? [String: Any]
         let attentionSurface = attentionRequestSurface(dict)
-        return AgentSession(
+        return Self(
             id: id,
             name: name,
             status: dict["status"] as? String ?? "Idle",
@@ -294,11 +300,11 @@ enum AgentAvatarState: Equatable {
     case attentionDiscussion
     case attentionBlocker
 
-    static func state(for session: AgentSession) -> AgentAvatarState {
+    static func state(for session: AgentSession) -> Self {
         let status = session.status.lowercased()
         // A completed status yields to live work: a re-woken agent keeps its
         // stale "completed" status until the turn settles.
-        if status == "completed" && !isRunning(session) {
+        if status == "completed", !Self.isRunning(session) {
             return .completed
         }
         if session.isErrored {
@@ -349,7 +355,10 @@ enum AgentAvatarState: Equatable {
     }
 
     private static let terminalStatuses: Set<String> = [
-        "completed", "error", "failed", "deleted"
+        "completed",
+        "error",
+        "failed",
+        "deleted"
     ]
 
     private static func isTerminal(_ session: AgentSession) -> Bool {
@@ -384,4 +393,3 @@ enum AgentAvatarState: Equatable {
         return !isTerminal(session) && session.isActive
     }
 }
-

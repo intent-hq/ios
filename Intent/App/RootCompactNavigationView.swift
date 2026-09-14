@@ -22,13 +22,12 @@ extension RootView {
                                     noteId: noteDetailNoteId,
                                     workspaceId: noteDetailWorkspaceId,
                                     noteTitle: noteDetailNoteTitle,
-                                    session: session,
-                                    onNavigateToNote: { noteId, wsId, title in
-                                        noteDetailNoteId = noteId
-                                        noteDetailWorkspaceId = wsId
-                                        noteDetailNoteTitle = title
-                                    }
-                                )
+                                    session: session
+                                ) { noteId, workspaceId, title in
+                                    noteDetailNoteId = noteId
+                                    noteDetailWorkspaceId = workspaceId
+                                    noteDetailNoteTitle = title
+                                }
                                 .id(noteDetailNoteId)
                             }
                     }
@@ -78,7 +77,7 @@ extension RootView {
     }
 
     func syncNavigationState() {
-        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
             let agentChanged = conversationAgentId != agentId
             conversationAgentId = agentId
             conversationWorkspaceId = workspaceId
@@ -91,7 +90,7 @@ extension RootView {
                 pendingConversationPush = true
             } else if !showingConversation {
                 showingConversation = true
-            } else if agentChanged && sizeClass == .regular {
+            } else if agentChanged, sizeClass == .regular {
                 // iPad NavigationStack rebuild race: when the workspace detail is
                 // rebuilt (different workspace) but showingConversation is still
                 // true, SwiftUI may not push the new conversation. Tear down
@@ -106,7 +105,7 @@ extension RootView {
                 // the clear below is just a backstop.
                 DispatchQueue.main.async {
                     programmaticConversationDismiss = false
-                    if RootView.shouldRepushConversation(
+                    if Self.shouldRepushConversation(
                         currentScreen: coordinator.currentScreen,
                         pendingAgentId: pendingAgentId,
                         conversationAgentId: conversationAgentId
@@ -118,12 +117,12 @@ extension RootView {
             // If showingConversation is already true and agent changed,
             // the .id(conversationAgentId) modifier forces SwiftUI to
             // destroy and recreate ConversationView with fresh @State-owned state
-        } else if case .noteDetail(let nId, let wId, let nTitle) = coordinator.currentScreen {
+        } else if case let .noteDetail(noteId, workspaceId, noteTitle) = coordinator.currentScreen {
             if sizeClass == .compact {
                 // iPhone: use isPresented-based navigation (not noteStack)
-                noteDetailNoteId = nId
-                noteDetailWorkspaceId = wId
-                noteDetailNoteTitle = nTitle
+                noteDetailNoteId = noteId
+                noteDetailWorkspaceId = workspaceId
+                noteDetailNoteTitle = noteTitle
                 if showingConversation { showingConversation = false }
                 if !showingWorkspaceDetail {
                     showingWorkspaceDetail = true
@@ -143,9 +142,9 @@ extension RootView {
                 if !noteStack.isEmpty {
                     noteStack = NavigationPath()
                 }
-                let pendingNoteId = nId
-                let pendingWorkspaceId = wId
-                let pendingTitle = nTitle
+                let pendingNoteId = noteId
+                let pendingWorkspaceId = workspaceId
+                let pendingTitle = noteTitle
                 DispatchQueue.main.async {
                     if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
                         noteStack = NavigationPath()

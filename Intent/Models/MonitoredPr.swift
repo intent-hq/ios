@@ -45,7 +45,7 @@ struct MonitoredPr: Identifiable, Equatable {
         let approvals: Approvals
         let threads: Threads
 
-        nonisolated static func parse(_ dict: [String: Any]) -> Snapshot? {
+        nonisolated static func parse(_ dict: [String: Any]) -> Self? {
             guard let state = dict["state"] as? String,
                   let isDraft = dict["isDraft"] as? Bool,
                   let hasConflicts = dict["hasConflicts"] as? Bool,
@@ -55,7 +55,7 @@ struct MonitoredPr: Identifiable, Equatable {
                   let threadsDict = dict["threads"] as? [String: Any],
                   let decision = approvalsDict["decision"] as? String
             else { return nil }
-            return Snapshot(
+            return Self(
                 state: state,
                 isDraft: isDraft,
                 hasConflicts: hasConflicts,
@@ -110,13 +110,13 @@ struct MonitoredPr: Identifiable, Equatable {
         state == .active
     }
 
-    static func parseMonitor(_ dict: [String: Any]) -> MonitoredPr? {
+    static func parseMonitor(_ dict: [String: Any]) -> Self? {
         guard let monitorId = dict["monitorId"] as? String,
               let repo = dict["repo"] as? String,
               let prNumber = dict["prNumber"] as? Int,
               let stateRaw = dict["state"] as? String,
               let state = State(rawValue: stateRaw) else { return nil }
-        return MonitoredPr(
+        return Self(
             monitorId: monitorId,
             workspaceId: dict["workspaceId"] as? String ?? "",
             agentId: dict["agentId"] as? String ?? "",

@@ -1,6 +1,6 @@
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 /// Tests for the desktop-parity agent avatar design selection (mirrors
 /// cloudlands-fe avatar-design.ts) and the ported glyph geometry.
@@ -17,7 +17,7 @@ struct AgentAvatarDesignTests {
             "pr-reviewer": .prReviewer,
             "ui-designer": .uiDesigner,
             "chief-of-staff": .chiefOfStaff,
-            "ralph": .ralph,
+            "ralph": .ralph
         ]
         for (specialist, design) in expected {
             #expect(AgentAvatarDesign.design(agentId: "agent-1", specialist: specialist) == design)
@@ -27,7 +27,8 @@ struct AgentAvatarDesignTests {
     @Test func builtinMappingIgnoresAgentId() {
         #expect(
             AgentAvatarDesign.design(agentId: "agent-a", specialist: "implementor")
-                == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor"))
+                == AgentAvatarDesign.design(agentId: "agent-b", specialist: "implementor")
+        )
     }
 
     // MARK: - Icon resolution (PROTOCOL §5.11)
@@ -35,20 +36,35 @@ struct AgentAvatarDesignTests {
     @Test func iconResolvesAheadOfSpecialistMapAndFallback() {
         for icon in AgentAvatarDesign.builtinDesigns {
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "implementor", icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: "implementor",
+                icon: icon.rawValue
+            ) == icon)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "custom-specialist", icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: "custom-specialist",
+                icon: icon.rawValue
+            ) == icon)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: nil, icon: icon.rawValue) == icon)
+                agentId: "agent-a",
+                specialist: nil,
+                icon: icon.rawValue
+            ) == icon)
         }
     }
 
     @Test func unknownOrAbsentIconsDegradeToIdMapThenFallback() {
         for icon in [nil, "", "not-a-design", "fallback-glasses"] {
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "implementor", icon: icon) == .implementor)
+                agentId: "agent-a",
+                specialist: "implementor",
+                icon: icon
+            ) == .implementor)
             #expect(AgentAvatarDesign.design(
-                agentId: "agent-a", specialist: "custom-specialist", icon: icon)
+                agentId: "agent-a",
+                specialist: "custom-specialist",
+                icon: icon
+            )
                 == AgentAvatarDesign.fallbackDesign(agentId: "agent-a"))
         }
     }
@@ -79,7 +95,8 @@ struct AgentAvatarDesignTests {
         for id in ids {
             #expect(
                 AgentAvatarDesign.fallbackDesign(agentId: id)
-                    == AgentAvatarDesign.fallbackDesign(agentId: id))
+                    == AgentAvatarDesign.fallbackDesign(agentId: id)
+            )
         }
     }
 
@@ -108,12 +125,13 @@ struct AgentAvatarDesignTests {
             // different design than exact integer math would — regression
             // coverage for the Double-based LCG step.
             ("agent-750158", .fallbackCrownMouth),
-            ("x2191079", .fallbackGlasses),
+            ("x2191079", .fallbackGlasses)
         ]
         for (agentId, expected) in fixtures {
             #expect(
                 AgentAvatarDesign.fallbackDesign(agentId: agentId) == expected,
-                "\(agentId)")
+                "\(agentId)"
+            )
         }
     }
 
@@ -125,11 +143,13 @@ struct AgentAvatarDesignTests {
             let glyph = design.glyph
             #expect(
                 !(glyph.strokePath.isEmpty && glyph.fillPath.isEmpty),
-                "\(design.rawValue) has no geometry")
+                "\(design.rawValue) has no geometry"
+            )
             for path in [glyph.strokePath, glyph.fillPath] where !path.isEmpty {
                 #expect(
                     limit.contains(path.boundingRect),
-                    "\(design.rawValue) outside 16×16 art bounds: \(path.boundingRect)")
+                    "\(design.rawValue) outside 16×16 art bounds: \(path.boundingRect)"
+                )
             }
         }
     }

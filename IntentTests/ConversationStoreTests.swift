@@ -1,11 +1,10 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for ConversationStore – covers reset behavior and lastFailedSend tracking.
 @MainActor
 struct ConversationStoreTests {
-
     // MARK: - Helpers
 
     private func makeAgent(
@@ -17,15 +16,26 @@ struct ConversationStoreTests {
         isResponding: Bool = false
     ) -> AgentSession {
         AgentSession(
-            id: id, name: name, status: status,
-            isBackground: false, isStreaming: isStreaming,
-            isProcessing: isProcessing, isResponding: isResponding,
-            isWaitingForOtherAgents: false, waitingForAgentIds: [],
-            createdAt: nil, updatedAt: nil, lastActivity: nil,
-            lastAgentResponse: nil, lastUserMessage: nil,
+            id: id,
+            name: name,
+            status: status,
+            isBackground: false,
+            isStreaming: isStreaming,
+            isProcessing: isProcessing,
+            isResponding: isResponding,
+            isWaitingForOtherAgents: false,
+            waitingForAgentIds: [],
+            createdAt: nil,
+            updatedAt: nil,
+            lastActivity: nil,
+            lastAgentResponse: nil,
+            lastUserMessage: nil,
             lastMessageRole: nil,
-            digest: nil, specialist: nil, createdByAgentId: nil,
-            attentionRequestKind: nil, attentionRequestReason: nil,
+            digest: nil,
+            specialist: nil,
+            createdByAgentId: nil,
+            attentionRequestKind: nil,
+            attentionRequestReason: nil,
             attentionRequestTimestamp: nil
         )
     }
@@ -132,7 +142,7 @@ struct ConversationStoreTests {
 
     @Test func rollbackFailedSendRemovesOptimisticMessageAndThinking() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
@@ -152,9 +162,10 @@ struct ConversationStoreTests {
         let store = ConversationStore()
         store.messages = [
             ConversationMessage(
-                id: "m1", role: .user,
+                id: "m1",
+                role: .user,
                 contentBlocks: [ContentBlock(type: .text, text: "hi")]
-            ),
+            )
         ]
         store.isStreaming = true
 
@@ -170,7 +181,8 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "A",
+                "id": "a",
+                "name": "A",
                 "attentionRequestKind": "blocker",
                 "attentionRequestReason": "sandbox is broken",
                 "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
@@ -236,11 +248,14 @@ struct ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
-            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            agentId: "a",
+            content: "Q: x\nA: y",
+            workspaceId: "w",
             messageMetadata: [
                 "type": "question_answers",
-                "answeredQuestionsMessageId": "msg-q1",
-            ])
+                "answeredQuestionsMessageId": "msg-q1"
+            ]
+        )
 
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         let metadata = try #require(sent.params["messageMetadata"] as? [String: Any])
@@ -261,7 +276,7 @@ struct ConversationStoreTests {
 
     @Test func failedSendKeepsAttentionRequest() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
         let store = ConversationStore(connectionManager: fake)
         store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "input needed")
 
@@ -286,9 +301,13 @@ struct ConversationStoreTests {
         // agent.getConversation answers -32602 with data.code == "not-found" for a
         // nonexistent agent (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: gone",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchConversation(agentId: "gone", workspaceId: "w")
@@ -301,8 +320,10 @@ struct ConversationStoreTests {
         // -32602 without data.code == "not-found" (invalid-params or a legacy
         // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
+        )
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchConversation(agentId: "a", workspaceId: "w")
@@ -313,9 +334,13 @@ struct ConversationStoreTests {
     @Test func fetchConversationInvalidParams32602DoesNotRaiseAgentNotFound() async {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId",
-                       NSError.intentErrorDataCodeKey: "invalid-params"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Missing required parameter: agentId",
+                NSError.intentErrorDataCodeKey: "invalid-params"
+            ]
+        )
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchConversation(agentId: "a", workspaceId: "w")
@@ -327,8 +352,10 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         // Transport-level timeout must not read as deletion
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            domain: "WebSocket",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+        )
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchConversation(agentId: "a", workspaceId: "w")
@@ -339,9 +366,13 @@ struct ConversationStoreTests {
     @Test func fetchAgentStreamingStateNotFoundRaisesAgentNotFound() async {
         let fake = FakeConnectionManager()
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: gone",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: gone",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchAgentStreamingState(agentId: "gone")
@@ -388,7 +419,8 @@ struct ConversationStoreTests {
     @Test func dismissQuestionsCallsRpcAndRaisesMarker() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
 
@@ -413,15 +445,17 @@ struct ConversationStoreTests {
 
     @Test func failedDismissRollsBackMarkerAndRethrows() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
             try await store.dismissQuestions(agentId: "a", messageId: "a1", workspaceId: "w")
         }
 
-        #expect(store.dismissedQuestionsMessageId == nil,
-                "a failed dismiss must roll the optimistic marker back so the wizard re-pends")
+        #expect(
+            store.dismissedQuestionsMessageId == nil,
+            "a failed dismiss must roll the optimistic marker back so the wizard re-pends"
+        )
     }
 
     @Test func dismissQuestionsRaisesMarkerOptimisticallyBeforeRpcReturns() async throws {
@@ -434,11 +468,17 @@ struct ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         let inFlight = Task { try await store.dismissQuestions(
-            agentId: "a", messageId: "a1", workspaceId: "w") }
+            agentId: "a",
+            messageId: "a1",
+            workspaceId: "w"
+        )
+        }
         try await Task.sleep(nanoseconds: 10_000_000)
 
-        #expect(store.dismissedQuestionsMessageId == "a1",
-                "the marker is raised optimistically while the RPC is in flight")
+        #expect(
+            store.dismissedQuestionsMessageId == "a1",
+            "the marker is raised optimistically while the RPC is in flight"
+        )
         try await inFlight.value
         #expect(store.dismissedQuestionsMessageId == "a1")
     }
@@ -447,18 +487,24 @@ struct ConversationStoreTests {
         // If another client's dismissal lands (agent:updated push) while our
         // failing RPC is in flight, the rollback must not clobber it.
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         fake.delayMap["agent.dismissQuestions"] = 50_000_000
         let store = ConversationStore(connectionManager: fake)
 
         let inFlight = Task { try await store.dismissQuestions(
-            agentId: "a", messageId: "a1", workspaceId: "w") }
+            agentId: "a",
+            messageId: "a1",
+            workspaceId: "w"
+        )
+        }
         try await Task.sleep(nanoseconds: 10_000_000)
         store.dismissedQuestionsMessageId = "a2"
 
         await #expect(throws: (any Error).self) { try await inFlight.value }
-        #expect(store.dismissedQuestionsMessageId == "a2",
-                "rollback must not clobber a marker moved while the RPC was in flight")
+        #expect(
+            store.dismissedQuestionsMessageId == "a2",
+            "rollback must not clobber a marker moved while the RPC was in flight"
+        )
     }
 
     @Test func agentUpdatedEventAppliesDismissalMarkerPushStyle() async {
@@ -468,13 +514,19 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "dismissedQuestionsMessageId": "a1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "dismissedQuestionsMessageId": "a1"
+                ]
+            ] as [String: Any]
         ])
 
-        #expect(store.dismissedQuestionsMessageId == "a1",
-                "a dismissal from another client must retire the wizard here too")
+        #expect(
+            store.dismissedQuestionsMessageId == "a1",
+            "a dismissal from another client must retire the wizard here too"
+        )
     }
 
     @Test func agentUpdatedEventForOtherAgentIsIgnored() async {
@@ -484,9 +536,13 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "someone-else",
-                               "dismissedQuestionsMessageId": "x1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "someone-else",
+                    "dismissedQuestionsMessageId": "x1"
+                ]
+            ] as [String: Any]
         ])
 
         #expect(store.dismissedQuestionsMessageId == nil)
@@ -500,29 +556,38 @@ struct ConversationStoreTests {
         store.dismissedQuestionsMessageId = "a1"
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
 
-        #expect(store.dismissedQuestionsMessageId == "a1",
-                "an unrelated agent:updated must not clear the marker")
+        #expect(
+            store.dismissedQuestionsMessageId == "a1",
+            "an unrelated agent:updated must not clear the marker"
+        )
     }
 
     @Test func fetchAgentStreamingStateRestoresDismissalMarkerFromMetadata() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["dismissedQuestionsMessageId": "a1"],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["dismissedQuestionsMessageId": "a1"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchAgentStreamingState(agentId: "a")
 
-        #expect(store.dismissedQuestionsMessageId == "a1",
-                "the daemon-persisted marker must survive reload (AgentLite metadata)")
+        #expect(
+            store.dismissedQuestionsMessageId == "a1",
+            "the daemon-persisted marker must survive reload (AgentLite metadata)"
+        )
     }
 
     @Test func resetClearsDismissalMarker() {
@@ -543,8 +608,9 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["pendingQuestionsMessageId": "a1"],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["pendingQuestionsMessageId": "a1"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
@@ -560,8 +626,10 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test", "isStreaming": false,
-                "metadata": ["pendingQuestionsMessageId": "a1"],
+                "id": "a",
+                "name": "Test",
+                "isStreaming": false,
+                "metadata": ["pendingQuestionsMessageId": "a1"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
@@ -577,8 +645,9 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["pendingQuestionsMessageId": ""],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["pendingQuestionsMessageId": ""]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
@@ -586,15 +655,16 @@ struct ConversationStoreTests {
 
         await store.fetchAgentStreamingState(agentId: "a")
 
-        #expect(store.pendingQuestionsMessageId == "")
+        #expect(store.pendingQuestionsMessageId.isEmpty)
     }
 
     @Test func fetchAgentStreamingStateWithoutPendingMarkerLeavesItUntouched() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["dismissedQuestionsMessageId": "a0"],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["dismissedQuestionsMessageId": "a0"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
@@ -602,8 +672,10 @@ struct ConversationStoreTests {
 
         await store.fetchAgentStreamingState(agentId: "a")
 
-        #expect(store.pendingQuestionsMessageId == "a1",
-                "an absent field is not a clear — only \"\" is")
+        #expect(
+            store.pendingQuestionsMessageId == "a1",
+            "an absent field is not a clear — only \"\" is"
+        )
     }
 
     @Test func agentUpdatedEventAppliesPendingMarkerPushStyle() async {
@@ -613,19 +685,29 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": "a1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": "a1"
+                ]
+            ] as [String: Any]
         ])
         #expect(store.pendingQuestionsMessageId == "a1")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": ""]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": ""
+                ]
+            ] as [String: Any]
         ])
-        #expect(store.pendingQuestionsMessageId == "",
-                "the daemon clearing the marker to \"\" must land push-style")
+        #expect(
+            store.pendingQuestionsMessageId.isEmpty,
+            "the daemon clearing the marker to \"\" must land push-style"
+        )
     }
 
     @Test func agentUpdatedEventDuringInitialFetchIsAppliedNotDropped() async throws {
@@ -644,21 +726,29 @@ struct ConversationStoreTests {
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": "",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": "",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
-        #expect(store.pendingQuestionsMessageId == "",
-                "the marker clear lands while the fetch is still in flight")
+        #expect(
+            store.pendingQuestionsMessageId.isEmpty,
+            "the marker clear lands while the fetch is still in flight"
+        )
         #expect(store.lastSeenMessageId == "m9")
 
         fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
         await fetch.value
 
         #expect(!store.isLoading)
-        #expect(store.pendingQuestionsMessageId == "",
-                "settling the fetch does not revert the pushed marker")
+        #expect(
+            store.pendingQuestionsMessageId.isEmpty,
+            "settling the fetch does not revert the pushed marker"
+        )
         #expect(store.lastSeenMessageId == "m9")
     }
 
@@ -677,31 +767,47 @@ struct ConversationStoreTests {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": "a2",
-                               "dismissedQuestionsMessageId": "a1",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": "a2",
+                    "dismissedQuestionsMessageId": "a1",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A", "isStreaming": true,
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "dismissedQuestionsMessageId": "a0",
-                             "lastSeenMessageId": "m3"],
+                "id": "a",
+                "name": "A",
+                "isStreaming": true,
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "dismissedQuestionsMessageId": "a0",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
-        #expect(store.pendingQuestionsMessageId == "a2",
-                "the stale reply must not revert the pushed pending marker")
-        #expect(store.dismissedQuestionsMessageId == "a1",
-                "the stale reply must not revert the pushed dismissal marker")
-        #expect(store.lastSeenMessageId == "m9",
-                "the stale reply must not revert the pushed seen marker")
-        #expect(store.isStreaming,
-                "streaming state is still applied from the reply")
+        #expect(
+            store.pendingQuestionsMessageId == "a2",
+            "the stale reply must not revert the pushed pending marker"
+        )
+        #expect(
+            store.dismissedQuestionsMessageId == "a1",
+            "the stale reply must not revert the pushed dismissal marker"
+        )
+        #expect(
+            store.lastSeenMessageId == "m9",
+            "the stale reply must not revert the pushed seen marker"
+        )
+        #expect(
+            store.isStreaming,
+            "streaming state is still applied from the reply"
+        )
     }
 
     @Test func agentGetReplyStillAppliesMarkersWhenNoPushIntervened() async throws {
@@ -716,10 +822,13 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "dismissedQuestionsMessageId": "a0",
-                             "lastSeenMessageId": "m3"],
+                "id": "a",
+                "name": "A",
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "dismissedQuestionsMessageId": "a0",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -746,22 +855,33 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "dismissedQuestionsMessageId": "a0",
-                             "lastSeenMessageId": "m3"],
+                "id": "a",
+                "name": "A",
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "dismissedQuestionsMessageId": "a0",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
-        #expect(store.pendingQuestionsMessageId == nil,
-                "A's pending marker must not land in B's conversation")
-        #expect(store.dismissedQuestionsMessageId == nil,
-                "A's dismissal marker must not land in B's conversation")
-        #expect(store.lastSeenMessageId == nil,
-                "A's seen marker must not land in B's conversation")
-        #expect(store.pendingQuestionRecovery == nil,
-                "no recovery seek may be started for A's marker against B")
+        #expect(
+            store.pendingQuestionsMessageId == nil,
+            "A's pending marker must not land in B's conversation"
+        )
+        #expect(
+            store.dismissedQuestionsMessageId == nil,
+            "A's dismissal marker must not land in B's conversation"
+        )
+        #expect(
+            store.lastSeenMessageId == nil,
+            "A's seen marker must not land in B's conversation"
+        )
+        #expect(
+            store.pendingQuestionRecovery == nil,
+            "no recovery seek may be started for A's marker against B"
+        )
     }
 
     @Test func staleAgentGetReplyAfterResetDoesNotRestoreMarkers() async throws {
@@ -778,10 +898,13 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "dismissedQuestionsMessageId": "a0",
-                             "lastSeenMessageId": "m3"],
+                "id": "a",
+                "name": "A",
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "dismissedQuestionsMessageId": "a0",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -808,9 +931,12 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "lastSeenMessageId": "m3"],
+                "id": "a",
+                "name": "A",
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -832,15 +958,20 @@ struct ConversationStoreTests {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "someone-else",
-                               "pendingQuestionsMessageId": "x1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "someone-else",
+                    "pendingQuestionsMessageId": "x1"
+                ]
+            ] as [String: Any]
         ])
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1"],
+                "id": "a",
+                "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1"]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -867,17 +998,23 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A", "isStreaming": true,
+                "id": "a",
+                "name": "A",
+                "isStreaming": true,
                 "attentionRequestKind": "blocker",
-                "attentionRequestReason": "a is stuck",
+                "attentionRequestReason": "a is stuck"
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
-        #expect(!store.isStreaming,
-                "A's streaming state must not land in B's conversation")
-        #expect(store.attentionRequest?.kind == .discussion,
-                "A's attention request must not replace B's")
+        #expect(
+            !store.isStreaming,
+            "A's streaming state must not land in B's conversation"
+        )
+        #expect(
+            store.attentionRequest?.kind == .discussion,
+            "A's attention request must not replace B's"
+        )
         #expect(store.attentionRequest?.reason == "b needs input")
     }
 
@@ -897,8 +1034,10 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A", "isStreaming": true,
-                "attentionRequestKind": "blocker",
+                "id": "a",
+                "name": "A",
+                "isStreaming": true,
+                "attentionRequestKind": "blocker"
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -914,9 +1053,13 @@ struct ConversationStoreTests {
         fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.delayMap["agent.get"] = 150_000_000
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: a",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: a",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
@@ -926,8 +1069,10 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "b", workspaceId: "w")
         await refresh.value
 
-        #expect(!store.agentNotFound,
-                "a not-found for the previous agent must not mark the current one deleted")
+        #expect(
+            !store.agentNotFound,
+            "a not-found for the previous agent must not mark the current one deleted"
+        )
     }
 
     @Test func staleAgentGetReplyAfterResetDoesNotRestoreStreamingOrAttention() async throws {
@@ -948,9 +1093,11 @@ struct ConversationStoreTests {
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A", "isStreaming": true,
+                "id": "a",
+                "name": "A",
+                "isStreaming": true,
                 "attentionRequestKind": "blocker",
-                "attentionRequestReason": "a is stuck",
+                "attentionRequestReason": "a is stuck"
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
@@ -964,9 +1111,13 @@ struct ConversationStoreTests {
         fake.responseMap["agent.getConversation"] = ["messages": []]
         fake.delayMap["agent.get"] = 150_000_000
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: a",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: a",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
@@ -976,8 +1127,10 @@ struct ConversationStoreTests {
         store.reset()
         await refresh.value
 
-        #expect(!store.agentNotFound,
-                "a stale not-found must not mark the reset store as deleted")
+        #expect(
+            !store.agentNotFound,
+            "a stale not-found must not mark the reset store as deleted"
+        )
     }
 
     @Test func agentGetReplyAfterMarkerPushStillAppliesStreamingAndAttention() async throws {
@@ -996,29 +1149,43 @@ struct ConversationStoreTests {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": "a2"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": "a2"
+                ]
+            ] as [String: Any]
         ])
 
         fake.resolvePending("agent.get", with: [
             "agent": [
-                "id": "a", "name": "A", "isStreaming": true,
+                "id": "a",
+                "name": "A",
+                "isStreaming": true,
                 "attentionRequestKind": "blocker",
                 "attentionRequestReason": "sandbox is broken",
-                "metadata": ["pendingQuestionsMessageId": "a1",
-                             "lastSeenMessageId": "m3"],
+                "metadata": [
+                    "pendingQuestionsMessageId": "a1",
+                    "lastSeenMessageId": "m3"
+                ]
             ] as [String: Any]
         ] as [String: Any])
         await refresh.value
 
         #expect(store.isStreaming, "streaming state is applied despite the marker push")
-        #expect(store.attentionRequest?.kind == .blocker,
-                "attention state is applied despite the marker push")
-        #expect(store.pendingQuestionsMessageId == "a2",
-                "the pushed marker wins over the stale reply")
-        #expect(store.lastSeenMessageId == nil,
-                "the stale reply's seen marker is skipped")
+        #expect(
+            store.attentionRequest?.kind == .blocker,
+            "attention state is applied despite the marker push"
+        )
+        #expect(
+            store.pendingQuestionsMessageId == "a2",
+            "the pushed marker wins over the stale reply"
+        )
+        #expect(
+            store.lastSeenMessageId == nil,
+            "the stale reply's seen marker is skipped"
+        )
     }
 
     @Test func turnBoundaryBufferedDuringInitialFetchTriggersOneMarkerRefresh() async throws {
@@ -1031,8 +1198,9 @@ struct ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "A",
-                "metadata": ["pendingQuestionsMessageId": "a1"],
+                "id": "a",
+                "name": "A",
+                "metadata": ["pendingQuestionsMessageId": "a1"]
             ] as [String: Any]
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
@@ -1042,24 +1210,32 @@ struct ConversationStoreTests {
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:status-changed",
-                      "data": ["agentId": "a", "status": "idle"]] as [String: Any]
+            "event": [
+                "type": "agent:status-changed",
+                "data": ["agentId": "a", "status": "idle"]
+            ] as [String: Any]
         ])
         store.handleStreamEvent("events.event", params: [
             "event": ["type": "agent:idle", "data": ["agentId": "a"]] as [String: Any]
         ])
-        #expect(store.pendingQuestionsMessageId == nil,
-                "turn boundaries are buffered while the fetch is in flight")
+        #expect(
+            store.pendingQuestionsMessageId == nil,
+            "turn boundaries are buffered while the fetch is in flight"
+        )
 
         fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
         await fetch.value
         try await Task.sleep(nanoseconds: 100_000_000)
 
         #expect(!store.isLoading)
-        #expect(store.pendingQuestionsMessageId == "a1",
-                "the buffered turn boundary still refreshes the marker after load")
-        #expect(fake.requestLog.filter { $0.method == "agent.get" }.count == 1,
-                "one refresh regardless of how many boundaries were buffered")
+        #expect(
+            store.pendingQuestionsMessageId == "a1",
+            "the buffered turn boundary still refreshes the marker after load"
+        )
+        #expect(
+            fake.requestLog.filter { $0.method == "agent.get" }.count == 1,
+            "one refresh regardless of how many boundaries were buffered"
+        )
     }
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
@@ -1070,9 +1246,13 @@ struct ConversationStoreTests {
         store.pendingQuestionsMessageId = "a1"
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
 
         #expect(store.pendingQuestionsMessageId == "a1")
@@ -1085,9 +1265,13 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "someone-else",
-                               "pendingQuestionsMessageId": "x1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "someone-else",
+                    "pendingQuestionsMessageId": "x1"
+                ]
+            ] as [String: Any]
         ])
 
         #expect(store.pendingQuestionsMessageId == nil)
@@ -1105,16 +1289,22 @@ struct ConversationStoreTests {
     /// A question-bearing assistant row as the daemon serves it.
     private func questionRow(id: String) -> [String: Any] {
         [
-            "id": id, "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
-            "contentBlocks": [["type": "text", "id": "\(id):0", "text": "Which one?"]],
+            "id": id,
+            "role": "assistant",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [["type": "text", "id": "\(id):0", "text": "Which one?"]]
         ]
     }
 
     private func pushMarker(_ store: ConversationStore, _ markerId: String) {
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "pendingQuestionsMessageId": markerId]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "pendingQuestionsMessageId": markerId
+                ]
+            ] as [String: Any]
         ])
     }
 
@@ -1126,15 +1316,17 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseQueueMap["agent.getConversation"] = [
             ["messages": []] as [String: Any],
-            ["messages": [questionRow(id: "q1")]] as [String: Any],
+            ["messages": [questionRow(id: "q1")]] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         #expect(store.pendingQuestionRecovery == nil)
 
         pushMarker(store, "q1")
-        #expect(store.pendingQuestionRecovery?.status == .loading,
-                "fails closed while the seek is in flight")
+        #expect(
+            store.pendingQuestionRecovery?.status == .loading,
+            "fails closed while the seek is in flight"
+        )
         try await Task.sleep(nanoseconds: 100_000_000)
 
         let seeks = seekRequests(fake)
@@ -1188,8 +1380,10 @@ struct ConversationStoreTests {
         // PROTOCOL §5.5: an unknown aroundMessageId is -32602 naming the id
         // (no data.code == "not-found" — the agent itself exists).
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"]
+        )
 
         pushMarker(store, "q1")
         try await Task.sleep(nanoseconds: 500_000_000)
@@ -1205,16 +1399,21 @@ struct ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         fake.errorQueueMap["agent.getConversation"] = [
-            NSError(domain: "WebSocket", code: -2,
-                    userInfo: [NSLocalizedDescriptionKey: "Request timed out"]),
+            NSError(
+                domain: "WebSocket",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+            )
         ]
         fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
 
         pushMarker(store, "q1")
         try await Task.sleep(nanoseconds: 100_000_000)
         #expect(seekRequests(fake).count == 1)
-        #expect(store.pendingQuestionRecovery?.status == .loading,
-                "still loading while waiting for the 250 ms retry")
+        #expect(
+            store.pendingQuestionRecovery?.status == .loading,
+            "still loading while waiting for the 250 ms retry"
+        )
 
         try await Task.sleep(nanoseconds: 500_000_000)
         #expect(seekRequests(fake).count == 2, "one retry after the transport error")
@@ -1228,8 +1427,10 @@ struct ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         fake.errorMap["agent.getConversation"] = NSError(
-            domain: "WebSocket", code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            domain: "WebSocket",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+        )
         store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
@@ -1254,11 +1455,15 @@ struct ConversationStoreTests {
         pushMarker(store, "")
         #expect(store.pendingQuestionRecovery == nil, "the marker clear drops the state")
 
-        fake.resolvePending("agent.getConversation",
-                            with: ["messages": [questionRow(id: "q1")]] as [String: Any])
+        fake.resolvePending(
+            "agent.getConversation",
+            with: ["messages": [questionRow(id: "q1")]] as [String: Any]
+        )
         try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(store.pendingQuestionRecovery == nil,
-                "a late reply for the cancelled seek never settles state")
+        #expect(
+            store.pendingQuestionRecovery == nil,
+            "a late reply for the cancelled seek never settles state"
+        )
     }
 
     @Test func markerReplacedMidFlightRestartsSeekForTheNewId() async throws {
@@ -1292,13 +1497,17 @@ struct ConversationStoreTests {
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         store.handleStreamEvent("subscription.push", params: [
-            "subscriptionId": "sub-chat", "kind": "snapshot", "seq": 0,
-            "snapshot": ["agentId": "a", "messages": [questionRow(id: "q1")]] as [String: Any],
+            "subscriptionId": "sub-chat",
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": ["agentId": "a", "messages": [questionRow(id: "q1")]] as [String: Any]
         ] as [String: Any])
 
         #expect(store.messages.map(\.id) == ["q1"])
-        #expect(store.pendingQuestionRecovery?.status == .found,
-                "the resident row settles the in-flight seek")
+        #expect(
+            store.pendingQuestionRecovery?.status == .found,
+            "the resident row settles the in-flight seek"
+        )
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
     }
 
@@ -1319,12 +1528,19 @@ struct ConversationStoreTests {
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
-            snapshot: [questionRow(id: "q1")], delta: nil, snapshotMeta: ["agentId": "a"]))
+            subscriptionId: "sub-chat",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [questionRow(id: "q1")],
+            delta: nil,
+            snapshotMeta: ["agentId": "a"]
+        ))
 
         #expect(store.messages.map(\.id) == ["q1"])
-        #expect(store.pendingQuestionRecovery?.status == .found,
-                "the live-channel snapshot settles the in-flight seek from the resident row")
+        #expect(
+            store.pendingQuestionRecovery?.status == .found,
+            "the live-channel snapshot settles the in-flight seek from the resident row"
+        )
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
     }
 
@@ -1336,8 +1552,13 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         await store.subscribeLiveChat(agentId: "a")
         fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-chat", kind: .snapshot, seq: 0,
-            snapshot: [], delta: nil, snapshotMeta: ["agentId": "a"]))
+            subscriptionId: "sub-chat",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [],
+            delta: nil,
+            snapshotMeta: ["agentId": "a"]
+        ))
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
@@ -1345,16 +1566,30 @@ struct ConversationStoreTests {
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         fake.deliverSubscriptionPush(SubscriptionPush(
-            subscriptionId: "sub-chat", kind: .delta, seq: 1, snapshot: nil,
-            delta: .init(added: [[
-                "messageId": "q1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
-                "streamingComplete": true,
-                "block": ["id": "q1:0", "type": "text", "text": "Which one?"] as [String: Any],
-            ] as [String: Any]], updated: [], removedIds: [])))
+            subscriptionId: "sub-chat",
+            kind: .delta,
+            seq: 1,
+            snapshot: nil,
+            delta: .init(
+                added: [
+                    [
+                        "messageId": "q1",
+                        "role": "assistant",
+                        "timestamp": "2024-01-01T00:00:00Z",
+                        "streamingComplete": true,
+                        "block": ["id": "q1:0", "type": "text", "text": "Which one?"] as [String: Any]
+                    ] as [String: Any]
+                ],
+                updated: [],
+                removedIds: []
+            )
+        ))
 
         #expect(store.messages.map(\.id) == ["q1"])
-        #expect(store.pendingQuestionRecovery?.status == .found,
-                "a live-channel delta that materialises the row settles the in-flight seek")
+        #expect(
+            store.pendingQuestionRecovery?.status == .found,
+            "a live-channel delta that materialises the row settles the in-flight seek"
+        )
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
     }
 
@@ -1421,11 +1656,14 @@ struct ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
-            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            agentId: "a",
+            content: "Q: x\nA: y",
+            workspaceId: "w",
             messageMetadata: [
                 "type": "question_answers",
-                "answeredQuestionsMessageId": "msg-q1",
-            ])
+                "answeredQuestionsMessageId": "msg-q1"
+            ]
+        )
 
         let row = try #require(store.messages.last)
         #expect(row.role == .user)
@@ -1453,23 +1691,30 @@ struct ConversationStoreTests {
         // gate still sees the marked set as answered.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.sendMessage"] = [
-            "success": true, "queued": true,
+            "success": true,
+            "queued": true,
             "queuedMessage": [
-                "id": "q-1", "content": "Q: x\nA: y", "queuedAt": "2026-01-01T00:00:00Z",
+                "id": "q-1",
+                "content": "Q: x\nA: y",
+                "queuedAt": "2026-01-01T00:00:00Z",
                 "position": 0,
                 "messageMetadata": [
-                    "type": "question_answers", "answeredQuestionsMessageId": "msg-q1",
-                ],
-            ] as [String: Any],
+                    "type": "question_answers",
+                    "answeredQuestionsMessageId": "msg-q1"
+                ]
+            ] as [String: Any]
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
 
         try await store.sendMessage(
-            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            agentId: "a",
+            content: "Q: x\nA: y",
+            workspaceId: "w",
             messageMetadata: [
                 "type": "question_answers",
-                "answeredQuestionsMessageId": "msg-q1",
-            ])
+                "answeredQuestionsMessageId": "msg-q1"
+            ]
+        )
 
         #expect(store.messages.isEmpty, "the optimistic row moves to the queue panel")
         #expect(store.queuedMessages.map(\.id) == ["q-1"])
@@ -1477,26 +1722,32 @@ struct ConversationStoreTests {
 
         // An agent:queue:updated that raced ahead of the result is not duplicated.
         try await store.sendMessage(
-            agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+            agentId: "a",
+            content: "Q: x\nA: y",
+            workspaceId: "w",
             messageMetadata: [
                 "type": "question_answers",
-                "answeredQuestionsMessageId": "msg-q1",
-            ])
+                "answeredQuestionsMessageId": "msg-q1"
+            ]
+        )
         #expect(store.queuedMessages.count == 1)
     }
 
     @Test func rollbackFailedSendRemovesTaggedOptimisticRow() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
         let store = ConversationStore(connectionManager: fake)
 
         await #expect(throws: (any Error).self) {
             try await store.sendMessage(
-                agentId: "a", content: "Q: x\nA: y", workspaceId: "w",
+                agentId: "a",
+                content: "Q: x\nA: y",
+                workspaceId: "w",
                 messageMetadata: [
                     "type": "question_answers",
-                    "answeredQuestionsMessageId": "msg-q1",
-                ])
+                    "answeredQuestionsMessageId": "msg-q1"
+                ]
+            )
         }
         #expect(store.messages.last?.answeredQuestionsMessageId == "msg-q1")
 
@@ -1511,32 +1762,38 @@ struct ConversationStoreTests {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["lastSeenMessageId": "m1"],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["lastSeenMessageId": "m1"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchAgentStreamingState(agentId: "a")
 
-        #expect(store.lastSeenMessageId == "m1",
-                "the daemon-persisted seen marker must survive reload (AgentLite metadata)")
+        #expect(
+            store.lastSeenMessageId == "m1",
+            "the daemon-persisted seen marker must survive reload (AgentLite metadata)"
+        )
     }
 
     @Test func fetchAgentStreamingStateRaiseOnlyStillAppliesSeenMarker() async {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.get"] = [
             "agent": [
-                "id": "a", "name": "Test",
-                "metadata": ["lastSeenMessageId": "m1"],
+                "id": "a",
+                "name": "Test",
+                "metadata": ["lastSeenMessageId": "m1"]
             ] as [String: Any]
         ]
         let store = ConversationStore(connectionManager: fake)
 
         await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
 
-        #expect(store.lastSeenMessageId == "m1",
-                "raiseOnly only gates isStreaming — the marker refresh applies on both paths")
+        #expect(
+            store.lastSeenMessageId == "m1",
+            "raiseOnly only gates isStreaming — the marker refresh applies on both paths"
+        )
     }
 
     @Test func agentUpdatedEventAppliesSeenMarkerPushStyle() async {
@@ -1546,13 +1803,19 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "a",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "a",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
 
-        #expect(store.lastSeenMessageId == "m9",
-                "a marker move from another client must converge here push-style")
+        #expect(
+            store.lastSeenMessageId == "m9",
+            "a marker move from another client must converge here push-style"
+        )
     }
 
     @Test func agentUpdatedEventForOtherAgentDoesNotMoveSeenMarker() async {
@@ -1562,9 +1825,13 @@ struct ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "someone-else",
-                               "lastSeenMessageId": "m9"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "someone-else",
+                    "lastSeenMessageId": "m9"
+                ]
+            ] as [String: Any]
         ])
 
         #expect(store.lastSeenMessageId == nil)
@@ -1580,12 +1847,13 @@ struct ConversationStoreTests {
     @Test func markSeenSendsNewestPersistedMessageIdAndAdoptsResult() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.markSeen"] = [
-            "success": true, "lastSeenMessageId": "m2",
+            "success": true,
+            "lastSeenMessageId": "m2"
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
         store.messages = [
             ConversationMessage(id: "m1", role: .user),
-            ConversationMessage(id: "m2", role: .assistant),
+            ConversationMessage(id: "m2", role: .assistant)
         ]
 
         await store.markSeen(agentId: "a", workspaceId: "w")
@@ -1594,26 +1862,31 @@ struct ConversationStoreTests {
         #expect(sent.params["agentId"] as? String == "a")
         #expect(sent.params["messageId"] as? String == "m2")
         #expect(sent.params["workspaceId"] as? String == "w")
-        #expect(store.lastSeenMessageId == "m2",
-                "the confirmed marker from the result is adopted")
+        #expect(
+            store.lastSeenMessageId == "m2",
+            "the confirmed marker from the result is adopted"
+        )
     }
 
     @Test func markSeenSkipsStreamingRows() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.markSeen"] = [
-            "success": true, "lastSeenMessageId": "m1",
+            "success": true,
+            "lastSeenMessageId": "m1"
         ] as [String: Any]
         let store = ConversationStore(connectionManager: fake)
         store.messages = [
             ConversationMessage(id: "m1", role: .user),
-            ConversationMessage(id: "m2", role: .assistant, isStreaming: true),
+            ConversationMessage(id: "m2", role: .assistant, isStreaming: true)
         ]
 
         await store.markSeen(agentId: "a", workspaceId: "w")
 
         let sent = try #require(fake.requestLog.last { $0.method == "agent.markSeen" })
-        #expect(sent.params["messageId"] as? String == "m1",
-                "streaming rows are never eligible — the marker must name a persisted message")
+        #expect(
+            sent.params["messageId"] as? String == "m1",
+            "streaming rows are never eligible — the marker must name a persisted message"
+        )
     }
 
     @Test func markSeenNoopWithoutPersistedMessages() async {
@@ -1637,8 +1910,10 @@ struct ConversationStoreTests {
         await store.markSeen(agentId: "a", workspaceId: "w")
         await store.markSeen(agentId: "a", workspaceId: "w")
 
-        #expect(fake.paramsForMethod("agent.markSeen").count == 1,
-                "re-triggering the same target must not re-send")
+        #expect(
+            fake.paramsForMethod("agent.markSeen").count == 1,
+            "re-triggering the same target must not re-send"
+        )
     }
 
     @Test func markSeenSkipsWhenTargetEqualsCurrentMarker() async {
@@ -1654,7 +1929,7 @@ struct ConversationStoreTests {
 
     @Test func markSeenRollsBackDedupeOnFailureSoLaterTriggerRetries() async {
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.markSeen"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.markSeen"] = NSError(domain: "WebSocket", code: -32_000)
         let store = ConversationStore(connectionManager: fake)
         store.messages = [ConversationMessage(id: "m1", role: .assistant)]
 
@@ -1663,12 +1938,15 @@ struct ConversationStoreTests {
 
         fake.errorMap.removeValue(forKey: "agent.markSeen")
         fake.responseMap["agent.markSeen"] = [
-            "success": true, "lastSeenMessageId": "m1",
+            "success": true,
+            "lastSeenMessageId": "m1"
         ] as [String: Any]
         await store.markSeen(agentId: "a", workspaceId: "w")
 
-        #expect(fake.paramsForMethod("agent.markSeen").count == 2,
-                "the dedupe record is rolled back on failure so a later trigger retries")
+        #expect(
+            fake.paramsForMethod("agent.markSeen").count == 2,
+            "the dedupe record is rolled back on failure so a later trigger retries"
+        )
         #expect(store.lastSeenMessageId == "m1")
     }
 
@@ -1687,4 +1965,3 @@ struct ConversationStoreTests {
         #expect(params.last?["messageId"] as? String == "m2")
     }
 }
-

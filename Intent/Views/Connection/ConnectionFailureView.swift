@@ -23,12 +23,16 @@ struct ConnectionFailureView: View {
                 ZStack {
                     Circle()
                         .fill(Theme.destructive(for: colorScheme).opacity(
-                            Constants.ConnectionFailure.destructiveBackgroundOpacity))
-                        .frame(width: Constants.ConnectionFailure.iconBackgroundSize,
-                               height: Constants.ConnectionFailure.iconBackgroundSize)
+                            Constants.ConnectionFailure.destructiveBackgroundOpacity
+                        ))
+                        .frame(
+                            width: Constants.ConnectionFailure.iconBackgroundSize,
+                            height: Constants.ConnectionFailure.iconBackgroundSize
+                        )
                     Image(systemName: "wifi.exclamationmark")
                         .font(.system(size: Constants.ConnectionFailure.iconSize))
                         .foregroundStyle(Theme.destructive(for: colorScheme))
+                        .accessibilityHidden(true)
                 }
 
                 VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
@@ -65,9 +69,11 @@ struct ConnectionFailureView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Constants.ConnectionFailure.controlVerticalPadding)
                         .background(Theme.muted(for: colorScheme).opacity(
-                            Constants.ConnectionFailure.controlBackgroundOpacity))
+                            Constants.ConnectionFailure.controlBackgroundOpacity
+                        ))
                         .clipShape(RoundedRectangle(
-                            cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
+                            cornerRadius: Constants.ConnectionFailure.controlCornerRadius
+                        ))
                     }
 
                     if retryPolicy == .manualLogOff {
@@ -87,8 +93,10 @@ struct ConnectionFailureView: View {
                         stopAutoRetry()
                         coordinator.onReconnect()
                     } label: {
-                        Label(isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
-                              systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus")
+                        Label(
+                            isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
+                            systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus"
+                        )
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -98,8 +106,10 @@ struct ConnectionFailureView: View {
                     // Scrollable with a bounded height so a long list never
                     // pushes the controls or rows off a small viewport.
                     if !savedConnections.isEmpty {
-                        VStack(alignment: .leading,
-                               spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
+                        VStack(
+                            alignment: .leading,
+                            spacing: Constants.ConnectionFailure.savedConnectionsSpacing
+                        ) {
                             Text("Saved Connections")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -136,9 +146,10 @@ struct ConnectionFailureView: View {
             }
         }
         .onAppear {
-            savedConnections = ConnectionFailureView.alternativeConnections(
+            savedConnections = Self.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
-                activeId: coordinator.backendID?.connectionID)
+                activeId: coordinator.backendID?.connectionID
+            )
             applyRetryPolicy()
         }
         .onChange(of: retryPolicy) {
@@ -168,7 +179,8 @@ struct ConnectionFailureView: View {
     /// unbound window, or the record was deleted mid-failure — means there
     /// is nothing to dial.
     static func autoRetryConnection(
-        connections: [StoredConnection], windowConnectionID: UUID?
+        connections: [StoredConnection],
+        windowConnectionID: UUID?
     ) -> StoredConnection? {
         guard let windowConnectionID else { return nil }
         return connections.first { $0.id == windowConnectionID }
@@ -177,7 +189,8 @@ struct ConnectionFailureView: View {
     /// Saved connections other than this window's currently failing bound
     /// one, most recently used first.
     static func alternativeConnections(
-        connections: [StoredConnection], activeId: UUID?
+        connections: [StoredConnection],
+        activeId: UUID?
     ) -> [StoredConnection] {
         connections
             .filter { $0.id != activeId }
@@ -193,6 +206,7 @@ struct ConnectionFailureView: View {
                 Image(systemName: "desktopcomputer")
                     .font(.body)
                     .foregroundStyle(Theme.primary(for: colorScheme))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
                     Text(connection.displayName)
@@ -208,11 +222,13 @@ struct ConnectionFailureView: View {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
             .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
             .background(Theme.muted(for: colorScheme).opacity(
-                Constants.ConnectionFailure.controlBackgroundOpacity))
+                Constants.ConnectionFailure.controlBackgroundOpacity
+            ))
             .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
         }
         .buttonStyle(.plain)
@@ -220,7 +236,7 @@ struct ConnectionFailureView: View {
 
     private func applyRetryPolicy() {
         stopAutoRetry()
-        if retryPolicy == .automaticConnection && !isCertMismatch {
+        if retryPolicy == .automaticConnection, !isCertMismatch {
             startAutoRetry()
         }
     }
@@ -243,7 +259,8 @@ struct ConnectionFailureView: View {
                 // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
                 let delay = min(
                     Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
-                    Constants.ConnectionFailure.retryBackoffMaximum)
+                    Constants.ConnectionFailure.retryBackoffMaximum
+                )
                 try? await Task.sleep(for: .seconds(delay))
                 if Task.isCancelled { break }
 
@@ -251,9 +268,10 @@ struct ConnectionFailureView: View {
                 // attempt so rotated tokens synced mid-retry are used);
                 // a missing record routes to pairing instead of dialing
                 // another backend's.
-                guard let record = ConnectionFailureView.autoRetryConnection(
+                guard let record = Self.autoRetryConnection(
                     connections: PersistenceManager.shared.loadConnections(),
-                    windowConnectionID: coordinator.backendID?.connectionID)
+                    windowConnectionID: coordinator.backendID?.connectionID
+                )
                 else {
                     coordinator.onReconnect()
                     return
@@ -297,4 +315,3 @@ struct ConnectionFailureView: View {
         .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
-

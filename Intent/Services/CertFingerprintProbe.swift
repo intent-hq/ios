@@ -52,7 +52,8 @@ enum CertFingerprintProbe {
             return nil
         }
         return WebSocketConnection.fingerprint(
-            ofCertificate: SecCertificateCopyData(serverCert) as Data)
+            ofCertificate: SecCertificateCopyData(serverCert) as Data
+        )
     }
 
     /// Probe the server's TLS certificate fingerprint via a bare TLS
@@ -85,10 +86,14 @@ enum CertFingerprintProbe {
                 // and the connection is closed immediately after capture.
                 complete(true)
             },
-            queue)
+            queue
+        )
 
         let connection = NWConnection(
-            host: NWEndpoint.Host(host), port: nwPort, using: NWParameters(tls: tlsOptions))
+            host: NWEndpoint.Host(host),
+            port: nwPort,
+            using: NWParameters(tls: tlsOptions)
+        )
         connection.stateUpdateHandler = { state in
             switch state {
             case .setup, .preparing:

@@ -1,9 +1,12 @@
 import SwiftUI
 
 struct WorkspaceDetailView: View {
+    private static let increasedRemainingOpacity = 0.55
+    private static let increasedContrastProgressBorderWidth: CGFloat = 1.5
+
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
-    @State var agentStore: AgentStore
+    @State private var agentStore: AgentStore
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -14,7 +17,7 @@ struct WorkspaceDetailView: View {
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
     @State private var progressWidth: CGFloat = 0
-    @State var noteStore: NoteStore
+    @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
 
     init(workspaceId: String, session: BackendSession) {
@@ -47,7 +50,9 @@ struct WorkspaceDetailView: View {
                     Text("\(owner)/\(repo)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(
-                            for: colorScheme, contrast: colorSchemeContrast))
+                            for: colorScheme,
+                            contrast: colorSchemeContrast
+                        ))
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
@@ -66,8 +71,10 @@ struct WorkspaceDetailView: View {
                             ? ", \(progress.inProgress) in progress"
                             : "")
 
-                    VStack(alignment: .leading,
-                           spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
+                    VStack(
+                        alignment: .leading,
+                        spacing: Constants.WorkspaceDetail.progressSectionSpacing
+                    ) {
                         Text(progressSummary)
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -81,7 +88,8 @@ struct WorkspaceDetailView: View {
                                         ? progress.segmentWidth(
                                             for: progress.completed,
                                             in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                            spacing: Constants.WorkspaceDetail.progressSpacing
+                                        )
                                         : 0)
                             }
                             if progress.inProgress > 0 {
@@ -91,28 +99,37 @@ struct WorkspaceDetailView: View {
                                         ? progress.segmentWidth(
                                             for: progress.inProgress,
                                             in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                            spacing: Constants.WorkspaceDetail.progressSpacing
+                                        )
                                         : 0)
                             }
                             if progress.remaining > 0 {
                                 RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .fill(Theme.mutedForeground(
-                                        for: colorScheme, contrast: colorSchemeContrast).opacity(
+                                    .fill(
+                                        Theme.mutedForeground(
+                                            for: colorScheme,
+                                            contrast: colorSchemeContrast
+                                        )
+                                        .opacity(
                                             colorSchemeContrast == .increased
-                                                ? 0.55
-                                                : Constants.WorkspaceDetail.remainingProgressOpacity))
+                                                ? Self.increasedRemainingOpacity
+                                                : Constants.WorkspaceDetail.remainingProgressOpacity
+                                        )
+                                    )
                                     .frame(width: progressWidth > 0
                                         ? progress.segmentWidth(
                                             for: progress.remaining,
                                             in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
+                                            spacing: Constants.WorkspaceDetail.progressSpacing
+                                        )
                                         : 0)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .frame(height: Constants.WorkspaceDetail.progressHeight)
                         .clipShape(RoundedRectangle(
-                            cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
+                            cornerRadius: Constants.WorkspaceDetail.progressCornerRadius
+                        ))
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.size.width
                         } action: { width in
@@ -121,10 +138,15 @@ struct WorkspaceDetailView: View {
                         .overlay {
                             if colorSchemeContrast == .increased {
                                 RoundedRectangle(
-                                    cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .strokeBorder(Theme.border(
-                                        for: colorScheme, contrast: colorSchemeContrast),
-                                        lineWidth: 1.5)
+                                    cornerRadius: Constants.WorkspaceDetail.progressCornerRadius
+                                )
+                                    .strokeBorder(
+                                        Theme.border(
+                                            for: colorScheme,
+                                            contrast: colorSchemeContrast
+                                        ),
+                                        lineWidth: Self.increasedContrastProgressBorderWidth
+                                    )
                             }
                         }
                         .accessibilityHidden(true)
@@ -141,14 +163,15 @@ struct WorkspaceDetailView: View {
                 .pickerStyle(.segmented)
                 .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
                 .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
-                    hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0))
+                    hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
+                ))
                 .padding(.bottom, Constants.WorkspaceDetail.tabVerticalPadding)
                 #endif
 
                 // Tab content
                 if selectedTab == 0 {
                     // Agent list
-                    if (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty {
+                    if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty {
                         Spacer()
                         ProgressView("Loading agents...")
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -167,13 +190,14 @@ struct WorkspaceDetailView: View {
                     // Notes list
                     NoteListView(workspaceId: workspaceId, noteStore: noteStore)
                 }
-
             }
         }
         .onAppear {
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceOpened(
-                    workspaceId: workspaceId, connectionId: connectionId)
+                    workspaceId: workspaceId,
+                    connectionId: connectionId
+                )
             }
             // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
             // Clearing here causes an empty list flash when swiping back from conversation.
@@ -190,15 +214,21 @@ struct WorkspaceDetailView: View {
             // clobbers another window's visibility.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
-                    workspaceId: workspaceId, connectionId: connectionId)
+                    workspaceId: workspaceId,
+                    connectionId: connectionId
+                )
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
-                    workspaceId: oldId, connectionId: connectionId)
+                    workspaceId: oldId,
+                    connectionId: connectionId
+                )
                 NotificationManager.shared.workspaceOpened(
-                    workspaceId: newId, connectionId: connectionId)
+                    workspaceId: newId,
+                    connectionId: connectionId
+                )
             }
             viewModel.agents = []
             agentStore.prepareForWorkspaceChange(to: newId)
@@ -231,11 +261,13 @@ struct WorkspaceDetailView: View {
                 return
             }
             coordinator.autoOpenSoleAgentIfArmed(
-                workspaceId: workspaceId, foregroundAgents: viewModel.foregroundAgents)
+                workspaceId: workspaceId,
+                foregroundAgents: viewModel.foregroundAgents
+            )
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if workspaceStore.lastUpdated != nil && !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace(workspaceId: workspaceId)
             }
         }
@@ -337,9 +369,8 @@ struct WorkspaceDetailView: View {
                         DelegatedAgentsRow(
                             agents: delegates,
                             isExpanded: expandedDelegates.contains(agent.id),
-                            colorScheme: colorScheme,
-                            onToggle: { toggleDelegates(agent.id) }
-                        )
+                            colorScheme: colorScheme
+                        ) { toggleDelegates(agent.id) }
                         if expandedDelegates.contains(agent.id) {
                             ForEach(delegates) { delegate in
                                 Button {
@@ -360,9 +391,8 @@ struct WorkspaceDetailView: View {
                     BackgroundAgentsHeader(
                         agents: viewModel.standaloneBackgroundAgents,
                         isExpanded: showBackgroundAgents,
-                        colorScheme: colorScheme,
-                        onToggle: { showBackgroundAgents.toggle() }
-                    )
+                        colorScheme: colorScheme
+                    ) { showBackgroundAgents.toggle() }
                     if showBackgroundAgents {
                         ForEach(viewModel.standaloneBackgroundAgents) { agent in
                             Button {
@@ -395,8 +425,10 @@ struct WorkspaceDetailView: View {
     private func deleteWorkspace() {
         Task {
             do {
-                let _ = try await session.connection.request(
-                    "workspace.delete", params: ["workspaceId": workspaceId])
+                _ = try await session.connection.request(
+                    "workspace.delete",
+                    params: ["workspaceId": workspaceId]
+                )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
@@ -408,8 +440,10 @@ struct WorkspaceDetailView: View {
     private func archiveWorkspace() {
         Task {
             do {
-                let _ = try await session.connection.request(
-                    "workspace.archive", params: ["workspaceId": workspaceId])
+                _ = try await session.connection.request(
+                    "workspace.archive",
+                    params: ["workspaceId": workspaceId]
+                )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
@@ -477,7 +511,7 @@ struct WorkspaceTaskProgressLayout: Equatable {
     }
 
     var visibleSegmentCount: Int {
-        [completed, inProgress, remaining].count(where: { $0 > 0 })
+        [completed, inProgress, remaining].count { $0 > 0 }
     }
 
     func segmentWidth(
@@ -496,4 +530,3 @@ enum WorkspaceDetailHeaderLayout {
         hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
     }
 }
-

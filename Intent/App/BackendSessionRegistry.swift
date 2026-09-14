@@ -144,15 +144,20 @@ final class BackendSessionRegistry {
             workspaceStore: workspaceStore,
             coordinatorFactory: { claim in
                 AppCoordinator(
-                    workspaceStore: workspaceStore, connection: connection,
+                    workspaceStore: workspaceStore,
+                    connection: connection,
                     backendID: backendID,
-                    claimScreenRestoration: claim)
+                    claimScreenRestoration: claim
+                )
             },
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,
             attachmentImageLoader: AttachmentImageLoader(
-                connection: connection, fileLoader: fileLoader),
-            attentionCueCenter: WorkspaceAttentionCueCenter())
+                connection: connection,
+                fileLoader: fileLoader
+            ),
+            attentionCueCenter: WorkspaceAttentionCueCenter()
+        )
     }
 }

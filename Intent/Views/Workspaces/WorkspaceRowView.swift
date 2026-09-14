@@ -19,7 +19,8 @@ struct WorkspaceRowView: View {
     private var prIndicator: PrIndicatorModel {
         Self.derivePrIndicator(
             workspace: workspace,
-            monitors: monitorsSource.monitors(for: workspace.id))
+            monitors: monitorsSource.monitors(for: workspace.id)
+        )
     }
 
     var body: some View {
@@ -99,7 +100,9 @@ struct WorkspaceRowView: View {
             Text(repo)
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(
-                    for: colorScheme, contrast: colorSchemeContrast))
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
                 .lineLimit(lineLimit)
                 .truncationMode(.middle)
                 .layoutPriority(-1)
@@ -113,7 +116,8 @@ struct WorkspaceRowView: View {
             indicator: prIndicator,
             colorScheme: colorScheme,
             colorSchemeContrast: colorSchemeContrast,
-            expanded: expanded)
+            expanded: expanded
+        )
     }
 
     struct PullRequestBadges: View {
@@ -134,8 +138,10 @@ struct WorkspaceRowView: View {
         }
 
         private var horizontalBadges: some View {
-            HStack(alignment: .firstTextBaseline,
-                   spacing: Constants.WorkspaceRow.metadataSpacing) {
+            HStack(
+                alignment: .firstTextBaseline,
+                spacing: Constants.WorkspaceRow.metadataSpacing
+            ) {
                 badgeContent
             }
         }
@@ -150,48 +156,64 @@ struct WorkspaceRowView: View {
         private var badgeContent: some View {
             if let pill = indicator.pill {
                 let pillColor = WorkspaceRowView.pillColor(for: pill.status)
-                HStack(alignment: .firstTextBaseline,
-                       spacing: Constants.WorkspaceRow.titleSpacing) {
+                HStack(
+                    alignment: .firstTextBaseline,
+                    spacing: Constants.WorkspaceRow.titleSpacing
+                ) {
                     Image(systemName: WorkspaceRowView.pillSystemImage(for: pill.status))
                         .foregroundStyle(pillColor)
                     Text("PR\(pill.number.map { " #\($0)" } ?? "")")
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.mutedForeground(
-                    for: colorScheme, contrast: colorSchemeContrast))
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
                 .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
                 .background(Theme.muted(for: colorScheme), in: Capsule())
                 .overlay {
-                    Capsule().strokeBorder(Theme.border(
-                        for: colorScheme, contrast: colorSchemeContrast),
-                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5)
+                    Capsule().strokeBorder(
+                        Theme.border(
+                            for: colorScheme,
+                            contrast: colorSchemeContrast
+                        ),
+                        lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                    )
                 }
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(
                     "\(pill.status.rawValue.capitalized) pull request"
-                        + (pill.number.map { " #\($0)" } ?? ""))
+                        + (pill.number.map { " #\($0)" } ?? "")
+                )
             }
 
             if indicator.otherMonitorCount > 0 {
                 Text("+\(indicator.otherMonitorCount)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(Theme.mutedForeground(
-                        for: colorScheme, contrast: colorSchemeContrast))
+                        for: colorScheme,
+                        contrast: colorSchemeContrast
+                    ))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, Constants.WorkspaceRow.pillHorizontalPadding)
                     .padding(.vertical, Constants.WorkspaceRow.pillVerticalPadding)
                     .background(Theme.muted(for: colorScheme), in: Capsule())
                     .overlay {
-                        Capsule().strokeBorder(Theme.border(
-                            for: colorScheme, contrast: colorSchemeContrast),
-                            lineWidth: colorSchemeContrast == .increased ? 1 : 0.5)
+                        Capsule().strokeBorder(
+                            Theme.border(
+                                for: colorScheme,
+                                contrast: colorSchemeContrast
+                            ),
+                            lineWidth: colorSchemeContrast == .increased ? 1 : 0.5
+                        )
                     }
                     .accessibilityLabel(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(
-                        indicator.otherMonitorCount))
+                        indicator.otherMonitorCount
+                    ))
             }
         }
     }
@@ -203,7 +225,9 @@ struct WorkspaceRowView: View {
             Text(value)
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(
-                    for: colorScheme, contrast: colorSchemeContrast))
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
                 .lineLimit(1)
                 .fixedSize()
                 .accessibilityLabel("Updated \(value)")

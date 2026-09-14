@@ -47,13 +47,18 @@ enum PairingFlow {
     /// model v2: there is no default session), so the pairing dials the
     /// connection the presenting window will keep using.
     static func connect(
-        payload: PairingPayload, certFingerprint: String,
+        payload: PairingPayload,
+        certFingerprint: String,
         connectionManager: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
         try await connectionManager.connect(
-            hosts: payload.hosts, port: payload.port, token: payload.token,
-            certFingerprint: certFingerprint, tcAddress: payload.tcAddress)
+            hosts: payload.hosts,
+            port: payload.port,
+            token: payload.token,
+            certFingerprint: certFingerprint,
+            tcAddress: payload.tcAddress
+        )
         // A cancelled pairing (deep-link sheet dismissed mid-flight) must
         // not be persisted after the connect happens to complete first —
         // and the just-established authenticated socket must not be left
@@ -63,13 +68,20 @@ enum PairingFlow {
             throw CancellationError()
         }
         let server = PairedServer(
-            hosts: payload.hosts, port: payload.port, name: "Intent",
-            pairedAt: Date(), certFingerprint: certFingerprint,
-            tcAddress: payload.tcAddress)
+            hosts: payload.hosts,
+            port: payload.port,
+            name: "Intent",
+            pairedAt: Date(),
+            certFingerprint: certFingerprint,
+            tcAddress: payload.tcAddress
+        )
         do {
             return try await ConnectionPairing.finalize(
-                server: server, token: payload.token, connection: connectionManager,
-                persistence: persistence)
+                server: server,
+                token: payload.token,
+                connection: connectionManager,
+                persistence: persistence
+            )
         } catch {
             // The authenticated socket belongs to this failed pairing attempt;
             // do not leave it live when no saved connection can own it.

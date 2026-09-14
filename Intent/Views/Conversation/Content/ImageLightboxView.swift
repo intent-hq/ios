@@ -9,7 +9,7 @@ struct ImageLightboxView: View {
     let image: UIImage
     /// Original encoded bytes when known (base64 image blocks) so the
     /// info rows show the real file size.
-    var data: Data? = nil
+    var data: Data?
     @Environment(\.dismiss) private var dismiss
 
     @State private var scale: CGFloat = 1
@@ -36,8 +36,10 @@ struct ImageLightboxView: View {
                 .resizable()
                 .scaledToFit()
                 .scaleEffect(scale * gestureScale)
-                .offset(x: offset.width + dragTranslation.width,
-                        y: offset.height + dragTranslation.height)
+                .offset(
+                    x: offset.width + dragTranslation.width,
+                    y: offset.height + dragTranslation.height
+                )
                 .accessibilityLabel("Image preview")
                 .accessibilityValue("\(Int(scale * 100)) percent zoom")
                 .accessibilityAdjustableAction { direction in
@@ -95,7 +97,8 @@ struct ImageLightboxView: View {
                 .background(.white.opacity(0.15), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget)
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
         }
         .accessibilityLabel("Image actions")
     }
@@ -109,7 +112,8 @@ struct ImageLightboxView: View {
                 .background(.white.opacity(0.15), in: Circle())
                 .frame(
                     minWidth: Constants.Accessibility.minimumTapTarget,
-                    minHeight: Constants.Accessibility.minimumTapTarget)
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
         }
         .accessibilityLabel("Close image")
     }
@@ -145,7 +149,8 @@ struct ImageLightboxView: View {
     private func panImage(by delta: CGSize, in size: CGSize) {
         offset = clampedOffset(
             CGSize(width: offset.width + delta.width, height: offset.height + delta.height),
-            in: size)
+            in: size
+        )
     }
 
     private func magnifyGesture(in size: CGSize) -> some Gesture {
@@ -174,8 +179,10 @@ struct ImageLightboxView: View {
             }
             .onEnded { value in
                 if scale > Self.minScale {
-                    let raw = CGSize(width: offset.width + value.translation.width,
-                                     height: offset.height + value.translation.height)
+                    let raw = CGSize(
+                        width: offset.width + value.translation.width,
+                        height: offset.height + value.translation.height
+                    )
                     dragTranslation = .zero
                     withAnimation(.spring(duration: Constants.Conversation.ImageLightbox.springAnimationDuration)) {
                         offset = clampedOffset(raw, in: size)
@@ -199,7 +206,9 @@ struct ImageLightboxView: View {
         let fitted = CGSize(width: image.size.width * fitRatio, height: image.size.height * fitRatio)
         let maxX = max(0, (fitted.width * scale - container.width) / 2)
         let maxY = max(0, (fitted.height * scale - container.height) / 2)
-        return CGSize(width: min(max(proposed.width, -maxX), maxX),
-                      height: min(max(proposed.height, -maxY), maxY))
+        return CGSize(
+            width: min(max(proposed.width, -maxX), maxX),
+            height: min(max(proposed.height, -maxY), maxY)
+        )
     }
 }

@@ -1,9 +1,14 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct MonitoredPrStoreTests {
+    private struct StateExpectation {
+        let rawValue: String
+        let state: MonitoredPr.State
+        let isActive: Bool
+    }
 
     /// The full §5.42 `prMonitor.list` sample row from PROTOCOL.md.
     private func makeMonitorDict(
@@ -25,13 +30,27 @@ struct MonitoredPrStoreTests {
             "title": "Add review wire surface",
             "url": "https://github.com/octo/repo/pull/12",
             "lastSnapshot": [
-                "state": "open", "isDraft": false, "hasConflicts": false, "isBehind": false,
-                "mergeable": true, "mergeBlockedReason": "1 required check failing (ci)",
-                "checks": ["total": 3, "passed": 2, "failed": 1, "pending": 0,
-                           "failingRequired": ["ci"], "pendingRequired": [] as [String],
-                           "requiredKnown": true],
-                "approvals": ["decision": "approved", "have": 1, "needed": 1,
-                              "changesRequested": 0],
+                "state": "open",
+                "isDraft": false,
+                "hasConflicts": false,
+                "isBehind": false,
+                "mergeable": true,
+                "mergeBlockedReason": "1 required check failing (ci)",
+                "checks": [
+                    "total": 3,
+                    "passed": 2,
+                    "failed": 1,
+                    "pending": 0,
+                    "failingRequired": ["ci"],
+                    "pendingRequired": [] as [String],
+                    "requiredKnown": true
+                ],
+                "approvals": [
+                    "decision": "approved",
+                    "have": 1,
+                    "needed": 1,
+                    "changesRequested": 0
+                ],
                 "threads": ["unresolved": 0, "resolutionRequired": true],
                 "rulesKnown": true
             ] as [String: Any],
@@ -86,8 +105,12 @@ struct MonitoredPrStoreTests {
         #expect(snapshot.mergeable == true)
         #expect(snapshot.mergeBlockedReason == "1 required check failing (ci)")
         #expect(snapshot.checks == .init(total: 3, passed: 2, failed: 1, pending: 0))
-        #expect(snapshot.approvals == .init(decision: "approved", have: 1,
-                                            needed: 1, changesRequested: 0))
+        #expect(snapshot.approvals == .init(
+            decision: "approved",
+            have: 1,
+            needed: 1,
+            changesRequested: 0
+        ))
         #expect(snapshot.threads == .init(unresolved: 0))
     }
 
@@ -116,7 +139,10 @@ struct MonitoredPrStoreTests {
         // A degraded snapshot: `mergeable` still computing,
         // no blocked reason, unreadable branch rules (needed omitted).
         dict["lastSnapshot"] = [
-            "state": "open", "isDraft": true, "hasConflicts": true, "isBehind": true,
+            "state": "open",
+            "isDraft": true,
+            "hasConflicts": true,
+            "isBehind": true,
             "checks": ["total": 0, "passed": 0, "failed": 0, "pending": 0],
             "approvals": ["decision": "review_required", "have": 0, "changesRequested": 2],
             "threads": ["unresolved": 3]
@@ -128,21 +154,25 @@ struct MonitoredPrStoreTests {
         #expect(snapshot.isDraft == true)
         #expect(snapshot.hasConflicts == true)
         #expect(snapshot.isBehind == true)
-        #expect(snapshot.approvals == .init(decision: "review_required", have: 0,
-                                            needed: nil, changesRequested: 2))
+        #expect(snapshot.approvals == .init(
+            decision: "review_required",
+            have: 0,
+            needed: nil,
+            changesRequested: 2
+        ))
         #expect(snapshot.threads == .init(unresolved: 3))
     }
 
     @Test func parsesAllStatesAndIsActive() throws {
-        let expectations: [(String, MonitoredPr.State, Bool)] = [
-            ("active", .active, true),
-            ("completed", .completed, false),
-            ("cancelled", .cancelled, false)
+        let expectations = [
+            StateExpectation(rawValue: "active", state: .active, isActive: true),
+            StateExpectation(rawValue: "completed", state: .completed, isActive: false),
+            StateExpectation(rawValue: "cancelled", state: .cancelled, isActive: false)
         ]
-        for (raw, expected, active) in expectations {
-            let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict(state: raw)))
-            #expect(monitor.state == expected)
-            #expect(monitor.isActive == active)
+        for expectation in expectations {
+            let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict(state: expectation.rawValue)))
+            #expect(monitor.state == expectation.state)
+            #expect(monitor.isActive == expectation.isActive)
         }
     }
 
@@ -165,7 +195,7 @@ struct MonitoredPrStoreTests {
     private func makeEventData(
         monitorId: String = "prm-1",
         state: String = "active",
-        changes: [String]? = nil
+        changes: [String] = []
     ) -> [String: Any] {
         var data: [String: Any] = [
             "workspaceId": "ws-abc",
@@ -175,7 +205,7 @@ struct MonitoredPrStoreTests {
             "prNumber": 12,
             "state": state
         ]
-        if let changes { data["changes"] = changes }
+        if !changes.isEmpty { data["changes"] = changes }
         return data
     }
 
@@ -211,11 +241,15 @@ struct MonitoredPrStoreTests {
         let result = MonitoredPrStore.foldMonitorEvent(
             monitors: [monitor],
             eventType: "prMonitor:changed",
-            data: makeEventData(monitorId: "prm-2",
-                                changes: ["check ci: pending → failed", "1 new comment"])
+            data: makeEventData(
+                monitorId: "prm-2",
+                changes: ["check ci: pending → failed", "1 new comment"]
+            )
         )
-        #expect(result.monitors[0].pendingChanges == ["check ci: pending → failed",
-                                                      "1 new comment"])
+        #expect(result.monitors[0].pendingChanges == [
+            "check ci: pending → failed",
+            "1 new comment"
+        ])
         #expect(result.monitors[0].hasPendingChanges == true)
         #expect(result.needsRefetch == false)
     }
@@ -258,9 +292,13 @@ struct MonitoredPrStoreTests {
         #expect(result.needsRefetch == false)
     }
 
-    @Test func foldUnknownMonitorRequestsRefetch() throws {
-        for eventType in ["prMonitor:registered", "prMonitor:changed",
-                          "prMonitor:emitted", "prMonitor:completed"] {
+    @Test func foldUnknownMonitorRequestsRefetch() {
+        for eventType in [
+            "prMonitor:registered",
+            "prMonitor:changed",
+            "prMonitor:emitted",
+            "prMonitor:completed"
+        ] {
             let result = MonitoredPrStore.foldMonitorEvent(
                 monitors: [],
                 eventType: eventType,

@@ -1,15 +1,14 @@
 import Foundation
+@testable import Intent
 import Observation
 import Synchronization
 import Testing
-@testable import Intent
 
 /// Live-state tests for the chat.subscribe channel using real PROTOCOL §7.1 wire
 /// shapes: object-shaped seq-0 snapshots (messages page + activity flags) and
 /// block-granularity deltas ({ agentId, messageId, role, block } entities).
 @MainActor
 struct ConversationStoreLiveStateTests {
-
     private func makeStore() -> (ConversationStore, FakeConnectionManager) {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -23,7 +22,7 @@ struct ConversationStoreLiveStateTests {
         meta: [String: Any] = [:]
     ) -> [String: Any] {
         var snapshot: [String: Any] = ["agentId": "agent-1", "messages": messages]
-        for (k, v) in meta { snapshot[k] = v }
+        for (key, value) in meta { snapshot[key] = value }
         return [
             "subscriptionId": "sub-chat-123",
             "kind": "snapshot",
@@ -39,7 +38,7 @@ struct ConversationStoreLiveStateTests {
         updated: [[String: Any]] = [],
         removedIds: [String] = []
     ) -> [String: Any] {
-        return [
+        [
             "subscriptionId": "sub-chat-123",
             "kind": "delta",
             "seq": seq,
@@ -63,25 +62,27 @@ struct ConversationStoreLiveStateTests {
             "block": block
         ]
         if streamingComplete { entity["streamingComplete"] = true }
-        if let messageSeq = messageSeq { entity["messageSeq"] = messageSeq }
-        if let timestamp = timestamp { entity["timestamp"] = timestamp }
+        if let messageSeq { entity["messageSeq"] = messageSeq }
+        if let timestamp { entity["timestamp"] = timestamp }
         return entity
     }
 
     // MARK: - Snapshot application
 
-    @Test func appliesObjectShapedSnapshot() async throws {
+    @Test func appliesObjectShapedSnapshot() async {
         let (store, _) = makeStore()
 
         let params = snapshotParams(
             messages: [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ],
                 [
-                    "id": "msg-2", "role": "assistant",
+                    "id": "msg-2",
+                    "role": "assistant",
                     "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Hi there"]],
                     "timestamp": "2026-06-27T01:00:01.000Z"
                 ]
@@ -108,25 +109,28 @@ struct ConversationStoreLiveStateTests {
 
         store.handleStreamEvent(
             "subscription.push",
-            params: snapshotParams(messages: [[
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-06-27T01:00:00.000Z",
-            ]])
+            params: snapshotParams(messages: [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z"
+                ]
+            ])
         )
 
         #expect(changeCount.withLock { $0 } == 1)
     }
 
-    @Test func snapshotWithoutMetaResetsTruncationDefaults() async throws {
+    @Test func snapshotWithoutMetaResetsTruncationDefaults() async {
         let (store, _) = makeStore()
 
         // First snapshot marks the transcript truncated.
         store.handleStreamEvent("subscription.push", params: snapshotParams(
             messages: [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ]
@@ -140,7 +144,8 @@ struct ConversationStoreLiveStateTests {
         // stale truncation state must reset to defaults.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
@@ -151,7 +156,7 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Mid-turn hydration
 
-    @Test func midTurnSnapshotShowsPartialAndStreaming() async throws {
+    @Test func midTurnSnapshotShowsPartialAndStreaming() async {
         let (store, _) = makeStore()
 
         // Snapshot taken mid-turn: synthetic in-flight assistant message with
@@ -159,12 +164,14 @@ struct ConversationStoreLiveStateTests {
         let params = snapshotParams(
             messages: [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Run the tests"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ],
                 [
-                    "id": "msg-2", "role": "assistant",
+                    "id": "msg-2",
+                    "role": "assistant",
                     "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Let me check"]],
                     "timestamp": "2026-06-27T01:00:01.000Z",
                     "isStreaming": true
@@ -179,14 +186,15 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
-    @Test func activityFlagsAloneRaiseStreaming() async throws {
+    @Test func activityFlagsAloneRaiseStreaming() async {
         let (store, _) = makeStore()
 
         // Turn in flight but no partial content yet (no synthetic message).
         let params = snapshotParams(
             messages: [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ]
@@ -200,12 +208,13 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Growing-text delta sequence
 
-    @Test func growingTextDeltasAccumulateFullText() async throws {
+    @Test func growingTextDeltasAccumulateFullText() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
@@ -213,13 +222,17 @@ struct ConversationStoreLiveStateTests {
 
         // First chunk: block's first appearance → added, full text so far
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Let me"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Let me"]
+            )
         ]))
         // Growth: updated carries the FULL accumulated text
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Let me check the logs."])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Let me check the logs."]
+            )
         ]))
 
         #expect(store.messages.count == 2)
@@ -234,25 +247,33 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Tool blocks
 
-    @Test func toolUseAndResultBlocksAppendInOrder() async throws {
+    @Test func toolUseAndResultBlocksAppendInOrder() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Running tests."])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Running tests."]
+            )
         ]))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, added: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:1", "name": "launch-process",
-                "input": ["command": "npm test"], "toolCallId": "call-1"
+                "type": "tool_use",
+                "id": "msg-2:1",
+                "name": "launch-process",
+                "input": ["command": "npm test"],
+                "toolCallId": "call-1"
             ])
         ]))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 3, added: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_result", "id": "msg-2:2", "tool_use_id": "call-1",
-                "output": "ok", "is_error": false
+                "type": "tool_result",
+                "id": "msg-2:2",
+                "tool_use_id": "call-1",
+                "output": "ok",
+                "is_error": false
             ])
         ]))
 
@@ -266,17 +287,21 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Terminal frame
 
-    @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() async throws {
+    @Test func terminalFrameClearsStreamingAndHonorsRemovedIds() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
         // Live chunks: one real block, one orphan the persisted message drops
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Partial"]),
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:1", "text": "orphan"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Partial"]
+            ),
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:1", "text": "orphan"]
+            )
         ]))
         #expect(store.isStreaming == true)
 
@@ -285,11 +310,13 @@ struct ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: deltaParams(
             seq: 2,
             updated: [
-                blockEntity(messageId: "msg-2",
-                            block: ["type": "text", "id": "msg-2:0", "text": "Partial + final."],
-                            streamingComplete: true,
-                            messageSeq: 1,
-                            timestamp: "2026-06-27T01:00:05.000Z")
+                blockEntity(
+                    messageId: "msg-2",
+                    block: ["type": "text", "id": "msg-2:0", "text": "Partial + final."],
+                    streamingComplete: true,
+                    messageSeq: 1,
+                    timestamp: "2026-06-27T01:00:05.000Z"
+                )
             ],
             removedIds: ["msg-2:1"]
         ))
@@ -304,12 +331,13 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Gap detection
 
-    @Test func gapLeavesTranscriptUntouched() async throws {
+    @Test func gapLeavesTranscriptUntouched() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
@@ -317,8 +345,10 @@ struct ConversationStoreLiveStateTests {
 
         // Gap: expected seq 1, got 5 — delta must not apply
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 5, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "lost"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "lost"]
+            )
         ]))
 
         #expect(store.messages.count == 1)
@@ -326,7 +356,7 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Malformed push rejection
 
-    @Test func rejectsMalformedPush() async throws {
+    @Test func rejectsMalformedPush() async {
         // Snapshot push missing "snapshot" field
         let malformedParams: [String: Any] = [
             "subscriptionId": "sub-chat-123",
@@ -341,12 +371,13 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - fetchConversation merge preserves in-flight message
 
-    @Test func fetchMergePreservesInFlightStreamingMessage() async throws {
+    @Test func fetchMergePreservesInFlightStreamingMessage() async {
         let (store, fake) = makeStore()
         fake.responseMap["agent.getConversation"] = [
             "messages": [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ]
@@ -357,14 +388,17 @@ struct ConversationStoreLiveStateTests {
         // server page does not yet contain (mid-turn content is not persisted).
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
         ]))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Working on it"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Working on it"]
+            )
         ]))
         #expect(store.messages.count == 2)
 
@@ -377,14 +411,15 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].isStreaming == true)
     }
 
-    @Test func idleSnapshotClearsStaleStreaming() async throws {
+    @Test func idleSnapshotClearsStaleStreaming() async {
         let (store, _) = makeStore()
 
         // Turn in flight at first snapshot.
         store.handleStreamEvent("subscription.push", params: snapshotParams(
             messages: [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ]
@@ -397,12 +432,14 @@ struct ConversationStoreLiveStateTests {
         // The snapshot is authoritative — stale streaming state must clear.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ],
             [
-                "id": "msg-2", "role": "assistant",
+                "id": "msg-2",
+                "role": "assistant",
                 "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Done"]],
                 "timestamp": "2026-06-27T01:00:01.000Z"
             ]
@@ -410,25 +447,29 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == false)
     }
 
-    @Test func terminalFrameTimestampAdopted() async throws {
+    @Test func terminalFrameTimestampAdopted() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
         // First block delta carries no timestamp — a local one is synthesized.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-1",
-                        block: ["type": "text", "id": "msg-1:0", "text": "Working"])
+            blockEntity(
+                messageId: "msg-1",
+                block: ["type": "text", "id": "msg-1:0", "text": "Working"]
+            )
         ]))
         #expect(store.messages.count == 1)
         #expect(!store.messages[0].timestamp.isEmpty)
 
         // Terminal frame carries the server timestamp — it must be adopted.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
-            blockEntity(messageId: "msg-1",
-                        block: ["type": "text", "id": "msg-1:0", "text": "Working done"],
-                        streamingComplete: true,
-                        timestamp: "2026-06-27T01:00:05.000Z")
+            blockEntity(
+                messageId: "msg-1",
+                block: ["type": "text", "id": "msg-1:0", "text": "Working done"],
+                streamingComplete: true,
+                timestamp: "2026-06-27T01:00:05.000Z"
+            )
         ]))
         #expect(store.messages[0].timestamp == "2026-06-27T01:00:05.000Z")
     }
@@ -439,7 +480,8 @@ struct ConversationStoreLiveStateTests {
         fake.responseMap["agent.getConversation"] = [
             "messages": [
                 [
-                    "id": "msg-1", "role": "user",
+                    "id": "msg-1",
+                    "role": "user",
                     "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                     "timestamp": "2026-06-27T01:00:00.000Z"
                 ]
@@ -454,12 +496,14 @@ struct ConversationStoreLiveStateTests {
         try await Task.sleep(nanoseconds: 20_000_000)
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ],
             [
-                "id": "msg-2", "role": "assistant",
+                "id": "msg-2",
+                "role": "assistant",
                 "contentBlocks": [["type": "text", "id": "msg-2:0", "text": "Working"]],
                 "timestamp": "2026-06-27T01:00:01.000Z",
                 "isStreaming": true
@@ -477,13 +521,14 @@ struct ConversationStoreLiveStateTests {
 
     // MARK: - Firehose gating while chat channel is live
 
-    @Test func firehoseActivityIgnoredWhenChatLive() async throws {
+    @Test func firehoseActivityIgnoredWhenChatLive() async {
         let (store, _) = makeStore()
 
         // Snapshot applied → chatLive; deltas own the transcript from here on.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
@@ -504,15 +549,17 @@ struct ConversationStoreLiveStateTests {
 
         // The delta channel still applies normally afterwards.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Real content"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Real content"]
+            )
         ]))
         #expect(store.messages.count == 2)
         #expect(store.messages[1].contentBlocks?.count == 1)
         #expect(store.messages[1].contentBlocks?.first?.resolvedText == "Real content")
     }
 
-    @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async throws {
+    @Test func firehoseActivityRaisesStreamingWhenChatNotLive() async {
         // No chat.subscribe snapshot applied → chatLive is false (legacy fallback).
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
@@ -527,13 +574,14 @@ struct ConversationStoreLiveStateTests {
         #expect(store.isStreaming == true)
     }
 
-    @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async throws {
+    @Test func failedResubscribeClearsChatLiveSoFirehoseApplies() async {
         let (store, _) = makeStore()
 
         // Chat channel goes live via a snapshot.
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
-                "id": "msg-1", "role": "user",
+                "id": "msg-1",
+                "role": "user",
                 "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
                 "timestamp": "2026-06-27T01:00:00.000Z"
             ]
@@ -562,16 +610,20 @@ struct ConversationStoreLiveStateTests {
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Working"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Working"]
+            )
         ]))
         #expect(store.messages.count == 1)
 
         // Stale re-delivery: seq 1 already applied (expected is now 2) — must be
         // silently ignored, not treated as a gap
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-stale",
-                        block: ["type": "text", "id": "msg-stale:0", "text": "dup"])
+            blockEntity(
+                messageId: "msg-stale",
+                block: ["type": "text", "id": "msg-stale:0", "text": "dup"]
+            )
         ]))
 
         // Give any (wrongly) spawned resnapshot task a chance to run
@@ -583,8 +635,10 @@ struct ConversationStoreLiveStateTests {
 
         // The live sequence continues normally after the stale frame
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Working more"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Working more"]
+            )
         ]))
         #expect(store.messages[0].contentBlocks?.first?.resolvedText == "Working more")
     }
@@ -597,14 +651,18 @@ struct ConversationStoreLiveStateTests {
 
         // Gap: expected seq 1, got 5 — genuine loss, must resnapshot
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 5, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "lost"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "lost"]
+            )
         ]))
         // A second gapped frame while the resnapshot is in flight must not
         // trigger another one (storm guard)
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 6, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:1", "text": "also lost"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:1", "text": "also lost"]
+            )
         ]))
 
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -618,8 +676,10 @@ struct ConversationStoreLiveStateTests {
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Working"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Working"]
+            )
         ]))
         #expect(store.messages.count == 1)
 
@@ -631,8 +691,10 @@ struct ConversationStoreLiveStateTests {
 
         // The live sequence continues without a gap
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
-            blockEntity(messageId: "msg-2",
-                        block: ["type": "text", "id": "msg-2:0", "text": "Working more"])
+            blockEntity(
+                messageId: "msg-2",
+                block: ["type": "text", "id": "msg-2:0", "text": "Working more"]
+            )
         ]))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.messages[0].contentBlocks?.first?.resolvedText == "Working more")
@@ -651,7 +713,9 @@ struct ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "view",
                 "input": ["_acpTitle": "Read `crates/intent-core/src/lib.rs`"],
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "read", "status": "started"]
@@ -669,7 +733,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.path == "crates/intent-core/src")
     }
 
-    @Test func terminalToolWithAcpTitleOnlyExtractsCommand() async throws {
+    @Test func terminalToolWithAcpTitleOnlyExtractsCommand() async {
         let display = ToolClassifier.classify(name: "launch-process", input: [
             "_acpTitle": AnyCodable("Run `cargo test --workspace`")
         ])
@@ -678,7 +742,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.subject == "cargo test --workspace")
     }
 
-    @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async throws {
+    @Test func workspaceApiWithAcpTitleUsesTitleAsLabel() async {
         let display = ToolClassifier.classify(name: "workspace_api", input: [
             "_acpTitle": AnyCodable("Read spec and task note")
         ])
@@ -686,7 +750,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.verb == "Read spec and task note")
     }
 
-    @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() async throws {
+    @Test func unrecognizedToolWithProseAcpTitleUsesTitleVerbatim() async {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("Summarize recent activity for the user")
         ])
@@ -696,7 +760,7 @@ struct ConversationStoreLiveStateTests {
 
     /// A raw tool-name-shaped title (single token) must NOT be rendered verbatim;
     /// the cleaned-name generic fallback wins (desktop isProseToolName parity).
-    @Test func nonProseAcpTitleKeepsCleanedNameFallback() async throws {
+    @Test func nonProseAcpTitleKeepsCleanedNameFallback() async {
         let display = ToolClassifier.classify(name: "zz_unrecognized_tool", input: [
             "_acpTitle": AnyCodable("zz_unrecognized_tool")
         ])
@@ -704,7 +768,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.verb == "Zz Unrecognized Tool")
     }
 
-    @Test func readToolWithQuotedExtensionlessFilenameClassifiesAsRead() async throws {
+    @Test func readToolWithQuotedExtensionlessFilenameClassifiesAsRead() async {
         let display = ToolClassifier.classify(name: "view", input: [
             "_acpTitle": AnyCodable("Read `LICENSE`")
         ])
@@ -713,7 +777,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.subject == "LICENSE")
     }
 
-    @Test func editToolWithAcpTitleOnlyExtractsPath() async throws {
+    @Test func editToolWithAcpTitleOnlyExtractsPath() async {
         let display = ToolClassifier.classify(name: "str-replace-editor", input: [
             "_acpTitle": AnyCodable("Edit `src/foo/bar.ts`")
         ])
@@ -723,7 +787,7 @@ struct ConversationStoreLiveStateTests {
         #expect(display.path == "src/foo")
     }
 
-    @Test func terminalKillAcpTitleUsesTitleVerbAndSubject() async throws {
+    @Test func terminalKillAcpTitleUsesTitleVerbAndSubject() async {
         let display = ToolClassifier.classify(name: "launch-process", input: [
             "_acpTitle": AnyCodable("Kill terminal 5")
         ])
@@ -741,7 +805,9 @@ struct ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "view",
                 "input": ["_acpTitle": "Read `src/main.rs`"],
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "read", "status": "started"]
@@ -751,7 +817,9 @@ struct ConversationStoreLiveStateTests {
         // _acpTitle fallback (pins raw-input-wins precedence).
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "view",
                 "input": ["_acpTitle": "Read `other.rs`", "path": "src/main.rs"],
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "read", "status": "completed"]
@@ -782,7 +850,9 @@ struct ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "view",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "view",
                 "input": ["_acpTitle": "Read `src/main.rs`"],
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "read", "status": "started"]
@@ -792,7 +862,9 @@ struct ConversationStoreLiveStateTests {
         // Sparse in-progress tick: name/input/toolKind collapse to defaults.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "",
                 "input": [String: Any](),
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "other", "status": "started"]
@@ -813,7 +885,9 @@ struct ConversationStoreLiveStateTests {
         // the retained fields while adopting the terminal status.
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 3, updated: [
             blockEntity(messageId: "msg-2", block: [
-                "type": "tool_use", "id": "msg-2:0", "name": "",
+                "type": "tool_use",
+                "id": "msg-2:0",
+                "name": "",
                 "input": [String: Any](),
                 "toolCallId": "call-1",
                 "metadata": ["toolKind": "other", "status": "completed"]
@@ -842,11 +916,14 @@ struct ConversationStoreLiveStateTests {
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: "msg-u1", role: "user",
-                        block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
-                        streamingComplete: true,
-                        messageSeq: 3,
-                        timestamp: "2026-06-27T01:00:02.000Z")
+            blockEntity(
+                messageId: "msg-u1",
+                role: "user",
+                block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
+                streamingComplete: true,
+                messageSeq: 3,
+                timestamp: "2026-06-27T01:00:02.000Z"
+            )
         ]))
 
         #expect(store.messages.count == 1)
@@ -863,14 +940,17 @@ struct ConversationStoreLiveStateTests {
 
     /// Re-delivery of the same user row (same synthetic block id) upserts by
     /// id instead of duplicating the message or its blocks.
-    @Test func userRowDeltaRedeliveryDoesNotDuplicate() async throws {
+    @Test func userRowDeltaRedeliveryDoesNotDuplicate() async {
         let (store, _) = makeStore()
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
 
-        let entity = blockEntity(messageId: "msg-u1", role: "user",
-                                 block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
-                                 streamingComplete: true)
+        let entity = blockEntity(
+            messageId: "msg-u1",
+            role: "user",
+            block: ["type": "text", "id": "msg-u1:0", "text": "Queued message"],
+            streamingComplete: true
+        )
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [entity]))
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [entity]))
 
@@ -893,10 +973,13 @@ struct ConversationStoreLiveStateTests {
         let messageId = try #require(store.messages.first?.id)
 
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: messageId, role: "user",
-                        block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
-                        streamingComplete: true,
-                        timestamp: "2026-06-27T01:00:02.000Z")
+            blockEntity(
+                messageId: messageId,
+                role: "user",
+                block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
+                streamingComplete: true,
+                timestamp: "2026-06-27T01:00:02.000Z"
+            )
         ]))
 
         #expect(store.messages.count == 1)
@@ -915,21 +998,34 @@ struct ConversationStoreLiveStateTests {
         fake.responseMap["agent.sendMessage"] = ["success": true]
 
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: []))
-        try await store.sendMessage(agentId: "agent-1", content: "See this",
-                                    workspaceId: "ws-1",
-                                    imageBlocks: [["type": "image", "data": "aGk=", "mimeType": "image/png"]])
+        try await store.sendMessage(
+            agentId: "agent-1",
+            content: "See this",
+            workspaceId: "ws-1",
+            imageBlocks: [["type": "image", "data": "aGk=", "mimeType": "image/png"]]
+        )
 
         #expect(store.messages.count == 1)
         let messageId = try #require(store.messages.first?.id)
 
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: messageId, role: "user",
-                        block: ["type": "text", "id": "\(messageId):0", "text": "See this"],
-                        streamingComplete: true),
-            blockEntity(messageId: messageId, role: "user",
-                        block: ["type": "image", "id": "\(messageId):1",
-                                "data": "aGk=", "mimeType": "image/png"],
-                        streamingComplete: true)
+            blockEntity(
+                messageId: messageId,
+                role: "user",
+                block: ["type": "text", "id": "\(messageId):0", "text": "See this"],
+                streamingComplete: true
+            ),
+            blockEntity(
+                messageId: messageId,
+                role: "user",
+                block: [
+                    "type": "image",
+                    "id": "\(messageId):1",
+                    "data": "aGk=",
+                    "mimeType": "image/png"
+                ],
+                streamingComplete: true
+            )
         ]))
 
         #expect(store.messages.count == 1)
@@ -954,9 +1050,12 @@ struct ConversationStoreLiveStateTests {
 
         let messageId = try #require(store.messages.first?.id)
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 1, added: [
-            blockEntity(messageId: messageId, role: "user",
-                        block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
-                        streamingComplete: true)
+            blockEntity(
+                messageId: messageId,
+                role: "user",
+                block: ["type": "text", "id": "\(messageId):0", "text": "Hello"],
+                streamingComplete: true
+            )
         ]))
 
         #expect(store.isStreaming == true)
@@ -972,16 +1071,26 @@ struct ConversationStoreLiveStateTests {
         digest: String? = nil
     ) -> AgentSession {
         AgentSession(
-            id: id, name: "Delegate", status: "responding",
-            isBackground: false, isStreaming: true,
-            isProcessing: false, isResponding: true,
-            isWaitingForOtherAgents: false, waitingForAgentIds: [],
-            createdAt: nil, updatedAt: nil, lastActivity: nil,
+            id: id,
+            name: "Delegate",
+            status: "responding",
+            isBackground: false,
+            isStreaming: true,
+            isProcessing: false,
+            isResponding: true,
+            isWaitingForOtherAgents: false,
+            waitingForAgentIds: [],
+            createdAt: nil,
+            updatedAt: nil,
+            lastActivity: nil,
             lastAgentResponse: lastAgentResponse,
             lastUserMessage: lastUserMessage,
             lastMessageRole: lastMessageRole,
-            digest: digest, specialist: nil, createdByAgentId: nil,
-            attentionRequestKind: nil, attentionRequestReason: nil,
+            digest: digest,
+            specialist: nil,
+            createdByAgentId: nil,
+            attentionRequestKind: nil,
+            attentionRequestReason: nil,
             attentionRequestTimestamp: nil
         )
     }
@@ -1024,11 +1133,14 @@ struct ConversationStoreLiveStateTests {
         let (store, fake) = await makeParentStore(watching: "agent-child")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1",
-                "lastAgentResponse": "Running the tests now",
-                "digest": "Running unit tests"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1",
+                    "lastAgentResponse": "Running the tests now",
+                    "digest": "Running unit tests"
+                ]
+            ]
         ])
         await drainMainQueue()
 
@@ -1049,10 +1161,13 @@ struct ConversationStoreLiveStateTests {
         store.watchedAgents = [makeWatchedAgent(id: "agent-child", digest: "Prior digest")]
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1",
-                "lastAgentResponse": "Partial turn text"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1",
+                    "lastAgentResponse": "Partial turn text"
+                ]
+            ]
         ])
         await drainMainQueue()
 
@@ -1068,10 +1183,13 @@ struct ConversationStoreLiveStateTests {
         let (store, fake) = await makeParentStore(watching: "agent-child")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1",
-                "digest": "Fresh digest"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1",
+                    "digest": "Fresh digest"
+                ]
+            ]
         ])
         await drainMainQueue()
 
@@ -1088,18 +1206,23 @@ struct ConversationStoreLiveStateTests {
     /// "assistant", mirroring the daemon's read-path overlay.
     @Test func enrichedActivityFlipsUserNewestPreviewToAgentText() async throws {
         let (store, fake) = await makeParentStore(watching: "agent-child")
-        store.watchedAgents = [makeWatchedAgent(
-            id: "agent-child",
-            lastUserMessage: "Please also update the docs",
-            lastMessageRole: "user"
-        )]
+        store.watchedAgents = [
+            makeWatchedAgent(
+                id: "agent-child",
+                lastUserMessage: "Please also update the docs",
+                lastMessageRole: "user"
+            )
+        ]
         #expect(store.watchedAgents.first?.displayMessage == "Please also update the docs")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1",
-                "lastAgentResponse": "Updating the docs now"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1",
+                    "lastAgentResponse": "Updating the docs now"
+                ]
+            ]
         ])
         await drainMainQueue()
 
@@ -1116,9 +1239,12 @@ struct ConversationStoreLiveStateTests {
         let (store, fake) = await makeParentStore(watching: "agent-child")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1"
+                ]
+            ]
         ])
         await drainMainQueue()
 
@@ -1133,16 +1259,25 @@ struct ConversationStoreLiveStateTests {
     @Test func enrichedActivityForUnloadedWatchedAgentFallsBackToRefetch() async throws {
         let (store, fake) = await makeParentStore(watching: "agent-child")
         store.watchedAgents = []
-        fake.responseMap["agent.get"] = ["agent": [
-            "id": "agent-child", "name": "Delegate", "status": "responding",
-            "isStreaming": true, "lastAgentResponse": "Loaded"
-        ]]
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "agent-child",
+                "name": "Delegate",
+                "status": "responding",
+                "isStreaming": true,
+                "lastAgentResponse": "Loaded"
+            ]
+        ]
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-child", "messageId": "m-1",
-                "lastAgentResponse": "Preview text", "digest": "Digest text"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-child",
+                    "messageId": "m-1",
+                    "lastAgentResponse": "Preview text",
+                    "digest": "Digest text"
+                ]
+            ]
         ])
         try await waitFor { store.watchedAgents.first?.id == "agent-child" }
 
@@ -1156,10 +1291,14 @@ struct ConversationStoreLiveStateTests {
         let (store, fake) = await makeParentStore(watching: "agent-child")
 
         store.handleStreamEvent("event", params: [
-            "event": ["type": "agent:stream:activity", "data": [
-                "agentId": "agent-stranger", "messageId": "m-1",
-                "lastAgentResponse": "Should not apply", "digest": "Nope"
-            ]]
+            "event": [
+                "type": "agent:stream:activity", "data": [
+                    "agentId": "agent-stranger",
+                    "messageId": "m-1",
+                    "lastAgentResponse": "Should not apply",
+                    "digest": "Nope"
+                ]
+            ]
         ])
         await drainMainQueue()
 

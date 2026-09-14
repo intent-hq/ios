@@ -1,7 +1,7 @@
+@testable import Intent
 import SwiftUI
 import Testing
 import UIKit
-@testable import Intent
 
 /// Availability gate for the copy-context-menu interaction
 /// (MessageCopyContextMenu): the overlay is applied unconditionally so the
@@ -89,7 +89,8 @@ struct CopyContextMenuOverlayHitTestTests {
         window.addSubview(host)
         let overlay = CopyContextMenuOverlay.OverlayView()
         let coordinator = CopyContextMenuOverlay.Coordinator(
-            text: "copy me", preview: AnyView(EmptyView())
+            text: "copy me",
+            preview: AnyView(EmptyView())
         )
         overlay.setInteractionEnabled(enabled, delegate: coordinator)
         if wrapped {
@@ -159,7 +160,8 @@ struct CopyContextMenuOverlayHitTestTests {
         // still claimed.
         let fixture = makeFixture(enabled: true)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
-            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100)
+        )
         fixture.host.insertSubview(marker, belowSubview: fixture.overlay)
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
@@ -172,7 +174,8 @@ struct CopyContextMenuOverlayHitTestTests {
         let fixture = makeFixture(enabled: true)
         let wrapper = UIView(frame: .zero)
         let marker = CopyContextMenuPassthroughMarker.MarkerView(
-            frame: CGRect(x: 0, y: 0, width: 50, height: 100))
+            frame: CGRect(x: 0, y: 0, width: 50, height: 100)
+        )
         wrapper.addSubview(marker)
         fixture.host.insertSubview(wrapper, belowSubview: fixture.overlay)
         #expect(fixture.host.hitTest(CGPoint(x: 25, y: 50), with: nil) === marker)

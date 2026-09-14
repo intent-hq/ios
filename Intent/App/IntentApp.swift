@@ -42,13 +42,15 @@ struct IntentApp: App {
                 #if os(visionOS)
                 .frame(
                     minWidth: Constants.Root.visionMinimumWindowWidth,
-                    minHeight: Constants.Root.visionMinimumWindowHeight)
+                    minHeight: Constants.Root.visionMinimumWindowHeight
+                )
                 #endif
         }
         #if os(visionOS)
         .defaultSize(
             width: Constants.Root.visionDefaultWindowWidth,
-            height: Constants.Root.visionDefaultWindowHeight)
+            height: Constants.Root.visionDefaultWindowHeight
+        )
         .windowResizability(.contentMinSize)
         #endif
     }
@@ -73,7 +75,7 @@ enum WindowRetargetRoute: Equatable {
         currentBackendID: BackendID?,
         target: BackendID,
         supportsMultipleWindows: Bool
-    ) -> WindowRetargetRoute {
+    ) -> Self {
         guard supportsMultipleWindows else { return .rebindInPlace }
         guard let current = currentBackendID else { return .replaceWindow }
         return current == target ? .rebindInPlace : .openTargetWindow
@@ -136,6 +138,8 @@ struct SessionWindowRoot: View {
 /// If a dismissal cannot be delivered, the "connection removed" placeholder
 /// remains with a manual Close Window button applying the same decision.
 struct BackendWindowRoot: View {
+    private static let replacementConnectionPollLimit = 20
+
     @Binding var backendID: BackendID?
     @State private var session: BackendSession?
     @State private var pairingSession: BackendSession?
@@ -214,9 +218,10 @@ struct BackendWindowRoot: View {
     /// the target's own window so it stays raisable by value).
     private func retarget(to target: BackendID) {
         switch WindowRetargetRoute.route(
-            currentBackendID: backendID, target: target,
-            supportsMultipleWindows: supportsMultipleWindows)
-        {
+            currentBackendID: backendID,
+            target: target,
+            supportsMultipleWindows: supportsMultipleWindows
+        ) {
         case .openTargetWindow:
             openWindow(value: target)
         case .replaceWindow:
@@ -234,7 +239,7 @@ struct BackendWindowRoot: View {
     /// leaves the pairing window behind (observed on visionOS).
     private func dismissWhenReplacementConnects() {
         Task { @MainActor in
-            for _ in 0..<20 {
+            for _ in 0..<Self.replacementConnectionPollLimit {
                 let scenes = UIApplication.shared.connectedScenes
                     .filter { $0 is UIWindowScene }
                     .count
@@ -262,8 +267,8 @@ struct BackendWindowRoot: View {
         switch RemovedWindowCloseAction.forWindowCounts(
             connectedWindowScenes: windowScenes,
             attachedRemovedBackendWindows:
-                BackendSessionRegistry.shared.attachmentCount(for: removedID))
-        {
+                BackendSessionRegistry.shared.attachmentCount(for: removedID)
+        ) {
         case .dismiss:
             dismissWindow(value: removedID)
         case .retargetToPairing:
@@ -300,7 +305,7 @@ enum RemovedWindowCloseAction: Equatable {
     static func forWindowCounts(
         connectedWindowScenes: Int,
         attachedRemovedBackendWindows: Int
-    ) -> RemovedWindowCloseAction {
+    ) -> Self {
         let surviving = connectedWindowScenes - attachedRemovedBackendWindows - 1
         return surviving > 0 ? .dismiss : .retargetToPairing
     }
@@ -317,6 +322,7 @@ private struct RemovedBackendPlaceholderView: View {
             Image(systemName: "desktopcomputer.trianglebadge.exclamationmark")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Connection Removed")
                 .font(.headline)
             Text("This connection is no longer saved.")

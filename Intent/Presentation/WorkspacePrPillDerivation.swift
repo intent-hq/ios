@@ -8,6 +8,7 @@ extension WorkspaceRowView {
             let status: WorkspacePrPill.Status
             let number: Int?
         }
+
         let pill: Pill?
         let otherMonitorCount: Int
     }
@@ -18,8 +19,10 @@ extension WorkspaceRowView {
     /// "+N" = `countOtherMonitors` against the primary's repo-qualified
     /// number. Like FE `mapWorkspacePRs`, an empty/absent `pullRequests`
     /// falls back to the single `activePullRequest` row before merging.
-    static func derivePrIndicator(workspace: Workspace,
-                                  monitors: [MonitoredPr]) -> PrIndicatorModel {
+    static func derivePrIndicator(
+        workspace: Workspace,
+        monitors: [MonitoredPr]
+    ) -> PrIndicatorModel {
         var workspaceRepo: String?
         if let owner = workspace.repositoryOwner, let name = workspace.repositoryName,
            !owner.isEmpty, !name.isEmpty {
@@ -34,8 +37,11 @@ extension WorkspaceRowView {
             basePrs = []
         }
         let base = basePrs.map(WorkspacePrPill.PillPr.init)
-        let pool = WorkspacePrPill.mergeMonitoredPRs(base, monitors,
-                                                     workspaceRepo: workspaceRepo)
+        let pool = WorkspacePrPill.mergeMonitoredPRs(
+            base,
+            monitors,
+            workspaceRepo: workspaceRepo
+        )
         let primary = WorkspacePrPill.selectPrimaryPr(pool)
 
         let pill: PrIndicatorModel.Pill?
@@ -52,7 +58,8 @@ extension WorkspaceRowView {
             primaryPrNumber: primary?.number ?? workspace.prNumber,
             repositoryOwner: workspace.repositoryOwner,
             repositoryName: workspace.repositoryName,
-            primaryCrossRepo: primary?.crossRepo)
+            primaryCrossRepo: primary?.crossRepo
+        )
         return PrIndicatorModel(pill: pill, otherMonitorCount: count)
     }
 

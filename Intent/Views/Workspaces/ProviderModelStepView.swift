@@ -85,7 +85,7 @@ struct ProviderModelStepView: View {
                             Picker("Model", selection: Binding(
                                 get: { selectedModel?.id ?? "" },
                                 set: { newId in
-                                    selectedModel = models.first(where: { $0.id == newId })
+                                    selectedModel = models.first { $0.id == newId }
                                 }
                             )) {
                                 Text(SpecialistInfo.daemonDefaultLabel(

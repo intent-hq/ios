@@ -23,7 +23,7 @@ class ScrollViewMomentumProxy {
 struct ScrollViewFinder: UIViewRepresentable {
     let proxy: ScrollViewMomentumProxy
 
-    func makeUIView(context: Context) -> UIView {
+    func makeUIView(context _: Context) -> UIView {
         let view = UIView()
         view.isUserInteractionEnabled = false
         view.frame = .zero
@@ -39,7 +39,7 @@ struct ScrollViewFinder: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_: UIView, context _: Context) {}
 
     /// Installed directly on the transcript scroll view so SwiftUI's hosting
     /// recognizer does not starve UIKit link-tap recognizers in message content.
@@ -54,21 +54,23 @@ struct ScrollViewFinder: UIViewRepresentable {
         @objc private func handleTap() {
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
-                to: nil, from: nil, for: nil
+                to: nil,
+                from: nil,
+                for: nil
             )
         }
 
         func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+            _: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
         ) -> Bool {
             true
         }
     }
 
     private static func installKeyboardDismissTap(on scrollView: UIScrollView) {
-        let installed = scrollView.gestureRecognizers?.contains {
-            $0 is KeyboardDismissTapGesture
+        let installed = scrollView.gestureRecognizers?.contains { gestureRecognizer in
+            gestureRecognizer is KeyboardDismissTapGesture
         }
         guard installed != true else { return }
         scrollView.addGestureRecognizer(KeyboardDismissTapGesture())

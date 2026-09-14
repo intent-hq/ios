@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 struct SpecialistInfo: Identifiable {
@@ -9,9 +9,9 @@ struct SpecialistInfo: Identifiable {
     var resolvedModel: String?     // Daemon-resolved default model preview (PROTOCOL §5.11)
     var resolvedProvider: String?  // Provider context the preview was resolved for
     var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
-    var role: String? = nil        // Picker metadata: "orchestrator" | "internal" (PROTOCOL §5.11)
-    var teamAgents: [String]? = nil  // Orchestrator's advisory team roster (render-only, PROTOCOL §5.11)
-    var icon: String? = nil        // Built-in avatar design name; unknown/absent falls back (PROTOCOL §5.11)
+    var role: String?        // Picker metadata: "orchestrator" | "internal" (PROTOCOL §5.11)
+    var teamAgents: [String]?  // Orchestrator's advisory team roster (render-only, PROTOCOL §5.11)
+    var icon: String?        // Built-in avatar design name; unknown/absent falls back (PROTOCOL §5.11)
 }
 
 extension Array where Element == SpecialistInfo {
@@ -116,7 +116,7 @@ extension SpecialistInfo {
         // Refetch on (re)connect: a fetch that failed pre-connection
         // (e.g. "Not connected") must be retried as soon as the
         // connection is up, not wait for a coincidental agent event.
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await fetchAgents(workspaceId: workspaceId)
         }
     }
@@ -265,16 +265,16 @@ extension SpecialistInfo {
         model: String? = nil
     ) async throws -> AgentSession? {
         var params: [String: Any] = ["workspaceId": workspaceId]
-        if let specialistId = specialistId {
+        if let specialistId {
             params["specialistId"] = specialistId
         }
-        if let name = name {
+        if let name {
             params["name"] = name
         }
-        if let provider = provider {
+        if let provider {
             params["provider"] = provider
         }
-        if let model = model {
+        if let model {
             params["model"] = model
         }
 
@@ -290,7 +290,7 @@ extension SpecialistInfo {
     }
 
     func deleteAgent(agentId: String, workspaceId: String) async throws {
-        let _ = try await connectionManager.request(
+        _ = try await connectionManager.request(
             "agent.delete",
             params: ["agentId": agentId, "workspaceId": workspaceId]
         )
@@ -298,7 +298,7 @@ extension SpecialistInfo {
         agents.removeAll { $0.id == agentId }
     }
 
-    private func handleEvent(_ method: String, params: Any) {
+    private func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         let event: [String: Any]
@@ -315,12 +315,11 @@ extension SpecialistInfo {
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
         switch eventType {
-        case let t where t.hasPrefix("agent:"):
-            guard let workspaceId = workspaceId else { return }
+        case let eventName where eventName.hasPrefix("agent:"):
+            guard let workspaceId else { return }
             Task { await fetchAgents(workspaceId: workspaceId) }
         default:
             break
         }
     }
 }
-

@@ -1,12 +1,11 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Display-helper tests for the monitored-PRs chip row (the pure static
 /// funcs on `MonitoredPrsRow`; the SwiftUI body itself is not under test).
 @MainActor
 struct MonitoredPrsRowTests {
-
     private func makeMonitor(
         repo: String = "octo/repo",
         prNumber: Int = 12,
@@ -17,13 +16,23 @@ struct MonitoredPrsRowTests {
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
         MonitoredPr(
-            monitorId: "prm-1", workspaceId: "ws-abc", agentId: "agent-1",
-            repo: repo, prNumber: prNumber, state: .active,
+            monitorId: "prm-1",
+            workspaceId: "ws-abc",
+            agentId: "agent-1",
+            repo: repo,
+            prNumber: prNumber,
+            state: .active,
             pendingChanges: pendingChanges,
             hasPendingChanges: !pendingChanges.isEmpty,
-            createdAt: nil, updatedAt: nil, pendingSince: nil,
-            lastChangeAt: lastChangeAt, lastPolledAt: nil, lastError: nil,
-            title: title, url: url, lastSnapshot: snapshot
+            createdAt: nil,
+            updatedAt: nil,
+            pendingSince: nil,
+            lastChangeAt: lastChangeAt,
+            lastPolledAt: nil,
+            lastError: nil,
+            title: title,
+            url: url,
+            lastSnapshot: snapshot
         )
     }
 
@@ -35,9 +44,15 @@ struct MonitoredPrsRowTests {
         threads: MonitoredPr.Snapshot.Threads = .init(unresolved: 0)
     ) -> MonitoredPr.Snapshot {
         MonitoredPr.Snapshot(
-            state: "open", isDraft: false, hasConflicts: false, isBehind: false,
-            mergeable: mergeable, mergeBlockedReason: mergeBlockedReason,
-            checks: checks, approvals: approvals, threads: threads
+            state: "open",
+            isDraft: false,
+            hasConflicts: false,
+            isBehind: false,
+            mergeable: mergeable,
+            mergeBlockedReason: mergeBlockedReason,
+            checks: checks,
+            approvals: approvals,
+            threads: threads
         )
     }
 
@@ -80,13 +95,16 @@ struct MonitoredPrsRowTests {
 
     @Test func checksSummaryPrefersFailingThenPendingThenPassing() {
         let failing = makeMonitor(snapshot: makeSnapshot(
-            checks: .init(total: 4, passed: 2, failed: 1, pending: 1)))
+            checks: .init(total: 4, passed: 2, failed: 1, pending: 1)
+        ))
         #expect(MonitoredPrsRow.checksSummary(failing) == "1/4 failing")
         let pending = makeMonitor(snapshot: makeSnapshot(
-            checks: .init(total: 4, passed: 2, failed: 0, pending: 2)))
+            checks: .init(total: 4, passed: 2, failed: 0, pending: 2)
+        ))
         #expect(MonitoredPrsRow.checksSummary(pending) == "2/4 pending")
         let passing = makeMonitor(snapshot: makeSnapshot(
-            checks: .init(total: 4, passed: 4, failed: 0, pending: 0)))
+            checks: .init(total: 4, passed: 4, failed: 0, pending: 0)
+        ))
         #expect(MonitoredPrsRow.checksSummary(passing) == "4/4 passing")
     }
 
@@ -94,20 +112,24 @@ struct MonitoredPrsRowTests {
 
     @Test func approvalsSummaryIncludesNeededWhenKnown() {
         let known = makeMonitor(snapshot: makeSnapshot(
-            approvals: .init(decision: "approved", have: 1, needed: 2, changesRequested: 0)))
+            approvals: .init(decision: "approved", have: 1, needed: 2, changesRequested: 0)
+        ))
         #expect(MonitoredPrsRow.approvalsSummary(known) == "approved (1/2 approvals)")
         let unknown = makeMonitor(snapshot: makeSnapshot(
-            approvals: .init(decision: "approved", have: 2, needed: nil, changesRequested: 0)))
+            approvals: .init(decision: "approved", have: 2, needed: nil, changesRequested: 0)
+        ))
         #expect(MonitoredPrsRow.approvalsSummary(unknown) == "approved (2 approvals)")
         #expect(MonitoredPrsRow.approvalsSummary(makeMonitor()) == nil)
     }
 
     @Test func approvalsSummarySingularizesOneApproval() {
         let neededOne = makeMonitor(snapshot: makeSnapshot(
-            approvals: .init(decision: "approved", have: 1, needed: 1, changesRequested: 0)))
+            approvals: .init(decision: "approved", have: 1, needed: 1, changesRequested: 0)
+        ))
         #expect(MonitoredPrsRow.approvalsSummary(neededOne) == "approved (1/1 approval)")
         let haveOne = makeMonitor(snapshot: makeSnapshot(
-            approvals: .init(decision: "approved", have: 1, needed: nil, changesRequested: 0)))
+            approvals: .init(decision: "approved", have: 1, needed: nil, changesRequested: 0)
+        ))
         #expect(MonitoredPrsRow.approvalsSummary(haveOne) == "approved (1 approval)")
     }
 
@@ -162,7 +184,9 @@ struct MonitoredPrsRowTests {
         let unknown = makeMonitor(snapshot: makeSnapshot())
         #expect(MonitoredPrsRow.mergeSummary(unknown) == nil)
         let blocked = makeMonitor(snapshot: makeSnapshot(
-            mergeable: true, mergeBlockedReason: "2 failing checks"))
+            mergeable: true,
+            mergeBlockedReason: "2 failing checks"
+        ))
         #expect(MonitoredPrsRow.mergeSummary(blocked) == "Merge blocked: 2 failing checks")
         let mergeable = makeMonitor(snapshot: makeSnapshot(mergeable: true))
         #expect(MonitoredPrsRow.mergeSummary(mergeable) == "Mergeable")

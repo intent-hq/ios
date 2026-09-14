@@ -11,16 +11,20 @@ struct CompactMarkdownStyle: StructuredText.Style {
     /// Inline-code colors from the old `.markdownTextStyle(\.code)` override.
     static let codeForeground = DynamicColor(
         light: Constants.Colors.Markdown.inlineCodeForeground(for: .light),
-        dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark))
+        dark: Constants.Colors.Markdown.inlineCodeForeground(for: .dark)
+    )
     static let codeBackground = DynamicColor(
         light: Constants.Colors.Markdown.inlineCodeBackground(for: .light),
-        dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark))
+        dark: Constants.Colors.Markdown.inlineCodeBackground(for: .dark)
+    )
 
     let inlineStyle = InlineStyle()
         .code(
-            .monospaced, .fontScale(0.85),
-            .foregroundColor(CompactMarkdownStyle.codeForeground),
-            .backgroundColor(CompactMarkdownStyle.codeBackground))
+            .monospaced,
+            .fontScale(0.85),
+            .foregroundColor(Self.codeForeground),
+            .backgroundColor(Self.codeBackground)
+        )
         .link(.foregroundColor(.blue))
     let headingStyle = CompactHeadingStyle()
     let paragraphStyle = CompactParagraphStyle()
@@ -28,7 +32,10 @@ struct CompactMarkdownStyle: StructuredText.Style {
     let codeBlockStyle = CompactCodeBlockStyle()
     let listItemStyle: StructuredText.DefaultListItemStyle = .default
     let unorderedListMarker: StructuredText.HierarchicalSymbolListMarker = .hierarchical(
-        .disc, .circle, .square)
+        .disc,
+        .circle,
+        .square
+    )
     let orderedListMarker: StructuredText.DecimalListMarker = .decimal
     let tableStyle: StructuredText.GitHubTableStyle = .gitHub
     let tableCellStyle = CompactTableCellStyle()
@@ -43,10 +50,20 @@ extension StructuredText.Style where Self == CompactMarkdownStyle {
 /// h3 17pt/semibold, h4-h6 17pt/medium, with 8/6/4pt top and 4pt bottom margins.
 struct CompactHeadingStyle: StructuredText.HeadingStyle {
     private static let fontScales: [CGFloat] = [
-        17 / 15, 16 / 15, 1, 1, 1, 1,
+        17 / 15,
+        16 / 15,
+        1,
+        1,
+        1,
+        1
     ]
     private static let weights: [Font.Weight] = [
-        .semibold, .semibold, .semibold, .medium, .medium, .medium,
+        .semibold,
+        .semibold,
+        .semibold,
+        .medium,
+        .medium,
+        .medium
     ]
     private static let topMargins: [CGFloat] = [8, 8, 6, 6, 4, 4]
 
@@ -82,7 +99,8 @@ struct CompactBlockQuoteStyle: StructuredText.BlockQuoteStyle {
 struct CompactCodeBlockStyle: StructuredText.CodeBlockStyle {
     private static let background = DynamicColor(
         light: Constants.Colors.Markdown.codeBlockBackground(for: .light),
-        dark: Constants.Colors.Markdown.codeBlockBackground(for: .dark))
+        dark: Constants.Colors.Markdown.codeBlockBackground(for: .dark)
+    )
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -116,6 +134,8 @@ struct CompactThematicBreakStyle: StructuredText.ThematicBreakStyle {
             .textual.blockSpacing(
                 .init(
                     top: 2 * CompactMarkdownStyle.baseFontSize,
-                    bottom: 2 * CompactMarkdownStyle.baseFontSize))
+                    bottom: 2 * CompactMarkdownStyle.baseFontSize
+                )
+            )
     }
 }

@@ -1,6 +1,6 @@
-import SwiftUI
 import Combine
 import Observation
+import SwiftUI
 
 enum AppScreen {
     case loading
@@ -31,6 +31,8 @@ struct DeepLinkPairingRequest: Identifiable, Equatable {
 @MainActor
 @Observable
 class AppCoordinator {
+    private static let invalidParametersErrorCode = -32_602
+
     var currentScreen: AppScreen = .loading
     private(set) var connectionFailureRetryPolicy: ConnectionFailureRetryPolicy = .automaticConnection
     var isDisconnected = false
@@ -54,7 +56,10 @@ class AppCoordinator {
     @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
     /// Notification selection awaiting completion of connection or retry routing.
     @ObservationIgnored private var pendingNotificationSelection: (
-        agentId: String, workspaceId: String, agentName: String, connectionId: UUID
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        connectionId: UUID
     )?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
@@ -118,15 +123,17 @@ class AppCoordinator {
         return claimed
     }
 
-    init(workspaceStore: WorkspaceStore,
-         connection: any SessionConnectionManaging,
-         backendID: BackendID? = nil,
-         persistence: PersistenceManager = PersistenceManager.shared,
-         sessionRegistry: BackendSessionRegistry = .shared,
-         syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
-         backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
-         reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
-         claimScreenRestoration: @escaping @MainActor () -> Bool = { true }) {
+    init(
+        workspaceStore: WorkspaceStore,
+        connection: any SessionConnectionManaging,
+        backendID: BackendID? = nil,
+        persistence: PersistenceManager = PersistenceManager.shared,
+        sessionRegistry: BackendSessionRegistry = .shared,
+        syncedRegistry: SyncedBackendRegistry = SyncedBackendRegistry(),
+        backgroundTaskManager: BackgroundTaskManager = BackgroundTaskManager(),
+        reconnectLoadingObservationDidChange: @escaping @Sendable () -> Void = {},
+        claimScreenRestoration: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.workspaceStore = workspaceStore
         self.connection = connection
         self.backendID = backendID
@@ -150,26 +157,26 @@ class AppCoordinator {
         connectionObserver = connection.connectionStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
-                guard let self = self else { return }
+                guard let self else { return }
                 switch state {
                 case .reconnecting, .disconnected:
-                    self.cancelReconnectLoadingObservation()
-                    self.reconnectOverlayTimeoutTask?.cancel()
-                    self.reconnectOverlayTimeoutTask = nil
-                    if self.hasEverConnected {
-                        self.isDisconnected = true
+                    cancelReconnectLoadingObservation()
+                    reconnectOverlayTimeoutTask?.cancel()
+                    reconnectOverlayTimeoutTask = nil
+                    if hasEverConnected {
+                        isDisconnected = true
                     }
                 case .connected:
-                    let wasDisconnected = self.isDisconnected
-                    self.hasEverConnected = true
+                    let wasDisconnected = isDisconnected
+                    hasEverConnected = true
                     if wasDisconnected {
                         // On reconnection, wait for workspace data to load before
                         // clearing the overlay so the UI doesn't flash blank metadata.
-                        self.waitForWorkspaceLoadThenClearOverlay()
+                        waitForWorkspaceLoadThenClearOverlay()
                         // The agent shown in an open conversation may have been
                         // deleted while disconnected — re-validate it. (Workspace
                         // validation follows from the reconnect fetchAll.)
-                        self.revalidateCurrentAgentAfterReconnect()
+                        revalidateCurrentAgentAfterReconnect()
                     } else {
                         // Initial connection — isDisconnected was never true, nothing to clear.
                     }
@@ -181,7 +188,7 @@ class AppCoordinator {
 
     /// After a reconnect, re-run agent validation if the current screen is a conversation.
     private func revalidateCurrentAgentAfterReconnect() {
-        if case .agentConversation(let agentId, let workspaceId, _) = currentScreen {
+        if case let .agentConversation(agentId, workspaceId, _) = currentScreen {
             Task { @MainActor in
                 await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
             }
@@ -198,8 +205,8 @@ class AppCoordinator {
 
         // If WorkspaceStore is not currently loading (fetchAll already completed
         // or hasn't started yet), check if data is already available.
-        if !workspaceStore.isLoading && workspaceStore.lastUpdated != nil {
-            self.isDisconnected = false
+        if !workspaceStore.isLoading, workspaceStore.lastUpdated != nil {
+            isDisconnected = false
             return
         }
 
@@ -216,10 +223,10 @@ class AppCoordinator {
                 return
             }
             guard let self, !Task.isCancelled else { return }
-            self.reconnectOverlayTimeoutTask = nil
-            if self.isDisconnected {
-                self.cancelReconnectLoadingObservation()
-                self.isDisconnected = false
+            reconnectOverlayTimeoutTask = nil
+            if isDisconnected {
+                cancelReconnectLoadingObservation()
+                isDisconnected = false
             }
         }
     }
@@ -239,29 +246,28 @@ class AppCoordinator {
             observationDidChange()
             Task { @MainActor [weak self] in
                 guard let self,
-                      self.reconnectLoadingObservationID == observationID else { return }
-                if self.workspaceStore.isLoading {
-                    self.observeWorkspaceLoading(observationID: observationID)
+                      reconnectLoadingObservationID == observationID else { return }
+                if workspaceStore.isLoading {
+                    observeWorkspaceLoading(observationID: observationID)
                 } else {
-                    self.reconnectOverlayTimeoutTask?.cancel()
-                    self.reconnectOverlayTimeoutTask = nil
-                    self.cancelReconnectLoadingObservation()
-                    self.isDisconnected = false
+                    reconnectOverlayTimeoutTask?.cancel()
+                    reconnectOverlayTimeoutTask = nil
+                    cancelReconnectLoadingObservation()
+                    isDisconnected = false
                 }
             }
         }
     }
 
-
     private func startObservingCertMismatch() {
         certMismatchObserver = connection.certMismatchPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] mismatch in
-                guard let self = self, mismatch else { return }
-                self.connectionFailureRetryPolicy = .automaticConnection
-                self.currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
+                guard let self, mismatch else { return }
+                connectionFailureRetryPolicy = .automaticConnection
+                currentScreen = .connectionFailed(error: "Server certificate has changed. Please re-pair your device.")
                 // Reset the flag so it doesn't re-trigger
-                self.connection.certMismatchDetected = false
+                connection.certMismatchDetected = false
             }
     }
 
@@ -272,10 +278,10 @@ class AppCoordinator {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.startObservingWorkspaceList()
+                startObservingWorkspaceList()
                 // Only validate after workspaces have been fetched at least once
-                guard self.workspaceStore.lastUpdated != nil else { return }
-                self.validateCurrentWorkspaceExists(in: self.workspaceStore.workspaces)
+                guard workspaceStore.lastUpdated != nil else { return }
+                validateCurrentWorkspaceExists(in: workspaceStore.workspaces)
             }
         }
     }
@@ -361,10 +367,12 @@ class AppCoordinator {
         pendingDeepLinkPairing = nil
         if let bound = backendID, bound.connectionID == connection.id {
             self.connection.updateCachedCredentials(
-                hosts: connection.server.hosts, port: connection.server.port,
+                hosts: connection.server.hosts,
+                port: connection.server.port,
                 token: connection.token,
                 certFingerprint: connection.server.certFingerprint,
-                tcAddress: connection.server.tcAddress)
+                tcAddress: connection.server.tcAddress
+            )
             connectionAttemptId += 1
             currentScreen = .connecting
             return
@@ -474,12 +482,14 @@ class AppCoordinator {
             exitRemovedBackend()
         } else if outcome.changed {
             if let record = windowConnection,
-                outcome.updatedIds.contains(record.id)
-            {
+                outcome.updatedIds.contains(record.id) {
                 connection.updateCachedCredentials(
-                    hosts: record.server.hosts, port: record.server.port,
-                    token: record.token, certFingerprint: record.server.certFingerprint,
-                    tcAddress: record.server.tcAddress)
+                    hosts: record.server.hosts,
+                    port: record.server.port,
+                    token: record.token,
+                    certFingerprint: record.server.certFingerprint,
+                    tcAddress: record.server.tcAddress
+                )
             }
             // A merge while the pairing surface is up must (un)offer the
             // saved connections it added/removed.
@@ -529,7 +539,10 @@ class AppCoordinator {
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
                     currentScreen = .agentConversation(
-                        agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+                        agentId: agentId,
+                        workspaceId: workspaceId,
+                        agentName: agentName
+                    )
                     // Validate agent still exists asynchronously
                     Task { @MainActor in
                         await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
@@ -545,7 +558,10 @@ class AppCoordinator {
                     selectedWorkspaceId = workspaceId
                     suppressWorkspaceNavigation = false
                     currentScreen = .noteDetail(
-                        noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
+                        noteId: noteId,
+                        workspaceId: workspaceId,
+                        noteTitle: noteTitle
+                    )
                     // Validate note still exists asynchronously
                     Task { @MainActor in
                         await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
@@ -693,7 +709,8 @@ class AppCoordinator {
         selectedWorkspaceId = nil
         connectionFailureRetryPolicy = .manualLogOff
         currentScreen = .connectionFailed(
-            error: String(localized: "Could not forget this connection. Please try again."))
+            error: String(localized: "Could not forget this connection. Please try again.")
+        )
     }
 
     func onSelectWorkspace(_ workspaceId: String) {
@@ -708,7 +725,10 @@ class AppCoordinator {
             case "conversation":
                 if let agentId = saved.agentId, let agentName = saved.agentName {
                     currentScreen = .agentConversation(
-                        agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+                        agentId: agentId,
+                        workspaceId: workspaceId,
+                        agentName: agentName
+                    )
                     saveCurrentScreen()
                     // Validate agent still exists asynchronously
                     Task { @MainActor in
@@ -719,7 +739,10 @@ class AppCoordinator {
             case "note":
                 if let noteId = saved.noteId, let noteTitle = saved.noteTitle {
                     currentScreen = .noteDetail(
-                        noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
+                        noteId: noteId,
+                        workspaceId: workspaceId,
+                        noteTitle: noteTitle
+                    )
                     saveCurrentScreen()
                     // Validate note still exists asynchronously
                     Task { @MainActor in
@@ -770,7 +793,9 @@ class AppCoordinator {
         Task { @MainActor in
             do {
                 _ = try await connection.request(
-                    "workspace.markSeen", params: ["workspaceId": workspaceId])
+                    "workspace.markSeen",
+                    params: ["workspaceId": workspaceId]
+                )
             } catch {
                 AppLog.app.error("[AppCoordinator] workspace.markSeen failed: \(error)")
             }
@@ -794,9 +819,15 @@ class AppCoordinator {
         guard restoresLastScreen, let connectionID = windowConnectionID else { return }
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceList", workspaceId: nil,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: connectionID)
+                screen: "workspaceList",
+                workspaceId: nil,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: connectionID
+        )
     }
 
     func onSelectAgent(_ agentId: String, workspaceId: String, agentName: String) {
@@ -809,8 +840,14 @@ class AppCoordinator {
         persistence.saveWorkspaceScreen(
             workspaceId: workspaceId,
             screen: PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: workspaceId,
-                agentId: agentId, agentName: agentName, noteId: nil, noteTitle: nil))
+                screen: "conversation",
+                workspaceId: workspaceId,
+                agentId: agentId,
+                agentName: agentName,
+                noteId: nil,
+                noteTitle: nil
+            )
+        )
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
@@ -820,8 +857,14 @@ class AppCoordinator {
         persistence.saveWorkspaceScreen(
             workspaceId: workspaceId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: workspaceId,
-                agentId: nil, agentName: nil, noteId: noteId, noteTitle: noteTitle))
+                screen: "note",
+                workspaceId: workspaceId,
+                agentId: nil,
+                agentName: nil,
+                noteId: noteId,
+                noteTitle: noteTitle
+            )
+        )
     }
 
     func onBackFromNote() {
@@ -850,18 +893,33 @@ class AppCoordinator {
         guard restoresLastScreen else { return }
         let saved: PersistenceManager.SavedScreen
         switch currentScreen {
-        case .workspaceDetail(let workspaceId):
+        case let .workspaceDetail(workspaceId):
             saved = PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: workspaceId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil)
-        case .agentConversation(let agentId, let workspaceId, let agentName):
+                screen: "workspaceDetail",
+                workspaceId: workspaceId,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            )
+        case let .agentConversation(agentId, workspaceId, agentName):
             saved = PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: workspaceId,
-                agentId: agentId, agentName: agentName, noteId: nil, noteTitle: nil)
-        case .noteDetail(let noteId, let workspaceId, let noteTitle):
+                screen: "conversation",
+                workspaceId: workspaceId,
+                agentId: agentId,
+                agentName: agentName,
+                noteId: nil,
+                noteTitle: nil
+            )
+        case let .noteDetail(noteId, workspaceId, noteTitle):
             saved = PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: workspaceId,
-                agentId: nil, agentName: nil, noteId: noteId, noteTitle: noteTitle)
+                screen: "note",
+                workspaceId: workspaceId,
+                agentId: nil,
+                agentName: nil,
+                noteId: noteId,
+                noteTitle: noteTitle
+            )
         default:
             return
         }
@@ -888,11 +946,13 @@ class AppCoordinator {
             let nsError = error as NSError
             if nsError.isEntityNotFound {
                 handleMissingAgent(agentId: agentId, workspaceId: workspaceId)
-            } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
+            } else if nsError.domain == "WebSocket",
+                      nsError.code == Self.invalidParametersErrorCode {
                 AppLog.app.warning(
                     "[AppCoordinator] UNEXPECTED -32602 without data.code == \"not-found\" for "
                         + "agent \(agentId) (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
-                        + "NOT treating as deletion: \(nsError.localizedDescription)")
+                        + "NOT treating as deletion: \(nsError.localizedDescription)"
+                )
             }
         }
     }
@@ -903,7 +963,7 @@ class AppCoordinator {
     func handleMissingAgent(agentId: String, workspaceId: String) {
         // Only redirect if we're still viewing this agent's conversation — a stale
         // validation must not evict a different conversation in the same workspace.
-        if case .agentConversation(let aId, let wsId, _) = currentScreen,
+        if case let .agentConversation(aId, wsId, _) = currentScreen,
            aId == agentId, wsId == workspaceId {
             persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
@@ -924,7 +984,7 @@ class AppCoordinator {
     func handleMissingNote(noteId: String, workspaceId: String) {
         // Only redirect if we're still viewing this note — a stale validation
         // must not evict a different note screen in the same workspace.
-        if case .noteDetail(let nId, let wsId, _) = currentScreen,
+        if case let .noteDetail(nId, wsId, _) = currentScreen,
            nId == noteId, wsId == workspaceId {
             persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
@@ -936,4 +996,3 @@ class AppCoordinator {
         currentScreen = .workspaceList
     }
 }
-

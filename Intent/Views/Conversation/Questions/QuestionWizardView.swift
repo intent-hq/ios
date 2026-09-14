@@ -7,7 +7,7 @@ struct QuestionWizardView: View {
     @Binding var collapsed: Bool
     let containerHeight: CGFloat
     let onComplete: ([QuestionAnswer]) -> Void
-    var onDismiss: (() -> Void)? = nil
+    var onDismiss: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -85,7 +85,7 @@ struct QuestionWizardView: View {
                     },
                     onSelect: selectOption,
                     onSubmit: handleNext,
-                    onTextChange: { drafts[idx].skipped = false }
+                    onTextChange: markCurrentDraftUnskipped
                 )
                     .id(idx)
                     .transition(.opacity)
@@ -105,14 +105,17 @@ struct QuestionWizardView: View {
             }
         }
         .background(Theme.muted(for: colorScheme).opacity(
-            colorSchemeContrast == .increased ? 0.7 : 0.4))
+            colorSchemeContrast == .increased ? 0.7 : 0.4
+        ))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(
                     Theme.border(for: colorScheme, contrast: colorSchemeContrast).opacity(
-                        colorSchemeContrast == .increased ? 1 : 0.3),
-                    lineWidth: colorSchemeContrast == .increased ? 2 : 1)
+                        colorSchemeContrast == .increased ? 1 : 0.3
+                    ),
+                    lineWidth: colorSchemeContrast == .increased ? 2 : 1
+                )
         )
         .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: Constants.Conversation.QuestionWizard.animationDuration), value: idx)
@@ -123,7 +126,7 @@ struct QuestionWizardView: View {
             titleVisibility: .visible
         ) {
             Button("Dismiss questions", role: .destructive) {
-                guard !dismissed && !submitted else { return }
+                guard !dismissed, !submitted else { return }
                 dismissed = true
                 onDismiss?()
             }
@@ -132,7 +135,8 @@ struct QuestionWizardView: View {
             Text(
                 "The agent's questions will be dismissed completely without "
                     + "answering. This is permanent — they won't come back, "
-                    + "even after a reload.")
+                    + "even after a reload."
+            )
         }
     }
 
@@ -149,7 +153,7 @@ struct QuestionWizardView: View {
 
     private func advance() {
         if idx >= questions.count - 1 {
-            guard !submitted && !dismissed else { return }
+            guard !submitted, !dismissed else { return }
             submitted = true
             onComplete(buildAnswers())
             return
@@ -157,17 +161,21 @@ struct QuestionWizardView: View {
         idx += 1
     }
 
-    private func selectOption(_ oi: Int) {
+    private func markCurrentDraftUnskipped() {
+        drafts[idx].skipped = false
+    }
+
+    private func selectOption(_ optionIndex: Int) {
         if isMulti {
-            if let pos = drafts[idx].sel.firstIndex(of: oi) {
-                drafts[idx].sel.remove(at: pos)
+            if let position = drafts[idx].sel.firstIndex(of: optionIndex) {
+                drafts[idx].sel.remove(at: position)
             } else {
-                drafts[idx].sel.append(oi)
+                drafts[idx].sel.append(optionIndex)
             }
             drafts[idx].skipped = false
             return
         }
-        drafts[idx].sel = drafts[idx].sel.contains(oi) ? [] : [oi]
+        drafts[idx].sel = drafts[idx].sel.contains(optionIndex) ? [] : [optionIndex]
         drafts[idx].skipped = false
         if isLast { return }
         advance()

@@ -20,7 +20,7 @@ enum NoteRowIcon: Equatable {
     /// Pick the treatment for `note`, resolving linked-task IDs in its
     /// content against `notes` (pass the store's full note list so the ring
     /// recomputes as task statuses change).
-    static func kind(for note: Note, notes: [Note]) -> NoteRowIcon {
+    static func kind(for note: Note, notes: [Note]) -> Self {
         if let status = note.taskDisplayStatus {
             return .taskStatus(childrenDerivedStatus(for: note, notes: notes) ?? status)
         }

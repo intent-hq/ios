@@ -27,11 +27,11 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
             "Invalid WebSocket URL for \(host)"
         case .timedOut(let host):
             "Connection to \(host) timed out"
-        case .failed(let host, let message):
+        case let .failed(host, message):
             "Connection to \(host) failed: \(message)"
-        case .disconnected(let host, let code, let reason):
+        case let .disconnected(host, code, reason):
             "Disconnected from \(host) (\(code)): \(reason)"
-        case .certificateMismatch(let host, let fingerprint):
+        case let .certificateMismatch(host, fingerprint):
             "Certificate fingerprint mismatch for \(host). Received: \(fingerprint)"
         case .certificateMismatches(let mismatches):
             "Certificate fingerprint mismatch for "
@@ -114,7 +114,7 @@ actor WebSocketConnection {
 
     // MARK: - Connection setup
 
-    private nonisolated static func makeParameters(
+    nonisolated private static func makeParameters(
         host: String,
         token: String,
         certFingerprint: String?,
@@ -150,7 +150,8 @@ actor WebSocketConnection {
                         complete(false)
                     }
                 },
-                verifyQueue)
+                verifyQueue
+            )
             parameters = NWParameters(tls: tlsOptions)
         } else {
             parameters = NWParameters.tcp
@@ -182,7 +183,8 @@ actor WebSocketConnection {
             token: token,
             certFingerprint: certFingerprint,
             mismatchFingerprint: mismatchFingerprint,
-            verifyQueue: queue)
+            verifyQueue: queue
+        )
         let nwConnection = NWConnection(to: .url(url), using: parameters)
         nwConnection.stateUpdateHandler = { state in
             switch state {
@@ -200,21 +202,31 @@ actor WebSocketConnection {
                 // verify block, mapped to certificateMismatch by connect).
                 AppLog.connection.error("[WebSocket] \(host): waiting (\(String(describing: error)))")
                 lifecycleContinuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host, message: String(describing: error)))
+                    host: host,
+                    message: String(describing: error)
+                ))
             case .failed(let error):
                 AppLog.connection.error("[WebSocket] \(host): failed (\(String(describing: error)))")
                 lifecycleContinuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host, message: String(describing: error)))
+                    host: host,
+                    message: String(describing: error)
+                ))
             case .cancelled:
                 AppLog.connection.debug("[WebSocket] \(host): cancelled")
                 lifecycleContinuation.finish(throwing: WebSocketTransportError.failed(
-                    host: host, message: "Connection cancelled before opening"))
+                    host: host,
+                    message: "Connection cancelled before opening"
+                ))
             @unknown default:
                 break
             }
         }
         let connection = WebSocketConnection(
-            host: host, connection: nwConnection, queue: queue, didOpen: didOpen)
+            host: host,
+            connection: nwConnection,
+            queue: queue,
+            didOpen: didOpen
+        )
 
         do {
             try await withTaskCancellationHandler {
@@ -223,16 +235,20 @@ actor WebSocketConnection {
                     group.addTask {
                         for try await _ in lifecycleEvents { return }
                         throw WebSocketTransportError.failed(
-                            host: host, message: "Handshake ended before the socket opened")
+                            host: host,
+                            message: "Handshake ended before the socket opened"
+                        )
                     }
                     group.addTask {
                         try await Task.sleep(for: connectTimeout)
                         throw WebSocketTransportError.timedOut(host: host)
                     }
                     do {
-                        guard let _ = try await group.next() else {
+                        guard try await group.next() != nil else {
                             throw WebSocketTransportError.failed(
-                                host: host, message: "Handshake produced no result")
+                                host: host,
+                                message: "Handshake produced no result"
+                            )
                         }
                         group.cancelAll()
                     } catch {
@@ -249,7 +265,9 @@ actor WebSocketConnection {
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             if let fingerprint = mismatchFingerprint.withLock({ $0 }) {
                 throw WebSocketTransportError.certificateMismatch(
-                    host: host, fingerprint: fingerprint)
+                    host: host,
+                    fingerprint: fingerprint
+                )
             }
             if let transportError = error as? WebSocketTransportError {
                 throw transportError
@@ -326,36 +344,44 @@ actor WebSocketConnection {
                     connection.receiveMessage { content, context, isComplete, error in
                         if let error {
                             continuation.resume(throwing: WebSocketTransportError.failed(
-                                host: host, message: String(describing: error)))
+                                host: host,
+                                message: String(describing: error)
+                            ))
                             return
                         }
                         continuation.resume(returning: Self.classifyFrame(
-                            content: content, context: context, isComplete: isComplete))
+                            content: content,
+                            context: context,
+                            isComplete: isComplete
+                        ))
                     }
                 }
             } onCancel: {
                 Self.close(connection, didOpen: didOpen, code: .protocolCode(.normalClosure), queue: queue)
             }
             switch frame {
-            case .fragment(let kind, let data, let isComplete):
+            case let .fragment(kind, data, isComplete):
                 if let message = assembler.consume(kind: kind, data: data, isComplete: isComplete) {
                     return message
                 }
-            case .closed(let code, let reason):
+            case let .closed(code, reason):
                 AppLog.connection.debug("[WebSocket] \(host): remote close code=\(code) reason=\(reason)")
                 throw WebSocketTransportError.disconnected(host: host, code: code, reason: reason)
             case .ended:
                 // No error and no websocket metadata: the connection ended
                 // without a close frame (RFC 6455 abnormal closure).
                 throw WebSocketTransportError.disconnected(
-                    host: host, code: 1006, reason: "Connection closed")
+                    host: host,
+                    code: 1006,
+                    reason: "Connection closed"
+                )
             case .control:
                 continue
             }
         }
     }
 
-    private nonisolated static func classifyFrame(
+    nonisolated private static func classifyFrame(
         content: Data?,
         context: NWConnection.ContentContext?,
         isComplete: Bool
@@ -384,7 +410,7 @@ actor WebSocketConnection {
         }
     }
 
-    private nonisolated static func closeCodeValue(_ code: NWProtocolWebSocket.CloseCode) -> Int {
+    nonisolated private static func closeCodeValue(_ code: NWProtocolWebSocket.CloseCode) -> Int {
         switch code {
         case .protocolCode(let definition):
             return Int(definition.rawValue)
@@ -410,11 +436,14 @@ actor WebSocketConnection {
                 completion: .contentProcessed { error in
                     if let error {
                         continuation.resume(throwing: WebSocketTransportError.failed(
-                            host: host, message: String(describing: error)))
+                            host: host,
+                            message: String(describing: error)
+                        ))
                     } else {
                         continuation.resume(returning: ())
                     }
-                })
+                }
+            )
         }
     }
 
@@ -456,7 +485,9 @@ actor WebSocketConnection {
                     }
                     if let error {
                         continuation?.resume(throwing: WebSocketTransportError.failed(
-                            host: host, message: String(describing: error)))
+                            host: host,
+                            message: String(describing: error)
+                        ))
                     } else {
                         continuation?.resume(returning: ())
                     }
@@ -474,8 +505,11 @@ actor WebSocketConnection {
                             return state
                         }
                         continuation?.resume(throwing: WebSocketTransportError.failed(
-                            host: host, message: String(describing: error)))
-                    })
+                            host: host,
+                            message: String(describing: error)
+                        ))
+                    }
+                )
             }
         } onCancel: {
             let continuation = pending.withLock { state in
@@ -494,7 +528,7 @@ actor WebSocketConnection {
     /// underlying connection. Safe to call repeatedly and from any context:
     /// once the connection is cancelled, further sends complete with an error
     /// and cancel() is idempotent.
-    private nonisolated static func close(
+    nonisolated private static func close(
         _ connection: NWConnection,
         didOpen: OSAllocatedUnfairLock<Bool>,
         code: NWProtocolWebSocket.CloseCode,
@@ -511,7 +545,8 @@ actor WebSocketConnection {
             content: nil,
             contentContext: context,
             isComplete: true,
-            completion: .contentProcessed { _ in connection.cancel() })
+            completion: .contentProcessed { _ in connection.cancel() }
+        )
         // An unresponsive peer or dead path can leave the close-frame send
         // pending forever; guarantee teardown with a fallback cancel after a
         // grace period (cancel() is idempotent).
@@ -520,4 +555,3 @@ actor WebSocketConnection {
         ) { connection.cancel() }
     }
 }
-

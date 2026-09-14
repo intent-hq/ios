@@ -1,8 +1,8 @@
 import Foundation
+@testable import Intent
 import Synchronization
 import Testing
 import UserNotifications
-@testable import Intent
 
 @MainActor
 private final class FakeLocalNotificationCenter: LocalNotificationCenter {
@@ -15,14 +15,14 @@ private final class FakeLocalNotificationCenter: LocalNotificationCenter {
     var completesAuthorizationRequest = true
 
     func getAuthorizationStatus(
-        completionHandler: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void
+        completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
     ) {
         completionHandler(authorizationStatus)
     }
 
     func requestAuthorization(
         options: UNAuthorizationOptions,
-        completionHandler: @escaping @Sendable (Bool, (any Error)?) -> Void
+        completionHandler: @Sendable (Bool, (any Error)?) -> Void
     ) {
         authorizationOptions.append(options)
         if completesAuthorizationRequest {
@@ -77,15 +77,18 @@ struct LocalNotificationServiceTests {
         #expect(center.authorizationOptions == [[.alert, .sound]])
     }
 
-    @Test func postsExpectedAgentCompletionRequest() {
+    @Test func postsExpectedAgentCompletionRequest() throws {
         let center = FakeLocalNotificationCenter()
         let service = LocalNotificationService(center: center)
-        let connectionId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
 
         service.postAgentIdleNotification(
-            agentId: "agent-1", workspaceId: "workspace-1",
-            agentName: "Build Agent", workspaceName: "iOS App",
-            connectionId: connectionId)
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent",
+            workspaceName: "iOS App",
+            connectionId: connectionId
+        )
 
         guard let request = center.requests.first else {
             Issue.record("Expected a notification request")
@@ -110,28 +113,31 @@ struct LocalNotificationServiceTests {
         #expect(LocalNotificationService.presentationOptionsForForegroundNotification().isEmpty)
     }
 
-    @Test func removesDeliveredNotificationForAgent() {
+    @Test func removesDeliveredNotificationForAgent() throws {
         let center = FakeLocalNotificationCenter()
         let service = LocalNotificationService(center: center)
-        let connectionId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+        let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
 
         service.removeDeliveredNotifications(forAgentId: "agent-1", connectionId: connectionId)
 
-        #expect(center.removedNotificationIdentifiers == [[
-            "agent-idle-\(connectionId.uuidString)-agent-1"
-        ]])
+        #expect(center.removedNotificationIdentifiers == [
+            [
+                "agent-idle-\(connectionId.uuidString)-agent-1"
+            ]
+        ])
     }
 
-    @Test func decodesNotificationResponsePayload() {
-        let connectionId = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    @Test func decodesNotificationResponsePayload() throws {
+        let connectionId = try #require(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
         let response = LocalNotificationService.response(
             actionIdentifier: UNNotificationDefaultActionIdentifier,
             userInfo: [
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
                 "agentName": "Build Agent",
-                "connectionId": connectionId.uuidString,
-            ])
+                "connectionId": connectionId.uuidString
+            ]
+        )
 
         #expect(response.actionIdentifier == UNNotificationDefaultActionIdentifier)
         #expect(response.agentId == "agent-1")
@@ -146,7 +152,8 @@ struct LocalNotificationServiceTests {
         let events = Mutex<[String]>([])
         let response = LocalNotificationService.response(
             actionIdentifier: UNNotificationDefaultActionIdentifier,
-            userInfo: [:])
+            userInfo: [:]
+        )
         service.onNotificationResponse = { _ in
             events.withLock { $0.append("routed") }
         }

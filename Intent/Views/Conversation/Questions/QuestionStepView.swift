@@ -81,31 +81,38 @@ struct QuestionStepView: View {
                     Image(systemName: "arrow.right")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                        .accessibilityHidden(true)
                 }
             }
             .frame(
                 maxWidth: .infinity,
                 minHeight: Constants.Accessibility.minimumTapTarget,
-                alignment: .leading)
+                alignment: .leading
+            )
             .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
             .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
             .background(
                 selected
                     ? Theme.primary(for: colorScheme).opacity(
-                        colorSchemeContrast == .increased ? 0.2 : 0.1)
+                        colorSchemeContrast == .increased ? 0.2 : 0.1
+                    )
                     : Theme.background(for: colorScheme).opacity(0.6)
             )
             .clipShape(RoundedRectangle(
-                cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
+                cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
+            ))
             .overlay(
                 RoundedRectangle(
-                    cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius)
+                    cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
+                )
                     .strokeBorder(
                         selected
                             ? Theme.primary(for: colorScheme)
                             : Theme.border(
-                                for: colorScheme, contrast: colorSchemeContrast).opacity(
-                                    colorSchemeContrast == .increased ? 1 : 0.4),
+                                for: colorScheme,
+                                contrast: colorSchemeContrast
+                            )
+                                .opacity(colorSchemeContrast == .increased ? 1 : 0.4),
                         lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
                     )
             )
@@ -123,13 +130,16 @@ struct QuestionStepView: View {
             .frame(width: checkboxSide, height: checkboxSide)
             .overlay(
                 RoundedRectangle(
-                    cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius)
+                    cornerRadius: Constants.Conversation.QuestionWizard.checkboxCornerRadius
+                )
                     .strokeBorder(
                         selected
                             ? Color.clear
                             : Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast).opacity(
-                                    colorSchemeContrast == .increased ? 1 : 0.5),
+                                for: colorScheme,
+                                contrast: colorSchemeContrast
+                            )
+                                .opacity(colorSchemeContrast == .increased ? 1 : 0.5),
                         lineWidth: colorSchemeContrast == .increased ? 2 : 1
                     )
             )
@@ -138,6 +148,7 @@ struct QuestionStepView: View {
                     Image(systemName: "checkmark")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.white)
+                        .accessibilityHidden(true)
                 }
             }
     }
@@ -147,6 +158,7 @@ struct QuestionStepView: View {
             Image(systemName: "pencil")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                .accessibilityHidden(true)
             TextField("Type your own answer…", text: $freeText)
                 .font(.body)
                 .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -156,12 +168,14 @@ struct QuestionStepView: View {
             Image(systemName: "return")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.5))
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
         .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
         .frame(minHeight: Constants.Accessibility.minimumTapTarget)
         .background(Theme.background(for: colorScheme).opacity(0.7))
         .clipShape(RoundedRectangle(
-            cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius))
+            cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
+        ))
     }
 }

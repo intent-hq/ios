@@ -40,8 +40,12 @@ struct ToastView: View {
         .buttonStyle(.plain)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: Constants.Toast.cornerRadius, style: .continuous))
-        .shadow(color: .black.opacity(Constants.Toast.shadowOpacity),
-                radius: Constants.Toast.shadowRadius, x: 0, y: Constants.Toast.shadowYOffset)
+        .shadow(
+            color: .black.opacity(Constants.Toast.shadowOpacity),
+            radius: Constants.Toast.shadowRadius,
+            x: 0,
+            y: Constants.Toast.shadowYOffset
+        )
         .padding(.horizontal, Constants.Toast.outerHorizontalPadding)
         .offset(y: min(dragOffset, 0)) // Only allow upward drag
         .highPriorityGesture(
@@ -55,7 +59,8 @@ struct ToastView: View {
                     } else {
                         withAnimation(.spring(
                             response: Constants.Toast.resetSpringResponse,
-                            dampingFraction: Constants.Toast.resetSpringDamping)) {
+                            dampingFraction: Constants.Toast.resetSpringDamping
+                        )) {
                             dragOffset = 0
                         }
                     }
@@ -69,4 +74,3 @@ struct ToastView: View {
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 }
-

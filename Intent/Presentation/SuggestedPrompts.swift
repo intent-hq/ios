@@ -14,6 +14,9 @@ import Foundation
 /// app's `messageParser.ts`, including `Label|` / `delay:N|` stripping, the
 /// four-chip cap, and dropping individually invalid lines.
 enum SuggestedPrompts {
+    private static let markdownMarkerLength = 3
+    private static let maximumFenceIndent = 3
+
     /// Maximum number of chips a block can contribute (matches the desktop
     /// cap and the harness's "write 2–4 prompts" instruction).
     static let maxPrompts = 4
@@ -110,8 +113,10 @@ enum SuggestedPrompts {
         }
         let length = text.utf16.count
         return found.map { block in
-            (start: offsets[block.openerLine] + block.openerPrefix.utf16.count,
-             end: min(offsets[block.closerLine] + lines[block.closerLine].utf16.count + 1, length))
+            (
+                start: offsets[block.openerLine] + block.openerPrefix.utf16.count,
+                end: min(offsets[block.closerLine] + lines[block.closerLine].utf16.count + 1, length)
+            )
         }
     }
 
@@ -174,7 +179,9 @@ enum SuggestedPrompts {
                     break
                 }
                 if candidate.hasSuffix("-->") {
-                    let remainder = trimmingTrailingWhitespace(String(candidate.dropLast(3)))
+                    let remainder = trimmingTrailingWhitespace(
+                        String(candidate.dropLast(Self.markdownMarkerLength))
+                    )
                     // An opener-shaped remainder (`<!-- suggested-prompts -->`)
                     // must not close the block: stripping is ungated, so it
                     // would delete the body text under an unclosed opener.
@@ -200,7 +207,8 @@ enum SuggestedPrompts {
                 openerLine: index,
                 closerLine: closer,
                 openerPrefix: String(line[line.startIndex..<openerRange.lowerBound]),
-                body: body))
+                body: body
+            ))
             index = closer + 1
         }
         return result
@@ -214,7 +222,7 @@ enum SuggestedPrompts {
             indent += 1
             index = line.index(after: index)
         }
-        guard indent <= 3, index < line.endIndex else { return nil }
+        guard indent <= Self.maximumFenceIndent, index < line.endIndex else { return nil }
         let char = line[index]
         guard char == "`" || char == "~" else { return nil }
         var length = 0
@@ -222,7 +230,7 @@ enum SuggestedPrompts {
             length += 1
             index = line.index(after: index)
         }
-        guard length >= 3 else { return nil }
+        guard length >= Self.markdownMarkerLength else { return nil }
         return (char, length, String(line[index...]))
     }
 
@@ -259,7 +267,8 @@ enum SuggestedPrompts {
     private static func parsePromptLine(_ line: String) -> String? {
         let delayPattern = "^delay:[0-9]+\\|"
         if let delayRange = line.range(
-            of: delayPattern, options: [.regularExpression, .caseInsensitive]
+            of: delayPattern,
+            options: [.regularExpression, .caseInsensitive]
         ) {
             let text = String(line[delayRange.upperBound...])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -271,7 +280,8 @@ enum SuggestedPrompts {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if let delayRange = promptPart.range(
-            of: delayPattern, options: [.regularExpression, .caseInsensitive]
+            of: delayPattern,
+            options: [.regularExpression, .caseInsensitive]
         ) {
             promptPart = String(promptPart[delayRange.upperBound...])
                 .trimmingCharacters(in: .whitespacesAndNewlines)

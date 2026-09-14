@@ -1,13 +1,12 @@
 import Foundation
+@testable import Intent
 import Security
 import Testing
-@testable import Intent
 
 /// Tests for PersistenceManager per-workspace screen persistence.
 /// Uses a unique key prefix per test to avoid UserDefaults collisions.
 @Suite(.serialized)
 struct PersistenceManagerTests {
-
     // MARK: - Setup / Teardown helper
 
     /// Clean up UserDefaults keys used by PersistenceManager for workspace screens.
@@ -24,9 +23,12 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation", workspaceId: wsId,
-            agentId: "agent-42", agentName: "Builder",
-            noteId: nil, noteTitle: nil
+            screen: "conversation",
+            workspaceId: wsId,
+            agentId: "agent-42",
+            agentName: "Builder",
+            noteId: nil,
+            noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
@@ -42,9 +44,12 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "note", workspaceId: wsId,
-            agentId: nil, agentName: nil,
-            noteId: "note-123", noteTitle: "My Note"
+            screen: "note",
+            workspaceId: wsId,
+            agentId: nil,
+            agentName: nil,
+            noteId: "note-123",
+            noteTitle: "My Note"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
@@ -70,9 +75,12 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation", workspaceId: wsId,
-            agentId: "a", agentName: "A",
-            noteId: nil, noteTitle: nil
+            screen: "conversation",
+            workspaceId: wsId,
+            agentId: "a",
+            agentName: "A",
+            noteId: nil,
+            noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
@@ -89,14 +97,20 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [ws1, ws2]) }
 
         let screen1 = PersistenceManager.SavedScreen(
-            screen: "conversation", workspaceId: ws1,
-            agentId: "agent-A", agentName: "A",
-            noteId: nil, noteTitle: nil
+            screen: "conversation",
+            workspaceId: ws1,
+            agentId: "agent-A",
+            agentName: "A",
+            noteId: nil,
+            noteTitle: nil
         )
         let screen2 = PersistenceManager.SavedScreen(
-            screen: "note", workspaceId: ws2,
-            agentId: nil, agentName: nil,
-            noteId: "note-B", noteTitle: "B"
+            screen: "note",
+            workspaceId: ws2,
+            agentId: nil,
+            agentName: nil,
+            noteId: "note-B",
+            noteTitle: "B"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws1, screen: screen1)
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws2, screen: screen2)
@@ -115,9 +129,12 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [ws1, ws2]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation", workspaceId: ws1,
-            agentId: "a", agentName: "A",
-            noteId: nil, noteTitle: nil
+            screen: "conversation",
+            workspaceId: ws1,
+            agentId: "a",
+            agentName: "A",
+            noteId: nil,
+            noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws1, screen: screen)
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws2, screen: screen)
@@ -134,16 +151,22 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let first = PersistenceManager.SavedScreen(
-            screen: "conversation", workspaceId: wsId,
-            agentId: "a1", agentName: "First",
-            noteId: nil, noteTitle: nil
+            screen: "conversation",
+            workspaceId: wsId,
+            agentId: "a1",
+            agentName: "First",
+            noteId: nil,
+            noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: first)
 
         let second = PersistenceManager.SavedScreen(
-            screen: "note", workspaceId: wsId,
-            agentId: nil, agentName: nil,
-            noteId: "n2", noteTitle: "Second"
+            screen: "note",
+            workspaceId: wsId,
+            agentId: nil,
+            agentName: nil,
+            noteId: "n2",
+            noteTitle: "Second"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: second)
 
@@ -259,9 +282,15 @@ struct ConnectionPersistenceFailureTests {
     private func connection(token: String = "old") -> StoredConnection {
         StoredConnection(
             server: PairedServer(
-                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
-                certFingerprint: "aa:bb"),
-            token: token, displayName: "Original")
+                hosts: ["10.0.0.1"],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                certFingerprint: "aa:bb"
+            ),
+            token: token,
+            displayName: "Original"
+        )
     }
 
     @Test func failedRemovalPreservesRecordAndActivePointer() {
@@ -285,10 +314,18 @@ struct ConnectionPersistenceFailureTests {
         setup.manager.setActiveConnection(id: stored.id)
         storage.setSaveFailure(true)
         let tombstone = SyncedBackendRecord(
-            label: "Synced Mac", host: "10.0.0.1", hosts: ["10.0.0.1"], port: 4242,
-            fingerprint: "aa:bb", hostname: nil, detectHosts: true, token: "",
-            updatedAt: Date().timeIntervalSince1970 * 1000, deleted: true,
-            deletedAt: Date().timeIntervalSince1970 * 1000)
+            label: "Synced Mac",
+            host: "10.0.0.1",
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            fingerprint: "aa:bb",
+            hostname: nil,
+            detectHosts: true,
+            token: "",
+            updatedAt: Date().timeIntervalSince1970 * 1000,
+            deleted: true,
+            deletedAt: Date().timeIntervalSince1970 * 1000
+        )
 
         let outcome = setup.manager.mergeSyncedBackends(records: [tombstone])
 
@@ -305,7 +342,9 @@ struct ConnectionPersistenceFailureTests {
         storage.setSaveFailure(true)
 
         #expect(!setup.manager.updateConnectionDisplayName(
-            id: stored.id, displayName: "Updated"))
+            id: stored.id,
+            displayName: "Updated"
+        ))
         #expect(setup.manager.loadConnections() == [stored])
     }
 }
@@ -389,7 +428,9 @@ struct SecItemKeychainStorageTests {
     private let service = "test.service"
     private let account = "test.account"
     private let original = FakeSecItemStore.Record(
-        data: Data("old".utf8), accessibility: "existing-accessibility")
+        data: Data("old".utf8),
+        accessibility: "existing-accessibility"
+    )
 
     @Test func updateSucceedsWithoutDeleteOrAdd() {
         let fake = FakeSecItemStore(items: ["\(service)\u{1F}\(account)": original])
@@ -399,7 +440,8 @@ struct SecItemKeychainStorageTests {
         #expect(storage.save(data: replacement, service: service, account: account))
         #expect(
             fake.record(service: service, account: account)
-                == .init(data: replacement, accessibility: original.accessibility))
+                == .init(data: replacement, accessibility: original.accessibility)
+        )
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 0)
         #expect(fake.deleteCallCount == 0)
@@ -427,7 +469,9 @@ struct SecItemKeychainStorageTests {
             fake.record(service: service, account: account)
                 == .init(
                     data: data,
-                    accessibility: kSecAttrAccessibleAfterFirstUnlock as String))
+                    accessibility: kSecAttrAccessibleAfterFirstUnlock as String
+                )
+        )
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 1)
         #expect(fake.deleteCallCount == 0)
@@ -452,8 +496,7 @@ struct SecItemKeychainStorageTests {
 /// active-connection pointer, legacy-pairing migration).
 @Suite(.serialized)
 struct ConnectionPersistenceTests {
-
-    private let pm = PersistenceManager.shared
+    private let persistenceManager = PersistenceManager.shared
 
     init() {
         _ = TestKeychainStorage.installed
@@ -461,15 +504,17 @@ struct ConnectionPersistenceTests {
 
     /// Remove all connection-related state (new blob, legacy entries, active pointer).
     private func resetConnectionState() {
-        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
-        pm.deleteFromKeychain(account: pm.keychainAccountServer)
-        pm.deleteFromKeychain(account: pm.keychainAccountToken)
-        UserDefaults.standard.removeObject(forKey: pm.activeConnectionIdKey)
-        UserDefaults.standard.removeObject(forKey: pm.serverKey)
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountConnections)
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountServer)
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountToken)
+        UserDefaults.standard.removeObject(forKey: persistenceManager.activeConnectionIdKey)
+        UserDefaults.standard.removeObject(forKey: persistenceManager.serverKey)
     }
 
     private func makeServer(
-        hosts: [String] = ["10.0.0.1"], port: Int = 4242, name: String = "daemon"
+        hosts: [String] = ["10.0.0.1"],
+        port: Int = 4242,
+        name: String = "daemon"
     ) -> PairedServer {
         PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
     }
@@ -479,7 +524,7 @@ struct ConnectionPersistenceTests {
     @Test func loadConnectionsIsEmptyByDefault() {
         resetConnectionState()
         defer { resetConnectionState() }
-        #expect(pm.loadConnections().isEmpty)
+        #expect(persistenceManager.loadConnections().isEmpty)
     }
 
     @Test func upsertInsertsAndRoundTrips() {
@@ -487,9 +532,9 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let connection = StoredConnection(server: makeServer(), token: "tok-1")
-        pm.upsertConnection(connection)
+        persistenceManager.upsertConnection(connection)
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first == connection)
         #expect(loaded.first?.displayName == "10.0.0.1:4242")
@@ -504,16 +549,16 @@ struct ConnectionPersistenceTests {
             token: "tok-old",
             lastConnectedAt: Date(timeIntervalSince1970: 1000)
         )
-        pm.upsertConnection(original)
+        persistenceManager.upsertConnection(original)
 
         // Same host set (reordered) + port: updates in place, preserves id and lastConnectedAt.
         let updated = StoredConnection(
             server: makeServer(hosts: ["10.0.0.1", "a.local"]),
             token: "tok-new"
         )
-        let stored = pm.upsertConnection(updated)
+        let stored = persistenceManager.upsertConnection(updated)
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(stored.id == original.id)
         #expect(loaded.first?.id == original.id)
@@ -525,9 +570,9 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.upsertConnection(StoredConnection(server: makeServer(port: 4242), token: "t1"))
-        pm.upsertConnection(StoredConnection(server: makeServer(port: 4243), token: "t2"))
-        #expect(pm.loadConnections().count == 2)
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 4242), token: "t1"))
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 4243), token: "t2"))
+        #expect(persistenceManager.loadConnections().count == 2)
     }
 
     @Test func upsertOverlappingHostSetUpdatesInPlaceAndMergesHosts() {
@@ -537,14 +582,16 @@ struct ConnectionPersistenceTests {
         // Simulates a re-pair after the route refresh grew the stored host set:
         // upsert [h], grow to [h, ip] via updateConnectionHosts, then re-pair
         // with [h] again — must update the grown record, not insert a duplicate.
-        let original = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old"))
-        pm.updateConnectionHosts(id: original.id, hosts: ["192.168.1.10", "10.0.0.5"])
+        let original = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old")
+        )
+        persistenceManager.updateConnectionHosts(id: original.id, hosts: ["192.168.1.10", "10.0.0.5"])
 
-        let stored = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-new"))
+        let stored = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-new")
+        )
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(stored.id == original.id)
         #expect(loaded.first?.token == "tok-new")
@@ -556,9 +603,9 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
-        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
-        #expect(pm.loadConnections().count == 2)
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        #expect(persistenceManager.loadConnections().count == 2)
     }
 
     /// A tunnel-only re-pair (manual tc-address entry) carries no hosts, so
@@ -569,20 +616,30 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let original = pm.upsertConnection(StoredConnection(
+        let original = persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: [], port: 4242, name: "daemon",
-                pairedAt: Date(), tcAddress: "tc-abc123"),
-            token: "tok-old"))
-        pm.updateConnectionHosts(id: original.id, hosts: ["10.0.0.1"])
+                hosts: [],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                tcAddress: "tc-abc123"
+            ),
+            token: "tok-old"
+        ))
+        persistenceManager.updateConnectionHosts(id: original.id, hosts: ["10.0.0.1"])
 
-        let stored = pm.upsertConnection(StoredConnection(
+        let stored = persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: [], port: 4242, name: "daemon",
-                pairedAt: Date(), tcAddress: "tc-abc123"),
-            token: "tok-new"))
+                hosts: [],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                tcAddress: "tc-abc123"
+            ),
+            token: "tok-new"
+        ))
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(stored.id == original.id)
         #expect(loaded.first?.token == "tok-new")
@@ -598,14 +655,19 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
-        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
-        pm.upsertConnection(StoredConnection(
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: [], port: 4242, name: "daemon",
-                pairedAt: Date(), tcAddress: "tc-abc123"),
-            token: "t3"))
-        #expect(pm.loadConnections().count == 3)
+                hosts: [],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                tcAddress: "tc-abc123"
+            ),
+            token: "t3"
+        ))
+        #expect(persistenceManager.loadConnections().count == 3)
     }
 
     /// Same tc address on a different port is a different daemon listener —
@@ -614,23 +676,34 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.upsertConnection(StoredConnection(
+        persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: [], port: 4242, name: "daemon",
-                pairedAt: Date(), tcAddress: "tc-abc123"),
-            token: "t1"))
-        pm.upsertConnection(StoredConnection(
+                hosts: [],
+                port: 4242,
+                name: "daemon",
+                pairedAt: Date(),
+                tcAddress: "tc-abc123"
+            ),
+            token: "t1"
+        ))
+        persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(
-                hosts: [], port: 4243, name: "daemon",
-                pairedAt: Date(), tcAddress: "tc-abc123"),
-            token: "t2"))
-        #expect(pm.loadConnections().count == 2)
+                hosts: [],
+                port: 4243,
+                name: "daemon",
+                pairedAt: Date(),
+                tcAddress: "tc-abc123"
+            ),
+            token: "t2"
+        ))
+        #expect(persistenceManager.loadConnections().count == 2)
     }
 
     @Test func mergeHostListsKeepsExistingFirstAndAppendsNew() {
         #expect(PersistenceManager.mergeHostLists(
             existing: ["nat.example.com", "192.168.1.10"],
-            incoming: ["192.168.1.10", "10.0.0.5"])
+            incoming: ["192.168.1.10", "10.0.0.5"]
+        )
             == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
         #expect(PersistenceManager.mergeHostLists(existing: [], incoming: ["a"]) == ["a"])
         #expect(PersistenceManager.mergeHostLists(existing: ["a"], incoming: []) == ["a"])
@@ -642,11 +715,12 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok"))
-        pm.updateConnectionHosts(id: stored.id, hosts: ["192.168.1.10", "10.0.0.5"])
+        let stored = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok")
+        )
+        persistenceManager.updateConnectionHosts(id: stored.id, hosts: ["192.168.1.10", "10.0.0.5"])
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.id == stored.id)
         #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
@@ -663,22 +737,26 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let server = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-            pairedAt: Date(), certFingerprint: "ab:cd")
-        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
-        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            certFingerprint: "ab:cd"
+        )
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: server, token: "tok"))
+        persistenceManager.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
 
-        #expect(pm.loadConnections().first?.server.certFingerprint == "ab:cd")
+        #expect(persistenceManager.loadConnections().first?.server.certFingerprint == "ab:cd")
     }
 
     @Test func updateConnectionHostsUnknownIdIsNoOp() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
-        pm.updateConnectionHosts(id: UUID(), hosts: ["1.2.3.4"])
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        persistenceManager.updateConnectionHosts(id: UUID(), hosts: ["1.2.3.4"])
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.server.hosts == stored.server.hosts)
     }
@@ -688,12 +766,16 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let server = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-            pairedAt: Date(), tcAddress: "tc-abc123")
-        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
-        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            tcAddress: "tc-abc123"
+        )
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: server, token: "tok"))
+        persistenceManager.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
 
-        #expect(pm.loadConnections().first?.server.tcAddress == "tc-abc123")
+        #expect(persistenceManager.loadConnections().first?.server.tcAddress == "tc-abc123")
     }
 
     // MARK: - updateConnectionTcAddress
@@ -702,14 +784,14 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
-        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        #expect(persistenceManager.loadConnections().first?.server.tcAddress == nil)
 
-        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-first")
-        #expect(pm.loadConnections().first?.server.tcAddress == "tc-first")
+        persistenceManager.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-first")
+        #expect(persistenceManager.loadConnections().first?.server.tcAddress == "tc-first")
 
-        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-second")
-        let loaded = pm.loadConnections().first
+        persistenceManager.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-second")
+        let loaded = persistenceManager.loadConnections().first
         #expect(loaded?.server.tcAddress == "tc-second")
         #expect(loaded?.server.hosts == stored.server.hosts)
         #expect(loaded?.id == stored.id)
@@ -719,9 +801,9 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
-        pm.updateConnectionTcAddress(id: UUID(), tcAddress: "tc-x")
-        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        persistenceManager.updateConnectionTcAddress(id: UUID(), tcAddress: "tc-x")
+        #expect(persistenceManager.loadConnections().first?.server.tcAddress == nil)
     }
 
     /// A re-pair without a tunnel address (manual entry, QR from a daemon
@@ -731,12 +813,16 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let withTc = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-            pairedAt: Date(), tcAddress: "tc-known")
-        pm.upsertConnection(StoredConnection(server: withTc, token: "tok-old"))
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            tcAddress: "tc-known"
+        )
+        persistenceManager.upsertConnection(StoredConnection(server: withTc, token: "tok-old"))
 
-        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok-new"))
-        let loaded = pm.loadConnections()
+        persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "tok-new"))
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.server.tcAddress == "tc-known")
         #expect(loaded.first?.token == "tok-new")
@@ -747,15 +833,23 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let old = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-            pairedAt: Date(), tcAddress: "tc-old")
-        pm.upsertConnection(StoredConnection(server: old, token: "tok"))
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            tcAddress: "tc-old"
+        )
+        persistenceManager.upsertConnection(StoredConnection(server: old, token: "tok"))
 
         let new = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-            pairedAt: Date(), tcAddress: "tc-new")
-        pm.upsertConnection(StoredConnection(server: new, token: "tok"))
-        #expect(pm.loadConnections().first?.server.tcAddress == "tc-new")
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            tcAddress: "tc-new"
+        )
+        persistenceManager.upsertConnection(StoredConnection(server: new, token: "tok"))
+        #expect(persistenceManager.loadConnections().first?.server.tcAddress == "tc-new")
     }
 
     // MARK: - updateConnectionDisplayName
@@ -764,11 +858,12 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(
-            StoredConnection(server: makeServer(), token: "tok", displayName: "ugly.local-domain"))
-        pm.updateConnectionDisplayName(id: stored.id, displayName: "Pretty Studio")
+        let stored = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(), token: "tok", displayName: "ugly.local-domain")
+        )
+        persistenceManager.updateConnectionDisplayName(id: stored.id, displayName: "Pretty Studio")
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.id == stored.id)
         #expect(loaded.first?.displayName == "Pretty Studio")
@@ -781,10 +876,10 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
-        pm.updateConnectionDisplayName(id: UUID(), displayName: "Pretty Studio")
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        persistenceManager.updateConnectionDisplayName(id: UUID(), displayName: "Pretty Studio")
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.displayName == stored.displayName)
     }
@@ -793,30 +888,34 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let a = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
-        let b = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
-        pm.updateConnectionDisplayName(id: a.id, displayName: "Pretty Studio")
+        let firstConnection = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a")
+        )
+        let secondConnection = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b")
+        )
+        persistenceManager.updateConnectionDisplayName(id: firstConnection.id, displayName: "Pretty Studio")
 
-        let loaded = pm.loadConnections()
-        #expect(loaded.first { $0.id == a.id }?.displayName == "Pretty Studio")
-        #expect(loaded.first { $0.id == b.id }?.displayName == b.displayName)
+        let loaded = persistenceManager.loadConnections()
+        #expect(loaded.first { $0.id == firstConnection.id }?.displayName == "Pretty Studio")
+        #expect(loaded.first { $0.id == secondConnection.id }?.displayName == secondConnection.displayName)
     }
 
     @Test func updateConnectionHostsDoesNotAffectOtherRecords() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let a = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
-        let b = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
-        pm.updateConnectionHosts(id: a.id, hosts: ["a.local", "10.0.0.9"])
+        let firstConnection = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a")
+        )
+        let secondConnection = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b")
+        )
+        persistenceManager.updateConnectionHosts(id: firstConnection.id, hosts: ["a.local", "10.0.0.9"])
 
-        let loaded = pm.loadConnections()
-        #expect(loaded.first { $0.id == a.id }?.server.hosts == ["a.local", "10.0.0.9"])
-        #expect(loaded.first { $0.id == b.id }?.server.hosts == ["b.local"])
+        let loaded = persistenceManager.loadConnections()
+        #expect(loaded.first { $0.id == firstConnection.id }?.server.hosts == ["a.local", "10.0.0.9"])
+        #expect(loaded.first { $0.id == secondConnection.id }?.server.hosts == ["b.local"])
     }
 
     // MARK: - Delete
@@ -825,18 +924,18 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
-        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
-        pm.setActiveConnection(id: a.id)
+        let firstConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let secondConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        persistenceManager.setActiveConnection(id: firstConnection.id)
 
-        pm.deleteConnection(id: a.id)
-        #expect(pm.loadConnections().map(\.id) == [b.id])
-        #expect(pm.activeConnection() == nil)
+        persistenceManager.deleteConnection(id: firstConnection.id)
+        #expect(persistenceManager.loadConnections().map(\.id) == [secondConnection.id])
+        #expect(persistenceManager.activeConnection() == nil)
 
         // Deleting a non-active connection leaves the active pointer alone.
-        pm.setActiveConnection(id: b.id)
-        pm.deleteConnection(id: a.id)
-        #expect(pm.activeConnection()?.id == b.id)
+        persistenceManager.setActiveConnection(id: secondConnection.id)
+        persistenceManager.deleteConnection(id: firstConnection.id)
+        #expect(persistenceManager.activeConnection()?.id == secondConnection.id)
     }
 
     // MARK: - Active pointer
@@ -845,28 +944,28 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        #expect(pm.activeConnection() == nil)
+        #expect(persistenceManager.activeConnection() == nil)
 
-        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
-        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        let firstConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let secondConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
 
-        pm.setActiveConnection(id: a.id)
-        #expect(pm.activeConnection()?.id == a.id)
+        persistenceManager.setActiveConnection(id: firstConnection.id)
+        #expect(persistenceManager.activeConnection()?.id == firstConnection.id)
 
-        pm.setActiveConnection(id: b.id)
-        #expect(pm.activeConnection()?.id == b.id)
+        persistenceManager.setActiveConnection(id: secondConnection.id)
+        #expect(persistenceManager.activeConnection()?.id == secondConnection.id)
     }
 
     @Test func touchLastConnectedUpdatesTimestamp() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "t"))
+        let stored = persistenceManager.upsertConnection(StoredConnection(server: makeServer(), token: "t"))
         #expect(stored.lastConnectedAt == nil)
 
         let before = Date()
-        pm.touchLastConnected(id: stored.id)
-        let loaded = pm.loadConnections().first
+        persistenceManager.touchLastConnected(id: stored.id)
+        let loaded = persistenceManager.loadConnections().first
         #expect(loaded?.lastConnectedAt != nil)
         if let touched = loaded?.lastConnectedAt {
             #expect(touched >= before)
@@ -879,34 +978,38 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
-        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
-        pm.touchLastConnected(id: b.id)
-        pm.setActiveConnection(id: a.id)
+        let firstConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let secondConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        persistenceManager.touchLastConnected(id: secondConnection.id)
+        persistenceManager.setActiveConnection(id: firstConnection.id)
 
-        #expect(pm.lastUsedConnection()?.id == a.id,
-                "The last-used pointer wins over recency when its record exists")
+        #expect(
+            persistenceManager.lastUsedConnection()?.id == firstConnection.id,
+            "The last-used pointer wins over recency when its record exists"
+        )
     }
 
     @Test func lastUsedConnectionFallsBackToMostRecentlyConnected() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        _ = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
-        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
-        let c = pm.upsertConnection(StoredConnection(server: makeServer(port: 3), token: "c"))
-        pm.touchLastConnected(id: c.id)
-        pm.touchLastConnected(id: b.id)
+        _ = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let secondConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        let thirdConnection = persistenceManager.upsertConnection(StoredConnection(server: makeServer(port: 3), token: "c"))
+        persistenceManager.touchLastConnected(id: thirdConnection.id)
+        persistenceManager.touchLastConnected(id: secondConnection.id)
 
-        #expect(pm.lastUsedConnection()?.id == b.id,
-                "Without a pointer the most recently connected record wins")
+        #expect(
+            persistenceManager.lastUsedConnection()?.id == secondConnection.id,
+            "Without a pointer the most recently connected record wins"
+        )
     }
 
     @Test func lastUsedConnectionIsNilWithoutSavedConnections() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        #expect(pm.lastUsedConnection() == nil)
+        #expect(persistenceManager.lastUsedConnection() == nil)
     }
 
     // MARK: - Migration
@@ -917,18 +1020,18 @@ struct ConnectionPersistenceTests {
 
         let server = makeServer(hosts: ["legacy.local"], port: 9999)
         let data = try JSONEncoder().encode(server)
-        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
-        pm.saveDataToKeychain(data: Data("legacy-token".utf8), account: pm.keychainAccountToken)
+        persistenceManager.saveDataToKeychain(data: data, account: persistenceManager.keychainAccountServer)
+        persistenceManager.saveDataToKeychain(data: Data("legacy-token".utf8), account: persistenceManager.keychainAccountToken)
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.server == server)
         #expect(loaded.first?.token == "legacy-token")
-        #expect(pm.activeConnection()?.id == loaded.first?.id)
+        #expect(persistenceManager.activeConnection()?.id == loaded.first?.id)
 
         // Legacy entries removed after successful migration.
-        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == nil)
-        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountToken) == nil)
+        #expect(persistenceManager.loadDataFromKeychain(account: persistenceManager.keychainAccountServer) == nil)
+        #expect(persistenceManager.loadDataFromKeychain(account: persistenceManager.keychainAccountToken) == nil)
     }
 
     @Test func migratesLegacyUserDefaultsPairing() throws {
@@ -936,15 +1039,15 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let server = makeServer(hosts: ["defaults.local"], port: 8888)
-        UserDefaults.standard.set(try JSONEncoder().encode(server), forKey: pm.serverKey)
-        pm.saveDataToKeychain(data: Data("ud-token".utf8), account: pm.keychainAccountToken)
+        UserDefaults.standard.set(try JSONEncoder().encode(server), forKey: persistenceManager.serverKey)
+        persistenceManager.saveDataToKeychain(data: Data("ud-token".utf8), account: persistenceManager.keychainAccountToken)
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.server == server)
         #expect(loaded.first?.token == "ud-token")
-        #expect(pm.activeConnection()?.id == loaded.first?.id)
-        #expect(UserDefaults.standard.data(forKey: pm.serverKey) == nil)
+        #expect(persistenceManager.activeConnection()?.id == loaded.first?.id)
+        #expect(UserDefaults.standard.data(forKey: persistenceManager.serverKey) == nil)
     }
 
     @Test func migrationWithoutTokenIsNonDestructive() throws {
@@ -953,11 +1056,11 @@ struct ConnectionPersistenceTests {
 
         let server = makeServer(hosts: ["orphan.local"])
         let data = try JSONEncoder().encode(server)
-        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
+        persistenceManager.saveDataToKeychain(data: data, account: persistenceManager.keychainAccountServer)
 
         // No token: nothing to migrate, legacy server entry must remain untouched.
-        #expect(pm.loadConnections().isEmpty)
-        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == data)
+        #expect(persistenceManager.loadConnections().isEmpty)
+        #expect(persistenceManager.loadDataFromKeychain(account: persistenceManager.keychainAccountServer) == data)
     }
 
     @Test func migrationRunsOnlyOnce() throws {
@@ -965,40 +1068,52 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let server = makeServer(hosts: ["once.local"])
-        pm.saveDataToKeychain(data: try JSONEncoder().encode(server), account: pm.keychainAccountServer)
-        pm.saveDataToKeychain(data: Data("tok".utf8), account: pm.keychainAccountToken)
+        persistenceManager.saveDataToKeychain(data: try JSONEncoder().encode(server), account: persistenceManager.keychainAccountServer)
+        persistenceManager.saveDataToKeychain(data: Data("tok".utf8), account: persistenceManager.keychainAccountToken)
 
-        let first = pm.loadConnections()
+        let first = persistenceManager.loadConnections()
         try #require(first.count == 1)
 
         // Deleting everything from the migrated list must not resurrect the legacy pairing.
-        pm.deleteConnection(id: first[0].id)
-        #expect(pm.loadConnections().isEmpty)
+        persistenceManager.deleteConnection(id: first[0].id)
+        #expect(persistenceManager.loadConnections().isEmpty)
     }
 
     // MARK: - Synced-registry merge
 
     private func syncedRecord(
-        host: String = "10.0.0.1", port: Int = 4242, fingerprint: String = "aa:bb",
-        token: String = "tok-sync", updatedAt: Double = 100, deleted: Bool = false
+        host: String = "10.0.0.1",
+        port: Int = 4242,
+        fingerprint: String = "aa:bb",
+        token: String = "tok-sync",
+        updatedAt: Double = 100,
+        deleted: Bool = false
     ) -> SyncedBackendRecord {
         SyncedBackendRecord(
-            label: "Synced Mac", host: host, hosts: [host], port: port,
-            fingerprint: fingerprint, hostname: nil, detectHosts: true,
-            token: deleted ? "" : token, updatedAt: updatedAt,
-            deleted: deleted, deletedAt: deleted ? updatedAt : nil)
+            label: "Synced Mac",
+            host: host,
+            hosts: [host],
+            port: port,
+            fingerprint: fingerprint,
+            hostname: nil,
+            detectHosts: true,
+            token: deleted ? "" : token,
+            updatedAt: updatedAt,
+            deleted: deleted,
+            deletedAt: deleted ? updatedAt : nil
+        )
     }
 
     @Test func mergeSyncedBackendsAddsAndPersistsNewRecords() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let outcome = pm.mergeSyncedBackends(records: [syncedRecord()])
+        let outcome = persistenceManager.mergeSyncedBackends(records: [syncedRecord()])
         #expect(outcome.changed)
         #expect(outcome.addedIds.count == 1)
         #expect(!outcome.removedActiveConnection)
 
-        let loaded = pm.loadConnections()
+        let loaded = persistenceManager.loadConnections()
         #expect(loaded.count == 1)
         #expect(loaded.first?.token == "tok-sync")
         #expect(loaded.first?.server.certFingerprint == "aa:bb")
@@ -1009,54 +1124,69 @@ struct ConnectionPersistenceTests {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let stored = pm.upsertConnection(
+        let stored = persistenceManager.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok"))
-        pm.setActiveConnection(id: stored.id)
+                    hosts: ["10.0.0.1"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok"
+            )
+        )
+        persistenceManager.setActiveConnection(id: stored.id)
 
-        let outcome = pm.mergeSyncedBackends(
-            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        let outcome = persistenceManager.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)]
+        )
         #expect(outcome.removedIds == [stored.id])
         #expect(outcome.removedActiveConnection)
-        #expect(pm.loadConnections().isEmpty)
-        #expect(pm.activeConnection() == nil)
+        #expect(persistenceManager.loadConnections().isEmpty)
+        #expect(persistenceManager.activeConnection() == nil)
     }
 
     @Test func mergeSyncedBackendsTombstoneOnNonActiveKeepsPointer() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        let doomed = pm.upsertConnection(
+        let doomed = persistenceManager.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok"))
-        let active = pm.upsertConnection(
-            StoredConnection(server: makeServer(hosts: ["other.local"], port: 1), token: "o"))
-        pm.setActiveConnection(id: active.id)
+                    hosts: ["10.0.0.1"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok"
+            )
+        )
+        let active = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["other.local"], port: 1), token: "o")
+        )
+        persistenceManager.setActiveConnection(id: active.id)
 
-        let outcome = pm.mergeSyncedBackends(
-            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        let outcome = persistenceManager.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)]
+        )
         #expect(outcome.removedIds == [doomed.id])
         #expect(!outcome.removedActiveConnection)
-        #expect(pm.activeConnection()?.id == active.id)
+        #expect(persistenceManager.activeConnection()?.id == active.id)
     }
 
     @Test func mergeSyncedBackendsNoChangeWritesNothing() {
         resetConnectionState()
         defer { resetConnectionState() }
 
-        pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
-        let before = pm.loadConnections()
+        persistenceManager.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        let before = persistenceManager.loadConnections()
 
         // Same clock again: no-op.
-        let outcome = pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        let outcome = persistenceManager.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
         #expect(!outcome.changed)
-        #expect(pm.loadConnections() == before)
+        #expect(persistenceManager.loadConnections() == before)
     }
 
     // MARK: - Compatibility shims
@@ -1066,25 +1196,25 @@ struct ConnectionPersistenceTests {
         defer { resetConnectionState() }
 
         let server = makeServer(hosts: ["shim.local"], port: 7777)
-        pm.savePairing(server: server, token: "shim-token")
+        persistenceManager.savePairing(server: server, token: "shim-token")
 
-        let pairing = pm.loadPairing()
+        let pairing = persistenceManager.loadPairing()
         #expect(pairing?.server == server)
         #expect(pairing?.token == "shim-token")
-        #expect(pm.loadConnections().count == 1)
+        #expect(persistenceManager.loadConnections().count == 1)
 
         // Re-pairing the same host:port does not create a duplicate.
-        pm.savePairing(server: server, token: "shim-token-2")
-        #expect(pm.loadConnections().count == 1)
-        #expect(pm.loadPairing()?.token == "shim-token-2")
+        persistenceManager.savePairing(server: server, token: "shim-token-2")
+        #expect(persistenceManager.loadConnections().count == 1)
+        #expect(persistenceManager.loadPairing()?.token == "shim-token-2")
 
         // clearPairing forgets only the active connection.
-        let other = pm.upsertConnection(
+        let other = persistenceManager.upsertConnection(
             StoredConnection(server: makeServer(hosts: ["other.local"], port: 7778), token: "o")
         )
-        pm.clearPairing()
-        #expect(pm.loadPairing() == nil)
-        #expect(pm.loadConnections().map(\.id) == [other.id])
+        persistenceManager.clearPairing()
+        #expect(persistenceManager.loadPairing() == nil)
+        #expect(persistenceManager.loadConnections().map(\.id) == [other.id])
     }
 }
 
@@ -1094,8 +1224,7 @@ struct ConnectionPersistenceTests {
 /// deinit.
 @Suite(.serialized)
 final class LastScreenPersistenceTests {
-
-    private let pm: PersistenceManager
+    private let persistenceManager: PersistenceManager
     private let suiteName: String
 
     init() {
@@ -1103,8 +1232,10 @@ final class LastScreenPersistenceTests {
         suiteName = "LastScreenPersistenceTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        pm = PersistenceManager(
-            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        persistenceManager = PersistenceManager(
+            defaults: defaults,
+            keychainStorage: InMemoryKeychainStorage()
+        )
     }
 
     deinit {
@@ -1113,53 +1244,62 @@ final class LastScreenPersistenceTests {
 
     private func makeScreen(workspaceId: String) -> PersistenceManager.SavedScreen {
         PersistenceManager.SavedScreen(
-            screen: "workspaceDetail", workspaceId: workspaceId,
-            agentId: nil, agentName: nil, noteId: nil, noteTitle: nil)
+            screen: "workspaceDetail",
+            workspaceId: workspaceId,
+            agentId: nil,
+            agentName: nil,
+            noteId: nil,
+            noteTitle: nil
+        )
     }
 
     @Test func roundTripIsKeyedPerConnection() {
-        let a = UUID()
-        let b = UUID()
-        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
-        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+        let firstConnection = UUID()
+        let secondConnection = UUID()
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: firstConnection)
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: secondConnection)
 
-        #expect(pm.loadLastScreen(for: a)?.workspaceId == "ws-a")
-        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
-        #expect(pm.loadLastScreen(for: UUID()) == nil)
+        #expect(persistenceManager.loadLastScreen(for: firstConnection)?.workspaceId == "ws-a")
+        #expect(persistenceManager.loadLastScreen(for: secondConnection)?.workspaceId == "ws-b")
+        #expect(persistenceManager.loadLastScreen(for: UUID()) == nil)
     }
 
     @Test func clearRemovesOnlyThatConnectionsSlot() {
-        let a = UUID()
-        let b = UUID()
-        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
-        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+        let firstConnection = UUID()
+        let secondConnection = UUID()
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: firstConnection)
+        persistenceManager.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: secondConnection)
 
-        pm.clearLastScreen(for: a)
+        persistenceManager.clearLastScreen(for: firstConnection)
 
-        #expect(pm.loadLastScreen(for: a) == nil)
-        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
+        #expect(persistenceManager.loadLastScreen(for: firstConnection) == nil)
+        #expect(persistenceManager.loadLastScreen(for: secondConnection)?.workspaceId == "ws-b")
     }
 
     @Test func legacySingleSlotMigratesToTheActiveConnection() {
-        let active = pm.upsertConnection(StoredConnection(
+        let active = persistenceManager.upsertConnection(StoredConnection(
             server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),
-            token: "t"))
-        pm.setActiveConnection(id: active.id)
-        pm.defaults.set("workspaceDetail", forKey: "lastScreen")
-        pm.defaults.set("ws-legacy", forKey: "lastWorkspaceId")
+            token: "t"
+        ))
+        persistenceManager.setActiveConnection(id: active.id)
+        persistenceManager.defaults.set("workspaceDetail", forKey: "lastScreen")
+        persistenceManager.defaults.set("ws-legacy", forKey: "lastWorkspaceId")
 
         // A different connection must not adopt the legacy slot.
-        #expect(pm.loadLastScreen(for: UUID()) == nil)
+        #expect(persistenceManager.loadLastScreen(for: UUID()) == nil)
 
         // The connection that was active adopts the legacy slot once, and
         // the legacy keys are cleared so it cannot migrate twice.
-        let migrated = pm.loadLastScreen(for: active.id)
+        let migrated = persistenceManager.loadLastScreen(for: active.id)
         #expect(migrated?.screen == "workspaceDetail")
         #expect(migrated?.workspaceId == "ws-legacy")
-        #expect(pm.defaults.string(forKey: "lastScreen") == nil,
-                "The legacy slot must be cleared after migration")
-        #expect(pm.loadLastScreen(for: active.id)?.workspaceId == "ws-legacy",
-                "The migrated screen must persist under the keyed slot")
+        #expect(
+            persistenceManager.defaults.string(forKey: "lastScreen") == nil,
+            "The legacy slot must be cleared after migration"
+        )
+        #expect(
+            persistenceManager.loadLastScreen(for: active.id)?.workspaceId == "ws-legacy",
+            "The migrated screen must persist under the keyed slot"
+        )
     }
 }
-

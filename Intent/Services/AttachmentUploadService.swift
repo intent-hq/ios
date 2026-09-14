@@ -72,31 +72,44 @@ final class AttachmentUploadService {
         }
 
         func placeAttachment(
-            workspaceId: String, fileName: String, encodedData: String, mimeType: String?
+            workspaceId: String,
+            fileName: String,
+            encodedData: String,
+            mimeType: String?
         ) async throws -> PlacedAttachment {
             var params: [String: Any] = [
                 "workspaceId": workspaceId,
                 "fileName": fileName,
-                "data": encodedData,
+                "data": encodedData
             ]
             if let mimeType, !mimeType.isEmpty { params["mimeType"] = mimeType }
             let result = try await connection.request(
-                "file.placeAttachment", params: params, timeout: transferTimeout)
+                "file.placeAttachment",
+                params: params,
+                timeout: transferTimeout
+            )
             return try parsePlacement(result, method: "file.placeAttachment")
         }
 
         func begin(
-            workspaceId: String, fileName: String, mimeType: String?, size: Int, sha256: String
+            workspaceId: String,
+            fileName: String,
+            mimeType: String?,
+            size: Int,
+            sha256: String
         ) async throws -> UploadSession {
             var params: [String: Any] = [
                 "workspaceId": workspaceId,
                 "fileName": fileName,
                 "sizeBytes": size,
-                "sha256": sha256,
+                "sha256": sha256
             ]
             if let mimeType, !mimeType.isEmpty { params["mimeType"] = mimeType }
             let result = try await connection.request(
-                "file.attachmentUpload.begin", params: params, timeout: transferTimeout)
+                "file.attachmentUpload.begin",
+                params: params,
+                timeout: transferTimeout
+            )
             guard let dict = result as? [String: Any],
                   let uploadId = dict["uploadId"] as? String,
                   let maxChunkBytes = dict["maxChunkBytes"] as? Int,
@@ -106,24 +119,32 @@ final class AttachmentUploadService {
         }
 
         func uploadChunk(uploadId: String, sequence: Int, encodedData: String) async throws {
-            _ = try await connection.request("file.attachmentUpload.chunk", params: [
-                "uploadId": uploadId,
-                "seq": sequence,
-                "data": encodedData,
-            ], timeout: transferTimeout)
+            _ = try await connection.request(
+                "file.attachmentUpload.chunk",
+                params: [
+                    "uploadId": uploadId,
+                    "seq": sequence,
+                    "data": encodedData
+                ],
+                timeout: transferTimeout
+            )
         }
 
         func commit(uploadId: String) async throws -> PlacedAttachment {
             let result = try await connection.request(
-                "file.attachmentUpload.commit", params: ["uploadId": uploadId],
-                timeout: transferTimeout)
+                "file.attachmentUpload.commit",
+                params: ["uploadId": uploadId],
+                timeout: transferTimeout
+            )
             return try parsePlacement(result, method: "file.attachmentUpload.commit")
         }
 
         func abort(uploadId: String) async {
             _ = try? await connection.request(
-                "file.attachmentUpload.abort", params: ["uploadId": uploadId],
-                timeout: transferTimeout)
+                "file.attachmentUpload.abort",
+                params: ["uploadId": uploadId],
+                timeout: transferTimeout
+            )
         }
     }
 
@@ -135,54 +156,87 @@ final class AttachmentUploadService {
 
     /// Place an in-memory payload (e.g. a picked or pasted image).
     func placeData(
-        workspaceId: String, fileName: String, data: Data, mimeType: String? = nil,
+        workspaceId: String,
+        fileName: String,
+        data: Data,
+        mimeType: String? = nil,
         onProgress: ProgressCallback? = nil
     ) async throws -> PlacedAttachment {
-        return try await Self.place(
-            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-            data: data, mimeType: mimeType, onProgress: onProgress)
+        try await Self.place(
+            rpcClient: rpcClient,
+            workspaceId: workspaceId,
+            fileName: fileName,
+            data: data,
+            mimeType: mimeType,
+            onProgress: onProgress
+        )
     }
 
     /// Place a file payload, streaming chunks off disk via `FileHandle` on
     /// the chunked (> 25 MB) path.
     func placeFile(
-        workspaceId: String, fileName: String, fileURL: URL, mimeType: String? = nil,
+        workspaceId: String,
+        fileName: String,
+        fileURL: URL,
+        mimeType: String? = nil,
         onProgress: ProgressCallback? = nil
     ) async throws -> PlacedAttachment {
-        return try await Self.placeFromFile(
-            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-            fileURL: fileURL, mimeType: mimeType, onProgress: onProgress)
+        try await Self.placeFromFile(
+            rpcClient: rpcClient,
+            workspaceId: workspaceId,
+            fileName: fileName,
+            fileURL: fileURL,
+            mimeType: mimeType,
+            onProgress: onProgress
+        )
     }
 
     // MARK: - Placement (nonisolated: hashing and disk reads stay off the
     // main actor; only the RPCs hop — same pattern as WorkspaceFileImageLoader)
 
     @concurrent
-    private nonisolated static func place(
-        rpcClient: RPCClient, workspaceId: String, fileName: String,
-        data: Data, mimeType: String?, onProgress: ProgressCallback?
+    nonisolated private static func place(
+        rpcClient: RPCClient,
+        workspaceId: String,
+        fileName: String,
+        data: Data,
+        mimeType: String?,
+        onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         guard data.count <= maxAttachmentBytes else {
             throw UploadError.payloadTooLarge(size: data.count)
         }
         if data.count <= maxSingleShotBytes {
             return try await placeSingleShot(
-                rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-                data: data, mimeType: mimeType)
+                rpcClient: rpcClient,
+                workspaceId: workspaceId,
+                fileName: fileName,
+                data: data,
+                mimeType: mimeType
+            )
         }
         return try await placeChunked(
-            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-            mimeType: mimeType, size: data.count, sha256: sha256Hex(of: data),
+            rpcClient: rpcClient,
+            workspaceId: workspaceId,
+            fileName: fileName,
+            mimeType: mimeType,
+            size: data.count,
+            sha256: sha256Hex(of: data),
             readChunk: { offset, length in
                 data.subdata(in: offset..<min(offset + length, data.count))
             },
-            onProgress: onProgress)
+            onProgress: onProgress
+        )
     }
 
     @concurrent
-    private nonisolated static func placeFromFile(
-        rpcClient: RPCClient, workspaceId: String, fileName: String,
-        fileURL: URL, mimeType: String?, onProgress: ProgressCallback?
+    nonisolated private static func placeFromFile(
+        rpcClient: RPCClient,
+        workspaceId: String,
+        fileName: String,
+        fileURL: URL,
+        mimeType: String?,
+        onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         let size = try fileSize(of: fileURL)
         guard size <= maxAttachmentBytes else {
@@ -191,15 +245,23 @@ final class AttachmentUploadService {
         if size <= maxSingleShotBytes {
             let data = try Data(contentsOf: fileURL)
             return try await placeSingleShot(
-                rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-                data: data, mimeType: mimeType)
+                rpcClient: rpcClient,
+                workspaceId: workspaceId,
+                fileName: fileName,
+                data: data,
+                mimeType: mimeType
+            )
         }
         let sha256 = try sha256Hex(fileURL: fileURL)
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
         return try await placeChunked(
-            rpcClient: rpcClient, workspaceId: workspaceId, fileName: fileName,
-            mimeType: mimeType, size: size, sha256: sha256,
+            rpcClient: rpcClient,
+            workspaceId: workspaceId,
+            fileName: fileName,
+            mimeType: mimeType,
+            size: size,
+            sha256: sha256,
             readChunk: { offset, length in
                 try handle.seek(toOffset: UInt64(offset))
                 // read(upToCount:) may legally return fewer bytes than
@@ -214,16 +276,23 @@ final class AttachmentUploadService {
                 }
                 return chunk
             },
-            onProgress: onProgress)
+            onProgress: onProgress
+        )
     }
 
-    private nonisolated static func placeSingleShot(
-        rpcClient: RPCClient, workspaceId: String, fileName: String,
-        data: Data, mimeType: String?
+    nonisolated private static func placeSingleShot(
+        rpcClient: RPCClient,
+        workspaceId: String,
+        fileName: String,
+        data: Data,
+        mimeType: String?
     ) async throws -> PlacedAttachment {
-        return try await rpcClient.placeAttachment(
-            workspaceId: workspaceId, fileName: fileName,
-            encodedData: data.base64EncodedString(), mimeType: mimeType)
+        try await rpcClient.placeAttachment(
+            workspaceId: workspaceId,
+            fileName: fileName,
+            encodedData: data.base64EncodedString(),
+            mimeType: mimeType
+        )
     }
 
     /// Chunked placement: `begin` (declares size + SHA-256), sequential
@@ -233,27 +302,45 @@ final class AttachmentUploadService {
     /// Internal for test visibility (lets tests exercise the chunk math with
     /// small payloads).
     static func placeChunked(
-        connection: ConnectionManagerRouting, workspaceId: String, fileName: String,
-        mimeType: String?, size: Int, sha256: String,
+        connection: ConnectionManagerRouting,
+        workspaceId: String,
+        fileName: String,
+        mimeType: String?,
+        size: Int,
+        sha256: String,
         readChunk: @Sendable (_ offset: Int, _ length: Int) throws -> Data,
         onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
-        return try await placeChunked(
-            rpcClient: RPCClient(connection: connection), workspaceId: workspaceId,
-            fileName: fileName, mimeType: mimeType, size: size, sha256: sha256,
-            readChunk: readChunk, onProgress: onProgress)
+        try await placeChunked(
+            rpcClient: RPCClient(connection: connection),
+            workspaceId: workspaceId,
+            fileName: fileName,
+            mimeType: mimeType,
+            size: size,
+            sha256: sha256,
+            readChunk: readChunk,
+            onProgress: onProgress
+        )
     }
 
     @concurrent
-    private nonisolated static func placeChunked(
-        rpcClient: RPCClient, workspaceId: String, fileName: String,
-        mimeType: String?, size: Int, sha256: String,
+    nonisolated private static func placeChunked(
+        rpcClient: RPCClient,
+        workspaceId: String,
+        fileName: String,
+        mimeType: String?,
+        size: Int,
+        sha256: String,
         readChunk: @Sendable (_ offset: Int, _ length: Int) throws -> Data,
         onProgress: ProgressCallback?
     ) async throws -> PlacedAttachment {
         let session = try await rpcClient.begin(
-            workspaceId: workspaceId, fileName: fileName, mimeType: mimeType,
-            size: size, sha256: sha256)
+            workspaceId: workspaceId,
+            fileName: fileName,
+            mimeType: mimeType,
+            size: size,
+            sha256: sha256
+        )
 
         let chunkBytes = min(uploadChunkBytes, session.maxChunkBytes)
         let totalChunks = (size + chunkBytes - 1) / chunkBytes
@@ -261,8 +348,10 @@ final class AttachmentUploadService {
             for seq in 0..<totalChunks {
                 let chunk = try readChunk(seq * chunkBytes, chunkBytes)
                 try await rpcClient.uploadChunk(
-                    uploadId: session.uploadId, sequence: seq,
-                    encodedData: chunk.base64EncodedString())
+                    uploadId: session.uploadId,
+                    sequence: seq,
+                    encodedData: chunk.base64EncodedString()
+                )
                 if let onProgress {
                     await onProgress(Double(seq + 1) / Double(totalChunks))
                 }
@@ -275,8 +364,9 @@ final class AttachmentUploadService {
         }
     }
 
-    private nonisolated static func parsePlacement(
-        _ result: Any, method: String
+    nonisolated private static func parsePlacement(
+        _ result: Any,
+        method: String
     ) throws -> PlacedAttachment {
         guard let dict = result as? [String: Any],
               let attachmentId = dict["attachmentId"] as? String,
@@ -285,16 +375,20 @@ final class AttachmentUploadService {
               let size = dict["size"] as? Int
         else { throw UploadError.malformedResponse(method: method) }
         return PlacedAttachment(
-            attachmentId: attachmentId, fileName: fileName, path: path, size: size,
+            attachmentId: attachmentId,
+            fileName: fileName,
+            path: path,
+            size: size,
             mimeType: dict["mimeType"] as? String,
-            uploadedAt: dict["uploadedAt"] as? String)
+            uploadedAt: dict["uploadedAt"] as? String
+        )
     }
 
     // MARK: - Hashing & file metadata
 
     /// Lowercase-hex SHA-256 of an in-memory payload.
     nonisolated static func sha256Hex(of data: Data) -> String {
-        return hexString(SHA256.hash(data: data))
+        hexString(SHA256.hash(data: data))
     }
 
     /// Lowercase-hex SHA-256 of a file, streamed in bounded blocks.
@@ -308,11 +402,11 @@ final class AttachmentUploadService {
         return hexString(hasher.finalize())
     }
 
-    private nonisolated static func hexString(_ digest: SHA256.Digest) -> String {
-        return digest.map { String(format: "%02x", $0) }.joined()
+    nonisolated private static func hexString(_ digest: SHA256.Digest) -> String {
+        digest.map { String(format: "%02x", $0) }.joined()
     }
 
-    private nonisolated static func fileSize(of url: URL) throws -> Int {
+    nonisolated private static func fileSize(of url: URL) throws -> Int {
         guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
             throw UploadError.unreadableFile
         }

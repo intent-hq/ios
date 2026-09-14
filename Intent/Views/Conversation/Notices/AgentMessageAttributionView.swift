@@ -13,7 +13,7 @@ struct AgentMessageAttributionView: View {
     var preview: String = ""
     @Binding var isExpanded: Bool
     /// Tap-through on the sender identity; nil renders it non-interactive.
-    var onOpenAgent: (() -> Void)? = nil
+    var onOpenAgent: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -66,6 +66,7 @@ struct AgentMessageAttributionView: View {
             Image(systemName: "person.crop.circle.badge.checkmark")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Text(attribution.displayName)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))

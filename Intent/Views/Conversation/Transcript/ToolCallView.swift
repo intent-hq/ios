@@ -8,7 +8,7 @@ struct ToolCallView: View {
     var isHydrating: Bool = false
     /// Fetch the full bodies of this row's slim-truncated blocks; absent →
     /// no hydration (the bounded preview stays).
-    var onHydrate: (() -> Void)? = nil
+    var onHydrate: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded = false
 
@@ -50,7 +50,7 @@ struct ToolCallView: View {
                 }
                 // Expanding a slim-truncated row triggers the on-demand full
                 // fetch (no-op for under-budget rows).
-                if isExpanded && isTruncated {
+                if isExpanded, isTruncated {
                     onHydrate?()
                 }
             } label: {
@@ -76,6 +76,7 @@ struct ToolCallView: View {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 8))
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.4))
+                        .accessibilityHidden(true)
                 }
                 .padding(.leading, 8)
                 .padding(.vertical, 3)
@@ -110,6 +111,7 @@ struct ToolCallView: View {
                         } else {
                             Image(systemName: "arrow.down.circle")
                                 .font(.caption2)
+                                .accessibilityHidden(true)
                             Text(onHydrate != nil ? "Preview — tap to load full content" : "Preview")
                         }
                     }
@@ -162,4 +164,3 @@ struct ToolCallView: View {
         return str
     }
 }
-

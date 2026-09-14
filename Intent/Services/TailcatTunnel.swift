@@ -8,6 +8,7 @@ import TailcatKit
 /// 127.0.0.1:`localPort` to the daemon's WSS port over the tunnel.
 nonisolated protocol TunnelSession: Sendable {
     var localPort: Int { get }
+
     func close() async
 }
 
@@ -26,10 +27,11 @@ nonisolated protocol TunnelDialing: Sendable {
 nonisolated struct UnavailableTunnelDialer: TunnelDialing {
     static let unavailableMessage = "Tailcat tunnels are not supported on this platform"
 
-    func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+    func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
         throw WebSocketTransportError.failed(
             host: ConnectionManager.tunnelCandidateLabel,
-            message: Self.unavailableMessage)
+            message: Self.unavailableMessage
+        )
     }
 }
 
@@ -156,7 +158,8 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                         logFinished("failed: client init")
                         continuation.resume(throwing: WebSocketTransportError.failed(
                             host: ConnectionManager.tunnelCandidateLabel,
-                            message: "TailcatKit client init failed"))
+                            message: "TailcatKit client init failed"
+                        ))
                         return
                     }
                     guard handle.register(client) else {
@@ -191,7 +194,8 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                         let forwarder = try client.forward(remotePort)
                         logFinished("established (ping \(pingMs)ms)")
                         continuation.resume(
-                            returning: TailcatTunnelSession(client: client, forwarder: forwarder))
+                            returning: TailcatTunnelSession(client: client, forwarder: forwarder)
+                        )
                     } catch {
                         try? client.close()
                         logFinished("failed: \(error.localizedDescription)")

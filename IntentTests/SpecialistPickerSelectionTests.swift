@@ -1,5 +1,5 @@
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for the SpecialistPickerView step-2 selection helpers:
 /// provider selection/fallback, default model resolution, and the
@@ -7,8 +7,11 @@ import Testing
 struct SpecialistPickerSelectionTests {
     private func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
         SpecialistInfo(
-            id: "implementor", name: "Implementor", description: "Implements tasks",
-            resolvedModel: resolvedModel, resolvedProvider: resolvedProvider
+            id: "implementor",
+            name: "Implementor",
+            description: "Implements tasks",
+            resolvedModel: resolvedModel,
+            resolvedProvider: resolvedProvider
         )
     }
 
@@ -21,7 +24,7 @@ struct SpecialistPickerSelectionTests {
     @Test func defaultsToAuggieWhenSelectable() {
         let providers = [
             ProviderInfo(id: "claude-code", authenticated: true),
-            ProviderInfo(id: "auggie", authenticated: true),
+            ProviderInfo(id: "auggie", authenticated: true)
         ]
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers)?.id == "auggie")
     }
@@ -36,7 +39,7 @@ struct SpecialistPickerSelectionTests {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: false),
             ProviderInfo(id: "claude-code", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil),
+            ProviderInfo(id: "grok", authenticated: nil)
         ]
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers)?.id == "grok")
     }
@@ -44,7 +47,7 @@ struct SpecialistPickerSelectionTests {
     @Test func keepsCurrentSelectionWhenStillSelectable() {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: true),
-            ProviderInfo(id: "claude-code", authenticated: true),
+            ProviderInfo(id: "claude-code", authenticated: true)
         ]
         let current = ProviderInfo(id: "claude-code", authenticated: true)
         #expect(SpecialistPickerView.resolveProviderSelection(current: current, providers: providers)?.id == "claude-code")
@@ -53,7 +56,7 @@ struct SpecialistPickerSelectionTests {
     @Test func fallsBackWhenCurrentSelectionBecomesDisabled() {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: true),
-            ProviderInfo(id: "claude-code", authenticated: false),
+            ProviderInfo(id: "claude-code", authenticated: false)
         ]
         let current = ProviderInfo(id: "claude-code", authenticated: true)
         #expect(SpecialistPickerView.resolveProviderSelection(current: current, providers: providers)?.id == "auggie")
@@ -62,7 +65,7 @@ struct SpecialistPickerSelectionTests {
     @Test func returnsNilWhenNoProviderSelectable() {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "codex", authenticated: false),
+            ProviderInfo(id: "codex", authenticated: false)
         ]
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers) == nil)
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: []) == nil)
@@ -73,7 +76,7 @@ struct SpecialistPickerSelectionTests {
     @Test func noneSelectableWhenAllProvidersSignedOut() {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "codex", authenticated: false),
+            ProviderInfo(id: "codex", authenticated: false)
         ]
         #expect(providers.noneSelectable)
     }
@@ -85,14 +88,14 @@ struct SpecialistPickerSelectionTests {
     @Test func notNoneSelectableWhenAnyProviderSelectable() {
         let signedIn = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "claude-code", authenticated: true),
+            ProviderInfo(id: "claude-code", authenticated: true)
         ]
         #expect(!signedIn.noneSelectable)
 
         // nil (unknown) stays selectable since probes can fail transiently
         let unknown = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil),
+            ProviderInfo(id: "grok", authenticated: nil)
         ]
         #expect(!unknown.noneSelectable)
     }
@@ -118,7 +121,7 @@ struct SpecialistPickerSelectionTests {
     @Test func createDisabledWhenNoProviderSelectable() {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "codex", authenticated: false),
+            ProviderInfo(id: "codex", authenticated: false)
         ]
         #expect(isCreateDisabled(providers: providers))
     }

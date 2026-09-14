@@ -17,7 +17,9 @@ struct MessageCopyContextMenu: ViewModifier {
             CopyContextMenuOverlay(
                 text: text,
                 isEnabled: Self.shouldEnableCopyInteraction(
-                    text: text, isStreaming: isStreaming),
+                    text: text,
+                    isStreaming: isStreaming
+                ),
                 preview: AnyView(preview)
             )
         }
@@ -31,7 +33,8 @@ struct MessageCopyContextMenu: ViewModifier {
             .padding(12)
             .frame(
                 maxWidth: Constants.Conversation.Message.contextPreviewMaximumWidth,
-                alignment: .leading)
+                alignment: .leading
+            )
             .background(userStyled ? Theme.muted(for: colorScheme).opacity(0.4) : .clear)
             .background(Theme.background(for: colorScheme))
     }

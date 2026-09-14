@@ -1,7 +1,7 @@
+@testable import Intent
 import SwiftUI
 import Testing
 import UIKit
-@testable import Intent
 
 @MainActor
 struct WorkspaceRowPresentationTests {
@@ -27,12 +27,17 @@ struct WorkspaceRowPresentationTests {
             lastActivity: "2026-09-09T15:42:17Z",
             pullRequests: [
                 WorkspacePullRequest(
-                    number: 123_456_789, status: "Open",
-                    createdAt: "2026-09-01T00:00:00Z"),
+                    number: 123_456_789,
+                    status: "Open",
+                    createdAt: "2026-09-01T00:00:00Z"
+                ),
                 WorkspacePullRequest(
-                    number: 987_654_321, status: "Merged",
-                    updatedAt: "2026-09-02T00:00:00Z"),
-            ])
+                    number: 987_654_321,
+                    status: "Merged",
+                    updatedAt: "2026-09-02T00:00:00Z"
+                )
+            ]
+        )
 
         let indicator = WorkspaceRowView.derivePrIndicator(workspace: workspace, monitors: [])
 
@@ -59,30 +64,40 @@ struct WorkspaceRowPresentationTests {
             displayStatus: "in_progress",
             pullRequests: [
                 WorkspacePullRequest(
-                    number: 123_456_789, status: "Open",
-                    createdAt: "2026-08-01T00:00:00Z"),
-            ])
-        let monitors = (1...100).map {
-            makeMonitor(number: 900_000_000 + $0)
+                    number: 123_456_789,
+                    status: "Open",
+                    createdAt: "2026-08-01T00:00:00Z"
+                )
+            ]
+        )
+        let monitors = (1...100).map { index in
+            makeMonitor(number: 900_000_000 + index)
         }
 
         let indicator = WorkspaceRowView.derivePrIndicator(
-            workspace: workspace, monitors: monitors)
+            workspace: workspace,
+            monitors: monitors
+        )
 
         #expect(indicator.pill?.number == 123_456_789)
         #expect(indicator.otherMonitorCount == 100)
         #expect(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(
-            indicator.otherMonitorCount) == "100 additional pull requests")
+            indicator.otherMonitorCount
+        ) == "100 additional pull requests")
     }
 
     @Test func adaptivePrBadgeInputsPreserveEmptyAndSingleStates() {
         let empty = WorkspaceRowView.derivePrIndicator(
-            workspace: makeWorkspace(displayStatus: nil), monitors: [])
+            workspace: makeWorkspace(displayStatus: nil),
+            monitors: []
+        )
         let single = WorkspaceRowView.derivePrIndicator(
             workspace: makeWorkspace(
                 displayStatus: nil,
-                pullRequests: [WorkspacePullRequest(number: 123_456_789, status: "Open")]),
-            monitors: [])
+                pullRequests: [WorkspacePullRequest(number: 123_456_789, status: "Open")]
+            ),
+            monitors: []
+        )
 
         #expect(empty.pill == nil)
         #expect(empty.otherMonitorCount == 0)
@@ -93,10 +108,12 @@ struct WorkspaceRowPresentationTests {
     @Test func adaptivePrBadgeInputsPreserveMonitorOnlyAndNumberlessStates() {
         let monitorOnly = WorkspaceRowView.derivePrIndicator(
             workspace: makeWorkspace(displayStatus: nil),
-            monitors: [makeMonitor(number: 231)])
+            monitors: [makeMonitor(number: 231)]
+        )
         let numberless = WorkspaceRowView.derivePrIndicator(
             workspace: makeWorkspace(displayStatus: nil, prStatus: "Open"),
-            monitors: [])
+            monitors: []
+        )
 
         #expect(monitorOnly.pill?.number == 231)
         #expect(monitorOnly.otherMonitorCount == 0)
@@ -126,7 +143,7 @@ struct WorkspaceRowPresentationTests {
         #expect(fallback.badges.allSatisfy { fallback.hostFrame.contains($0.frame) })
         #expect(fallback.badges.map { $0.label } == [
             "Merged pull request #123456789",
-            "100 additional pull requests",
+            "100 additional pull requests"
         ])
         print("SYNTHETIC PR badge fit geometry: \(fit)")
         print("SYNTHETIC PR badge fallback geometry: \(fallback)")
@@ -137,7 +154,7 @@ struct WorkspaceRowPresentationTests {
 
         #expect(container.accessibilityElements == nil)
         #expect(accessibilityElements(in: container).map(\.accessibilityLabel) == [
-            "Dynamic container element",
+            "Dynamic container element"
         ])
     }
 
@@ -148,7 +165,9 @@ struct WorkspaceRowPresentationTests {
         container.dynamicElement.accessibilityHint = "private hint"
 
         let snapshot = accessibilityGraphSnapshot(
-            root: container, expectedLabels: ["Expected label", "Other expected label"])
+            root: container,
+            expectedLabels: ["Expected label", "Other expected label"]
+        )
 
         #expect(snapshot.contains("path=root.dynamic[0]"))
         #expect(snapshot.contains("labelPresent=true labelMatches=[true,false]"))
@@ -161,7 +180,9 @@ struct WorkspaceRowPresentationTests {
         let cycle = NSObject()
         cycle.accessibilityElements = [cycle]
         #expect(accessibilityGraphSnapshot(
-            root: cycle, expectedLabels: []).split(separator: "\n").count == 1)
+            root: cycle,
+            expectedLabels: []
+        ).split(separator: "\n").count == 1)
         cycle.accessibilityElements = nil
 
         let wideRoot = NSObject()
@@ -195,7 +216,8 @@ struct WorkspaceRowPresentationTests {
         let workspace = makeWorkspace(
             displayStatus: "needs_attention",
             activity: "agent_running",
-            attention: "unread")
+            attention: "unread"
+        )
 
         #expect(WorkspaceStatusIconView.accessibilitySummary(for: workspace)
             == "Needs Attention, Active agent, Unread attention")
@@ -204,7 +226,10 @@ struct WorkspaceRowPresentationTests {
     @Test func waitingSummaryAppearsOnlyWhenWaitingCueIsVisible() {
         let waiting = makeWorkspace(displayStatus: "idle", waiting: true)
         let running = makeWorkspace(
-            displayStatus: "idle", activity: "agent_running", waiting: true)
+            displayStatus: "idle",
+            activity: "agent_running",
+            waiting: true
+        )
 
         #expect(WorkspaceStatusIconView.accessibilitySummary(for: waiting)
             == "Idle, Waiting")
@@ -225,26 +250,51 @@ struct WorkspaceRowPresentationTests {
         pullRequests: [WorkspacePullRequest]? = nil
     ) -> Workspace {
         Workspace(
-            id: "ws-1", title: title, branch: nil, baseRef: nil,
-            status: nil, activity: activity, displayStatus: displayStatus,
-            attention: attention, waiting: waiting,
-            lastActivity: lastActivity, updatedAt: nil,
-            repositoryOwner: "intent-hq", repositoryName: repositoryName,
-            prStatus: prStatus, prNumber: prNumber,
+            id: "ws-1",
+            title: title,
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: activity,
+            displayStatus: displayStatus,
+            attention: attention,
+            waiting: waiting,
+            lastActivity: lastActivity,
+            updatedAt: nil,
+            repositoryOwner: "intent-hq",
+            repositoryName: repositoryName,
+            prStatus: prStatus,
+            prNumber: prNumber,
             diffSummaryTotalFiles: nil,
-            taskStatsTotal: nil, taskStatsCompleted: nil,
-            taskStatsInProgress: nil, agentSummaryCount: nil,
-            agentSummaryAgents: nil, pullRequests: pullRequests)
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil,
+            agentSummaryAgents: nil,
+            pullRequests: pullRequests
+        )
     }
 
     private func makeMonitor(number: Int) -> MonitoredPr {
         MonitoredPr(
-            monitorId: "prm-\(number)", workspaceId: "ws-1", agentId: "agent-1",
-            repo: "intent-hq/intent", prNumber: number, state: .active,
-            pendingChanges: [], hasPendingChanges: false,
-            createdAt: "2026-09-01T00:00:00Z", updatedAt: nil, pendingSince: nil,
-            lastChangeAt: nil, lastPolledAt: nil, lastError: nil,
-            title: nil, url: nil, lastSnapshot: nil)
+            monitorId: "prm-\(number)",
+            workspaceId: "ws-1",
+            agentId: "agent-1",
+            repo: "intent-hq/intent",
+            prNumber: number,
+            state: .active,
+            pendingChanges: [],
+            hasPendingChanges: false,
+            createdAt: "2026-09-01T00:00:00Z",
+            updatedAt: nil,
+            pendingSince: nil,
+            lastChangeAt: nil,
+            lastPolledAt: nil,
+            lastError: nil,
+            title: nil,
+            url: nil,
+            lastSnapshot: nil
+        )
     }
 
     private struct RenderedBadges {
@@ -256,13 +306,15 @@ struct WorkspaceRowPresentationTests {
         try autoreleasepool {
             let indicator = WorkspaceRowView.PrIndicatorModel(
                 pill: .init(status: .merged, number: 123_456_789),
-                otherMonitorCount: 100)
+                otherMonitorCount: 100
+            )
             let height: CGFloat = 300
             let rootView = WorkspaceRowView.PullRequestBadges(
                 indicator: indicator,
                 colorScheme: .light,
                 colorSchemeContrast: .standard,
-                expanded: true)
+                expanded: true
+            )
                 .environment(\.dynamicTypeSize, .accessibility3)
                 .frame(width: width, height: height, alignment: .topLeading)
             let controller = UIHostingController(rootView: rootView)
@@ -287,7 +339,9 @@ struct WorkspaceRowPresentationTests {
             if initialBadges.contains(where: { $0?.label == nil }) {
                 let immediate = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
                 _ = RunLoop.current.run(
-                    mode: .default, before: Date(timeIntervalSinceNow: 0.01))
+                    mode: .default,
+                    before: Date(timeIntervalSinceNow: 0.01)
+                )
                 let observed = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
                 print("SYNTHETIC PR badge accessibility graph immediate:\n\(immediate)")
                 print("SYNTHETIC PR badge accessibility graph after run-loop observation:\n\(observed)")
@@ -301,11 +355,12 @@ struct WorkspaceRowPresentationTests {
     }
 
     private func initialBadgeFrames(
-        labels: [String], elements: [NSObject]
+        labels: [String],
+        elements: [NSObject]
     ) -> [(label: String, frame: CGRect)?] {
         labels.map { label in
-            elements.first { $0.accessibilityLabel == label }.map {
-                (label: label, frame: $0.accessibilityFrame)
+            elements.first { $0.accessibilityLabel == label }.map { element in
+                (label: label, frame: element.accessibilityFrame)
             }
         }
     }
@@ -314,8 +369,8 @@ struct WorkspaceRowPresentationTests {
         let elementCount = view.accessibilityElementCount()
         let direct = elementCount == NSNotFound
             ? (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-            : (0..<elementCount).compactMap {
-                view.accessibilityElement(at: $0) as? NSObject
+            : (0..<elementCount).compactMap { index in
+                view.accessibilityElement(at: index) as? NSObject
             }
         return (view.isAccessibilityElement ? [view] : direct)
             + view.subviews.flatMap(accessibilityElements(in:))
@@ -343,12 +398,12 @@ struct WorkspaceRowPresentationTests {
             if elementCount == NSNotFound || elementCount < 0 {
                 dynamicChildren = []
             } else {
-                dynamicChildren = (0..<min(elementCount, maxNodes)).compactMap {
-                    object.accessibilityElement(at: $0) as? NSObject
+                dynamicChildren = (0..<min(elementCount, maxNodes)).compactMap { index in
+                    object.accessibilityElement(at: index) as? NSObject
                 }
             }
-            let subviews = (object as? UIView).map {
-                Array($0.subviews.prefix(maxNodes))
+            let subviews = (object as? UIView).map { view in
+                Array(view.subviews.prefix(maxNodes))
             } ?? []
             let label = object.accessibilityLabel
             let labelMatches = expectedLabels.map { label == $0 }
@@ -367,7 +422,8 @@ struct WorkspaceRowPresentationTests {
                     + "frame=\(object.accessibilityFrame) elementCount=\(countDescription) "
                     + "children=[property:\(propertyChildren.count),dynamic:\(dynamicChildren.count),"
                     + "subviews:\(subviews.count)] labelPresent=\(label != nil) "
-                    + "labelMatches=[\(labelMatches)]")
+                    + "labelMatches=[\(labelMatches)]"
+            )
 
             guard depth < maxDepth else { return }
             for (index, child) in propertyChildren.enumerated() {

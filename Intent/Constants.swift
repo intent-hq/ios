@@ -44,7 +44,7 @@ enum Constants {
         enum ResponseGroup {}
 
         enum ToolCall {
-            static let outputCharacterLimit = 2_000
+            static let outputCharacterLimit = 2000
         }
 
         enum ToolClassifier {
@@ -85,7 +85,8 @@ enum Constants {
     }
 
     enum AppCoordination {
-        static let reconnectOverlayTimeout: Duration = .seconds(5)
+        private static let reconnectOverlayTimeoutSeconds = 5
+        static let reconnectOverlayTimeout: Duration = .seconds(reconnectOverlayTimeoutSeconds)
     }
 
     enum Connection {
@@ -95,16 +96,19 @@ enum Constants {
     }
 
     enum WebSocket {
-        static let pingTimeout: Duration = .seconds(30)
+        private static let pingTimeoutSeconds = 30
+        static let pingTimeout: Duration = .seconds(pingTimeoutSeconds)
         nonisolated static let closeCancellationGracePeriod: TimeInterval = 2
     }
 
     enum AgentStore {
-        static let fetchDebounce: Duration = .milliseconds(300)
+        private static let fetchDebounceMilliseconds = 300
+        static let fetchDebounce: Duration = .milliseconds(fetchDebounceMilliseconds)
     }
 
     enum Notification {
-        static let displayDuration: Duration = .seconds(4)
+        private static let displayDurationSeconds = 4
+        static let displayDuration: Duration = .seconds(displayDurationSeconds)
     }
 
     enum Note {
@@ -134,7 +138,6 @@ enum Constants {
             static let mask: UInt32 = 0x7FFF_FFFF
             static let normalizationDivisor: UInt32 = 0x8000_0000
         }
-
     }
 
     enum AgentRow {
@@ -145,7 +148,7 @@ enum Constants {
 
     enum RelativeTime {
         static let minute: TimeInterval = 60
-        static let hour: TimeInterval = 3_600
+        static let hour: TimeInterval = 3600
         static let day: TimeInterval = 86_400
         static let week: TimeInterval = 604_800
     }
@@ -163,12 +166,14 @@ enum Constants {
     }
 
     enum CreateWorkspace {
+        private static let branchSearchDebounceMilliseconds = 300
         static let messageLineCountRange = 3...6
-        static let branchSearchDebounce: Duration = .milliseconds(300)
+        static let branchSearchDebounce: Duration = .milliseconds(branchSearchDebounceMilliseconds)
     }
 
     enum GitHubRepoPicker {
-        static let searchDebounce: Duration = .milliseconds(300)
+        private static let searchDebounceMilliseconds = 300
+        static let searchDebounce: Duration = .milliseconds(searchDebounceMilliseconds)
     }
 
     enum RepoOwnerAvatar {
@@ -204,12 +209,13 @@ enum Constants {
     }
 
     enum QRScanner {
-        static let errorDisplayDuration: Duration = .seconds(3)
-        static let duplicateScanResetDelay: Duration = .seconds(3)
+        private static let errorDisplayDurationSeconds = 3
+        private static let duplicateScanResetDelaySeconds = 3
+        static let errorDisplayDuration: Duration = .seconds(errorDisplayDurationSeconds)
+        static let duplicateScanResetDelay: Duration = .seconds(duplicateScanResetDelaySeconds)
     }
 
     enum Loading {}
 
     enum Splash {}
-
 }

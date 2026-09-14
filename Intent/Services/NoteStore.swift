@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 @MainActor
@@ -45,12 +45,12 @@ import Observation
     var sortedNotes: [Note] {
         notes
             .filter { !$0.isArchived }
-            .sorted { a, b in
-                if a.isDefault != b.isDefault {
-                    return a.isDefault
+            .sorted { lhs, rhs in
+                if lhs.isDefault != rhs.isDefault {
+                    return lhs.isDefault
                 }
                 // Match Electron behavior: sort by createdAt ascending (oldest first, newest at bottom)
-                return a.createdAt < b.createdAt
+                return lhs.createdAt < rhs.createdAt
             }
     }
 
@@ -67,7 +67,7 @@ import Observation
     func childNotes(of parentId: String) -> [Note] {
         notes
             .filter { !$0.isArchived && $0.parentId == parentId }
-            .sorted { a, b in a.createdAt < b.createdAt }
+            .sorted { lhs, rhs in lhs.createdAt < rhs.createdAt }
     }
 
     /// Check if a note has children
@@ -104,7 +104,7 @@ import Observation
         resnapshotInProgress = false
 
         // If we have a workspace context, refetch and subscribe
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await fetchNotes(workspaceId: workspaceId)
             await subscribeLiveState(workspaceId: workspaceId)
         }
@@ -175,9 +175,10 @@ import Observation
                 "note.list",
                 params: ["workspaceId": workspaceId, "projection": "slim"]
             )
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32_602 {
             AppLog.notes.warning(
-                "[NoteStore] note.list rejected projection param, retrying full: \(error)")
+                "[NoteStore] note.list rejected projection param, retrying full: \(error)"
+            )
             result = try await connectionManager.request(
                 "note.list",
                 params: ["workspaceId": workspaceId]
@@ -196,7 +197,7 @@ import Observation
     /// possibly-outdated body.
     private func mergeSlimRows(_ incoming: [Note]) -> [Note] {
         guard !notes.isEmpty else { return incoming }
-        let existingById = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let existingById = Dictionary(notes.map { ($0.id, $0) }) { existing, _ in existing }
         return incoming.map { row in
             guard row.isContentStale,
                   let existing = existingById[row.id],
@@ -272,14 +273,15 @@ import Observation
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
             return .notFound
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32_602 {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
             // client params bug doesn't silently masquerade as deletion.
             AppLog.notes.error(
                 "[NoteStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "note \(noteId) (data.code: \(error.intentErrorDataCode ?? "absent")) — "
-                    + "NOT treating as deletion: \(error.localizedDescription)")
+                    + "NOT treating as deletion: \(error.localizedDescription)"
+            )
             return .transientError
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch note: \(error)")
@@ -309,7 +311,10 @@ import Observation
         var original: Note?
         if let idx = notes.firstIndex(where: { $0.id == noteId }),
            let rewritten = NoteContentSegmenter.replacingCheckboxMarker(
-               in: notes[idx].content, line: line, status: status) {
+               in: notes[idx].content,
+               line: line,
+               status: status
+           ) {
             original = notes[idx]
             notes[idx] = notes[idx].withContent(rewritten)
         }
@@ -318,7 +323,7 @@ import Observation
                 "workspaceId": workspaceId,
                 "noteId": noteId,
                 "line": line,
-                "status": status,
+                "status": status
             ])
             return true
         } catch {
@@ -342,7 +347,7 @@ import Observation
             _ = try await connectionManager.request("task.updateNoteStatus", params: [
                 "workspaceId": workspaceId,
                 "noteId": noteId,
-                "status": status,
+                "status": status
             ])
             return true
         } catch {
@@ -398,7 +403,7 @@ import Observation
     // MARK: - Event subscription
 
     func startObservingEvents(workspaceId: String? = nil) {
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             self.workspaceId = workspaceId
         }
 
@@ -438,10 +443,10 @@ import Observation
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
         switch eventType {
-        case let t where t.hasPrefix("note:"):
+        case let eventName where eventName.hasPrefix("note:"):
             // Only refetch if not in live mode (avoid double-apply)
             if !noteLive {
-                guard let workspaceId = workspaceId else { return }
+                guard let workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
             }
             onNoteChanged?()
@@ -497,7 +502,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await connectionManager.request("note.unsubscribe", params: [
+                _ = try await connectionManager.request("note.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -507,11 +512,10 @@ import Observation
 
         noteSubscriptionId = nil
 
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await subscribeLiveState(workspaceId: workspaceId)
             // Baseline refetch to bridge the gap during resnapshot
             await fetchNotes(workspaceId: workspaceId)
         }
     }
 }
-

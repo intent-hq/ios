@@ -3,13 +3,13 @@ import SwiftUI
 struct MessageView: View {
     let message: ConversationMessage
     let workspaceId: String
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
-    var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)? = nil
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     /// Block ids of this message with a slim-projection hydration fetch in
     /// flight (agent.getMessageBlock, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
     /// Fetch the full body of a slim-truncated block of this message by id.
-    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
     /// Agent-to-agent rows render as a collapsed disclosure card; the body
     /// is hidden until the header is tapped (FE parity: ChatMessage.svelte
     /// `isAgentMessageExpanded`, collapsed by default).
@@ -30,7 +30,9 @@ struct MessageView: View {
                 // `agent.setModel`; FE parity: ChatMessage.svelte checks
                 // getModelChangeNotice before any role branching).
                 ModelChangeNoticeView(
-                    notice: modelChange, fallbackText: message.joinedTextContent)
+                    notice: modelChange,
+                    fallbackText: message.joinedTextContent
+                )
             } else if isUser, let eventWake = message.eventWakeAttribution {
                 // Event-notification wake rows render as a compact banner —
                 // the whole body is machine text, so the banner replaces the

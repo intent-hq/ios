@@ -1,10 +1,9 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct GitHubRepoStoreTests {
-
     private func makeRepoDict(
         owner: String = "intent-hq",
         name: String = "intentd",
@@ -56,13 +55,13 @@ struct GitHubRepoStoreTests {
     @Test func rewritesPartialSlashQueries() {
         #expect(GitHubRepoStore.rewriteSearchQuery("intent-hq/") == "user:intent-hq")
         #expect(GitHubRepoStore.rewriteSearchQuery("/intentd") == "intentd")
-        #expect(GitHubRepoStore.rewriteSearchQuery("/") == "")
+        #expect(GitHubRepoStore.rewriteSearchQuery("/").isEmpty)
     }
 
     @Test func leavesBareQueriesUnchanged() {
         #expect(GitHubRepoStore.rewriteSearchQuery("intentd") == "intentd")
-        #expect(GitHubRepoStore.rewriteSearchQuery("") == "")
-        #expect(GitHubRepoStore.rewriteSearchQuery("   ") == "")
+        #expect(GitHubRepoStore.rewriteSearchQuery("").isEmpty)
+        #expect(GitHubRepoStore.rewriteSearchQuery("   ").isEmpty)
     }
 
     // MARK: - Auth status
@@ -93,32 +92,46 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["repo.list"] = [
             "repos": [
-                ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
-                ["path": "/repos/local-only", "name": "local-only",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-09T10:00:00Z"],
-                ["path": "/repos/intentd", "name": "intentd", "owner": "intent-hq",
-                 "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-08T10:00:00Z"],
+                [
+                    "path": "/repos/monorepo",
+                    "name": "monorepo",
+                    "owner": "intent-hq",
+                    "addedAt": "2026-08-01T10:00:00Z",
+                    "lastUsedAt": "2026-08-10T10:00:00Z"
+                ],
+                [
+                    "path": "/repos/local-only",
+                    "name": "local-only",
+                    "addedAt": "2026-08-01T10:00:00Z",
+                    "lastUsedAt": "2026-08-09T10:00:00Z"
+                ],
+                [
+                    "path": "/repos/intentd",
+                    "name": "intentd",
+                    "owner": "intent-hq",
+                    "addedAt": "2026-08-01T10:00:00Z",
+                    "lastUsedAt": "2026-08-08T10:00:00Z"
+                ]
             ]
         ]
         await store.fetchRecentRepos()
         #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo", "intent-hq/intentd"])
     }
 
-    @Test func fetchRecentReposErrorLeavesRecentsUnchanged() async {
+    @Test func fetchRecentReposErrorLeavesRecentsUnchanged() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        let existing = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         store.recentRepos = [existing]
         fake.errorMap["repo.list"] = NSError(domain: "t", code: -1)
         await store.fetchRecentRepos()
         #expect(store.recentRepos == [existing])
     }
 
-    @Test func fetchRecentReposMalformedResponseLeavesRecentsUnchanged() async {
+    @Test func fetchRecentReposMalformedResponseLeavesRecentsUnchanged() async throws {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        let existing = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         store.recentRepos = [existing]
         fake.responseMap["repo.list"] = ["unexpected": "shape"]
         await store.fetchRecentRepos()
@@ -132,7 +145,7 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.list"] = [
             "repos": [makeRepoDict(name: "a"), makeRepoDict(name: "b")],
-            "nextToken": "tok-1",
+            "nextToken": "tok-1"
         ]
         await store.fetchOwnRepos()
         #expect(store.ownRepos.map(\.name) == ["a", "b"])
@@ -160,7 +173,8 @@ struct GitHubRepoStoreTests {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.errorMap["github.repos.list"] = NSError(
-            domain: "t", code: -1,
+            domain: "t",
+            code: -1,
             userInfo: [NSLocalizedDescriptionKey: "boom"]
         )
         await store.fetchOwnRepos()
@@ -199,13 +213,13 @@ struct GitHubRepoStoreTests {
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
-    @Test func searchReposDoesNotAssignPublishedResults() async {
+    @Test func searchReposDoesNotAssignPublishedResults() async throws {
         // The debounced caller publishes results itself after its
         // cancellation check, so an out-of-order older response can't
         // overwrite a newer one's published results.
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
+        let existing = try #require(GitHubRepo.parseRepo(makeRepoDict()))
         store.searchResults = [existing]
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "other")]]
         _ = await store.searchRepos(query: "other")
@@ -216,7 +230,8 @@ struct GitHubRepoStoreTests {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.errorMap["github.repos.search"] = NSError(
-            domain: "t", code: -1,
+            domain: "t",
+            code: -1,
             userInfo: [NSLocalizedDescriptionKey: "search down"]
         )
         let results = await store.searchRepos(query: "intentd")
@@ -262,7 +277,7 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.branches.list"] = [
             "branches": ["main", "dev"],
-            "nextToken": "tok-1",
+            "nextToken": "tok-1"
         ]
         let branches = try await store.fetchRemoteBranches(owner: "intent-hq", repo: "intentd")
         #expect(branches == ["main", "dev"])
@@ -283,7 +298,9 @@ struct GitHubRepoStoreTests {
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.branches.list"] = ["branches": ["feature/x"]]
         let branches = try await store.fetchRemoteBranches(
-            owner: "intent-hq", repo: "intentd", prefix: "feature/"
+            owner: "intent-hq",
+            repo: "intentd",
+            prefix: "feature/"
         )
         #expect(branches == ["feature/x"])
         let calls = fake.paramsForMethod("github.branches.list")

@@ -27,6 +27,7 @@ struct ContextMentionChipView: View {
             Image(systemName: Self.iconName(for: mention.provider))
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
@@ -66,7 +67,7 @@ struct ContextMentionChipView: View {
 struct ChipFlowLayout: Layout {
     var spacing: CGFloat = 6
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
         var x: CGFloat = 0
         var y: CGFloat = 0
@@ -74,7 +75,7 @@ struct ChipFlowLayout: Layout {
         var width: CGFloat = 0
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > 0 && x + size.width > maxWidth {
+            if x > 0, x + size.width > maxWidth {
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
@@ -86,13 +87,13 @@ struct ChipFlowLayout: Layout {
         return CGSize(width: width, height: y + rowHeight)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         var x = bounds.minX
         var y = bounds.minY
         var rowHeight: CGFloat = 0
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX {
+            if x > bounds.minX, x + size.width > bounds.maxX {
                 x = bounds.minX
                 y += rowHeight + spacing
                 rowHeight = 0

@@ -6,10 +6,16 @@ import SwiftUI
 /// by unpadded base64url-encoded CBOR; the tunnel dial remains the authoritative
 /// validation of the decoded contents.
 enum ManualConnectionInput: Equatable {
+    private static let base64BlockSize = 4
+    private static let minimumConnectionBlobByteCount = 37
+    private static let cborMapPrefixRange: ClosedRange<UInt8> = 0xa1...0xa4
+    private static let publicKeyHeaderRange = 1...4
+    private static let publicKeyHeader = Array("apX ".utf8)
+
     case direct(host: String)
     case tailcat(tcAddress: String)
 
-    static func classify(_ raw: String) -> ManualConnectionInput {
+    static func classify(_ raw: String) -> Self {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if isTailcatConnectionBlob(trimmed) {
             return .tailcat(tcAddress: trimmed)
@@ -29,14 +35,16 @@ enum ManualConnectionInput: Equatable {
         var base64 = String(encoded)
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
-        base64 += String(repeating: "=", count: (4 - base64.count % 4) % 4)
-        guard let decoded = Data(base64Encoded: base64), decoded.count >= 37 else { return false }
+        let paddingCount = (base64BlockSize - base64.count % base64BlockSize) % base64BlockSize
+        base64 += String(repeating: "=", count: paddingCount)
+        guard let decoded = Data(base64Encoded: base64),
+              decoded.count >= minimumConnectionBlobByteCount else { return false }
         // v0.4.0's wireConnInfo emits a 1–4 entry map whose first, required
         // field is `p`: a 32-byte server public key. Requiring that structure
         // prevents short legal DNS labels such as `tcoA` (an empty CBOR map)
         // from being mistaken for connection blobs.
-        return (0xa1...0xa4).contains(decoded[0])
-            && decoded[1...4].elementsEqual([0x61, 0x70, 0x58, 0x20])
+        return cborMapPrefixRange.contains(decoded[0])
+            && decoded[publicKeyHeaderRange].elementsEqual(publicKeyHeader)
     }
 
     /// Direct hosts to race and persist: empty for a tunnel-only target
@@ -91,6 +99,7 @@ struct ManualTokenEntryView: View {
                             Image(systemName: "keyboard")
                                 .font(.largeTitle)
                                 .foregroundStyle(Theme.primary(for: colorScheme))
+                                .accessibilityHidden(true)
                             Text("Manual Connection")
                                 .font(.title3.bold())
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -240,7 +249,9 @@ struct ManualTokenEntryView: View {
                 do {
                     fingerprint = try await CertFingerprintProbe.probeViaTunnel(
                         dialer: session.connection.tunnelDialer,
-                        tcAddress: tcAddress, remotePort: portNum)
+                        tcAddress: tcAddress,
+                        remotePort: portNum
+                    )
                 } catch {
                     // Classification only recognizes the expected prefix,
                     // base64, and CBOR-header shape. TailcatKit authoritatively
@@ -281,15 +292,27 @@ struct ManualTokenEntryView: View {
         Task {
             do {
                 try await session.connection.connect(
-                    hosts: input.hosts, port: portNum, token: token,
-                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
+                    hosts: input.hosts,
+                    port: portNum,
+                    token: token,
+                    certFingerprint: fingerprint,
+                    tcAddress: input.tcAddress
+                )
                 let server = PairedServer(
-                    hosts: input.hosts, port: portNum, name: "Intent", pairedAt: Date(),
-                    certFingerprint: fingerprint, tcAddress: input.tcAddress)
+                    hosts: input.hosts,
+                    port: portNum,
+                    name: "Intent",
+                    pairedAt: Date(),
+                    certFingerprint: fingerprint,
+                    tcAddress: input.tcAddress
+                )
                 let stored: StoredConnection
                 do {
                     stored = try await ConnectionPairing.finalize(
-                        server: server, token: token, connection: session.connection)
+                        server: server,
+                        token: token,
+                        connection: session.connection
+                    )
                 } catch {
                     session.connection.disconnect()
                     throw error
@@ -306,6 +329,4 @@ struct ManualTokenEntryView: View {
             }
         }
     }
-
 }
-

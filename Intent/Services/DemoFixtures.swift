@@ -30,7 +30,6 @@ enum DemoMode {
 /// default: a response without a `subscriptionId` makes every store fall
 /// back to its legacy fetch path, which is exactly right for static data.
 enum DemoFixtures {
-
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
@@ -53,7 +52,7 @@ enum DemoFixtures {
             return [
                 "messages": conversationMessages,
                 "truncated": false,
-                "totalMessages": conversationMessages.count,
+                "totalMessages": conversationMessages.count
             ] as [String: Any]
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
@@ -101,7 +100,7 @@ enum DemoFixtures {
                             "name": "Dashboard Implementor",
                             "status": "idle",
                             "specialist": "implementor",
-                            "lastActivity": iso(minutesAgo: 12),
+                            "lastActivity": iso(minutesAgo: 12)
                         ],
                         [
                             "id": "demo-agent-reviewer",
@@ -109,16 +108,16 @@ enum DemoFixtures {
                             "status": "running",
                             "specialist": "verifier",
                             "isResponding": true,
-                            "lastActivity": iso(minutesAgo: 2),
-                        ],
-                    ] as [[String: Any]],
+                            "lastActivity": iso(minutesAgo: 2)
+                        ]
+                    ] as [[String: Any]]
                 ] as [String: Any],
                 "activePullRequest": [
                     "number": 482,
                     "status": "Open",
                     "title": "feat: usage analytics dashboard with CSV export",
-                    "updatedAt": iso(minutesAgo: 25),
-                ] as [String: Any],
+                    "updatedAt": iso(minutesAgo: 25)
+                ] as [String: Any]
             ],
             [
                 "id": "demo-ws-reconnect",
@@ -144,10 +143,10 @@ enum DemoFixtures {
                             "status": "running",
                             "specialist": "implementor",
                             "isStreaming": true,
-                            "lastActivity": iso(minutesAgo: 1),
-                        ],
-                    ] as [[String: Any]],
-                ] as [String: Any],
+                            "lastActivity": iso(minutesAgo: 1)
+                        ]
+                    ] as [[String: Any]]
+                ] as [String: Any]
             ],
             [
                 "id": "demo-ws-dark-mode",
@@ -166,7 +165,7 @@ enum DemoFixtures {
                 "prNumber": 471,
                 "diffSummary": ["totalFiles": 9],
                 "taskStats": ["total": 4, "completed": 4, "inProgress": 0],
-                "agentSummary": ["count": 0, "agents": [[String: Any]]()] as [String: Any],
+                "agentSummary": ["count": 0, "agents": [[String: Any]]()] as [String: Any]
             ],
             [
                 "id": "demo-ws-flaky-tests",
@@ -191,11 +190,11 @@ enum DemoFixtures {
                             "name": "Test Stabilizer",
                             "status": "idle",
                             "specialist": "implementor",
-                            "lastActivity": iso(minutesAgo: 42),
-                        ],
-                    ] as [[String: Any]],
-                ] as [String: Any],
-            ],
+                            "lastActivity": iso(minutesAgo: 42)
+                        ]
+                    ] as [[String: Any]]
+                ] as [String: Any]
+            ]
         ]
     }
 
@@ -235,7 +234,7 @@ enum DemoFixtures {
                 querying raw events — keeps the dashboard queries under 50ms.
                 - Export is capped at 90 days per request; longer ranges get a \
                 background job + email link in a follow-up.
-                """,
+                """
             ],
             [
                 "id": "demo-note-csv-task",
@@ -245,8 +244,8 @@ enum DemoFixtures {
                 "metadata": [
                     "task": [
                         "status": "in_progress",
-                        "assignedAgentIds": ["demo-agent-implementor"],
-                    ] as [String: Any],
+                        "assignedAgentIds": ["demo-agent-implementor"]
+                    ] as [String: Any]
                 ] as [String: Any],
                 "content": """
                 # CSV export with streamed download
@@ -257,7 +256,7 @@ enum DemoFixtures {
                 - [x] Chunked encoder over the rollup cursor
                 - [x] Content-Disposition + progress header plumbing
                 - [ ] Integration test for the 90-day cap error
-                """,
+                """
             ],
             [
                 "id": "demo-note-research",
@@ -276,8 +275,8 @@ enum DemoFixtures {
                 | Recharts | 45 KB | CSS vars | ✅ picked |
                 | Chart.js | 68 KB | JS config | runner-up |
                 | ECharts | 320 KB | JS config | too heavy |
-                """,
-            ],
+                """
+            ]
         ]
     }
 
@@ -294,7 +293,7 @@ enum DemoFixtures {
                 "lastActivity": iso(minutesAgo: 12),
                 "lastMessageRole": "assistant",
                 "digest": "CSV export endpoint is streaming; adding the 90-day cap test next.",
-                "metadata": ["specialist": "implementor"],
+                "metadata": ["specialist": "implementor"]
             ],
             [
                 "id": "demo-agent-reviewer",
@@ -306,8 +305,8 @@ enum DemoFixtures {
                 "lastActivity": iso(minutesAgo: 2),
                 "lastMessageRole": "assistant",
                 "digest": "Reviewing PR #482 — checking the pagination math on the rollup query.",
-                "metadata": ["specialist": "verifier"],
-            ],
+                "metadata": ["specialist": "verifier"]
+            ]
         ]
     }
 
@@ -322,9 +321,9 @@ enum DemoFixtures {
                 "contentBlocks": [
                     [
                         "type": "text",
-                        "text": "Add the CSV export for the usage dashboard. Finance wants the same column layout as the old billing export.",
-                    ],
-                ],
+                        "text": "Add the CSV export for the usage dashboard. Finance wants the same column layout as the old billing export."
+                    ]
+                ]
             ],
             [
                 "id": "demo-msg-2",
@@ -342,9 +341,9 @@ enum DemoFixtures {
                         3. Reuse `BillingCsvSchema` for the column order
 
                         Starting with the streaming encoder.
-                        """,
-                    ],
-                ],
+                        """
+                    ]
+                ]
             ],
             [
                 "id": "demo-msg-3",
@@ -353,9 +352,9 @@ enum DemoFixtures {
                 "contentBlocks": [
                     [
                         "type": "text",
-                        "text": "What happens if someone requests more than 90 days?",
-                    ],
-                ],
+                        "text": "What happens if someone requests more than 90 days?"
+                    ]
+                ]
             ],
             [
                 "id": "demo-msg-4",
@@ -376,10 +375,10 @@ enum DemoFixtures {
                         Longer ranges will get a background job + email link in the \
                         follow-up task. The streaming encoder and cap are in — running \
                         the integration tests now.
-                        """,
-                    ],
-                ],
-            ],
+                        """
+                    ]
+                ]
+            ]
         ]
     }
 
@@ -391,14 +390,14 @@ enum DemoFixtures {
                 "id": "demo-note-csv-task",
                 "title": "CSV export with streamed download",
                 "status": "in_progress",
-                "updatedAt": iso(minutesAgo: 20),
+                "updatedAt": iso(minutesAgo: 20)
             ],
             [
                 "id": "demo-task-flag",
                 "title": "Feature flag rollout to beta orgs",
                 "status": "not_started",
-                "updatedAt": iso(minutesAgo: 240),
-            ],
+                "updatedAt": iso(minutesAgo: 240)
+            ]
         ]
     }
 
@@ -409,13 +408,13 @@ enum DemoFixtures {
             [
                 "id": "implementor",
                 "name": "Implementor",
-                "description": "Implements a scoped task end to end.",
+                "description": "Implements a scoped task end to end."
             ],
             [
                 "id": "verifier",
                 "name": "Verifier",
-                "description": "Reviews and verifies completed work.",
-            ],
+                "description": "Reviews and verifies completed work."
+            ]
         ]
     }
 }

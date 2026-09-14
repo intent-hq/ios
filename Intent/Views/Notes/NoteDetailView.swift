@@ -1,21 +1,26 @@
 import SwiftUI
 
 struct NoteDetailView: View {
+    private static let linkedNotePathComponentCount = 3
+    private static let linkedNoteKindIndex = 1
+
     let noteId: String
     let workspaceId: String
     let noteTitle: String
     /// Optional closure to push a note onto the navigation stack (for note-to-note navigation).
     /// Parameters: (noteId, workspaceId, noteTitle)
     var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
-    @State var noteStore: NoteStore
-    @State var agentStore: AgentStore
+    @State private var noteStore: NoteStore
+    @State private var agentStore: AgentStore
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var note: Note?
     @State private var isLoading = true
 
     init(
-        noteId: String, workspaceId: String, noteTitle: String,
+        noteId: String,
+        workspaceId: String,
+        noteTitle: String,
         session: BackendSession,
         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
     ) {
@@ -47,7 +52,8 @@ struct NoteDetailView: View {
                                         .padding(.vertical, Constants.Notes.Detail.tagVerticalPadding)
                                         .background(Theme.muted(for: colorScheme))
                                         .clipShape(RoundedRectangle(
-                                            cornerRadius: Constants.Notes.Detail.tagCornerRadius))
+                                            cornerRadius: Constants.Notes.Detail.tagCornerRadius
+                                        ))
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 }
                             }
@@ -64,14 +70,17 @@ struct NoteDetailView: View {
                                 },
                                 resolveAgentCreatedAt: { id in
                                     ISO8601DateFormatter.lenientDate(
-                                        from: agentStore.agents.first { $0.id == id }?.createdAt)
+                                        from: agentStore.agents.first { $0.id == id }?.createdAt
+                                    )
                                 },
                                 onNavigateToNote: { navigateToNote($0) },
                                 onSetStatus: { status in
                                     Task {
                                         await noteStore.updateTaskNoteStatus(
-                                            noteId: noteId, workspaceId: workspaceId,
-                                            status: status)
+                                            noteId: noteId,
+                                            workspaceId: workspaceId,
+                                            status: status
+                                        )
                                     }
                                 }
                             )
@@ -95,15 +104,20 @@ struct NoteDetailView: View {
                                 onSetLineStatus: { line, status in
                                     Task {
                                         await noteStore.updateTaskLineStatus(
-                                            noteId: noteId, workspaceId: workspaceId,
-                                            line: line, status: status)
+                                            noteId: noteId,
+                                            workspaceId: workspaceId,
+                                            line: line,
+                                            status: status
+                                        )
                                     }
                                 },
                                 onSetTaskNoteStatus: { taskNoteId, status in
                                     Task {
                                         await noteStore.updateTaskNoteStatus(
-                                            noteId: taskNoteId, workspaceId: workspaceId,
-                                            status: status)
+                                            noteId: taskNoteId,
+                                            workspaceId: workspaceId,
+                                            status: status
+                                        )
                                     }
                                 }
                             )
@@ -116,6 +130,7 @@ struct NoteDetailView: View {
                     Image(systemName: "doc.text")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .accessibilityHidden(true)
                     Text("Note content unavailable")
                         .font(.headline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -140,7 +155,7 @@ struct NoteDetailView: View {
             agentStore.startObservingEvents()
             await agentStore.fetchAgents(workspaceId: workspaceId)
             noteStore.onNoteChanged = { [self] in
-                Task { await self.refreshNote() }
+                Task { await refreshNote() }
             }
             noteStore.startObservingEvents(workspaceId: workspaceId)
         }
@@ -151,7 +166,7 @@ struct NoteDetailView: View {
             // triggers the refetch — the last note in the workspace may have been the
             // open one — and a spurious empty publish is harmless since refreshNote
             // only navigates on a definitive not-found.
-            if note != nil && !newNotes.contains(where: { $0.id == noteId }) {
+            if note != nil, !newNotes.contains(where: { $0.id == noteId }) {
                 Task { await refreshNote() }
             }
             // A slim row (§5.2) at a different revision than the fetched body
@@ -194,7 +209,7 @@ struct NoteDetailView: View {
     private func navigateToNote(_ targetId: String, in targetWorkspaceId: String? = nil) {
         let destinationWorkspaceId = targetWorkspaceId ?? workspaceId
         let title = noteStore.note(byId: targetId)?.title ?? "Note"
-        if let onNavigateToNote = onNavigateToNote {
+        if let onNavigateToNote {
             onNavigateToNote(targetId, destinationWorkspaceId, title)
         } else {
             coordinator.onSelectNote(targetId, workspaceId: destinationWorkspaceId, noteTitle: title)
@@ -242,10 +257,10 @@ struct NoteDetailView: View {
         if segments.count >= 2, segments[0] == "task" || segments[0] == "note" {
             return (workspaceId: nil, id: segments[1])
         }
-        if segments.count >= 3, segments[1] == "task" || segments[1] == "note" {
+        if segments.count >= Self.linkedNotePathComponentCount,
+           segments[Self.linkedNoteKindIndex] == "task" || segments[Self.linkedNoteKindIndex] == "note" {
             return (workspaceId: segments[0], id: segments[2])
         }
         return nil
     }
 }
-

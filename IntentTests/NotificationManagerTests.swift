@@ -1,8 +1,8 @@
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
 import UserNotifications
-@testable import Intent
 
 @MainActor
 private final class NotificationManagerFakeCenter: LocalNotificationCenter {
@@ -11,14 +11,14 @@ private final class NotificationManagerFakeCenter: LocalNotificationCenter {
     private(set) var removedNotificationIdentifiers: [[String]] = []
 
     func getAuthorizationStatus(
-        completionHandler: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void
+        completionHandler: @MainActor @Sendable (UNAuthorizationStatus) -> Void
     ) {
         completionHandler(.authorized)
     }
 
     func requestAuthorization(
-        options: UNAuthorizationOptions,
-        completionHandler: @escaping @Sendable (Bool, (any Error)?) -> Void
+        options _: UNAuthorizationOptions,
+        completionHandler: @Sendable (Bool, (any Error)?) -> Void
     ) {
         completionHandler(true, nil)
     }
@@ -39,8 +39,10 @@ private final class NotificationManagerFakeCenter: LocalNotificationCenter {
 @Suite("NotificationManager idle-alert suppression")
 @MainActor
 struct NotificationManagerTests {
-    private static let connectionId = UUID(
-        uuidString: "11111111-1111-1111-1111-111111111111")!
+    private static let connectionId = UUID(uuid: (
+        0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
+        0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11
+    ))
 
     private func makeNotificationManager(
         state: UIApplication.State,
@@ -55,7 +57,8 @@ struct NotificationManagerTests {
             activeConnectionId: { Self.connectionId },
             presentFeedback: feedback,
             windowEmitsFeedbackSound: windowEmitsFeedbackSound,
-            registerEvents: false)
+            registerEvents: false
+        )
         return (manager, center)
     }
 
@@ -70,16 +73,26 @@ struct NotificationManagerTests {
         waitingForAgentIds: [String] = []
     ) -> AgentSession {
         AgentSession(
-            id: id, name: "Agent \(id)", status: status,
-            isBackground: isBackground, isStreaming: isStreaming,
-            isProcessing: isProcessing, isResponding: isResponding,
+            id: id,
+            name: "Agent \(id)",
+            status: status,
+            isBackground: isBackground,
+            isStreaming: isStreaming,
+            isProcessing: isProcessing,
+            isResponding: isResponding,
             isWaitingForOtherAgents: isWaitingForOtherAgents,
             waitingForAgentIds: waitingForAgentIds,
-            createdAt: nil, updatedAt: nil, lastActivity: nil,
-            lastAgentResponse: nil, lastUserMessage: nil,
+            createdAt: nil,
+            updatedAt: nil,
+            lastActivity: nil,
+            lastAgentResponse: nil,
+            lastUserMessage: nil,
             lastMessageRole: nil,
-            digest: nil, specialist: nil, createdByAgentId: nil,
-            attentionRequestKind: nil, attentionRequestReason: nil,
+            digest: nil,
+            specialist: nil,
+            createdByAgentId: nil,
+            attentionRequestKind: nil,
+            attentionRequestReason: nil,
             attentionRequestTimestamp: nil
         )
     }
@@ -181,7 +194,10 @@ struct NotificationManagerTests {
         manager.workspaceOpened(workspaceId: "workspace-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(center.requests.count == 1)
         #expect(feedbackCount == 0)
@@ -192,7 +208,10 @@ struct NotificationManagerTests {
         let (manager, center) = makeNotificationManager(state: .background)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(center.requests.count == 1)
     }
@@ -204,7 +223,10 @@ struct NotificationManagerTests {
         }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(center.requests.isEmpty)
         #expect(feedbackCount == 1)
@@ -219,7 +241,10 @@ struct NotificationManagerTests {
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(center.requests.isEmpty)
         #expect(feedbackCount == 1)
@@ -233,7 +258,10 @@ struct NotificationManagerTests {
         manager.conversationOpened(agentId: "agent-1", connectionId: UUID())
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(manager.currentToast?.agentId == "agent-1")
         #expect(manager.currentToast?.sourceBackendID == BackendID(Self.connectionId))
@@ -245,7 +273,10 @@ struct NotificationManagerTests {
         manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(manager.currentToast?.agentId == "agent-1")
     }
@@ -260,15 +291,25 @@ struct NotificationManagerTests {
         manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
-        #expect(manager.currentToast == nil,
-                "The conversation is still visible in the sibling window")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        #expect(
+            manager.currentToast == nil,
+            "The conversation is still visible in the sibling window"
+        )
 
         manager.conversationClosed(agentId: "agent-1", connectionId: Self.connectionId)
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
-        #expect(manager.currentToast?.agentId == "agent-1",
-                "The last close stops the suppression")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        #expect(
+            manager.currentToast?.agentId == "agent-1",
+            "The last close stops the suppression"
+        )
     }
 
     @Test @MainActor func workspaceOpenInSiblingWindowKeepsSuppressingAfterOneClose() {
@@ -279,15 +320,25 @@ struct NotificationManagerTests {
         manager.workspaceClosed(workspaceId: "workspace-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
-        #expect(manager.currentToast == nil,
-                "The workspace is still visible in the sibling window")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        #expect(
+            manager.currentToast == nil,
+            "The workspace is still visible in the sibling window"
+        )
 
         manager.workspaceClosed(workspaceId: "workspace-1", connectionId: Self.connectionId)
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
-        #expect(manager.currentToast?.workspaceId == "workspace-1",
-                "The last close stops the suppression")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
+        #expect(
+            manager.currentToast?.workspaceId == "workspace-1",
+            "The last close stops the suppression"
+        )
     }
 
     @Test func foregroundDeliveryReplaysFeedbackAndToastBeforeSuppressingBanner() async {
@@ -299,15 +350,17 @@ struct NotificationManagerTests {
             applicationState: { .active },
             activeConnectionId: { Self.connectionId },
             presentFeedback: { feedbackCount += 1 },
-            registerEvents: false)
+            registerEvents: false
+        )
         let response = LocalNotificationService.response(
             actionIdentifier: UNNotificationDefaultActionIdentifier,
             userInfo: [
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
                 "agentName": "Build Agent",
-                "connectionId": Self.connectionId.uuidString,
-            ])
+                "connectionId": Self.connectionId.uuidString
+            ]
+        )
 
         let options = await withCheckedContinuation { continuation in
             service.deliverForegroundNotification(response) { options in
@@ -329,24 +382,29 @@ struct NotificationManagerTests {
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
                 "agentName": "Build Agent",
-                "connectionId": connectionId.uuidString,
-            ])
+                "connectionId": connectionId.uuidString
+            ]
+        )
     }
 
     @Test @MainActor func notificationTapRoutesAfterColdStartHandlerInstallation() {
         let (manager, _) = makeNotificationManager(state: .inactive)
-        var routedValues: (String, String, String)?
+        var routedAgentId: String?
+        var routedWorkspaceId: String?
+        var routedAgentName: String?
 
         manager.handleNotificationResponse(makeResponse(connectionId: Self.connectionId))
         manager.registerAgentSelectionHandler(
             for: BackendID(Self.connectionId)
         ) { agentId, workspaceId, agentName, _ in
-            routedValues = (agentId, workspaceId, agentName)
+            routedAgentId = agentId
+            routedWorkspaceId = workspaceId
+            routedAgentName = agentName
         }
 
-        #expect(routedValues?.0 == "agent-1")
-        #expect(routedValues?.1 == "workspace-1")
-        #expect(routedValues?.2 == "Build Agent")
+        #expect(routedAgentId == "agent-1")
+        #expect(routedWorkspaceId == "workspace-1")
+        #expect(routedAgentName == "Build Agent")
     }
 
     @Test @MainActor func singleWindowTapForAnotherBackendIsDropped() {
@@ -408,8 +466,11 @@ struct NotificationManagerTests {
         }
 
         manager.routeAgentSelection(
-            agentId: "agent-1", workspaceId: "workspace-1",
-            agentName: "Build Agent", connectionId: source.connectionID)
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent",
+            connectionId: source.connectionID
+        )
 
         #expect(routedValues?.0 == "agent-1")
         #expect(routedValues?.1 == source.connectionID)
@@ -441,8 +502,9 @@ struct NotificationManagerTests {
             userInfo: [
                 "agentId": "agent-1",
                 "workspaceId": "workspace-1",
-                "agentName": "Build Agent",
-            ])
+                "agentName": "Build Agent"
+            ]
+        )
         var didRoute = false
         manager.registerAgentSelectionHandler(
             for: BackendID(Self.connectionId)
@@ -458,9 +520,11 @@ struct NotificationManagerTests {
 
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
-        #expect(center.removedNotificationIdentifiers == [[
-            "agent-idle-\(Self.connectionId.uuidString)-agent-1"
-        ]])
+        #expect(center.removedNotificationIdentifiers == [
+            [
+                "agent-idle-\(Self.connectionId.uuidString)-agent-1"
+            ]
+        ])
     }
 
     @Test @MainActor func openingConversationClearsNotificationScopedToItsConnection() {
@@ -471,50 +535,60 @@ struct NotificationManagerTests {
 
         manager.conversationOpened(agentId: "agent-1", connectionId: pinnedConnectionId)
 
-        #expect(center.removedNotificationIdentifiers == [[
-            "agent-idle-\(pinnedConnectionId.uuidString)-agent-1"
-        ]])
+        #expect(center.removedNotificationIdentifiers == [
+            [
+                "agent-idle-\(pinnedConnectionId.uuidString)-agent-1"
+            ]
+        ])
     }
 
     // MARK: - Multi-window tap routing (spec decision 5)
 
-    private static let pinnedBackend = BackendID(UUID(
-        uuidString: "22222222-2222-2222-2222-222222222222")!)
+    private static let pinnedBackend = BackendID(UUID(uuid: (
+        0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+        0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22
+    )))
 
     @Test func routeDeliversToRegisteredSourceWindow() {
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [Self.pinnedBackend, BackendID(UUID())],
-            supportsMultipleWindows: false) == .deliverToWindow)
+            supportsMultipleWindows: false
+        ) == .deliverToWindow)
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [Self.pinnedBackend],
-            supportsMultipleWindows: true) == .deliverToWindow)
+            supportsMultipleWindows: true
+        ) == .deliverToWindow)
     }
 
     @Test func routeOpensSourceWindowWhereMultipleWindowsSupported() {
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [BackendID(UUID())],
-            supportsMultipleWindows: true) == .openSourceWindow)
+            supportsMultipleWindows: true
+        ) == .openSourceWindow)
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [],
-            supportsMultipleWindows: true) == .openSourceWindow)
+            supportsMultipleWindows: true
+        ) == .openSourceWindow)
     }
 
     @Test func routeHoldsColdStartTapForFirstWindow() {
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [],
-            supportsMultipleWindows: false) == .holdForFirstWindow)
+            supportsMultipleWindows: false
+        ) == .holdForFirstWindow)
     }
 
     @Test func routeDropsCrossBackendTapOnSingleWindowPlatform() {
         #expect(NotificationManager.selectionRoute(
             source: Self.pinnedBackend,
             registeredBackends: [BackendID(UUID())],
-            supportsMultipleWindows: false) == .drop)
+            supportsMultipleWindows: false
+        ) == .drop)
     }
 
     // MARK: - Presentation routing (per-backend windows)
@@ -525,57 +599,70 @@ struct NotificationManagerTests {
         #expect(NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: Self.pinnedBackend,
-            supportsMultipleWindows: false))
+            supportsMultipleWindows: false
+        ))
         #expect(NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: BackendID(UUID()),
-            supportsMultipleWindows: false))
+            supportsMultipleWindows: false
+        ))
         #expect(NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: nil,
-            supportsMultipleWindows: false))
+            supportsMultipleWindows: false
+        ))
     }
 
     @Test func multiWindowRendersToastOnlyInSourceBackendWindow() {
         #expect(NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: Self.pinnedBackend,
-            supportsMultipleWindows: true))
+            supportsMultipleWindows: true
+        ))
         #expect(!NotificationManager.windowPresentsAlert(
             source: Self.pinnedBackend,
             windowBackendID: BackendID(UUID()),
-            supportsMultipleWindows: true))
-        #expect(!NotificationManager.windowPresentsAlert(
-            source: Self.pinnedBackend,
-            windowBackendID: nil,
-            supportsMultipleWindows: true),
-            "A pairing window (no backend) renders no toasts on multi-window platforms")
+            supportsMultipleWindows: true
+        ))
+        #expect(
+            !NotificationManager.windowPresentsAlert(
+                source: Self.pinnedBackend,
+                windowBackendID: nil,
+                supportsMultipleWindows: true
+            ),
+            "A pairing window (no backend) renders no toasts on multi-window platforms"
+        )
     }
 
     @Test func singleWindowAlwaysPresentsAlerts() {
         #expect(NotificationManager.alertPresents(
             source: Self.pinnedBackend,
             registeredBackends: [],
-            supportsMultipleWindows: false))
+            supportsMultipleWindows: false
+        ))
         #expect(NotificationManager.alertPresents(
             source: Self.pinnedBackend,
             registeredBackends: [BackendID(UUID())],
-            supportsMultipleWindows: false))
+            supportsMultipleWindows: false
+        ))
     }
 
     @Test func multiWindowPresentsAlertOnlyWhenSourceWindowRegistered() {
         #expect(NotificationManager.alertPresents(
             source: Self.pinnedBackend,
             registeredBackends: [Self.pinnedBackend, BackendID(UUID())],
-            supportsMultipleWindows: true))
+            supportsMultipleWindows: true
+        ))
         #expect(!NotificationManager.alertPresents(
             source: Self.pinnedBackend,
             registeredBackends: [BackendID(UUID())],
-            supportsMultipleWindows: true))
+            supportsMultipleWindows: true
+        ))
         #expect(!NotificationManager.alertPresents(
             source: Self.pinnedBackend,
             registeredBackends: [],
-            supportsMultipleWindows: true))
+            supportsMultipleWindows: true
+        ))
     }
 
     @Test @MainActor func multiWindowAlertPresentsViaRegisteredSourceWindow() {
@@ -585,10 +672,14 @@ struct NotificationManagerTests {
         }
         manager.supportsMultipleWindows = true
         manager.registerAgentSelectionHandler(
-            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 1)
         #expect(manager.currentToast?.agentId == "agent-1")
@@ -606,7 +697,10 @@ struct NotificationManagerTests {
         manager.registerAgentSelectionHandler(for: BackendID(UUID())) { _, _, _, _ in }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 0)
         #expect(manager.currentToast == nil)
@@ -622,11 +716,15 @@ struct NotificationManagerTests {
         }
         manager.supportsMultipleWindows = true
         manager.registerAgentSelectionHandler(
-            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in }
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 1)
         #expect(manager.currentToast == nil)
@@ -640,13 +738,19 @@ struct NotificationManagerTests {
         // global (non-spatial) sound.
         var feedbackCount = 0
         let (manager, _) = makeNotificationManager(
-            state: .active, windowEmitsFeedbackSound: true) { feedbackCount += 1 }
+            state: .active,
+            windowEmitsFeedbackSound: true
+        ) { feedbackCount += 1 }
         manager.supportsMultipleWindows = true
         manager.registerAgentSelectionHandler(
-            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 0)
         #expect(manager.windowFeedbackEvent?.sourceBackendID == BackendID(Self.connectionId))
@@ -658,14 +762,20 @@ struct NotificationManagerTests {
         // still emits the sound from the source window, with no toast.
         var feedbackCount = 0
         let (manager, _) = makeNotificationManager(
-            state: .active, windowEmitsFeedbackSound: true) { feedbackCount += 1 }
+            state: .active,
+            windowEmitsFeedbackSound: true
+        ) { feedbackCount += 1 }
         manager.supportsMultipleWindows = true
         manager.registerAgentSelectionHandler(
-            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in }
         manager.conversationOpened(agentId: "agent-1", connectionId: Self.connectionId)
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 0)
         #expect(manager.windowFeedbackEvent?.sourceBackendID == BackendID(Self.connectionId))
@@ -676,16 +786,25 @@ struct NotificationManagerTests {
         // Each request carries a fresh id so a window's onChange re-fires
         // for back-to-back alerts from the same backend.
         let (manager, _) = makeNotificationManager(
-            state: .active, windowEmitsFeedbackSound: true)
+            state: .active,
+            windowEmitsFeedbackSound: true
+        )
         manager.supportsMultipleWindows = true
         manager.registerAgentSelectionHandler(
-            for: BackendID(Self.connectionId)) { _, _, _, _ in }
+            for: BackendID(Self.connectionId)
+        ) { _, _, _, _ in }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
         let first = manager.windowFeedbackEvent
         manager.presentIdleAlert(
-            agentId: "agent-2", workspaceId: "workspace-2", agentName: "Test Agent")
+            agentId: "agent-2",
+            workspaceId: "workspace-2",
+            agentName: "Test Agent"
+        )
 
         #expect(first != nil)
         #expect(manager.windowFeedbackEvent != nil)
@@ -701,7 +820,10 @@ struct NotificationManagerTests {
         }
 
         manager.presentIdleAlert(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent")
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent"
+        )
 
         #expect(feedbackCount == 1)
         #expect(manager.windowFeedbackEvent == nil)
@@ -728,7 +850,7 @@ struct NotificationChimeTests {
 
     @Test func chimeIsAudible() {
         let samples = NotificationChime.chimeSamples()
-        #expect(samples.contains { abs(Int($0)) > 8_000 })
+        #expect(samples.contains { abs(Int($0)) > 8000 })
     }
 
     @Test func fileURLIsCreatedOnceAndStable() throws {
@@ -746,9 +868,11 @@ struct NotificationChimeTests {
 /// (window model v2: there is no default session to deduplicate against).
 @Suite("NotificationManager cross-session aggregation", .serialized)
 @MainActor
-final class NotificationManagerSessionAggregationTests {
-    private static let activeConnectionId = UUID(
-        uuidString: "22222222-2222-2222-2222-222222222222")!
+final class NotificationSessionAggregationTests {
+    private static let activeConnectionId = UUID(uuid: (
+        0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22,
+        0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22, 0x22
+    ))
 
     /// Per-test isolated persistence (same pattern as
     /// BackendSessionRegistryTests) so AppCoordinator never touches the
@@ -762,7 +886,9 @@ final class NotificationManagerSessionAggregationTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
-            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+            defaults: defaults,
+            keychainStorage: InMemoryKeychainStorage()
+        )
     }
 
     deinit {
@@ -770,8 +896,8 @@ final class NotificationManagerSessionAggregationTests {
     }
 
     private func makeManager(
-        state: UIApplication.State = .active,
         defaultConnection: FakeConnectionManager,
+        state: UIApplication.State = .active,
         windowEmitsFeedbackSound: Bool = false,
         feedback: @escaping () -> Void = {}
     ) -> (NotificationManager, NotificationManagerFakeCenter) {
@@ -785,14 +911,16 @@ final class NotificationManagerSessionAggregationTests {
             windowEmitsFeedbackSound: windowEmitsFeedbackSound,
             connection: defaultConnection,
             workspaceStore: WorkspaceStore(forTesting: true),
-            registerEvents: false)
+            registerEvents: false
+        )
         return (manager, center)
     }
 
     private func makeSession(
-        backendID: BackendID?, connection: SessionFakeConnectionManager,
+        backendID: BackendID?,
+        connection: SessionFakeConnectionManager,
         attentionCueCenter: WorkspaceAttentionCueCenter =
-            WorkspaceAttentionCueCenter(playSound: {})
+            WorkspaceAttentionCueCenter {}
     ) -> BackendSession {
         let workspaceStore = WorkspaceStore(forTesting: true)
         let fileLoader = WorkspaceFileImageLoader(connection: connection)
@@ -802,15 +930,21 @@ final class NotificationManagerSessionAggregationTests {
             workspaceStore: workspaceStore,
             coordinatorFactory: { [persistence] claim in
                 AppCoordinator(
-                    workspaceStore: workspaceStore, connection: connection,
-                    persistence: persistence, claimScreenRestoration: claim)
+                    workspaceStore: workspaceStore,
+                    connection: connection,
+                    persistence: persistence,
+                    claimScreenRestoration: claim
+                )
             },
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,
             attachmentImageLoader: AttachmentImageLoader(
-                connection: connection, fileLoader: fileLoader),
-            attentionCueCenter: attentionCueCenter)
+                connection: connection,
+                fileLoader: fileLoader
+            ),
+            attentionCueCenter: attentionCueCenter
+        )
     }
 
     private func idleEventParams(agentId: String, workspaceId: String) -> [String: Any] {
@@ -818,7 +952,7 @@ final class NotificationManagerSessionAggregationTests {
             "event": [
                 "type": "agent:idle",
                 "workspaceId": workspaceId,
-                "data": ["agentId": agentId, "agentName": "Pinned Agent"],
+                "data": ["agentId": agentId, "agentName": "Pinned Agent"]
             ] as [String: Any]
         ]
     }
@@ -847,8 +981,10 @@ final class NotificationManagerSessionAggregationTests {
 
         manager.attachSessionObserver(for: session)
         manager.attachSessionObserver(for: session)
-        #expect(connection.eventHandlerCount == 1,
-                "Repeat attaches for the same backend must not stack handlers")
+        #expect(
+            connection.eventHandlerCount == 1,
+            "Repeat attaches for the same backend must not stack handlers"
+        )
 
         manager.detachSessionObserver(for: backendID)
         #expect(connection.eventHandlerCount == 0)
@@ -863,8 +999,10 @@ final class NotificationManagerSessionAggregationTests {
 
         manager.attachSessionObserver(for: session)
 
-        #expect(connection.eventHandlerCount == 0,
-                "A transient pairing session has no backend to observe")
+        #expect(
+            connection.eventHandlerCount == 0,
+            "A transient pairing session has no backend to observe"
+        )
     }
 
     // MARK: - Backend-session alerts
@@ -880,20 +1018,25 @@ final class NotificationManagerSessionAggregationTests {
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         try await waitFor { manager.currentToast != nil }
 
         #expect(manager.currentToast?.agentId == "agent-p")
         #expect(manager.currentToast?.sourceBackendID == backendID)
-        #expect(connection.didCallMethod("agent.list"),
-                "The suppression read must go through the source session's connection")
+        #expect(
+            connection.didCallMethod("agent.list"),
+            "The suppression read must go through the source session's connection"
+        )
         #expect(!defaultFake.didCallMethod("agent.list"))
         #expect(center.requests.isEmpty)
     }
 
     @Test func idleEventInBackgroundPostsNotificationScopedToBackend() async throws {
         let (manager, center) = makeManager(
-            state: .background, defaultConnection: FakeConnectionManager())
+            state: .background,
+            defaultConnection: FakeConnectionManager()
+        )
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
@@ -902,7 +1045,8 @@ final class NotificationManagerSessionAggregationTests {
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         try await waitFor { !center.requests.isEmpty }
 
         #expect(center.requests.map(\.identifier) == [
@@ -921,15 +1065,18 @@ final class NotificationManagerSessionAggregationTests {
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         try await waitFor { manager.currentToast != nil }
 
-        #expect(connection.didCallMethod("agent.list"),
-                "Every backend session is observed directly (v2: no default handler dedup)")
+        #expect(
+            connection.didCallMethod("agent.list"),
+            "Every backend session is observed directly (v2: no default handler dedup)"
+        )
         #expect(manager.currentToast?.sourceBackendID == backendID)
     }
 
-    @Test func detachedSessionNoLongerAlerts() async throws {
+    @Test func detachedSessionNoLongerAlerts() async {
         let (manager, center) = makeManager(defaultConnection: FakeConnectionManager())
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
@@ -940,7 +1087,8 @@ final class NotificationManagerSessionAggregationTests {
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         await drainMainQueue()
 
         #expect(manager.currentToast == nil)
@@ -950,54 +1098,84 @@ final class NotificationManagerSessionAggregationTests {
     // MARK: - Alert-chime / attention-cue dedup (visionOS double chime)
 
     private func makeCueWorkspace(id: String, attention: String? = nil) -> Workspace {
-        Workspace(id: id, title: "Test", branch: nil, baseRef: nil, status: nil,
-                  activity: nil, displayStatus: nil, attention: attention,
-                  lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
-                  repositoryName: nil, prStatus: nil, prNumber: nil,
-                  diffSummaryTotalFiles: nil, taskStatsTotal: nil,
-                  taskStatsCompleted: nil, taskStatsInProgress: nil,
-                  agentSummaryCount: nil, agentSummaryAgents: nil)
+        Workspace(
+            id: id,
+            title: "Test",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            attention: attention,
+            lastActivity: nil,
+            updatedAt: nil,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            prStatus: nil,
+            prNumber: nil,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil,
+            agentSummaryAgents: nil
+        )
     }
 
     @Test func idleAlertChimeThenAttentionFlipYieldsOneAudibleTrigger() async throws {
         // agent:idle chimes via the observed session, then the same
         // completion flips the workspace to unread: the cue stays silent.
         let (manager, _) = makeManager(
-            defaultConnection: FakeConnectionManager(), windowEmitsFeedbackSound: true)
+            defaultConnection: FakeConnectionManager(),
+            windowEmitsFeedbackSound: true
+        )
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
         let cueCenter = WorkspaceAttentionCueCenter(
-            playSound: {}, windowEmitsCueSound: true)
+            playSound: {},
+            windowEmitsCueSound: true
+        )
         let session = makeSession(
-            backendID: backendID, connection: connection,
-            attentionCueCenter: cueCenter)
+            backendID: backendID,
+            connection: connection,
+            attentionCueCenter: cueCenter
+        )
         manager.attachSessionObserver(for: session)
         cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p")])
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         try await waitFor { manager.windowFeedbackEvent != nil }
 
         cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p", attention: "unread")])
-        #expect(cueCenter.windowCueEvent == nil,
-                "The alert chime already sounded for ws-p — no second chime")
+        #expect(
+            cueCenter.windowCueEvent == nil,
+            "The alert chime already sounded for ws-p — no second chime"
+        )
     }
 
     @Test func attentionCueThenIdleAlertYieldsOneAudibleTrigger() async throws {
         // Reverse arrival order: the workspace snapshot flips first, then
         // the agent:idle alert arrives — the chime is suppressed.
         let (manager, _) = makeManager(
-            defaultConnection: FakeConnectionManager(), windowEmitsFeedbackSound: true)
+            defaultConnection: FakeConnectionManager(),
+            windowEmitsFeedbackSound: true
+        )
         let backendID = BackendID(UUID())
         let connection = SessionFakeConnectionManager()
         connection.responseMap["agent.list"] = ["agents": [[String: Any]]()]
         let cueCenter = WorkspaceAttentionCueCenter(
-            playSound: {}, windowEmitsCueSound: true)
+            playSound: {},
+            windowEmitsCueSound: true
+        )
         let session = makeSession(
-            backendID: backendID, connection: connection,
-            attentionCueCenter: cueCenter)
+            backendID: backendID,
+            connection: connection,
+            attentionCueCenter: cueCenter
+        )
         manager.attachSessionObserver(for: session)
         cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p")])
         cueCenter.observe(workspaces: [makeCueWorkspace(id: "ws-p", attention: "unread")])
@@ -1005,12 +1183,17 @@ final class NotificationManagerSessionAggregationTests {
 
         connection.deliverEvent(
             method: "event",
-            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p"))
+            params: idleEventParams(agentId: "agent-p", workspaceId: "ws-p")
+        )
         try await waitFor { manager.currentToast != nil }
 
-        #expect(manager.windowFeedbackEvent == nil,
-                "The attention cue already sounded for ws-p — no alert chime")
-        #expect(manager.currentToast != nil,
-                "Dedup silences the sound only; the toast still shows")
+        #expect(
+            manager.windowFeedbackEvent == nil,
+            "The attention cue already sounded for ws-p — no alert chime"
+        )
+        #expect(
+            manager.currentToast != nil,
+            "Dedup silences the sound only; the toast still shows"
+        )
     }
 }

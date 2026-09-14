@@ -125,8 +125,10 @@ struct DeepLinkPairingView: View {
         pairingTask = Task {
             do {
                 let stored = try await PairingFlow.connect(
-                    payload: payload, certFingerprint: certFingerprint,
-                    connectionManager: session.connection)
+                    payload: payload,
+                    certFingerprint: certFingerprint,
+                    connectionManager: session.connection
+                )
                 guard !Task.isCancelled else { return }
                 coordinator.onDeepLinkPaired(stored)
             } catch {

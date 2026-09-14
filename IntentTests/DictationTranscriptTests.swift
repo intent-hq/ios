@@ -1,11 +1,10 @@
-import Testing
 @testable import Intent
+import Testing
 
 /// The visionOS dictation merge rules (`DictationTranscript`): each partial
 /// or final transcription replaces the previous one at the caret captured
 /// when dictation started, with single-space separation from adjacent text.
 struct DictationTranscriptTests {
-
     @Test func insertsIntoEmptyText() {
         let transcript = DictationTranscript(baseText: "", insertionOffset: 0)
         #expect(transcript.merged(with: "hello world") == "hello world")
@@ -228,39 +227,36 @@ struct DictationTranscriptTests {
     /// prompts (second tap, disappear, scene-inactive, send) must cancel the
     /// pending start so `begin` never runs a second engine or resumes capture
     /// after the composer is gone.
-    @Test func stopDuringStartWindowCancelsPendingStart() {
+    @Test func stopDuringStartWindowCancelsPendingStart() throws {
         for reason: DictationStopReason in [.userTapped, .viewDisappeared, .sceneInactive, .send] {
             #expect(DictationStopAction.action(for: reason, phase: .starting) == .cancelStart)
         }
 
         var state = DictationStartState()
-        let token = state.requestStart()
-        #expect(token != nil)
+        let token = try #require(state.requestStart())
         // Stop lands while authorization is pending.
         state.stopped()
         // The awaited start may not proceed and cannot reach recording.
-        #expect(!state.canProceed(token!))
-        let reachedRecording = state.started(token!)
+        #expect(!state.canProceed(token))
+        let reachedRecording = state.started(token)
         #expect(!reachedRecording)
         #expect(state.phase == .idle)
     }
 
     /// A second start during the starting window is refused, and a cancelled
     /// token stays stale even after a fresh start begins.
-    @Test func startWindowTokensAreGenerationScoped() {
+    @Test func startWindowTokensAreGenerationScoped() throws {
         var state = DictationStartState()
-        let first = state.requestStart()
-        #expect(first != nil)
+        let first = try #require(state.requestStart())
         let reentrant = state.requestStart()
         #expect(reentrant == nil)
 
         state.stopped()
-        let second = state.requestStart()
-        #expect(second != nil)
+        let second = try #require(state.requestStart())
         // The older attempt stays cancelled; the fresh one proceeds.
-        #expect(!state.canProceed(first!))
-        #expect(state.canProceed(second!))
-        let reachedRecording = state.started(second!)
+        #expect(!state.canProceed(first))
+        #expect(state.canProceed(second))
+        let reachedRecording = state.started(second)
         #expect(reachedRecording)
         #expect(state.phase == .recording)
         // While recording, another start is still refused.
@@ -269,15 +265,15 @@ struct DictationTranscriptTests {
     }
 
     /// An uncancelled start completes; a failed one returns to idle.
-    @Test func startWindowCompletesOrAborts() {
+    @Test func startWindowCompletesOrAborts() throws {
         var state = DictationStartState()
-        let token = state.requestStart()!
+        let token = try #require(state.requestStart())
         let reachedRecording = state.started(token)
         #expect(reachedRecording)
         #expect(state.phase == .recording)
 
         var failing = DictationStartState()
-        let failToken = failing.requestStart()!
+        let failToken = try #require(failing.requestStart())
         failing.abort(failToken)
         #expect(failing.phase == .idle)
         // Idle again: a new start is allowed.

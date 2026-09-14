@@ -1,27 +1,35 @@
 import Foundation
+@testable import Intent
 import Observation
 import Synchronization
-import UIKit
 import Testing
-@testable import Intent
+import UIKit
 
 // Tests share the PersistenceManager draft key "test-ws"/"test-agent".
 @Suite(.serialized)
 @MainActor
 struct ConversationViewModelTests {
-
     // MARK: - Helpers
 
     private func makeVM() -> ConversationViewModel {
         ConversationViewModel(
-            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared, uploadService: .shared)
+            agentId: "test-agent",
+            workspaceId: "test-ws",
+            agentName: "Test",
+            connection: ConnectionManager.shared,
+            uploadService: .shared
+        )
     }
 
-    private func textMessage(id: String = UUID().uuidString, role: MessageRole, text: String,
-                             metadata: [String: AnyCodable]? = nil) -> ConversationMessage {
+    private func textMessage(
+        id: String = UUID().uuidString,
+        role: MessageRole,
+        text: String,
+        metadata: [String: AnyCodable]? = nil
+    ) -> ConversationMessage {
         ConversationMessage(
-            id: id, role: role,
+            id: id,
+            role: role,
             contentBlocks: [ContentBlock(type: .text, text: text)],
             metadata: metadata
         )
@@ -51,7 +59,8 @@ struct ConversationViewModelTests {
         extraBlocks: [ContentBlock] = []
     ) -> ConversationMessage {
         ConversationMessage(
-            id: id, role: .assistant,
+            id: id,
+            role: .assistant,
             contentBlocks: [questionResourceBlock()] + extraBlocks
         )
     }
@@ -61,7 +70,7 @@ struct ConversationViewModelTests {
     @Test func filteredMessagesKeepsAssistantMessages() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant, text: "Hello!"),
+            textMessage(role: .assistant, text: "Hello!")
         ]
         #expect(vm.filteredMessages.count == 1)
         #expect(vm.filteredMessages[0].role == .assistant)
@@ -70,7 +79,7 @@ struct ConversationViewModelTests {
     @Test func filteredMessagesKeepsNormalUserMessages() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .user, text: "Hi there"),
+            textMessage(role: .user, text: "Hi there")
         ]
         #expect(vm.filteredMessages.count == 1)
     }
@@ -80,7 +89,7 @@ struct ConversationViewModelTests {
         // on legacy text-only rows) — they are no longer hidden.
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .user, text: "[WORKSPACE EVENTS] something happened"),
+            textMessage(role: .user, text: "[WORKSPACE EVENTS] something happened")
         ]
         #expect(vm.filteredMessages.count == 1)
     }
@@ -88,7 +97,7 @@ struct ConversationViewModelTests {
     @Test func filteredMessagesKeepsTaskWake() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .user, text: "[TASK WAKE] waking up"),
+            textMessage(role: .user, text: "[TASK WAKE] waking up")
         ]
         #expect(vm.filteredMessages.count == 1)
     }
@@ -98,7 +107,7 @@ struct ConversationViewModelTests {
         // sender attribution header instead.
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .user, text: "[AGENT MESSAGE] from another agent"),
+            textMessage(role: .user, text: "[AGENT MESSAGE] from another agent")
         ]
         #expect(vm.filteredMessages.count == 1)
     }
@@ -106,8 +115,11 @@ struct ConversationViewModelTests {
     @Test func filteredMessagesKeepsEventNotificationMetadata() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .user, text: "event data",
-                        metadata: ["type": AnyCodable("event_notification")]),
+            textMessage(
+                role: .user,
+                text: "event data",
+                metadata: ["type": AnyCodable("event_notification")]
+            )
         ]
         #expect(vm.filteredMessages.count == 1)
     }
@@ -125,17 +137,26 @@ struct ConversationViewModelTests {
             textMessage(role: .assistant, text: "Hi"),
             textMessage(role: .user, text: "[WORKSPACE EVENTS] x"),
             textMessage(role: .user, text: "[AGENT MESSAGE] z"),
-            textMessage(role: .assistant, text: "Done"),
+            textMessage(role: .assistant, text: "Done")
         ]
         #expect(vm.filteredMessages.count == 5)
     }
 
     // MARK: - queuedMessages display filter
 
-    private func queuedEntry(id: String, content: String = "c",
-                             metadata: [String: AnyCodable]? = nil) -> QueuedMessage {
-        QueuedMessage(id: id, content: content, queuedAt: "2025-01-01T00:00:00Z",
-                      position: 0, imageBlocks: nil, messageMetadata: metadata)
+    private func queuedEntry(
+        id: String,
+        content: String = "c",
+        metadata: [String: AnyCodable]? = nil
+    ) -> QueuedMessage {
+        QueuedMessage(
+            id: id,
+            content: content,
+            queuedAt: "2025-01-01T00:00:00Z",
+            position: 0,
+            imageBlocks: nil,
+            messageMetadata: metadata
+        )
     }
 
     @Test func queuedMessagesHidesNonUserEntries() async {
@@ -145,7 +166,7 @@ struct ConversationViewModelTests {
             // Malformed agent message (no fromAgentId): typed metadata → hidden.
             queuedEntry(id: "q-agent-bad", metadata: ["type": AnyCodable("agent_message")]),
             queuedEntry(id: "q-system", metadata: ["source": AnyCodable("system")]),
-            queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")]),
+            queuedEntry(id: "q-benign", metadata: ["userAppMessageId": AnyCodable("uam-1")])
         ]
         #expect(vm.queuedMessages.map(\.id) == ["q-user", "q-benign"])
         // The store keeps the full queue (flush behavior untouched).
@@ -157,9 +178,10 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-agent", metadata: [
-                "type": AnyCodable("agent_message"), "fromAgentId": AnyCodable("agent-2"),
-                "fromAgentName": AnyCodable("Verifier"),
-            ]),
+                "type": AnyCodable("agent_message"),
+                "fromAgentId": AnyCodable("agent-2"),
+                "fromAgentName": AnyCodable("Verifier")
+            ])
         ]
         #expect(vm.queuedMessages.isEmpty)
     }
@@ -171,7 +193,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-event", metadata: ["type": AnyCodable("event_notification")]),
-            queuedEntry(id: "q-event-legacy", content: "[WORKSPACE EVENTS] 1 event"),
+            queuedEntry(id: "q-event-legacy", content: "[WORKSPACE EVENTS] 1 event")
         ]
         #expect(vm.queuedMessages.map(\.id) == ["q-event-legacy"])
     }
@@ -179,7 +201,7 @@ struct ConversationViewModelTests {
     @Test func queuedMessagesEmptyWhenOnlyNonUserEntries() async {
         let vm = makeVM()
         vm.store.queuedMessages = [
-            queuedEntry(id: "q-agent", metadata: ["fromAgentId": AnyCodable("agent-2")]),
+            queuedEntry(id: "q-agent", metadata: ["fromAgentId": AnyCodable("agent-2")])
         ]
         #expect(vm.queuedMessages.isEmpty)
     }
@@ -190,15 +212,19 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.queuedMessages = [
             queuedEntry(id: "q-hook", metadata: [
-                "type": AnyCodable("hook_wake"), "hookId": AnyCodable("h-1"),
-                "hookName": AnyCodable("CI watcher"), "reason": AnyCodable("dispatched"),
+                "type": AnyCodable("hook_wake"),
+                "hookId": AnyCodable("h-1"),
+                "hookName": AnyCodable("CI watcher"),
+                "reason": AnyCodable("dispatched")
             ]),
             queuedEntry(id: "q-pr", metadata: [
-                "type": AnyCodable("pr_monitor_wake"), "monitorId": AnyCodable("m-1"),
-                "repo": AnyCodable("intent-hq/intentd"), "prNumber": AnyCodable(7),
+                "type": AnyCodable("pr_monitor_wake"),
+                "monitorId": AnyCodable("m-1"),
+                "repo": AnyCodable("intent-hq/intentd"),
+                "prNumber": AnyCodable(7)
             ]),
             // Malformed PR wake (no repo): still a typed entry → hidden.
-            queuedEntry(id: "q-pr-bad", metadata: ["type": AnyCodable("pr_monitor_wake")]),
+            queuedEntry(id: "q-pr-bad", metadata: ["type": AnyCodable("pr_monitor_wake")])
         ]
         #expect(vm.queuedMessages.isEmpty)
     }
@@ -208,8 +234,10 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsParsesSinglePrompt() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant,
-                        text: "Here you go\n<!-- suggested-prompts\nRun the tests\n-->"),
+            textMessage(
+                role: .assistant,
+                text: "Here you go\n<!-- suggested-prompts\nRun the tests\n-->"
+            )
         ]
         #expect(vm.suggestedPrompts == ["Run the tests"])
     }
@@ -217,8 +245,10 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsMultiplePrompts() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant,
-                        text: "Done!\n<!-- suggested-prompts\nPrompt 1\nPrompt 2\nPrompt 3\n-->"),
+            textMessage(
+                role: .assistant,
+                text: "Done!\n<!-- suggested-prompts\nPrompt 1\nPrompt 2\nPrompt 3\n-->"
+            )
         ]
         #expect(vm.suggestedPrompts == ["Prompt 1", "Prompt 2", "Prompt 3"])
     }
@@ -227,7 +257,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .assistant, text: "<!-- suggested-prompts\nA\n-->"),
-            textMessage(role: .user, text: "thanks"),
+            textMessage(role: .user, text: "thanks")
         ]
         #expect(vm.suggestedPrompts.isEmpty)
     }
@@ -235,7 +265,7 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsEmptyWhenNoComment() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant, text: "Just a normal message"),
+            textMessage(role: .assistant, text: "Just a normal message")
         ]
         #expect(vm.suggestedPrompts.isEmpty)
     }
@@ -243,8 +273,10 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsTrimsWhitespace() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant,
-                        text: "<!-- suggested-prompts\n  Spaced prompt  \n-->"),
+            textMessage(
+                role: .assistant,
+                text: "<!-- suggested-prompts\n  Spaced prompt  \n-->"
+            )
         ]
         #expect(vm.suggestedPrompts == ["Spaced prompt"])
     }
@@ -252,8 +284,10 @@ struct ConversationViewModelTests {
     @Test func suggestedPromptsIgnoresEmptyLines() async {
         let vm = makeVM()
         vm.store.messages = [
-            textMessage(role: .assistant,
-                        text: "<!-- suggested-prompts\nA\n\n\nB\n-->"),
+            textMessage(
+                role: .assistant,
+                text: "<!-- suggested-prompts\nA\n\n\nB\n-->"
+            )
         ]
         #expect(vm.suggestedPrompts == ["A", "B"])
     }
@@ -264,13 +298,14 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             ConversationMessage(
-                id: UUID().uuidString, role: .assistant,
+                id: UUID().uuidString,
+                role: .assistant,
                 contentBlocks: [
                     ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\nRun the te"),
-                    ContentBlock(type: .text, text: "sts\n-->"),
+                    ContentBlock(type: .text, text: "sts\n-->")
                 ],
                 metadata: nil
-            ),
+            )
         ]
         #expect(vm.suggestedPrompts == ["Run the tests"])
     }
@@ -286,7 +321,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             textMessage(role: .user, text: "hi"),
-            questionMessage(id: "a1"),
+            questionMessage(id: "a1")
         ]
         let set = try #require(vm.pendingQuestions)
         #expect(set.messageId == "a1")
@@ -305,7 +340,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             questionMessage(),
-            textMessage(role: .user, text: "answered elsewhere"),
+            textMessage(role: .user, text: "answered elsewhere")
         ]
         #expect(vm.pendingQuestions == nil)
     }
@@ -320,8 +355,8 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             questionMessage(extraBlocks: [
-                ContentBlock(type: .text, text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
-            ]),
+                ContentBlock(type: .text, text: "Done\n<!-- suggested-prompts\nRun tests\n-->")
+            ])
         ]
         #expect(vm.pendingQuestions != nil)
         #expect(vm.suggestedPrompts.isEmpty)
@@ -332,8 +367,10 @@ struct ConversationViewModelTests {
         vm.store.messages = [
             questionMessage(),
             textMessage(role: .user, text: "answered"),
-            textMessage(role: .assistant,
-                        text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+            textMessage(
+                role: .assistant,
+                text: "Done\n<!-- suggested-prompts\nRun tests\n-->"
+            )
         ]
         #expect(vm.pendingQuestions == nil)
         #expect(vm.suggestedPrompts == ["Run tests"])
@@ -352,9 +389,11 @@ struct ConversationViewModelTests {
             fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
         }
         fake.responseMap["file.placeAttachment"] = [
-            "attachmentId": "att-1", "fileName": "image.jpg",
-            "path": ".intent/attachments/att-1/image.jpg", "size": 3,
-            "mimeType": "image/jpeg",
+            "attachmentId": "att-1",
+            "fileName": "image.jpg",
+            "path": ".intent/attachments/att-1/image.jpg",
+            "size": 3,
+            "mimeType": "image/jpeg"
         ] as [String: Any]
         vm.store = ConversationStore(connectionManager: fake)
         vm.uploadService = AttachmentUploadService(connection: fake)
@@ -367,8 +406,12 @@ struct ConversationViewModelTests {
     @Test func initRoutesInjectedUploadServiceIntoAttachmentPipeline() {
         let service = AttachmentUploadService(connection: FakeConnectionManager())
         let vm = ConversationViewModel(
-            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared, uploadService: service)
+            agentId: "test-agent",
+            workspaceId: "test-ws",
+            agentName: "Test",
+            connection: ConnectionManager.shared,
+            uploadService: service
+        )
         #expect(vm.uploadService === service)
     }
 
@@ -380,7 +423,7 @@ struct ConversationViewModelTests {
                 selectedLabels: ["OAuth"],
                 freeText: "",
                 skipped: false
-            ),
+            )
         ]
     }
 
@@ -458,7 +501,7 @@ struct ConversationViewModelTests {
         // (FE parity: ChatPanel.performLocalSendCleanup).
         let (vm, _) = makeFakeBackedVM()
         vm.store.messages = [questionMessage()]
-        vm.addImage(UIImage(systemName: "star")!)
+        vm.addImage(try #require(UIImage(systemName: "star")))
         let answers = try firstAnswer(vm)
 
         await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
@@ -469,7 +512,8 @@ struct ConversationViewModelTests {
     @Test func dismissQuestionsRetiresPendingSet() async throws {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         vm.store.messages = [questionMessage(id: "a1")]
         #expect(vm.pendingQuestions != nil)
@@ -485,7 +529,7 @@ struct ConversationViewModelTests {
 
     @Test func failedDismissKeepsQuestionsPending() async {
         let (vm, fake) = makeFakeBackedVM()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         vm.store.messages = [questionMessage(id: "a1")]
 
         await vm.dismissQuestions(messageId: "a1")
@@ -498,41 +542,49 @@ struct ConversationViewModelTests {
         // an explicit user-visible error, not just silently re-pend the
         // wizard — and the surface must be non-destructive (rollback intact).
         let (vm, fake) = makeFakeBackedVM()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         vm.store.messages = [questionMessage(id: "a1")]
         #expect(vm.dismissQuestionsError == nil)
 
         await vm.dismissQuestions(messageId: "a1")
 
-        #expect(vm.dismissQuestionsError != nil,
-                "a failed dismiss surfaces a user-visible error")
-        #expect(vm.pendingQuestions != nil,
-                "the error surface is non-destructive — the wizard still re-pends")
+        #expect(
+            vm.dismissQuestionsError != nil,
+            "a failed dismiss surfaces a user-visible error"
+        )
+        #expect(
+            vm.pendingQuestions != nil,
+            "the error surface is non-destructive — the wizard still re-pends"
+        )
     }
 
     @Test func successfulDismissRetryClearsPriorError() async {
         // A later successful dismiss must not leave a stale error surfaced.
         let (vm, fake) = makeFakeBackedVM()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
         vm.store.messages = [questionMessage(id: "a1")]
         await vm.dismissQuestions(messageId: "a1")
         #expect(vm.dismissQuestionsError != nil)
 
         fake.errorMap["agent.dismissQuestions"] = nil
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         await vm.dismissQuestions(messageId: "a1")
 
-        #expect(vm.dismissQuestionsError == nil,
-                "a successful retry clears the stale error")
+        #expect(
+            vm.dismissQuestionsError == nil,
+            "a successful retry clears the stale error"
+        )
         #expect(vm.pendingQuestions == nil)
     }
 
     @Test func newerQuestionSetPendsAfterDismissingOlderOne() async throws {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         vm.store.messages = [questionMessage(id: "a1")]
         await vm.dismissQuestions(messageId: "a1")
@@ -548,7 +600,8 @@ struct ConversationViewModelTests {
         // supersede the pending questions — the optimistic user message is
         // rolled back so the wizard re-derives and returns.
         let (vm, _) = makeFakeBackedVM(
-            sendError: NSError(domain: "WebSocket", code: -32000))
+            sendError: NSError(domain: "WebSocket", code: -32_000)
+        )
         vm.store.messages = [questionMessage()]
         let answers = try firstAnswer(vm)
         #expect(vm.pendingQuestions != nil)
@@ -569,8 +622,10 @@ struct ConversationViewModelTests {
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.isStreaming = true
 
-        let set = try #require(vm.pendingQuestions,
-                               "the marked set stays pending while a later turn runs")
+        let set = try #require(
+            vm.pendingQuestions,
+            "the marked set stays pending while a later turn runs"
+        )
         #expect(set.messageId == "a1")
         #expect(vm.suggestedPrompts.isEmpty)
     }
@@ -579,7 +634,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.store.messages = [
             questionMessage(id: "a1"),
-            textMessage(role: .user, text: "unrelated wake"),
+            textMessage(role: .user, text: "unrelated wake")
         ]
         vm.store.pendingQuestionsMessageId = "a1"
 
@@ -592,8 +647,10 @@ struct ConversationViewModelTests {
         vm.store.messages = [questionMessage(id: "a1")]
         vm.store.pendingQuestionsMessageId = ""
 
-        #expect(vm.pendingQuestions == nil,
-                "a written-empty marker means nothing pends, even with a question-bearing tail")
+        #expect(
+            vm.pendingQuestions == nil,
+            "a written-empty marker means nothing pends, even with a question-bearing tail"
+        )
     }
 
     @Test func submitQuestionAnswersHidesWizardBeforeDaemonClearsMarker() async throws {
@@ -626,14 +683,18 @@ struct ConversationViewModelTests {
         // answer until the drain lands the user row / clears the marker.
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.sendMessage"] = [
-            "success": true, "queued": true,
+            "success": true,
+            "queued": true,
             "queuedMessage": [
-                "id": "q-1", "content": "Q: Which auth method?\nA: OAuth",
-                "queuedAt": "2026-01-01T00:00:00Z", "position": 0,
+                "id": "q-1",
+                "content": "Q: Which auth method?\nA: OAuth",
+                "queuedAt": "2026-01-01T00:00:00Z",
+                "position": 0,
                 "messageMetadata": [
-                    "type": "question_answers", "answeredQuestionsMessageId": "a1",
-                ],
-            ] as [String: Any],
+                    "type": "question_answers",
+                    "answeredQuestionsMessageId": "a1"
+                ]
+            ] as [String: Any]
         ] as [String: Any]
         vm.store.messages = [questionMessage(id: "a1")]
         vm.store.pendingQuestionsMessageId = "a1"
@@ -655,7 +716,8 @@ struct ConversationViewModelTests {
 
     @Test func failedSubmitRePendsMarkedSetAfterRollback() async throws {
         let (vm, _) = makeFakeBackedVM(
-            sendError: NSError(domain: "WebSocket", code: -32000))
+            sendError: NSError(domain: "WebSocket", code: -32_000)
+        )
         vm.store.messages = [questionMessage(id: "a1")]
         vm.store.pendingQuestionsMessageId = "a1"
         let answers = try firstAnswer(vm)
@@ -669,7 +731,8 @@ struct ConversationViewModelTests {
     @Test func dismissRetiresMarkedSetWhileMarkerStillSet() async {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         vm.store.messages = [questionMessage(id: "a1")]
         vm.store.pendingQuestionsMessageId = "a1"
@@ -681,12 +744,12 @@ struct ConversationViewModelTests {
         #expect(vm.pendingQuestions == nil, "dismissal wins even while the marker still names the set")
     }
 
-    @Test func newerMarkerReplacesWizardContent() throws {
+    @Test func newerMarkerReplacesWizardContent() {
         let vm = makeVM()
         vm.store.messages = [
             questionMessage(id: "a1"),
             textMessage(role: .user, text: "answered elsewhere"),
-            questionMessage(id: "a2"),
+            questionMessage(id: "a2")
         ]
         vm.store.pendingQuestionsMessageId = "a1"
         #expect(vm.pendingQuestions?.messageId == "a1")
@@ -702,8 +765,11 @@ struct ConversationViewModelTests {
     private func offPageTranscript() -> [ConversationMessage] {
         [
             textMessage(id: "u9", role: .user, text: "later wake"),
-            textMessage(id: "a9", role: .assistant,
-                        text: "Done\n<!-- suggested-prompts\nRun tests\n-->"),
+            textMessage(
+                id: "a9",
+                role: .assistant,
+                text: "Done\n<!-- suggested-prompts\nRun tests\n-->"
+            )
         ]
     }
 
@@ -712,7 +778,10 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
 
         let set = try #require(vm.pendingQuestions, "the recovered row feeds the wizard")
         #expect(set.messageId == "a1")
@@ -726,7 +795,10 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
         vm.store.isStreaming = true
 
         #expect(vm.pendingQuestions?.messageId == "a1", "marker authority applies to the recovered copy")
@@ -737,7 +809,10 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
         let answers = try firstAnswer(vm)
 
         await vm.submitQuestionAnswers(answers, answeredQuestionsMessageId: "a1")
@@ -747,8 +822,10 @@ struct ConversationViewModelTests {
         #expect(metadata["answeredQuestionsMessageId"] as? String == "a1")
         #expect(vm.messages.last?.answeredQuestionsMessageId == "a1")
         #expect(vm.pendingQuestions == nil, "the tagged optimistic row hides the recovered wizard")
-        #expect(vm.isPendingQuestionRecoveryLoading == false,
-                "an answered recovered set does not fail closed")
+        #expect(
+            vm.isPendingQuestionRecoveryLoading == false,
+            "an answered recovered set does not fail closed"
+        )
         #expect(vm.store.pendingQuestionsMessageId == "a1", "no daemon update has landed yet")
 
         vm.store.pendingQuestionsMessageId = ""
@@ -761,12 +838,15 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
         vm.store.queuedMessages = [
             queuedEntry(id: "q-1", metadata: [
                 "type": AnyCodable("question_answers"),
-                "answeredQuestionsMessageId": AnyCodable("a1"),
-            ]),
+                "answeredQuestionsMessageId": AnyCodable("a1")
+            ])
         ]
 
         #expect(vm.pendingQuestions == nil, "the queued tagged answer bridge applies to the recovered copy")
@@ -776,19 +856,25 @@ struct ConversationViewModelTests {
     @Test func recoveredMarkedSetDismissesLikeResidentOne() async {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.dismissQuestions"] = [
-            "success": true, "dismissedQuestionsMessageId": "a1",
+            "success": true,
+            "dismissedQuestionsMessageId": "a1"
         ] as [String: Any]
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
         #expect(vm.pendingQuestions != nil)
 
         await vm.dismissQuestions(messageId: "a1")
 
         #expect(vm.pendingQuestions == nil, "the dismissed recovered set never re-pends")
-        #expect(vm.isPendingQuestionRecoveryLoading == false,
-                "a dismissed recovered set does not fail closed")
+        #expect(
+            vm.isPendingQuestionRecoveryLoading == false,
+            "a dismissed recovered set does not fail closed"
+        )
         #expect(vm.suggestedPrompts == ["Run tests"], "the ordinary composer slot is back")
     }
 
@@ -873,15 +959,20 @@ struct ConversationViewModelTests {
         // the resident row (with its current content) drives the wizard.
         let vm = makeVM()
         let staleCopy = ConversationMessage(
-            id: "a1", role: .assistant,
-            contentBlocks: [questionResourceBlock(attachmentId: "tar-stale00000000", question: "Stale?")])
+            id: "a1",
+            role: .assistant,
+            contentBlocks: [questionResourceBlock(attachmentId: "tar-stale00000000", question: "Stale?")]
+        )
         vm.store.messages = [
             questionMessage(id: "a1"),
-            textMessage(id: "u9", role: .user, text: "later wake"),
+            textMessage(id: "u9", role: .user, text: "later wake")
         ]
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: staleCopy)
+            messageId: "a1",
+            status: .found,
+            message: staleCopy
+        )
 
         let set = try #require(vm.pendingQuestions)
         #expect(set.questions.map(\.attachmentId) == ["tar-0123456789ab"], "the resident row wins")
@@ -896,7 +987,10 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a2"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found, message: questionMessage(id: "a1"))
+            messageId: "a1",
+            status: .found,
+            message: questionMessage(id: "a1")
+        )
 
         #expect(vm.pendingQuestions == nil)
         #expect(vm.isPendingQuestionRecoveryLoading, "the new marker fails closed until its own seek settles")
@@ -909,8 +1003,10 @@ struct ConversationViewModelTests {
         vm.store.messages = offPageTranscript()
         vm.store.pendingQuestionsMessageId = "a1"
         vm.store.pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: "a1", status: .found,
-            message: textMessage(id: "a1", role: .assistant, text: "no questions here"))
+            messageId: "a1",
+            status: .found,
+            message: textMessage(id: "a1", role: .assistant, text: "no questions here")
+        )
 
         #expect(vm.pendingQuestions == nil)
         #expect(vm.isPendingQuestionRecoveryLoading)
@@ -931,29 +1027,37 @@ struct ConversationViewModelTests {
             "resource": [
                 "uri": "intent-question://q",
                 "mimeType": Question.resourceMimeType,
-                "text": questionJSON,
-            ] as [String: Any],
+                "text": questionJSON
+            ] as [String: Any]
         ]
         let pageRow: [String: Any] = [
-            "id": "u9", "role": "user", "timestamp": "2024-01-01T00:00:00Z",
-            "contentBlocks": [["type": "text", "id": "u9:0", "text": "later wake"] as [String: Any]],
+            "id": "u9",
+            "role": "user",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [["type": "text", "id": "u9:0", "text": "later wake"] as [String: Any]]
         ]
         let markedRow: [String: Any] = [
-            "id": "a1", "role": "assistant", "timestamp": "2024-01-01T00:00:00Z",
-            "contentBlocks": [resourceBlock],
+            "id": "a1",
+            "role": "assistant",
+            "timestamp": "2024-01-01T00:00:00Z",
+            "contentBlocks": [resourceBlock]
         ]
         fake.responseQueueMap["agent.getConversation"] = [
             ["messages": [pageRow]] as [String: Any],
-            ["messages": [markedRow]] as [String: Any],
+            ["messages": [markedRow]] as [String: Any]
         ]
         vm.store = ConversationStore(connectionManager: fake)
         await vm.store.fetchConversation(agentId: "test-agent", workspaceId: "test-ws")
         #expect(vm.isPendingQuestionRecoveryLoading == false)
 
         vm.store.handleStreamEvent("events.event", params: [
-            "event": ["type": "agent:updated",
-                      "data": ["agentId": "test-agent",
-                               "pendingQuestionsMessageId": "a1"]] as [String: Any]
+            "event": [
+                "type": "agent:updated",
+                "data": [
+                    "agentId": "test-agent",
+                    "pendingQuestionsMessageId": "a1"
+                ]
+            ] as [String: Any]
         ])
         #expect(vm.pendingQuestions == nil)
         #expect(vm.isPendingQuestionRecoveryLoading, "fails closed while the seek is in flight")
@@ -971,7 +1075,7 @@ struct ConversationViewModelTests {
         // Regression: draft attachments must not silently ride a suggested
         // prompt — the prompt sends text only.
         let (vm, fake) = makeFakeBackedVM()
-        vm.addImage(UIImage(systemName: "star")!)
+        vm.addImage(try #require(UIImage(systemName: "star")))
 
         await vm.sendSuggestedPrompt("Run the tests")
 
@@ -985,14 +1089,19 @@ struct ConversationViewModelTests {
         // composer draft or the on-screen draft text.
         let (vm, _) = makeFakeBackedVM()
         PersistenceManager.shared.saveDraft(
-            "half-typed draft", workspaceId: vm.workspaceId, agentId: vm.agentId)
+            "half-typed draft",
+            workspaceId: vm.workspaceId,
+            agentId: vm.agentId
+        )
         vm.messageText = "half-typed draft"
 
         await vm.sendSuggestedPrompt("Run the tests")
 
         #expect(vm.messageText == "half-typed draft")
         #expect(PersistenceManager.shared.loadDraft(
-            workspaceId: vm.workspaceId, agentId: vm.agentId) == "half-typed draft")
+            workspaceId: vm.workspaceId,
+            agentId: vm.agentId
+        ) == "half-typed draft")
         PersistenceManager.shared.clearDraft(workspaceId: vm.workspaceId, agentId: vm.agentId)
     }
 
@@ -1001,14 +1110,19 @@ struct ConversationViewModelTests {
         // the persisted draft is cleared after a successful send.
         let (vm, fake) = makeFakeBackedVM()
         PersistenceManager.shared.saveDraft(
-            "outgoing", workspaceId: vm.workspaceId, agentId: vm.agentId)
+            "outgoing",
+            workspaceId: vm.workspaceId,
+            agentId: vm.agentId
+        )
 
-        await vm.sendMessage("outgoing", images: [UIImage(systemName: "star")!])
+        await vm.sendMessage("outgoing", images: [try #require(UIImage(systemName: "star"))])
 
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["imageBlocks"] != nil)
         #expect(PersistenceManager.shared.loadDraft(
-            workspaceId: vm.workspaceId, agentId: vm.agentId) == "")
+            workspaceId: vm.workspaceId,
+            agentId: vm.agentId
+        ).isEmpty)
     }
 
     // MARK: - Image placement (attachment references, monorepo#3338)
@@ -1019,10 +1133,11 @@ struct ConversationViewModelTests {
         // inline base64 (FE parity: toImageReferenceBlocks).
         let (vm, fake) = makeFakeBackedVM()
 
-        await vm.sendMessage("with image", images: [UIImage(systemName: "star")!])
+        await vm.sendMessage("with image", images: [try #require(UIImage(systemName: "star"))])
 
         let placement = try #require(
-            fake.requestLog.last { $0.method == "file.placeAttachment" })
+            fake.requestLog.last { $0.method == "file.placeAttachment" }
+        )
         #expect(placement.params["workspaceId"] as? String == "test-ws")
         #expect(placement.params["mimeType"] as? String == "image/jpeg")
         #expect((placement.params["fileName"] as? String)?.hasSuffix(".jpg") == true)
@@ -1042,13 +1157,17 @@ struct ConversationViewModelTests {
         // state (text + captured images) is restored.
         let (vm, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
-            domain: "WebSocket", code: -32000,
-            userInfo: [NSLocalizedDescriptionKey: "registry full"])
+            domain: "WebSocket",
+            code: -32_000,
+            userInfo: [NSLocalizedDescriptionKey: "registry full"]
+        )
 
-        await vm.sendMessage("with image", images: [UIImage(systemName: "star")!])
+        await vm.sendMessage("with image", images: [try #require(UIImage(systemName: "star"))])
 
-        #expect(fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
-                "the message is never sent when placement fails")
+        #expect(
+            fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
+            "the message is never sent when placement fails"
+        )
         #expect(vm.imagePlacementError != nil)
         #expect(vm.messageText == "with image", "draft text restored")
         #expect(vm.pendingImages.count == 1, "captured images restored")
@@ -1061,7 +1180,7 @@ struct ConversationViewModelTests {
         // A noise image so JPEG can't compress below the cap — 36 Mpx at
         // ≳1 byte/pixel lands above 30 MiB without the memory weight of a
         // larger bitmap.
-        let oversized = makeIncompressibleImage(side: 6000)
+        let oversized = try makeIncompressibleImage(side: 6000)
 
         await vm.sendMessage("big", images: [oversized])
 
@@ -1077,7 +1196,7 @@ struct ConversationViewModelTests {
         let (vm, fake) = makeFakeBackedVM()
         // ~25 Mpx noise ≈ 25 MB each as JPEG: under the per-image cap,
         // over 30 MiB in aggregate.
-        let image = makeIncompressibleImage(side: 5000)
+        let image = try makeIncompressibleImage(side: 5000)
 
         await vm.sendMessage("big pair", images: [image, image])
 
@@ -1091,8 +1210,10 @@ struct ConversationViewModelTests {
         // must keep them attached and never reach agent.queueMessage.
         let (vm, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
-            domain: "WebSocket", code: -32000)
-        vm.addImage(UIImage(systemName: "star")!)
+            domain: "WebSocket",
+            code: -32_000
+        )
+        vm.addImage(try #require(UIImage(systemName: "star")))
 
         await vm.queueMessage("queued with image")
 
@@ -1104,7 +1225,7 @@ struct ConversationViewModelTests {
     @Test func queueMessagePlacesImagesAndClearsPending() async throws {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.queueMessage"] = [:] as [String: Any]
-        vm.addImage(UIImage(systemName: "star")!)
+        vm.addImage(try #require(UIImage(systemName: "star")))
 
         await vm.queueMessage("queued with image")
 
@@ -1136,9 +1257,11 @@ struct ConversationViewModelTests {
         // pending list clears only after the successful send.
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["file.placeAttachment"] = [
-            "attachmentId": "att-f1", "fileName": "notes.txt",
-            "path": ".intent/attachments/att-f1/notes.txt", "size": 5,
-            "mimeType": "text/plain",
+            "attachmentId": "att-f1",
+            "fileName": "notes.txt",
+            "path": ".intent/attachments/att-f1/notes.txt",
+            "size": 5,
+            "mimeType": "text/plain"
         ] as [String: Any]
         let url = try makeTempFile(named: "notes.txt", contents: "hello")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1147,7 +1270,8 @@ struct ConversationViewModelTests {
         await vm.sendMessage("with file")
 
         let placement = try #require(
-            fake.requestLog.last { $0.method == "file.placeAttachment" })
+            fake.requestLog.last { $0.method == "file.placeAttachment" }
+        )
         #expect(placement.params["workspaceId"] as? String == "test-ws")
         #expect(placement.params["fileName"] as? String == "notes.txt")
         #expect(placement.params["mimeType"] as? String == "text/plain")
@@ -1170,30 +1294,35 @@ struct ConversationViewModelTests {
         // restored, and the pending files stay attached.
         let (vm, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
-            domain: "WebSocket", code: -32000,
-            userInfo: [NSLocalizedDescriptionKey: "registry full"])
+            domain: "WebSocket",
+            code: -32_000,
+            userInfo: [NSLocalizedDescriptionKey: "registry full"]
+        )
         let url = try makeTempFile(named: "notes.txt", contents: "hello")
         defer { try? FileManager.default.removeItem(at: url) }
         vm.addFiles([url])
 
         await vm.sendMessage("with file")
 
-        #expect(fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
-                "the message is never sent when file placement fails")
+        #expect(
+            fake.requestLog.allSatisfy { $0.method != "agent.sendMessage" },
+            "the message is never sent when file placement fails"
+        )
         #expect(vm.filePlacementError != nil)
         #expect(vm.messageText == "with file", "draft text restored")
         #expect(vm.pendingFiles.count == 1, "pending files stay attached")
         #expect(vm.fileUploadProgress.isEmpty, "progress state cleared after failure")
     }
 
-    @Test func oversizedPendingFileFailsWithoutAnyRPC() async throws {
+    @Test func oversizedPendingFileFailsWithoutAnyRPC() async {
         // A pending file whose pick-time size exceeds the daemon's 1 GiB cap
         // fails the send client-side with an explicit error.
         let (vm, fake) = makeFakeBackedVM()
         vm.pendingFiles.append(PendingFile(
             url: URL(fileURLWithPath: "/tmp/huge.bin"),
             displayName: "huge.bin",
-            size: Int64(AttachmentUploadService.maxAttachmentBytes) + 1))
+            size: Int64(AttachmentUploadService.maxAttachmentBytes) + 1
+        ))
 
         await vm.sendMessage("big file")
 
@@ -1206,8 +1335,10 @@ struct ConversationViewModelTests {
         let (vm, fake) = makeFakeBackedVM()
         fake.responseMap["agent.queueMessage"] = [:] as [String: Any]
         fake.responseMap["file.placeAttachment"] = [
-            "attachmentId": "att-f1", "fileName": "notes.txt",
-            "path": ".intent/attachments/att-f1/notes.txt", "size": 5,
+            "attachmentId": "att-f1",
+            "fileName": "notes.txt",
+            "path": ".intent/attachments/att-f1/notes.txt",
+            "size": 5
         ] as [String: Any]
         let url = try makeTempFile(named: "notes.txt", contents: "hello")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1225,7 +1356,9 @@ struct ConversationViewModelTests {
     @Test func queueMessageFailedFilePlacementKeepsPendingFiles() async throws {
         let (vm, fake) = makeFakeBackedVM()
         fake.errorMap["file.placeAttachment"] = NSError(
-            domain: "WebSocket", code: -32000)
+            domain: "WebSocket",
+            code: -32_000
+        )
         let url = try makeTempFile(named: "notes.txt", contents: "hello")
         defer { try? FileManager.default.removeItem(at: url) }
         vm.addFiles([url])
@@ -1243,26 +1376,34 @@ struct ConversationViewModelTests {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent(name)
-        try contents.data(using: .utf8)!.write(to: url)
+        try Data(contents.utf8).write(to: url)
         return url
     }
 
     /// A `side`×`side` per-pixel random-noise bitmap: JPEG cannot compress
     /// noise (≳1 byte/pixel at 0.8 quality), so the encoded payload lands
     /// well above the 30 MiB reference cap.
-    private func makeIncompressibleImage(side: Int) -> UIImage {
+    private func makeIncompressibleImage(side: Int) throws -> UIImage {
         var bytes = Data(count: side * side * 4)
-        bytes.withUnsafeMutableBytes { buf in
-            arc4random_buf(buf.baseAddress!, buf.count)
+        try bytes.withUnsafeMutableBytes { buffer in
+            let baseAddress = try #require(buffer.baseAddress)
+            arc4random_buf(baseAddress, buffer.count)
         }
-        let ctx = CGContext(
-            data: nil, width: side, height: side, bitsPerComponent: 8,
-            bytesPerRow: side * 4, space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        bytes.withUnsafeBytes { buf in
-            ctx.data!.copyMemory(from: buf.baseAddress!, byteCount: buf.count)
+        let context = try #require(CGContext(
+            data: nil,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ))
+        try bytes.withUnsafeBytes { buffer in
+            let destination = try #require(context.data)
+            let source = try #require(buffer.baseAddress)
+            destination.copyMemory(from: source, byteCount: buffer.count)
         }
-        return UIImage(cgImage: ctx.makeImage()!)
+        return UIImage(cgImage: try #require(context.makeImage()))
     }
 
     // MARK: - Missing-agent detection at load
@@ -1290,12 +1431,16 @@ struct ConversationViewModelTests {
 
     @Test func loadNotFoundRaisesAgentNotFound() async {
         let notFound = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: test-agent",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "unknown agent id: test-agent",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let (vm, _) = makeLoadableVM(errors: [
             "agent.getConversation": notFound,
-            "agent.get": notFound,
+            "agent.get": notFound
         ])
 
         await vm.load()
@@ -1307,11 +1452,13 @@ struct ConversationViewModelTests {
         // -32602 without data.code == "not-found" (invalid-params or a legacy
         // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         let bare = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
+        )
         let (vm, _) = makeLoadableVM(errors: [
             "agent.getConversation": bare,
-            "agent.get": bare,
+            "agent.get": bare
         ])
 
         await vm.load()
@@ -1321,11 +1468,13 @@ struct ConversationViewModelTests {
 
     @Test func loadTransientErrorDoesNotRaiseAgentNotFound() async {
         let timeout = NSError(
-            domain: "WebSocket", code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            domain: "WebSocket",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+        )
         let (vm, _) = makeLoadableVM(errors: [
             "agent.getConversation": timeout,
-            "agent.get": timeout,
+            "agent.get": timeout
         ])
 
         await vm.load()
@@ -1348,35 +1497,42 @@ struct ConversationViewModelTests {
         // the transcript's onAppear against already-settled state: isLoading
         // false and the divider anchor latched by the time load() returns.
         let (vm, fake) = makeLoadableVM()
-        fake.responseMap["agent.getConversation"] = ["messages": [
-            ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
-            ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]],
-        ]]
-        fake.responseMap["agent.get"] = ["agent": [
-            "id": "test-agent", "name": "Test",
-            "metadata": ["lastSeenMessageId": "m1"],
-        ]] as [String: Any]
+        fake.responseMap["agent.getConversation"] = [
+            "messages": [
+                ["id": "m1", "role": "assistant", "contentBlocks": [["type": "text", "text": "old"]]],
+                ["id": "m2", "role": "assistant", "contentBlocks": [["type": "text", "text": "new"]]]
+            ]
+        ]
+        fake.responseMap["agent.get"] = [
+            "agent": [
+                "id": "test-agent",
+                "name": "Test",
+                "metadata": ["lastSeenMessageId": "m1"]
+            ]
+        ] as [String: Any]
 
         await vm.load()
 
         #expect(!vm.isLoading, "load() returns with isLoading already settled")
         #expect(vm.filteredMessages.count == 2)
-        #expect(vm.newMessagesDividerAnchorId == "m1",
-                "the divider anchor is latched before the transcript can mount")
+        #expect(
+            vm.newMessagesDividerAnchorId == "m1",
+            "the divider anchor is latched before the transcript can mount"
+        )
     }
 
     // MARK: - Image handling
 
-    @Test func addImageAppendsToPendingImages() async {
+    @Test func addImageAppendsToPendingImages() async throws {
         let vm = makeVM()
-        let img = UIImage(systemName: "star")!
+        let img = try #require(UIImage(systemName: "star"))
         vm.addImage(img)
         #expect(vm.pendingImages.count == 1)
         vm.addImage(img)
         #expect(vm.pendingImages.count == 2)
     }
 
-    @Test func forwardedAttachmentStateRemainsObservable() {
+    @Test func forwardedAttachmentStateRemainsObservable() throws {
         let vm = makeVM()
         let changeCount = Mutex(0)
         withObservationTracking {
@@ -1385,24 +1541,24 @@ struct ConversationViewModelTests {
             changeCount.withLock { $0 += 1 }
         }
 
-        vm.addImage(UIImage(systemName: "star")!)
+        vm.addImage(try #require(UIImage(systemName: "star")))
 
         #expect(changeCount.withLock { $0 } == 1)
     }
 
-    @Test func removeImageRemovesAtIndex() async {
+    @Test func removeImageRemovesAtIndex() async throws {
         let vm = makeVM()
-        let img1 = UIImage(systemName: "star")!
-        let img2 = UIImage(systemName: "circle")!
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
         vm.addImage(img1)
         vm.addImage(img2)
         vm.removeImage(at: 0)
         #expect(vm.pendingImages.count == 1)
     }
 
-    @Test func removeImageOutOfBoundsIsSafe() async {
+    @Test func removeImageOutOfBoundsIsSafe() async throws {
         let vm = makeVM()
-        let img = UIImage(systemName: "star")!
+        let img = try #require(UIImage(systemName: "star"))
         vm.addImage(img)
         vm.removeImage(at: 5)
         #expect(vm.pendingImages.count == 1)
@@ -1412,12 +1568,12 @@ struct ConversationViewModelTests {
 
     // MARK: - Image attachment state regression tests
 
-    @Test func regressionPendingImagesPopulatedBeforeClearing() async {
+    @Test func regressionPendingImagesPopulatedBeforeClearing() async throws {
         // Regression test: verify that pendingImages contains data while images
         // are pending (buildImageBlocks captures from this before clearing)
         let vm = makeVM()
-        let img1 = UIImage(systemName: "star")!
-        let img2 = UIImage(systemName: "circle")!
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
         vm.addImage(img1)
         vm.addImage(img2)
 
@@ -1426,29 +1582,29 @@ struct ConversationViewModelTests {
         #expect(!vm.pendingImages.isEmpty)
     }
 
-    @Test func regressionClearingPendingImagesRemovesAll() async {
+    @Test func regressionClearingPendingImagesRemovesAll() async throws {
         // Regression test: after calling removeAll(), pendingImages should be empty
         let vm = makeVM()
-        let img1 = UIImage(systemName: "star")!
-        let img2 = UIImage(systemName: "circle")!
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
         vm.addImage(img1)
         vm.addImage(img2)
         #expect(vm.pendingImages.count == 2)
 
         vm.pendingImages.removeAll()
         #expect(vm.pendingImages.isEmpty)
-        #expect(vm.pendingImages.count == 0)
+        #expect(vm.pendingImages.isEmpty)
     }
 
-    @Test func regressionCaptureImagesThenClearBeforeSend() async {
+    @Test func regressionCaptureImagesThenClearBeforeSend() async throws {
         // Regression test: the send flow captures images into a local variable
         // and clears pendingImages BEFORE the async network call. This ensures
         // the UI immediately reflects the cleared state while the captured images
         // are still available for the send operation.
         // This mirrors the fix in MessageInputView.sendCurrentMessage().
         let vm = makeVM()
-        let img1 = UIImage(systemName: "star")!
-        let img2 = UIImage(systemName: "circle")!
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
         vm.addImage(img1)
         vm.addImage(img2)
         #expect(vm.pendingImages.count == 2)
@@ -1489,8 +1645,11 @@ struct ConversationViewModelTests {
 
     /// Poll (yielding the main actor) until `agent.markSeen` has been called
     /// `count` times or the timeout elapses.
-    private func waitForMarkSeen(_ fake: FakeConnectionManager, count: Int = 1,
-                                 timeoutMs: Double = 2_000) async {
+    private func waitForMarkSeen(
+        _ fake: FakeConnectionManager,
+        count: Int = 1,
+        timeoutMs: Double = 2000
+    ) async {
         let deadline = Date().addingTimeInterval(timeoutMs / 1000)
         while Date() < deadline {
             if fake.paramsForMethod("agent.markSeen").count >= count { return }
@@ -1503,7 +1662,7 @@ struct ConversationViewModelTests {
         vm.conversationAppeared()
         vm.store.messages = [
             textMessage(id: "m1", role: .user, text: "hi"),
-            textMessage(id: "m2", role: .assistant, text: "done"),
+            textMessage(id: "m2", role: .assistant, text: "done")
         ]
 
         vm.store.isStreaming = true
@@ -1525,8 +1684,10 @@ struct ConversationViewModelTests {
         vm.store.isStreaming = false
 
         try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"),
-                "turn finish is gated on the conversation being on screen")
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "turn finish is gated on the conversation being on screen"
+        )
     }
 
     @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async {
@@ -1547,8 +1708,10 @@ struct ConversationViewModelTests {
         vm.store.isStreaming = false
 
         try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"),
-                "turn finish is gated on the app being active")
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "turn finish is gated on the app being active"
+        )
     }
 
     @Test func plainEntryDoesNotMarkSeen() async {
@@ -1558,8 +1721,10 @@ struct ConversationViewModelTests {
         vm.conversationAppeared()
 
         try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"),
-                "entry never marks seen — the divider anchor must survive")
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "entry never marks seen — the divider anchor must survive"
+        )
     }
 
     @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
@@ -1572,8 +1737,10 @@ struct ConversationViewModelTests {
         let params = fake.paramsForMethod("agent.markSeen")
         #expect(params.count == 1)
         let optimisticId = try #require(vm.messages.last?.id)
-        #expect(params.first?["messageId"] as? String == optimisticId,
-                "the user's own (persisted-id) message is the marker target")
+        #expect(
+            params.first?["messageId"] as? String == optimisticId,
+            "the user's own (persisted-id) message is the marker target"
+        )
     }
 
     @Test func failedSendDoesNotScheduleMarkSeen() async {
@@ -1581,14 +1748,16 @@ struct ConversationViewModelTests {
         // the seen marker must not advance — markSeen is scheduled only on
         // the sendMessage success path (desktop parity).
         let (vm, fake) = makeSeenVM()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32000)
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
         vm.store.messages = [textMessage(id: "m1", role: .assistant, text: "unseen")]
 
         await vm.sendMessage("hello")
 
         try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"),
-                "a failed send must not schedule the debounced markSeen")
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "a failed send must not schedule the debounced markSeen"
+        )
     }
 
     @Test func leavingConversationFiresMarkSeenImmediately() async {
@@ -1646,8 +1815,10 @@ struct ConversationViewModelTests {
         vm.conversationDisappeared()
 
         try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"),
-                "all triggers funnel through the store's dedupe")
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "all triggers funnel through the store's dedupe"
+        )
     }
 
     // MARK: - Pending files
@@ -1726,7 +1897,7 @@ struct ConversationViewModelTests {
         let vm = makeVM()
         vm.addFiles([
             try makeTempFile(name: "a.txt", bytes: 1),
-            try makeTempFile(name: "b.txt", bytes: 2),
+            try makeTempFile(name: "b.txt", bytes: 2)
         ])
 
         vm.clearPendingFiles()
@@ -1749,4 +1920,3 @@ struct ConversationViewModelTests {
         #expect(!vm.hasPendingAttachments)
     }
 }
-

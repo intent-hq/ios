@@ -1,13 +1,12 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for the shared provider/model catalog helpers on AgentStore:
 /// host.providerAuthStatus parsing, models.list parsing, and the
 /// provider/model params on agent.create.
 @MainActor
 struct ProviderCatalogTests {
-
     // MARK: - fetchProviders (host.providerAuthStatus)
 
     @Test func fetchProvidersParsesTriStateAuthenticated() async {
@@ -18,7 +17,7 @@ struct ProviderCatalogTests {
                 ["id": "auggie", "authenticated": true],
                 ["id": "claude-code", "authenticated": false],
                 ["id": "grok", "authenticated": NSNull()],
-                ["id": "pi"],
+                ["id": "pi"]
             ]
         ]
 
@@ -38,7 +37,7 @@ struct ProviderCatalogTests {
         fake.responseMap["host.providerAuthStatus"] = [
             "providers": [
                 ["authenticated": true],
-                ["id": "codex", "authenticated": true],
+                ["id": "codex", "authenticated": true]
             ]
         ]
         #expect(await store.fetchProviders() == [ProviderInfo(id: "codex", authenticated: true)])
@@ -70,8 +69,8 @@ struct ProviderCatalogTests {
             "models": [
                 ["id": "sonnet4.5", "name": "Sonnet 4.5", "provider": "auggie", "isDefault": true],
                 ["id": "haiku4.5", "name": "Haiku 4.5", "provider": "auggie"],
-                ["name": "missing id"],
-            ],
+                ["name": "missing id"]
+            ]
         ]
 
         let models = await store.fetchModels(providerId: "auggie")

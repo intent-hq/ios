@@ -5,6 +5,9 @@ import SwiftUI
 /// loading → connecting transition). This view presents passive per-host
 /// certificate-mismatch warnings and owns the connection attempt.
 struct ConnectingView: View {
+    private static let mismatchHorizontalPadding: CGFloat = 32
+    private static let mismatchBottomPadding: CGFloat = 24
+
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
 
@@ -15,10 +18,10 @@ struct ConnectingView: View {
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
                 CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, Self.mismatchHorizontalPadding)
             }
         }
-        .padding(.bottom, 24)
+        .padding(.bottom, Self.mismatchBottomPadding)
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.
@@ -44,7 +47,8 @@ struct ConnectingView: View {
                 // under this window; the window root's removal observation
                 // closes or rebinds it.
                 coordinator.onConnectionFailed(
-                    error: String(localized: "This connection is no longer saved."))
+                    error: String(localized: "This connection is no longer saved.")
+                )
             } else {
                 coordinator.currentScreen = .pairing
             }
@@ -83,7 +87,7 @@ struct ConnectingView: View {
     /// screen.
     private func waitForWorkspaceData(timeout: TimeInterval) async {
         let deadline = Date().addingTimeInterval(timeout)
-        while session.workspaceStore.lastUpdated == nil && Date() < deadline {
+        while session.workspaceStore.lastUpdated == nil, Date() < deadline {
             try? await Task.sleep(for: Constants.Connecting.workspacePollInterval)
         }
     }

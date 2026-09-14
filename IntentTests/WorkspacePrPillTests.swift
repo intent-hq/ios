@@ -1,12 +1,11 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Behavior tests for the WorkspacePrPill pure-logic port, mirroring the
 /// Cloudlands `sidebar-changes-utils.ts` reference (selectPrimaryPr,
 /// mergeMonitoredPRs, monitorDisplayStatus, countOtherMonitors).
 struct WorkspacePrPillTests {
-
     private func makeMonitor(
         repo: String = "octo/repo",
         prNumber: Int = 12,
@@ -16,30 +15,54 @@ struct WorkspacePrPillTests {
         snapshot: MonitoredPr.Snapshot? = nil
     ) -> MonitoredPr {
         MonitoredPr(
-            monitorId: "prm-\(repo)-\(prNumber)", workspaceId: "ws-abc",
-            agentId: "agent-1", repo: repo, prNumber: prNumber, state: state,
-            pendingChanges: [], hasPendingChanges: false,
-            createdAt: createdAt, updatedAt: updatedAt, pendingSince: nil,
-            lastChangeAt: nil, lastPolledAt: nil, lastError: nil,
-            title: nil, url: nil, lastSnapshot: snapshot
+            monitorId: "prm-\(repo)-\(prNumber)",
+            workspaceId: "ws-abc",
+            agentId: "agent-1",
+            repo: repo,
+            prNumber: prNumber,
+            state: state,
+            pendingChanges: [],
+            hasPendingChanges: false,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            pendingSince: nil,
+            lastChangeAt: nil,
+            lastPolledAt: nil,
+            lastError: nil,
+            title: nil,
+            url: nil,
+            lastSnapshot: snapshot
         )
     }
 
     private func makeSnapshot(state: String = "open", isDraft: Bool = false) -> MonitoredPr.Snapshot {
         MonitoredPr.Snapshot(
-            state: state, isDraft: isDraft, hasConflicts: false, isBehind: false,
-            mergeable: nil, mergeBlockedReason: nil,
+            state: state,
+            isDraft: isDraft,
+            hasConflicts: false,
+            isBehind: false,
+            mergeable: nil,
+            mergeBlockedReason: nil,
             checks: .init(total: 0, passed: 0, failed: 0, pending: 0),
             approvals: .init(decision: "none", have: 0, needed: nil, changesRequested: 0),
             threads: .init(unresolved: 0)
         )
     }
 
-    private func pill(_ number: Int, _ status: WorkspacePrPill.Status,
-                      createdAt: String? = nil, updatedAt: String? = nil,
-                      crossRepo: String? = nil) -> WorkspacePrPill.PillPr {
-        WorkspacePrPill.PillPr(number: number, status: status, createdAt: createdAt,
-                               updatedAt: updatedAt, crossRepo: crossRepo)
+    private func pill(
+        _ number: Int,
+        _ status: WorkspacePrPill.Status,
+        createdAt: String? = nil,
+        updatedAt: String? = nil,
+        crossRepo: String? = nil
+    ) -> WorkspacePrPill.PillPr {
+        WorkspacePrPill.PillPr(
+            number: number,
+            status: status,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            crossRepo: crossRepo
+        )
     }
 
     // MARK: - selectPrimaryPr
@@ -48,7 +71,7 @@ struct WorkspacePrPillTests {
         let prs = [
             pill(30, .merged, updatedAt: "2026-08-15T00:00:00Z"),
             pill(20, .open, createdAt: "2026-08-10T00:00:00Z"),
-            pill(10, .open, createdAt: "2026-08-01T00:00:00Z"),
+            pill(10, .open, createdAt: "2026-08-01T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 10)
     }
@@ -56,7 +79,7 @@ struct WorkspacePrPillTests {
     @Test func draftCountsAsUnmerged() {
         let prs = [
             pill(20, .open, createdAt: "2026-08-10T00:00:00Z"),
-            pill(10, .draft, createdAt: "2026-08-01T00:00:00Z"),
+            pill(10, .draft, createdAt: "2026-08-01T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 10)
     }
@@ -64,7 +87,7 @@ struct WorkspacePrPillTests {
     @Test func openTiebreakIsLowerNumber() {
         let prs = [
             pill(22, .open, createdAt: "2026-08-01T00:00:00Z"),
-            pill(11, .open, createdAt: "2026-08-01T00:00:00Z"),
+            pill(11, .open, createdAt: "2026-08-01T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 11)
     }
@@ -72,7 +95,7 @@ struct WorkspacePrPillTests {
     @Test func openWithMissingCreatedAtSortsLast() {
         let prs = [
             pill(5, .open),
-            pill(9, .open, createdAt: "2026-08-12T00:00:00Z"),
+            pill(9, .open, createdAt: "2026-08-12T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 9)
     }
@@ -81,7 +104,7 @@ struct WorkspacePrPillTests {
         let prs = [
             pill(10, .merged, updatedAt: "2026-08-01T00:00:00Z"),
             pill(20, .merged, updatedAt: "2026-08-14T00:00:00Z"),
-            pill(30, .closed, updatedAt: "2026-08-16T00:00:00Z"),
+            pill(30, .closed, updatedAt: "2026-08-16T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 20)
     }
@@ -89,7 +112,7 @@ struct WorkspacePrPillTests {
     @Test func mergedTiebreakIsHigherNumber() {
         let prs = [
             pill(10, .merged, updatedAt: "2026-08-14T00:00:00Z"),
-            pill(20, .merged, updatedAt: "2026-08-14T00:00:00Z"),
+            pill(20, .merged, updatedAt: "2026-08-14T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 20)
     }
@@ -97,7 +120,7 @@ struct WorkspacePrPillTests {
     @Test func mergedWithMissingUpdatedAtSortsLast() {
         let prs = [
             pill(20, .merged),
-            pill(10, .merged, updatedAt: "2026-08-01T00:00:00Z"),
+            pill(10, .merged, updatedAt: "2026-08-01T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 10)
     }
@@ -105,7 +128,7 @@ struct WorkspacePrPillTests {
     @Test func closedOnlyPoolPicksFirstRow() {
         let prs = [
             pill(7, .closed, updatedAt: "2026-08-01T00:00:00Z"),
-            pill(8, .closed, updatedAt: "2026-08-14T00:00:00Z"),
+            pill(8, .closed, updatedAt: "2026-08-14T00:00:00Z")
         ]
         #expect(WorkspacePrPill.selectPrimaryPr(prs)?.number == 7)
     }
@@ -119,18 +142,26 @@ struct WorkspacePrPillTests {
     @Test func monitorDuplicatingWorkspacePrDoesNotAppend() {
         let base = [pill(12, .open, createdAt: "2026-08-01T00:00:00Z")]
         let merged = WorkspacePrPill.mergeMonitoredPRs(
-            base, [makeMonitor(repo: "octo/repo", prNumber: 12)],
-            workspaceRepo: "octo/repo")
+            base,
+            [makeMonitor(repo: "octo/repo", prNumber: 12)],
+            workspaceRepo: "octo/repo"
+        )
         #expect(merged == base)
     }
 
     @Test func unmatchedMonitorAppendsAsMonitorOnlyRow() {
         let merged = WorkspacePrPill.mergeMonitoredPRs(
             [pill(12, .open)],
-            [makeMonitor(repo: "octo/repo", prNumber: 34,
-                         createdAt: "2026-08-05T00:00:00Z",
-                         updatedAt: "2026-08-06T00:00:00Z")],
-            workspaceRepo: "octo/repo")
+            [
+                makeMonitor(
+                    repo: "octo/repo",
+                    prNumber: 34,
+                    createdAt: "2026-08-05T00:00:00Z",
+                    updatedAt: "2026-08-06T00:00:00Z"
+                )
+            ],
+            workspaceRepo: "octo/repo"
+        )
         #expect(merged.count == 2)
         let appended = merged[1]
         #expect(appended.number == 34)
@@ -145,7 +176,8 @@ struct WorkspacePrPillTests {
         let merged = WorkspacePrPill.mergeMonitoredPRs(
             [pill(12, .open)],
             [makeMonitor(repo: "other/repo", prNumber: 12)],
-            workspaceRepo: "octo/repo")
+            workspaceRepo: "octo/repo"
+        )
         #expect(merged.count == 2)
         #expect(merged[1].crossRepo == "other/repo")
         #expect(merged[1].monitorOnly)
@@ -155,7 +187,8 @@ struct WorkspacePrPillTests {
         let merged = WorkspacePrPill.mergeMonitoredPRs(
             [pill(12, .open, crossRepo: "other/repo")],
             [makeMonitor(repo: "octo/repo", prNumber: 12)],
-            workspaceRepo: "octo/repo")
+            workspaceRepo: "octo/repo"
+        )
         #expect(merged.count == 2)
         #expect(merged[1].crossRepo == nil)
     }
@@ -164,7 +197,8 @@ struct WorkspacePrPillTests {
         let merged = WorkspacePrPill.mergeMonitoredPRs(
             [pill(12, .open)],
             [makeMonitor(repo: "other/repo", prNumber: 12)],
-            workspaceRepo: nil)
+            workspaceRepo: nil
+        )
         #expect(merged.count == 1)
     }
 
@@ -172,13 +206,17 @@ struct WorkspacePrPillTests {
 
     @Test func monitorStatusFollowsSnapshotState() {
         #expect(WorkspacePrPill.monitorDisplayStatus(
-            makeMonitor(snapshot: makeSnapshot(state: "Merged"))) == .merged)
+            makeMonitor(snapshot: makeSnapshot(state: "Merged"))
+        ) == .merged)
         #expect(WorkspacePrPill.monitorDisplayStatus(
-            makeMonitor(snapshot: makeSnapshot(state: "closed"))) == .closed)
+            makeMonitor(snapshot: makeSnapshot(state: "closed"))
+        ) == .closed)
         #expect(WorkspacePrPill.monitorDisplayStatus(
-            makeMonitor(snapshot: makeSnapshot(state: "open", isDraft: true))) == .draft)
+            makeMonitor(snapshot: makeSnapshot(state: "open", isDraft: true))
+        ) == .draft)
         #expect(WorkspacePrPill.monitorDisplayStatus(
-            makeMonitor(snapshot: makeSnapshot(state: "open"))) == .open)
+            makeMonitor(snapshot: makeSnapshot(state: "open"))
+        ) == .open)
     }
 
     @Test func snapshotlessMonitorStatusFallsBackOnLifecycleState() {
@@ -191,58 +229,76 @@ struct WorkspacePrPillTests {
     @Test func monitorMatchingPrimaryIsExcludedFromCount() {
         let monitors = [
             makeMonitor(repo: "octo/repo", prNumber: 12),
-            makeMonitor(repo: "octo/repo", prNumber: 34),
+            makeMonitor(repo: "octo/repo", prNumber: 34)
         ]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: 12,
-            repositoryOwner: "octo", repositoryName: "repo")
+            monitors,
+            primaryPrNumber: 12,
+            repositoryOwner: "octo",
+            repositoryName: "repo"
+        )
         #expect(count == 1)
     }
 
     @Test func crossRepoMonitorSharingPrimaryNumberIsCounted() {
         let monitors = [makeMonitor(repo: "other/repo", prNumber: 12)]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: 12,
-            repositoryOwner: "octo", repositoryName: "repo")
+            monitors,
+            primaryPrNumber: 12,
+            repositoryOwner: "octo",
+            repositoryName: "repo"
+        )
         #expect(count == 1)
     }
 
     @Test func completedMonitorIsRetainedInCount() {
         let monitors = [makeMonitor(repo: "octo/repo", prNumber: 34, state: .completed)]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: 12,
-            repositoryOwner: "octo", repositoryName: "repo")
+            monitors,
+            primaryPrNumber: 12,
+            repositoryOwner: "octo",
+            repositoryName: "repo"
+        )
         #expect(count == 1)
     }
 
     @Test func primaryCrossRepoScopesTheExclusion() {
         let monitors = [
             makeMonitor(repo: "other/repo", prNumber: 12),
-            makeMonitor(repo: "octo/repo", prNumber: 12),
+            makeMonitor(repo: "octo/repo", prNumber: 12)
         ]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: 12,
-            repositoryOwner: "octo", repositoryName: "repo",
-            primaryCrossRepo: "other/repo")
+            monitors,
+            primaryPrNumber: 12,
+            repositoryOwner: "octo",
+            repositoryName: "repo",
+            primaryCrossRepo: "other/repo"
+        )
         #expect(count == 1)
     }
 
     @Test func unknownWorkspaceRepoMatchesPrimaryByNumberAlone() {
         let monitors = [
             makeMonitor(repo: "other/repo", prNumber: 12),
-            makeMonitor(repo: "octo/repo", prNumber: 12),
+            makeMonitor(repo: "octo/repo", prNumber: 12)
         ]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: 12,
-            repositoryOwner: nil, repositoryName: nil)
+            monitors,
+            primaryPrNumber: 12,
+            repositoryOwner: nil,
+            repositoryName: nil
+        )
         #expect(count == 0)
     }
 
     @Test func nilPrimaryNumberCountsEveryMonitor() {
         let monitors = [makeMonitor(repo: "octo/repo", prNumber: 12)]
         let count = WorkspacePrPill.countOtherMonitors(
-            monitors, primaryPrNumber: nil,
-            repositoryOwner: "octo", repositoryName: "repo")
+            monitors,
+            primaryPrNumber: nil,
+            repositoryOwner: "octo",
+            repositoryName: "repo"
+        )
         #expect(count == 1)
     }
 
@@ -257,10 +313,15 @@ struct WorkspacePrPillTests {
     }
 
     @Test func pillPrProjectsWorkspacePullRequestFields() {
-        let pr = WorkspacePullRequest(
-            number: 42, status: "Draft", title: "t", url: "u",
-            createdAt: "2026-08-01T00:00:00Z", updatedAt: "2026-08-02T00:00:00Z")
-        let row = WorkspacePrPill.PillPr(pr)
+        let pullRequest = WorkspacePullRequest(
+            number: 42,
+            status: "Draft",
+            title: "t",
+            url: "u",
+            createdAt: "2026-08-01T00:00:00Z",
+            updatedAt: "2026-08-02T00:00:00Z"
+        )
+        let row = WorkspacePrPill.PillPr(pullRequest)
         #expect(row.number == 42)
         #expect(row.status == .draft)
         #expect(row.createdAt == "2026-08-01T00:00:00Z")
@@ -274,21 +335,29 @@ struct WorkspacePrPillTests {
     @Test func monitoredMergedPrLosesToOlderOpenWorkspacePr() {
         let base = [
             pill(10, .open, createdAt: "2026-08-01T00:00:00Z"),
-            pill(20, .open, createdAt: "2026-08-10T00:00:00Z"),
+            pill(20, .open, createdAt: "2026-08-10T00:00:00Z")
         ]
         let merged = WorkspacePrPill.mergeMonitoredPRs(
             base,
-            [makeMonitor(repo: "octo/repo", prNumber: 99,
-                         createdAt: "2026-07-01T00:00:00Z",
-                         snapshot: makeSnapshot(state: "merged"))],
-            workspaceRepo: "octo/repo")
+            [
+                makeMonitor(
+                    repo: "octo/repo",
+                    prNumber: 99,
+                    createdAt: "2026-07-01T00:00:00Z",
+                    snapshot: makeSnapshot(state: "merged")
+                )
+            ],
+            workspaceRepo: "octo/repo"
+        )
         let primary = WorkspacePrPill.selectPrimaryPr(merged)
         #expect(primary?.number == 10)
         let count = WorkspacePrPill.countOtherMonitors(
             [makeMonitor(repo: "octo/repo", prNumber: 99)],
             primaryPrNumber: primary?.number,
-            repositoryOwner: "octo", repositoryName: "repo",
-            primaryCrossRepo: primary?.crossRepo)
+            repositoryOwner: "octo",
+            repositoryName: "repo",
+            primaryCrossRepo: primary?.crossRepo
+        )
         #expect(count == 1)
     }
 }

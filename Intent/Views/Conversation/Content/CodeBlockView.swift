@@ -27,6 +27,7 @@ struct CodeBlockView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .accessibilityHidden(true)
                         Text(copied ? "Copied" : "Copy")
                     }
                     .font(.caption)
@@ -60,4 +61,3 @@ struct CodeBlockView: View {
         }
     }
 }
-

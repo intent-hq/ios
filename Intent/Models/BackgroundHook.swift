@@ -42,12 +42,12 @@ struct BackgroundHook: Identifiable, Equatable {
         state == .scheduled || state == .running
     }
 
-    static func parseHook(_ dict: [String: Any]) -> BackgroundHook? {
+    static func parseHook(_ dict: [String: Any]) -> Self? {
         guard let hookId = dict["hookId"] as? String,
               let name = dict["name"] as? String,
               let stateRaw = dict["state"] as? String,
               let state = State(rawValue: stateRaw) else { return nil }
-        return BackgroundHook(
+        return Self(
             hookId: hookId,
             workspaceId: dict["workspaceId"] as? String ?? "",
             agentId: dict["agentId"] as? String ?? "",

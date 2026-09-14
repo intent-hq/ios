@@ -135,7 +135,7 @@ struct ConversationTranscriptView: View {
             return isScrolledAway
         } action: { _, isScrolledAway in
             AppLog.ui.debug("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
-            if hasInitiallyScrolled && !isScrollingToBottom {
+            if hasInitiallyScrolled, !isScrollingToBottom {
                 userIsScrolledAway = isScrolledAway
             }
         }
@@ -158,7 +158,7 @@ struct ConversationTranscriptView: View {
         #if !os(visionOS)
         // On visionOS the composer renders these as large chips above the
         // field instead (MessageInputView).
-        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
+        if !viewModel.suggestedPrompts.isEmpty, !viewModel.isStreaming {
             suggestedPromptsView
                 .flippedUpsideDown()
                 .id("suggested-prompts")
@@ -177,17 +177,16 @@ struct ConversationTranscriptView: View {
                 workspaceId: viewModel.workspaceId,
                 onNavigateToNote: onNavigateToNote,
                 onNavigateToAgent: onNavigateToAgent,
-                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id),
-                onHydrateBlock: { blockId in
-                    let messageId = message.id
-                    Task {
-                        await viewModel.store.hydrateBlock(
-                            messageId: messageId,
-                            blockId: blockId
-                        )
-                    }
+                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
+            ) { blockId in
+                let messageId = message.id
+                Task {
+                    await viewModel.store.hydrateBlock(
+                        messageId: messageId,
+                        blockId: blockId
+                    )
                 }
-            )
+            }
             .flippedUpsideDown()
             .id(message.id)
         }
@@ -208,6 +207,7 @@ struct ConversationTranscriptView: View {
             HStack(spacing: 4) {
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
+                    .accessibilityHidden(true)
                 Text("Go to End")
                     .font(.caption.weight(.medium))
             }
@@ -222,7 +222,8 @@ struct ConversationTranscriptView: View {
         .transition(.opacity.combined(with: .move(edge: .bottom)))
         .animation(
             .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
-            value: userIsScrolledAway)
+            value: userIsScrolledAway
+        )
     }
 
     private var thinkingIndicatorView: some View {
@@ -250,6 +251,7 @@ struct ConversationTranscriptView: View {
                         Image(systemName: "paperplane")
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                            .accessibilityHidden(true)
                         Text(prompt)
                             .font(.subheadline)
                             .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -278,6 +280,7 @@ struct ConversationTranscriptView: View {
             Image(systemName: "info.circle")
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Text("Showing the most recent \(viewModel.filteredMessages.count) of \(viewModel.totalMessageCount) messages.\nSee the full conversation on the desktop app.")
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))

@@ -20,8 +20,8 @@ enum PairingOption: Equatable {
     static func available(
         showsSavedConnections: Bool,
         supportsCameraScanning: Bool = platformSupportsCameraScanning
-    ) -> [PairingOption] {
-        var options: [PairingOption] = []
+    ) -> [Self] {
+        var options: [Self] = []
         if supportsCameraScanning {
             options.append(.qrScan)
         }
@@ -146,6 +146,7 @@ struct PairingOptionButton: View {
                     .font(.title3)
                     .foregroundStyle(Theme.primary(for: colorScheme))
                     .frame(width: Constants.Pairing.optionIconWidth)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.Pairing.optionTextSpacing) {
                     Text(title)
@@ -162,6 +163,7 @@ struct PairingOptionButton: View {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             .padding(Constants.Pairing.optionPadding)
             .background(Theme.card(for: colorScheme))

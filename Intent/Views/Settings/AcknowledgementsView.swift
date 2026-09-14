@@ -4,6 +4,14 @@ import SwiftUI
 /// reproduces the dependency's license text in full, as its terms
 /// require for binary distribution.
 struct AcknowledgementsView: View {
+    private enum Layout {
+        static let pageSpacing: CGFloat = 20
+        static let entrySpacing: CGFloat = 12
+        static let licenseSpacing: CGFloat = 8
+        static let cardPadding: CGFloat = 16
+        static let cardCornerRadius: CGFloat = 12
+    }
+
     @Environment(\.colorScheme) var colorScheme
 
     struct Entry: Identifiable {
@@ -49,7 +57,7 @@ struct AcknowledgementsView: View {
             OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
             OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             """
-        ),
+        )
     ]
 
     var body: some View {
@@ -57,15 +65,15 @@ struct AcknowledgementsView: View {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Layout.pageSpacing) {
                     ForEach(Self.entries) { entry in
-                        VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: Layout.entrySpacing) {
                             Text(entry.name)
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 .textCase(.uppercase)
 
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
                                 Text(entry.licenseTitle)
                                     .font(.body.weight(.medium))
                                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -78,17 +86,17 @@ struct AcknowledgementsView: View {
                                     .textSelection(.enabled)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
+                            .padding(Layout.cardPadding)
                             .background(Theme.card(for: colorScheme))
-                            .clipShape(.rect(cornerRadius: 12))
+                            .clipShape(.rect(cornerRadius: Layout.cardCornerRadius))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: Layout.cardCornerRadius)
                                     .stroke(Theme.border(for: colorScheme), lineWidth: 1)
                             )
                         }
                     }
                 }
-                .padding(20)
+                .padding(Layout.pageSpacing)
             }
         }
         .navigationTitle("Acknowledgements")

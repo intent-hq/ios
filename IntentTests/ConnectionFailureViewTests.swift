@@ -1,35 +1,39 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Routing of connection-failure messages into the certificate-mismatch
 /// path (no auto-retry, "Re-pair Device" action, per-host mismatch list).
 struct ConnectionFailureViewTests {
-
     @Test func aggregateRaceErrorRoutesToCertPath() {
         let error = WebSocketTransportError.certificateMismatches(mismatches: [
             HostCertMismatch(host: "h1", fingerprint: "aa:bb"),
-            HostCertMismatch(host: "h2", fingerprint: "cc:dd"),
+            HostCertMismatch(host: "h2", fingerprint: "cc:dd")
         ])
         #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
     }
 
     @Test func singleMismatchErrorRoutesToCertPath() {
         let error = WebSocketTransportError.certificateMismatch(
-            host: "h1", fingerprint: "aa:bb")
+            host: "h1",
+            fingerprint: "aa:bb"
+        )
         #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
     }
 
     @Test func repairPromptRoutesToCertPath() {
         #expect(ConnectionFailureView.isCertificateMismatchMessage(
-            "Server certificate has changed. Please re-pair your device."))
+            "Server certificate has changed. Please re-pair your device."
+        ))
     }
 
     @Test func genericFailuresDoNotRouteToCertPath() {
         #expect(!ConnectionFailureView.isCertificateMismatchMessage(
-            "Connection to 192.168.1.42 timed out"))
+            "Connection to 192.168.1.42 timed out"
+        ))
         #expect(!ConnectionFailureView.isCertificateMismatchMessage(
-            "The server at 192.168.1.42:5179 is not responding."))
+            "The server at 192.168.1.42:5179 is not responding."
+        ))
     }
 
     // MARK: - Auto-retry dial target (window model v2)
@@ -37,8 +41,13 @@ struct ConnectionFailureViewTests {
     private static func makeConnection(port: Int) -> StoredConnection {
         StoredConnection(
             server: PairedServer(
-                hosts: ["10.0.0.1"], port: port, name: "daemon-\(port)", pairedAt: Date()),
-            token: "tok-\(port)")
+                hosts: ["10.0.0.1"],
+                port: port,
+                name: "daemon-\(port)",
+                pairedAt: Date()
+            ),
+            token: "tok-\(port)"
+        )
     }
 
     @Test func autoRetryDialsWindowBoundRecordNotAnotherSaved() {
@@ -49,7 +58,9 @@ struct ConnectionFailureViewTests {
         let bound = Self.makeConnection(port: 2)
 
         let result = ConnectionFailureView.autoRetryConnection(
-            connections: [lastUsed, bound], windowConnectionID: bound.id)
+            connections: [lastUsed, bound],
+            windowConnectionID: bound.id
+        )
 
         #expect(result?.id == bound.id)
     }
@@ -61,7 +72,9 @@ struct ConnectionFailureViewTests {
         let survivor = Self.makeConnection(port: 1)
 
         let result = ConnectionFailureView.autoRetryConnection(
-            connections: [survivor], windowConnectionID: UUID())
+            connections: [survivor],
+            windowConnectionID: UUID()
+        )
 
         #expect(result == nil)
     }
@@ -70,6 +83,8 @@ struct ConnectionFailureViewTests {
         let saved = Self.makeConnection(port: 1)
 
         #expect(ConnectionFailureView.autoRetryConnection(
-            connections: [saved], windowConnectionID: nil) == nil)
+            connections: [saved],
+            windowConnectionID: nil
+        ) == nil)
     }
 }

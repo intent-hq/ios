@@ -1,16 +1,15 @@
 import Foundation
+@testable import Intent
 import Network
+import os
 import Security
 import Testing
-import os
-@testable import Intent
 
 /// Regression coverage for the pairing TLS probe decision (shared by manual
 /// entry and fingerprint-less QR payloads): pairing connections must always
 /// be pinned, so a probe that finds no certificate aborts with an error
 /// instead of falling back to an unpinned plain-WS connection.
 struct ManualTokenEntryViewTests {
-
     @Test @MainActor func probedFingerprintLeadsToConfirmation() {
         let fingerprint = "ab:cd:ef:01"
         let outcome = CertFingerprintProbe.outcome(forFingerprint: fingerprint)
@@ -34,13 +33,13 @@ struct ManualTokenEntryViewTests {
     @Test func endpointPortAcceptsValidRange() {
         #expect(CertFingerprintProbe.endpointPort(1)?.rawValue == 1)
         #expect(CertFingerprintProbe.endpointPort(7550)?.rawValue == 7550)
-        #expect(CertFingerprintProbe.endpointPort(65535)?.rawValue == 65535)
+        #expect(CertFingerprintProbe.endpointPort(65_535)?.rawValue == 65_535)
     }
 
     @Test func endpointPortRejectsOutOfRangeValues() {
         #expect(CertFingerprintProbe.endpointPort(0) == nil)
         #expect(CertFingerprintProbe.endpointPort(-1) == nil)
-        #expect(CertFingerprintProbe.endpointPort(65536) == nil)
+        #expect(CertFingerprintProbe.endpointPort(65_536) == nil)
     }
 
     @Test func probeReturnsNilForInvalidPortWithoutConnecting() async {
@@ -102,7 +101,7 @@ struct ManualTokenEntryViewTests {
     /// identity (CN=CertFingerprintProbe Live Handshake Fixture), plus the
     /// leaf certificate's independently computed SHA-256 fingerprint
     /// (openssl dgst -sha256 -c).
-    private nonisolated static let fixtureIdentityP12Base64 = """
+    nonisolated private static let fixtureIdentityP12Base64 = """
         MIIDwgIBAzCCA4gGCSqGSIb3DQEHAaCCA3kEggN1MIIDcTCCAmcGCSqGSIb3DQEH\
         BqCCAlgwggJUAgEAMIICTQYJKoZIhvcNAQcBMBwGCiqGSIb3DQEMAQMwDgQIKjGU\
         RG5CHioCAggAgIICIKX4vqHc5LEBJoDk4LCj/2pjqp2i0Nj/U90hNmNOivkfyHi7\
@@ -125,28 +124,28 @@ struct ManualTokenEntryViewTests {
         UrVnMDEwITAJBgUrDgMCGgUABBQ2+7hWu5Qe6SsZHyl7pq9jBLcTsQQIfjmQQ3oB\
         8nUCAggA
         """
-    private nonisolated static let fixtureIdentityFingerprint =
+    nonisolated private static let fixtureIdentityFingerprint =
         "e7:24:5c:fe:e7:65:5b:70:6b:e9:7e:02:1f:81:dc:f5:a1:15:38:8c:d1:a3:5f:22:90:08:f6:5e:97:3c:cc:ea"
 
-    private nonisolated static func fixtureIdentity() throws -> SecIdentity {
+    nonisolated private static func fixtureIdentity() throws -> SecIdentity {
         let p12 = try #require(Data(base64Encoded: fixtureIdentityP12Base64))
         var items: CFArray?
         let status = SecPKCS12Import(
             p12 as CFData,
             [kSecImportExportPassphrase as String: "fixture"] as CFDictionary,
-            &items)
+            &items
+        )
         #expect(status == errSecSuccess)
         let dicts = try #require(items as? [[String: Any]])
         let first = try #require(dicts.first)
-        let identity = try #require(first[kSecImportItemIdentity as String])
-        return identity as! SecIdentity
+        return try #require(first[kSecImportItemIdentity as String] as? SecIdentity)
     }
 
     /// Starts a loopback TLS listener serving the fixture identity and waits
     /// until it is ready. Nonisolated for the same reason as the probe itself:
     /// the handlers formed here run on the listener queue and must not inherit
     /// MainActor isolation.
-    private nonisolated static func startTLSListener() async throws -> NWListener {
+    nonisolated private static func startTLSListener() async throws -> NWListener {
         let identity = try fixtureIdentity()
         let tlsOptions = NWProtocolTLS.Options()
         let secIdentity = try #require(sec_identity_create(identity))
@@ -251,23 +250,26 @@ struct ManualTokenEntryViewTests {
 
     @Test func tailcatInputConnectsTunnelOnly() {
         let input = ManualConnectionInput.classify(Self.syntheticSDKConnBlob)
-        #expect(input.hosts == [])
+        #expect(input.hosts.isEmpty)
         #expect(input.tcAddress == Self.syntheticSDKConnBlob)
     }
 
     // MARK: - Fingerprint probe through the tailcat tunnel (mock dialer)
 
-    private nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+    nonisolated private final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
         let localPort: Int
         private let closed = OSAllocatedUnfairLock(initialState: false)
+
         init(localPort: Int) { self.localPort = localPort }
         func close() async { closed.withLock { $0 = true } }
+
         var isClosed: Bool { closed.withLock { $0 } }
     }
 
-    private nonisolated struct FakeTunnelDialer: TunnelDialing {
+    nonisolated private struct FakeTunnelDialer: TunnelDialing {
         let result: Result<FakeTunnelSession, WebSocketTransportError>
         let observed = OSAllocatedUnfairLock<[String: Int]>(initialState: [:])
+
         func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
             observed.withLock { $0[tcAddress] = remotePort }
             return try result.get()
@@ -282,7 +284,9 @@ struct ManualTokenEntryViewTests {
         let probed = OSAllocatedUnfairLock<[String]>(initialState: [])
 
         let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
-            dialer: dialer, tcAddress: Self.syntheticSDKConnBlob, remotePort: 5181
+            dialer: dialer,
+            tcAddress: Self.syntheticSDKConnBlob,
+            remotePort: 5181
         ) { host, port in
             probed.withLock { $0.append("\(host):\(port)") }
             return "ab:cd:ef"
@@ -301,7 +305,9 @@ struct ManualTokenEntryViewTests {
         let dialer = FakeTunnelDialer(result: .success(tunnel))
 
         let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
-            dialer: dialer, tcAddress: "tc-key-abc123", remotePort: 5180
+            dialer: dialer,
+            tcAddress: "tc-key-abc123",
+            remotePort: 5180
         ) { _, _ in nil }
 
         #expect(fingerprint == nil)
@@ -313,10 +319,14 @@ struct ManualTokenEntryViewTests {
     /// no-certificate message.
     @Test func probeViaTunnelThrowsWhenDialFails() async {
         let dialer = FakeTunnelDialer(result: .failure(.failed(
-            host: ConnectionManager.tunnelCandidateLabel, message: "bad address")))
+            host: ConnectionManager.tunnelCandidateLabel,
+            message: "bad address"
+        )))
         await #expect(throws: WebSocketTransportError.self) {
             _ = try await CertFingerprintProbe.probeViaTunnel(
-                dialer: dialer, tcAddress: "tc-nonsense", remotePort: 5180
+                dialer: dialer,
+                tcAddress: "tc-nonsense",
+                remotePort: 5180
             ) { _, _ in nil }
         }
     }

@@ -1,10 +1,9 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct DemoFixturesTests {
-
     // MARK: - Launch-argument gating
 
     @Test func demoModeInactiveWithoutArguments() {
@@ -93,7 +92,9 @@ struct DemoFixturesTests {
 
     @Test func noteGetReturnsRequestedNote() throws {
         let result = DemoFixtures.response(
-            for: "note.get", params: ["noteId": "demo-note-research"])
+            for: "note.get",
+            params: ["noteId": "demo-note-research"]
+        )
         let dict = try #require(result as? [String: Any])
         let noteDict = try #require(dict["note"] as? [String: Any])
         #expect(noteDict["id"] as? String == "demo-note-research")
@@ -112,7 +113,7 @@ struct DemoFixturesTests {
             DemoFixtures.response(for: "workspace.list", params: [:]),
             DemoFixtures.response(for: "note.list", params: [:]),
             DemoFixtures.response(for: "agent.list", params: [:]),
-            DemoFixtures.response(for: "agent.getConversation", params: [:]),
+            DemoFixtures.response(for: "agent.getConversation", params: [:])
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         let text = try #require(String(data: data, encoding: .utf8)).lowercased()

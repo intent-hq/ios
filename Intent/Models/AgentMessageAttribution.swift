@@ -24,7 +24,7 @@ struct AgentMessageAttribution: Equatable {
     /// Extracts sender attribution from an opaque metadata dictionary.
     /// Returns nil unless `metadata.type == "agent_message"` and
     /// `metadata.fromAgentId` is a non-empty string.
-    static func from(_ metadata: [String: AnyCodable]?) -> AgentMessageAttribution? {
+    static func from(_ metadata: [String: AnyCodable]?) -> Self? {
         guard let metadata, metadata["type"]?.stringValue == "agent_message" else { return nil }
         let fromAgentId = (metadata["fromAgentId"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,8 +36,11 @@ struct AgentMessageAttribution: Equatable {
         let displayName = rawName.count > maxNameLength
             ? String(rawName.prefix(maxNameLength - 1)) + "…"
             : rawName
-        return AgentMessageAttribution(
-            fromAgentId: fromAgentId, rawName: rawName, displayName: displayName)
+        return Self(
+            fromAgentId: fromAgentId,
+            rawName: rawName,
+            displayName: displayName
+        )
     }
 }
 

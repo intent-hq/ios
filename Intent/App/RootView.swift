@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct RootView: View {
+    private static let reconnectPanelMaximumWidth: CGFloat = 320
+
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
     @Environment(\.horizontalSizeClass) var sizeClass
@@ -69,7 +71,8 @@ struct RootView: View {
               NotificationManager.windowPresentsAlert(
                   source: event.sourceBackendID,
                   windowBackendID: session.backendID,
-                  supportsMultipleWindows: supportsMultipleWindows)
+                  supportsMultipleWindows: supportsMultipleWindows
+              )
         else { return nil }
         return event
     }
@@ -89,7 +92,8 @@ struct RootView: View {
                             .navigationSplitViewColumnWidth(
                                 min: Constants.Root.sidebarMinimumWidth,
                                 ideal: Constants.Root.sidebarIdealWidth,
-                                max: Constants.Root.sidebarMaximumWidth)
+                                max: Constants.Root.sidebarMaximumWidth
+                            )
                     } detail: {
                         detailContent
                     }
@@ -126,8 +130,10 @@ struct RootView: View {
                 }
             }
         }
-        .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
-                   value: String(describing: coordinator.currentScreen))
+        .animation(
+            .easeInOut(duration: Constants.Root.screenAnimationDuration),
+            value: String(describing: coordinator.currentScreen)
+        )
         .overlay(alignment: .top) {
             // On multi-window platforms only the source backend's window
             // renders the toast (windowPresentsAlert); on iPhone every
@@ -138,7 +144,8 @@ struct RootView: View {
                NotificationManager.windowPresentsAlert(
                    source: toast.sourceBackendID,
                    windowBackendID: session.backendID,
-                   supportsMultipleWindows: supportsMultipleWindows) {
+                   supportsMultipleWindows: supportsMultipleWindows
+               ) {
                 ToastView(
                     toast: toast,
                     onTap: {
@@ -192,8 +199,9 @@ struct RootView: View {
                         // race, while retries continue on the remaining hosts.
                         if !session.connection.certMismatches.isEmpty {
                             CertMismatchListView(
-                                mismatches: session.connection.certMismatches)
-                                .frame(maxWidth: 320)
+                                mismatches: session.connection.certMismatches
+                            )
+                                .frame(maxWidth: Self.reconnectPanelMaximumWidth)
                         }
 
                         Button("Log Off") {
@@ -205,11 +213,14 @@ struct RootView: View {
                     }
                     .padding(Constants.Root.reconnectPanelPadding)
                     .background(.regularMaterial, in: RoundedRectangle(
-                        cornerRadius: Constants.Root.reconnectPanelCornerRadius))
+                        cornerRadius: Constants.Root.reconnectPanelCornerRadius
+                    ))
                 }
                 .transition(.opacity)
-                .animation(.easeInOut(duration: Constants.Root.screenAnimationDuration),
-                           value: coordinator.isDisconnected)
+                .animation(
+                    .easeInOut(duration: Constants.Root.screenAnimationDuration),
+                    value: coordinator.isDisconnected
+                )
             }
         }
         // intent://pair deep-link confirmation — presented over whichever

@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 // MARK: - AnyCodable Tests
 
@@ -58,15 +58,15 @@ struct AnyCodableTests {
         #expect(decoded.isNull)
     }
 
-    @Test func equality() throws {
-        let a = AnyCodable("test")
-        let b = AnyCodable("test")
-        let c = AnyCodable("other")
-        #expect(a == b)
-        #expect(a != c)
+    @Test func equality() {
+        let first = AnyCodable("test")
+        let matching = AnyCodable("test")
+        let different = AnyCodable("other")
+        #expect(first == matching)
+        #expect(first != different)
     }
 
-    @Test func convenienceAccessorsReturnNilForWrongType() throws {
+    @Test func convenienceAccessorsReturnNilForWrongType() {
         let str = AnyCodable("hello")
         #expect(str.intValue == nil)
         #expect(str.boolValue == nil)
@@ -82,7 +82,7 @@ struct AnyCodableTests {
 struct ContentBlockTests {
     @Test func decodeTextBlock() throws {
         let json = #"{"type":"text","text":"Hello world"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .text)
         #expect(block.resolvedText == "Hello world")
         #expect(!block.id.isEmpty) // auto-generated
@@ -90,7 +90,7 @@ struct ContentBlockTests {
 
     @Test func decodeToolUseBlock() throws {
         let json = #"{"type":"tool_use","name":"read_file","input":{"path":"foo.txt"}}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .toolUse)
         #expect(block.resolvedName == "read_file")
         #expect(block.input != nil)
@@ -98,7 +98,7 @@ struct ContentBlockTests {
 
     @Test func decodeToolResultBlock() throws {
         let json = #"{"type":"tool_result","toolUseId":"tc-1","output":"ok","isError":false}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .toolResult)
         #expect(block.resolvedToolUseId == "tc-1")
         #expect(block.resolvedIsError == false)
@@ -106,14 +106,14 @@ struct ContentBlockTests {
 
     @Test func decodeThinkingBlock() throws {
         let json = #"{"type":"thinking","text":"Let me think..."}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .thinking)
         #expect(block.resolvedText == "Let me think...")
     }
 
     @Test func decodeImageBlock() throws {
         let json = #"{"type":"image","data":"base64data","mimeType":"image/png"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .image)
         #expect(block.data == "base64data")
         #expect(block.mimeType == "image/png")
@@ -123,7 +123,7 @@ struct ContentBlockTests {
         // Persisted attachment-reference image block (PROTOCOL §5.5 v7.4):
         // carries attachmentId + mimeType, no inline data.
         let json = #"{"type":"image","attachmentId":"att-42","mimeType":"image/jpeg"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .image)
         #expect(block.attachmentId == "att-42")
         #expect(block.mimeType == "image/jpeg")
@@ -135,7 +135,7 @@ struct ContentBlockTests {
 
     @Test func decodeSlimTruncatedToolUseBlock() throws {
         let json = #"{"type":"tool_use","name":"write_file","input":{"path":"foo.txt"},"inputTruncated":true,"inputBytes":900000}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.inputTruncated == true)
         #expect(block.inputBytes == 900_000)
         #expect(block.isSlimTruncated)
@@ -143,7 +143,7 @@ struct ContentBlockTests {
 
     @Test func decodeSlimTruncatedToolResultBlock() throws {
         let json = #"{"type":"tool_result","toolUseId":"tc-1","output":"preview…","outputTruncated":true,"outputBytes":1200000}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.outputTruncated == true)
         #expect(block.outputBytes == 1_200_000)
         #expect(block.isSlimTruncated)
@@ -151,7 +151,7 @@ struct ContentBlockTests {
 
     @Test func decodeSlimThumbnailImageBlock() throws {
         let json = #"{"type":"image","data":"thumbB64","mimeType":"image/webp","dataTruncated":true,"dataIsThumbnail":true,"dataBytes":4000000}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.dataTruncated == true)
         #expect(block.dataIsThumbnail == true)
         #expect(block.dataBytes == 4_000_000)
@@ -162,7 +162,7 @@ struct ContentBlockTests {
     @Test func decodeSlimTruncatedImageWithoutThumbnail() throws {
         // Legacy rows / failed thumbnail generation: data omitted entirely.
         let json = #"{"type":"image","mimeType":"image/png","dataTruncated":true,"dataBytes":4000000}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.data == nil)
         #expect(block.dataTruncated == true)
         #expect(block.dataIsThumbnail == nil)
@@ -171,55 +171,55 @@ struct ContentBlockTests {
 
     @Test func untruncatedBlockIsNotSlimTruncated() throws {
         let json = #"{"type":"tool_use","name":"read_file","input":{"path":"foo.txt"}}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.inputTruncated == nil)
         #expect(!block.isSlimTruncated)
     }
 
     @Test func legacyContentFallback() throws {
         let json = #"{"type":"text","content":"legacy text"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.text == nil)
         #expect(block.resolvedText == "legacy text")
     }
 
     @Test func legacyToolNameFallback() throws {
         let json = #"{"type":"tool_use","toolName":"old_tool"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.name == nil)
         #expect(block.resolvedName == "old_tool")
     }
 
     @Test func legacyToolUseIdFallback() throws {
         let json = #"{"type":"tool_result","tool_use_id":"tc-legacy"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.toolUseId == nil)
         #expect(block.resolvedToolUseId == "tc-legacy")
     }
 
     @Test func legacyIsErrorFallback() throws {
         let json = #"{"type":"tool_result","is_error":true}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.isError == nil)
         #expect(block.resolvedIsError == true)
     }
 
     @Test func unknownTypeDefaultsToText() throws {
         let json = #"{"type":"unknown_type","text":"fallback"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .text)
     }
 
     @Test func decodeMetaAlias() throws {
         let json = #"{"type":"text","text":"reason","meta":{"kind":"discussion-request"}}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.metadata == nil)
         #expect(block.resolvedMetadata?["kind"]?.stringValue == "discussion-request")
     }
 
     @Test func resolvedMetadataPrefersMetadata() throws {
         let json = #"{"type":"text","text":"x","metadata":{"kind":"a"},"meta":{"kind":"b"}}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.resolvedMetadata?["kind"]?.stringValue == "a")
     }
 }
@@ -231,11 +231,11 @@ struct AttentionNoticeTests {
         ConversationMessage.parseMessage([
             "id": "msg-att",
             "role": role,
-            "contentBlocks": blocks,
+            "contentBlocks": blocks
         ])
     }
 
-    @Test func classifiesDiscussionRequest() throws {
+    @Test func classifiesDiscussionRequest() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Need input on the API shape", "meta": ["kind": "discussion-request"]]
         ])
@@ -244,7 +244,7 @@ struct AttentionNoticeTests {
         #expect(notice?.reason == "Need input on the API shape")
     }
 
-    @Test func classifiesBlockerReport() throws {
+    @Test func classifiesBlockerReport() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Sandbox is broken", "meta": ["kind": "blocker-report"]]
         ])
@@ -253,7 +253,7 @@ struct AttentionNoticeTests {
         #expect(notice?.reason == "Sandbox is broken")
     }
 
-    @Test func classifiesTurnFailure() throws {
+    @Test func classifiesTurnFailure() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Model refused the request", "meta": ["kind": "turn-failure"]]
         ])
@@ -262,14 +262,14 @@ struct AttentionNoticeTests {
         #expect(notice?.reason == "Model refused the request")
     }
 
-    @Test func unknownKindReturnsNil() throws {
+    @Test func unknownKindReturnsNil() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Interrupted", "meta": ["kind": "interruption"]]
         ])
         #expect(msg?.attentionNotice == nil)
     }
 
-    @Test func unknownKindFallsBackToJoinedText() throws {
+    @Test func unknownKindFallsBackToJoinedText() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": " Interrupted by restart ", "meta": ["kind": "interruption"]]
         ])
@@ -277,40 +277,40 @@ struct AttentionNoticeTests {
         #expect(msg?.joinedTextContent == "Interrupted by restart")
     }
 
-    @Test func joinedTextContentEmptyForNoTextBlocks() throws {
+    @Test func joinedTextContentEmptyForNoTextBlocks() {
         let msg = systemMessage(blocks: [["type": "tool_use", "name": "some_tool"]])
-        #expect(msg?.joinedTextContent == "")
+        #expect(msg?.joinedTextContent.isEmpty == true)
     }
 
-    @Test func missingMetaReturnsNil() throws {
+    @Test func missingMetaReturnsNil() {
         let msg = systemMessage(blocks: [["type": "text", "text": "plain system message"]])
         #expect(msg?.attentionNotice == nil)
     }
 
-    @Test func nonSystemRoleReturnsNil() throws {
+    @Test func nonSystemRoleReturnsNil() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "Need input", "meta": ["kind": "discussion-request"]]
         ], role: "assistant")
         #expect(msg?.attentionNotice == nil)
     }
 
-    @Test func emptyContentBlocksReturnsNil() throws {
+    @Test func emptyContentBlocksReturnsNil() {
         let msg = systemMessage(blocks: [])
         #expect(msg?.attentionNotice == nil)
     }
 
-    @Test func nonStringKindReturnsNil() throws {
+    @Test func nonStringKindReturnsNil() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "x", "meta": ["kind": 42]]
         ])
         #expect(msg?.attentionNotice == nil)
     }
 
-    @Test func reasonJoinsTextBlocksAndTrims() throws {
+    @Test func reasonJoinsTextBlocksAndTrims() {
         let msg = systemMessage(blocks: [
             ["type": "text", "text": "  first line ", "meta": ["kind": "blocker-report"]],
             ["type": "tool_use", "name": "some_tool"],
-            ["type": "text", "text": "second line"],
+            ["type": "text", "text": "second line"]
         ])
         #expect(msg?.attentionNotice?.reason == "first line \nsecond line")
     }
@@ -320,7 +320,7 @@ struct AttentionNoticeTests {
         {"id":"msg-rt","role":"system","timestamp":"2026-07-30T00:00:00Z",
          "contentBlocks":[{"type":"text","text":"Reason","meta":{"kind":"discussion-request"}}]}
         """
-        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: Data(json.utf8))
         #expect(msg.attentionNotice == AttentionNotice(kind: .discussionRequest, reason: "Reason"))
     }
 }
@@ -334,7 +334,7 @@ struct ModelChangeNoticeTests {
         var dict: [String: Any] = [
             "id": "msg-mc",
             "role": role,
-            "contentBlocks": [["type": "text", "text": noticeText]],
+            "contentBlocks": [["type": "text", "text": noticeText]]
         ]
         if let metadata { dict["metadata"] = metadata }
         return ConversationMessage.parseMessage(dict)
@@ -343,43 +343,52 @@ struct ModelChangeNoticeTests {
     @Test func classifiesModelChangedRow() throws {
         let msg = message(metadata: [
             "type": "model_changed",
-            "from": "claude-4", "to": "gpt-5",
-            "fromProvider": "claude-code", "toProvider": "codex",
+            "from": "claude-4",
+            "to": "gpt-5",
+            "fromProvider": "claude-code",
+            "toProvider": "codex"
         ])
         let notice = try #require(msg?.modelChangeNotice)
         #expect(notice == ModelChangeNotice(
-            from: "claude-4", to: "gpt-5",
-            fromProvider: "claude-code", toProvider: "codex"))
+            from: "claude-4",
+            to: "gpt-5",
+            fromProvider: "claude-code",
+            toProvider: "codex"
+        ))
     }
 
     @Test func nullModelIdsMapToNil() throws {
         // `from`/`to` are null for "provider default model" (PROTOCOL §5.5).
         let msg = message(metadata: [
             "type": "model_changed",
-            "from": NSNull(), "to": "gpt-5",
-            "fromProvider": "claude-code", "toProvider": "codex",
+            "from": NSNull(),
+            "to": "gpt-5",
+            "fromProvider": "claude-code",
+            "toProvider": "codex"
         ])
         let notice = try #require(msg?.modelChangeNotice)
         #expect(notice.from == nil)
         #expect(notice.to == "gpt-5")
     }
 
-    @Test func missingMetadataReturnsNil() throws {
+    @Test func missingMetadataReturnsNil() {
         #expect(message(metadata: nil)?.modelChangeNotice == nil)
     }
 
-    @Test func otherMetadataTypeReturnsNil() throws {
+    @Test func otherMetadataTypeReturnsNil() {
         #expect(message(metadata: ["type": "questions_dismissed"])?.modelChangeNotice == nil)
     }
 
-    @Test func nonStringTypeReturnsNil() throws {
+    @Test func nonStringTypeReturnsNil() {
         #expect(message(metadata: ["type": 42])?.modelChangeNotice == nil)
     }
 
     @Test func nonStringFieldsAreDroppedNotCrashing() throws {
         let msg = message(metadata: [
             "type": "model_changed",
-            "from": 7, "to": ["x": 1], "fromProvider": true,
+            "from": 7,
+            "to": ["x": 1],
+            "fromProvider": true
         ])
         let notice = try #require(msg?.modelChangeNotice)
         #expect(notice == ModelChangeNotice(from: nil, to: nil, fromProvider: nil, toProvider: nil))
@@ -389,14 +398,21 @@ struct ModelChangeNoticeTests {
         // FE parity: asString requires value.length > 0.
         let msg = message(metadata: [
             "type": "model_changed",
-            "from": "", "to": "gpt-5", "fromProvider": "", "toProvider": "codex",
+            "from": "",
+            "to": "gpt-5",
+            "fromProvider": "",
+            "toProvider": "codex"
         ])
         let notice = try #require(msg?.modelChangeNotice)
         #expect(notice == ModelChangeNotice(
-            from: nil, to: "gpt-5", fromProvider: nil, toProvider: "codex"))
+            from: nil,
+            to: "gpt-5",
+            fromProvider: nil,
+            toProvider: "codex"
+        ))
     }
 
-    @Test func classifiesRegardlessOfRole() throws {
+    @Test func classifiesRegardlessOfRole() {
         // FE parity: discriminates purely on metadata.type, tolerant of the
         // exact non-user/non-assistant role the daemon persists.
         let msg = message(metadata: ["type": "model_changed"], role: "model_change")
@@ -404,36 +420,50 @@ struct ModelChangeNoticeTests {
         #expect(msg?.role == .system)
     }
 
-    @Test func labelDescribesBothSides() throws {
+    @Test func labelDescribesBothSides() {
         let notice = ModelChangeNotice(
-            from: "claude-4", to: "gpt-5",
-            fromProvider: "claude-code", toProvider: "codex")
+            from: "claude-4",
+            to: "gpt-5",
+            fromProvider: "claude-code",
+            toProvider: "codex"
+        )
         #expect(notice.label(fallbackText: noticeText)
             == "Switched from claude-4 (Claude Code) to gpt-5 (Codex)")
     }
 
-    @Test func labelDescribesProviderDefaultModel() throws {
+    @Test func labelDescribesProviderDefaultModel() {
         let notice = ModelChangeNotice(
-            from: nil, to: "gpt-5",
-            fromProvider: "claude-code", toProvider: "codex")
+            from: nil,
+            to: "gpt-5",
+            fromProvider: "claude-code",
+            toProvider: "codex"
+        )
         #expect(notice.label(fallbackText: noticeText)
             == "Switched from Claude Code default model to gpt-5 (Codex)")
     }
 
-    @Test func labelWithoutProviderUsesBareModelId() throws {
+    @Test func labelWithoutProviderUsesBareModelId() {
         let notice = ModelChangeNotice(
-            from: "claude-4", to: "gpt-5", fromProvider: nil, toProvider: nil)
+            from: "claude-4",
+            to: "gpt-5",
+            fromProvider: nil,
+            toProvider: nil
+        )
         #expect(notice.label(fallbackText: noticeText)
             == "Switched from claude-4 to gpt-5")
     }
 
-    @Test func labelFallsBackToRowTextWhenSideUndescribable() throws {
+    @Test func labelFallsBackToRowTextWhenSideUndescribable() {
         let notice = ModelChangeNotice(
-            from: nil, to: "gpt-5", fromProvider: nil, toProvider: "codex")
+            from: nil,
+            to: "gpt-5",
+            fromProvider: nil,
+            toProvider: "codex"
+        )
         #expect(notice.label(fallbackText: noticeText) == noticeText)
     }
 
-    @Test func labelFallsBackToGenericWhenRowTextEmpty() throws {
+    @Test func labelFallsBackToGenericWhenRowTextEmpty() {
         let notice = ModelChangeNotice(from: nil, to: nil, fromProvider: nil, toProvider: nil)
         #expect(notice.label(fallbackText: "  ") == ModelChangeNotice.fallbackLabel)
     }
@@ -445,20 +475,25 @@ struct ModelChangeNoticeTests {
          "metadata":{"type":"model_changed","from":"a","to":"b",
                      "fromProvider":"codex","toProvider":"codex"}}
         """
-        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: Data(json.utf8))
         #expect(msg.modelChangeNotice == ModelChangeNotice(
-            from: "a", to: "b", fromProvider: "codex", toProvider: "codex"))
+            from: "a",
+            to: "b",
+            fromProvider: "codex",
+            toProvider: "codex"
+        ))
     }
 
-    @Test func malformedMetadataKeepsAttentionAndBannerPaths() throws {
+    @Test func malformedMetadataKeepsAttentionAndBannerPaths() {
         // A system row without model_changed metadata still classifies down
         // the existing chain: attention notices stay attention notices, and
         // unclassified rows keep the banner fallback via joinedTextContent.
         let attention = ConversationMessage.parseMessage([
-            "id": "msg-a", "role": "system",
+            "id": "msg-a",
+            "role": "system",
             "contentBlocks": [
                 ["type": "text", "text": "Need input", "meta": ["kind": "discussion-request"]]
-            ],
+            ]
         ])
         #expect(attention?.modelChangeNotice == nil)
         #expect(attention?.attentionNotice?.kind == .discussionRequest)
@@ -477,10 +512,14 @@ struct QuestionsDismissedNoticeTests {
 
     @Test func classifiesFromRowMetadata() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
+            "id": "msg-d",
+            "role": "user",
             "contentBlocks": [["type": "text", "text": noticeText]],
-            "metadata": ["type": "questions_dismissed", "source": "system",
-                         "dismissedQuestionsMessageId": "a1"] as [String: Any],
+            "metadata": [
+                "type": "questions_dismissed",
+                "source": "system",
+                "dismissedQuestionsMessageId": "a1"
+            ] as [String: Any]
         ]))
         let notice = try #require(msg.questionsDismissedNotice)
         #expect(notice.dismissedQuestionsMessageId == "a1")
@@ -489,58 +528,72 @@ struct QuestionsDismissedNoticeTests {
 
     @Test func classifiesFromBlockMessageMetadataFallback() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
+            "id": "msg-d",
+            "role": "user",
             "contentBlocks": [
-                ["type": "text", "text": noticeText,
-                 "messageMetadata": ["type": "questions_dismissed",
-                                     "dismissedQuestionsMessageId": "a1"] as [String: Any]],
-            ],
+                [
+                    "type": "text",
+                    "text": noticeText,
+                    "messageMetadata": [
+                        "type": "questions_dismissed",
+                        "dismissedQuestionsMessageId": "a1"
+                    ] as [String: Any]
+                ]
+            ]
         ]))
         #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "a1")
     }
 
     @Test func toleratesAnyRole() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "system",
+            "id": "msg-d",
+            "role": "system",
             "contentBlocks": [["type": "text", "text": noticeText]],
-            "metadata": ["type": "questions_dismissed"] as [String: Any],
+            "metadata": ["type": "questions_dismissed"] as [String: Any]
         ]))
         #expect(msg.questionsDismissedNotice != nil)
     }
 
     @Test func missingDismissedIdReadsAsEmpty() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
+            "id": "msg-d",
+            "role": "user",
             "contentBlocks": [["type": "text", "text": noticeText]],
-            "metadata": ["type": "questions_dismissed"] as [String: Any],
+            "metadata": ["type": "questions_dismissed"] as [String: Any]
         ]))
-        #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "")
+        #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId.isEmpty == true)
     }
 
     @Test func otherMetadataTypesReturnNil() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
+            "id": "msg-d",
+            "role": "user",
             "contentBlocks": [["type": "text", "text": "hello"]],
-            "metadata": ["type": "question_answers"] as [String: Any],
+            "metadata": ["type": "question_answers"] as [String: Any]
         ]))
         #expect(msg.questionsDismissedNotice == nil)
     }
 
     @Test func plainMessagesReturnNil() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
-            "contentBlocks": [["type": "text", "text": "hello"]],
+            "id": "msg-d",
+            "role": "user",
+            "contentBlocks": [["type": "text", "text": "hello"]]
         ]))
         #expect(msg.questionsDismissedNotice == nil)
     }
 
     @Test func nonTextBlockMetadataIsIgnored() throws {
         let msg = try #require(ConversationMessage.parseMessage([
-            "id": "msg-d", "role": "user",
+            "id": "msg-d",
+            "role": "user",
             "contentBlocks": [
-                ["type": "tool_use", "name": "t",
-                 "messageMetadata": ["type": "questions_dismissed"] as [String: Any]],
-            ],
+                [
+                    "type": "tool_use",
+                    "name": "t",
+                    "messageMetadata": ["type": "questions_dismissed"] as [String: Any]
+                ]
+            ]
         ]))
         #expect(msg.questionsDismissedNotice == nil)
     }
@@ -551,7 +604,7 @@ struct QuestionsDismissedNoticeTests {
          "contentBlocks":[{"type":"text","text":"User dismissed your 1 question without answering.",
            "messageMetadata":{"type":"questions_dismissed","dismissedQuestionsMessageId":"a1"}}]}
         """
-        let msg = try JSONDecoder().decode(ConversationMessage.self, from: json.data(using: .utf8)!)
+        let msg = try JSONDecoder().decode(ConversationMessage.self, from: Data(json.utf8))
         #expect(msg.questionsDismissedNotice?.dismissedQuestionsMessageId == "a1")
     }
 }
@@ -559,7 +612,7 @@ struct QuestionsDismissedNoticeTests {
 // MARK: - ConversationMessage Tests
 
 struct ConversationMessageTests {
-    @Test func parseMessageFull() throws {
+    @Test func parseMessageFull() {
         let dict: [String: Any] = [
             "id": "msg-1",
             "role": "assistant",
@@ -594,7 +647,7 @@ struct ConversationMessageTests {
         #expect(msg?.metadata?["key"]?.stringValue == "value")
     }
 
-    @Test func parseMessageMinimal() throws {
+    @Test func parseMessageMinimal() {
         let dict: [String: Any] = [
             "id": "msg-2",
             "role": "user"
@@ -603,19 +656,19 @@ struct ConversationMessageTests {
         #expect(msg != nil)
         #expect(msg?.id == "msg-2")
         #expect(msg?.role == .user)
-        #expect(msg?.timestamp == "")
+        #expect(msg?.timestamp.isEmpty == true)
         #expect(msg?.contentBlocks == nil)
         #expect(msg?.toolCalls == nil)
         #expect(msg?.isStreaming == nil)
     }
 
-    @Test func parseMessageMissingIdReturnsNil() throws {
+    @Test func parseMessageMissingIdReturnsNil() {
         let dict: [String: Any] = ["role": "user"]
         let msg = ConversationMessage.parseMessage(dict)
         #expect(msg == nil)
     }
 
-    @Test func parseMessageUnknownRoleDefaultsToSystem() throws {
+    @Test func parseMessageUnknownRoleDefaultsToSystem() {
         let dict: [String: Any] = [
             "id": "msg-3",
             "role": "unknown_role"
@@ -672,7 +725,8 @@ struct QueuedMessageTests {
         let img = ImageBlock(type: "image", attachmentId: "att-9", mimeType: "image/jpeg")
         let encoded = try JSONEncoder().encode(img)
         let json = try #require(
-            try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+            try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
         #expect(json["attachmentId"] as? String == "att-9")
         #expect(json["data"] == nil)
 
@@ -719,8 +773,14 @@ struct QueuedMessageTests {
     // MARK: isUserMessage predicate (shared with FE, see spec Background)
 
     private func queued(metadata: [String: AnyCodable]?) -> QueuedMessage {
-        QueuedMessage(id: "q", content: "c", queuedAt: "2025-01-01T00:00:00Z",
-                      position: 0, imageBlocks: nil, messageMetadata: metadata)
+        QueuedMessage(
+            id: "q",
+            content: "c",
+            queuedAt: "2025-01-01T00:00:00Z",
+            position: 0,
+            imageBlocks: nil,
+            messageMetadata: metadata
+        )
     }
 
     @Test func isUserMessageTrueWithoutMetadata() {
@@ -730,7 +790,7 @@ struct QueuedMessageTests {
     @Test func isUserMessageTrueWithBenignMetadata() {
         #expect(queued(metadata: [
             "userAppMessageId": AnyCodable("uam-1"),
-            "queueInfo": AnyCodable(["position": 1]),
+            "queueInfo": AnyCodable(["position": 1])
         ]).isUserMessage)
     }
 
@@ -745,7 +805,7 @@ struct QueuedMessageTests {
         // carrying a string `type` (fe parity, cloudlands-fe #1167).
         #expect(queued(metadata: [
             "type": AnyCodable("question_answers"),
-            "answeredQuestionsMessageId": AnyCodable("qm-1"),
+            "answeredQuestionsMessageId": AnyCodable("qm-1")
         ]).isUserMessage)
     }
 
@@ -755,7 +815,7 @@ struct QueuedMessageTests {
         #expect(queued(metadata: [
             "type": AnyCodable("question_answers"),
             "fromAgentId": AnyCodable("agent-2"),
-            "source": AnyCodable("system"),
+            "source": AnyCodable("system")
         ]).isUserMessage)
     }
 
@@ -786,7 +846,7 @@ struct QueuedMessageTests {
         // Malformed marker values fail open.
         #expect(queued(metadata: [
             "type": AnyCodable(42),
-            "fromAgentId": AnyCodable(true),
+            "fromAgentId": AnyCodable(true)
         ]).isUserMessage)
     }
 }
@@ -807,7 +867,6 @@ struct ImageBlockTests {
 // MARK: - SuggestedPrompts Tests
 
 struct SuggestedPromptsTests {
-
     // MARK: - Valid formats
 
     @Test func parsesPlainPrompts() {
@@ -823,7 +882,7 @@ struct SuggestedPromptsTests {
             "Full prompt text",
             "Check deployment",
             "Check build",
-            "Check CI",
+            "Check CI"
         ])
     }
 
@@ -872,7 +931,7 @@ struct SuggestedPromptsTests {
         #expect(SuggestedPrompts.parse(text) == [
             "Run the tests",
             "Ship it",
-            "Leave rewrite parked for now.",
+            "Leave rewrite parked for now."
         ])
         #expect(SuggestedPrompts.stripBlocks(from: text) == "Done!")
     }
@@ -1136,7 +1195,7 @@ struct SuggestedPromptsTests {
         // (intent-hq/intent#3936).
         let blocks = [
             ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\nRun the te"),
-            ContentBlock(type: .text, text: "sts\nShip it\n-->"),
+            ContentBlock(type: .text, text: "sts\nShip it\n-->")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Run the tests", "Ship it"])
@@ -1148,7 +1207,7 @@ struct SuggestedPromptsTests {
         // even the opener token itself can straddle the boundary.
         let blocks = [
             ContentBlock(type: .text, text: "Done!\n<!-- suggested-"),
-            ContentBlock(type: .text, text: "prompts\nRun the tests\n-->"),
+            ContentBlock(type: .text, text: "prompts\nRun the tests\n-->")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Run the tests"])
@@ -1173,7 +1232,7 @@ struct SuggestedPromptsTests {
         let blocks = [
             ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts\n"),
             ContentBlock(type: .code, text: "let x = 1"),
-            ContentBlock(type: .text, text: "Run the tests\n-->"),
+            ContentBlock(type: .text, text: "Run the tests\n-->")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Run the tests"])
@@ -1184,7 +1243,7 @@ struct SuggestedPromptsTests {
     @Test func contentBlocksUnclosedOpenerLeavesBlocksUntouched() {
         let blocks = [
             ContentBlock(type: .text, text: "Done!\n<!-- suggested-prompts"),
-            ContentBlock(type: .text, text: "\nRun the tests"),
+            ContentBlock(type: .text, text: "\nRun the tests")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts.isEmpty)
@@ -1194,7 +1253,7 @@ struct SuggestedPromptsTests {
     @Test func contentBlocksMultipleBlocksAllStripLastSuppliesPrompts() {
         let blocks = [
             ContentBlock(type: .text, text: "A\n<!-- suggested-prompts\nOne\n-->\nB\n<!-- suggested-"),
-            ContentBlock(type: .text, text: "prompts\nTwo\n-->\nC"),
+            ContentBlock(type: .text, text: "prompts\nTwo\n-->\nC")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Two"])
@@ -1204,9 +1263,9 @@ struct SuggestedPromptsTests {
     @Test func contentBlocksLegacyContentFieldRoundTrips() throws {
         // Blocks decoded from the legacy `content` alias still join into the
         // scan and carry the cleaned text back out via `resolvedText`.
-        let json = """
+        let json = Data("""
         {"type": "text", "content": "Done!\\n<!-- suggested-prompts\\nRun the te"}
-        """.data(using: .utf8)!
+        """.utf8)
         let legacy = try JSONDecoder().decode(ContentBlock.self, from: json)
         let blocks = [legacy, ContentBlock(type: .text, text: "sts\n-->")]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
@@ -1219,7 +1278,7 @@ struct SuggestedPromptsTests {
         // mapping — offsets are UTF-16-unit based.
         let blocks = [
             ContentBlock(type: .text, text: "Done 🎉!\n<!-- suggested-prompts\nRun the te"),
-            ContentBlock(type: .text, text: "sts\n-->"),
+            ContentBlock(type: .text, text: "sts\n-->")
         ]
         let result = SuggestedPrompts.parse(contentBlocks: blocks)
         #expect(result.prompts == ["Run the tests"])

@@ -1,12 +1,11 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct DeltaSubscriptionTests {
-    
     // MARK: - SubscriptionPush parsing
-    
-    @Test func parseSnapshotPush() async throws {
+
+    @Test func parseSnapshotPush() async {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
             "kind": "snapshot",
@@ -16,7 +15,7 @@ struct DeltaSubscriptionTests {
                 ["id": "ws-2", "title": "Workspace 2"]
             ]
         ]
-        
+
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
         #expect(push != nil)
         #expect(push?.subscriptionId == "sub-123")
@@ -25,7 +24,7 @@ struct DeltaSubscriptionTests {
         #expect(push?.snapshotMeta == nil) // Array snapshots carry no metadata
     }
 
-    @Test func parseObjectSnapshotPush() async throws {
+    @Test func parseObjectSnapshotPush() async {
         // Chat channel seq-0 snapshot: object with messages + metadata/activity flags (PROTOCOL §7.1)
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
@@ -70,7 +69,7 @@ struct DeltaSubscriptionTests {
         #expect(meta?["messages"] == nil) // messages are lifted into .snapshot, not duplicated in meta
     }
 
-    @Test func parseObjectSnapshotWithEmptyMessages() async throws {
+    @Test func parseObjectSnapshotWithEmptyMessages() async {
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
             "kind": "snapshot",
@@ -89,7 +88,7 @@ struct DeltaSubscriptionTests {
         #expect(push?.snapshotMeta?["agentId"] as? String == "agent-123")
     }
 
-    @Test func parseDeltaPush() async throws {
+    @Test func parseDeltaPush() async {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
             "kind": "delta",
@@ -100,7 +99,7 @@ struct DeltaSubscriptionTests {
                 "removedIds": ["ws-2"]
             ]
         ]
-        
+
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
         #expect(push != nil)
         #expect(push?.subscriptionId == "sub-123")
@@ -109,14 +108,14 @@ struct DeltaSubscriptionTests {
         #expect(push?.delta?.updated.count == 1)
         #expect(push?.delta?.removedIds.count == 1)
     }
-    
-    @Test func parseNonPushMethodReturnsNil() async throws {
+
+    @Test func parseNonPushMethodReturnsNil() async {
         let params: [String: Any] = ["foo": "bar"]
         let push = SubscriptionPush.parse(method: "other.method", params: params)
         #expect(push == nil)
     }
-    
-    @Test func parseMalformedPushReturnsNil() async throws {
+
+    @Test func parseMalformedPushReturnsNil() async {
         let params: [String: Any] = ["kind": "snapshot"] // missing subscriptionId and seq
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
         #expect(push == nil)
@@ -165,7 +164,7 @@ struct DeltaSubscriptionTests {
         #expect(SubscriptionPush.parse(method: "subscription.push", params: scalarSnapshot) == nil)
     }
 
-    @Test func parseBlockShapedDeltaPassthrough() async throws {
+    @Test func parseBlockShapedDeltaPassthrough() async {
         // Chat channel delta: block-level entities with { agentId, messageId, role, block } (PROTOCOL §7.1)
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
@@ -215,36 +214,36 @@ struct DeltaSubscriptionTests {
     }
 
     // MARK: - DeltaReconciler
-    
-    @Test func reconcilerSnapshot() async throws {
+
+    @Test func reconcilerSnapshot() async {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
         )
-        
+
         let items = [
             ["id": "1", "name": "One"],
             ["id": "2", "name": "Two"]
         ]
         reconciler.applySnapshot(seq: 0, rawItems: items)
-        
+
         let values = reconciler.values()
         #expect(values.count == 2)
     }
-    
-    @Test func reconcilerDelta() async throws {
+
+    @Test func reconcilerDelta() async {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
         )
-        
+
         // Start with snapshot
         let snapshot = [
             ["id": "1", "name": "One"],
             ["id": "2", "name": "Two"]
         ]
         reconciler.applySnapshot(seq: 0, rawItems: snapshot)
-        
+
         // Apply delta
         let delta = SubscriptionPush.DeltaPayload(
             added: [["id": "3", "name": "Three"]],
@@ -252,53 +251,53 @@ struct DeltaSubscriptionTests {
             removedIds: ["2"]
         )
         let success = reconciler.applyDelta(seq: 1, delta: delta)
-        
+
         #expect(success == true)
         let values = reconciler.values()
         #expect(values.count == 2) // 1 (updated) + 3 (added), 2 removed
     }
-    
-    @Test func reconcilerDeltaGapDetection() async throws {
+
+    @Test func reconcilerDeltaGapDetection() async {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
         )
-        
+
         // Start with snapshot
         reconciler.applySnapshot(seq: 0, rawItems: [["id": "1", "name": "One"]])
-        
+
         // Try to apply delta with wrong seq (gap)
         let delta = SubscriptionPush.DeltaPayload(added: [["id": "2", "name": "Two"]], updated: [], removedIds: [])
         let success = reconciler.applyDelta(seq: 5, delta: delta) // Expected 1, got 5
-        
+
         #expect(success == false)
     }
-    
-    @Test func reconcilerDeltaBeforeSnapshotFails() async throws {
+
+    @Test func reconcilerDeltaBeforeSnapshotFails() async {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
         )
-        
+
         // Try to apply delta without snapshot (not seeded)
         let delta = SubscriptionPush.DeltaPayload(added: [["id": "1", "name": "One"]], updated: [], removedIds: [])
         let success = reconciler.applyDelta(seq: 1, delta: delta)
-        
+
         #expect(success == false)
     }
-    
-    @Test func reconcilerReset() async throws {
+
+    @Test func reconcilerReset() async {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
         )
-        
+
         reconciler.applySnapshot(seq: 0, rawItems: [["id": "1", "name": "One"]])
         #expect(reconciler.values().count == 1)
-        
+
         reconciler.reset()
-        #expect(reconciler.values().count == 0)
-        
+        #expect(reconciler.values().isEmpty)
+
         // After reset, delta should fail (not seeded)
         let delta = SubscriptionPush.DeltaPayload(added: [["id": "2", "name": "Two"]], updated: [], removedIds: [])
         let success = reconciler.applyDelta(seq: 1, delta: delta)

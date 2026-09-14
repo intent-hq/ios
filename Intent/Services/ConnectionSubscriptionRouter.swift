@@ -86,7 +86,7 @@ final class ConnectionSubscriptionRouter {
         let currentDate = now()
         pruneExpiredState(now: currentDate)
         if recentlyUnregisteredIds[push.subscriptionId] != nil {
-            if push.kind == .snapshot && push.seq == 0 {
+            if push.kind == .snapshot, push.seq == 0 {
                 recentlyUnregisteredIds.removeValue(forKey: push.subscriptionId)
             } else {
                 AppLog.connection.debug("[ConnectionManager] Dropped subscription.push for recently unregistered id=\(push.subscriptionId) seq=\(push.seq)")

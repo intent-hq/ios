@@ -24,8 +24,14 @@ struct SubscriptionPush {
         let removedIds: [String]
     }
 
-    init(subscriptionId: String, kind: Kind, seq: Int, snapshot: [[String: Any]]?,
-         delta: DeltaPayload?, snapshotMeta: [String: Any]? = nil) {
+    init(
+        subscriptionId: String,
+        kind: Kind,
+        seq: Int,
+        snapshot: [[String: Any]]?,
+        delta: DeltaPayload?,
+        snapshotMeta: [String: Any]? = nil
+    ) {
         self.subscriptionId = subscriptionId
         self.kind = kind
         self.seq = seq
@@ -35,7 +41,7 @@ struct SubscriptionPush {
     }
 
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
-    static func parse(method: String, params: Any) -> SubscriptionPush? {
+    static func parse(method: String, params: Any) -> Self? {
         guard method == "subscription.push",
               let dict = params as? [String: Any],
               let subscriptionId = dict["subscriptionId"] as? String,
@@ -46,7 +52,7 @@ struct SubscriptionPush {
         if let kindStr = dict["kind"] as? String, kindStr == "snapshot" {
             // Collection channels: snapshot is an array of entities.
             if let snapshot = dict["snapshot"] as? [[String: Any]] {
-                return SubscriptionPush(
+                return Self(
                     subscriptionId: subscriptionId,
                     kind: .snapshot,
                     seq: seq,
@@ -60,7 +66,7 @@ struct SubscriptionPush {
                let messages = snapshotObj["messages"] as? [[String: Any]] {
                 var meta = snapshotObj
                 meta.removeValue(forKey: "messages")
-                return SubscriptionPush(
+                return Self(
                     subscriptionId: subscriptionId,
                     kind: .snapshot,
                     seq: seq,
@@ -70,7 +76,8 @@ struct SubscriptionPush {
                 )
             }
             return nil // Malformed: no snapshot array and no snapshot.messages
-        } else if let kindStr = dict["kind"] as? String, kindStr == "delta" {
+        }
+        if let kindStr = dict["kind"] as? String, kindStr == "delta" {
             guard let deltaDict = dict["delta"] as? [String: Any] else {
                 return nil // Malformed: delta push must have "delta" field
             }
@@ -78,7 +85,7 @@ struct SubscriptionPush {
             let updated = (deltaDict["updated"] as? [[String: Any]]) ?? []
             let removedIds = (deltaDict["removedIds"] as? [String]) ?? []
             let delta = DeltaPayload(added: added, updated: updated, removedIds: removedIds)
-            return SubscriptionPush(
+            return Self(
                 subscriptionId: subscriptionId,
                 kind: .delta,
                 seq: seq,
@@ -154,7 +161,7 @@ class DeltaReconciler<T> {
 
     /// Current collection as an array preserving server snapshot/insertion order.
     func values() -> [T] {
-        return orderedIds.compactMap { items[$0] }
+        orderedIds.compactMap { items[$0] }
     }
 
     /// Insert or update an already-normalized value without touching sequence

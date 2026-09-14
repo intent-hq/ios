@@ -73,7 +73,10 @@ struct UserMessageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .modifier(MessageCopyContextMenu(
             text: MessageBlockPartitioning.userCopyText(
-                from: blocks, hookWake: hookWake, prWake: prWake),
+                from: blocks,
+                hookWake: hookWake,
+                prWake: prWake
+            ),
             userStyled: true,
             isStreaming: false
         ))
@@ -88,17 +91,22 @@ struct UserMessageView: View {
         let display: String = {
             if let hookWake {
                 return MessageBlockPartitioning.stripSupervisorTags(
-                    HookWakeAttribution.displayText(text, attribution: hookWake))
+                    HookWakeAttribution.displayText(text, attribution: hookWake)
+                )
             }
             if prWake != nil {
                 return MessageBlockPartitioning.stripSupervisorTags(
-                    PrMonitorWakeAttribution.displayText(text))
+                    PrMonitorWakeAttribution.displayText(text)
+                )
             }
             return MessageBlockPartitioning.stripSupervisorTags(text)
         }()
         if (hookWake == nil && prWake == nil) || !display.isEmpty {
             let rows = MessageView.userTextRows(display)
-            if rows.contains(where: { if case .chips = $0 { return true } else { return false } }) {
+            if rows.contains(where: { row in
+                if case .chips = row { return true }
+                return false
+            }) {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         switch row {
@@ -131,6 +139,7 @@ struct UserMessageView: View {
             Image(systemName: "doc.fill")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Text(block.fileName ?? "Attachment")
                 .font(.caption)
                 .lineLimit(1)
@@ -148,7 +157,8 @@ struct UserMessageView: View {
 
     private var workspaceRepo: String? {
         guard let workspace = session.workspaceStore.workspaces.first(
-                where: { $0.id == workspaceId }),
+                where: { $0.id == workspaceId }
+        ),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"

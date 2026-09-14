@@ -1,10 +1,10 @@
 import Foundation
+@testable import Intent
 import Observation
 import Security
 import Synchronization
 import Testing
 import UIKit
-@testable import Intent
 
 /// `AppCoordinator` takes its workspace store and connection explicitly (they
 /// come from the owning `BackendSession`). Navigation-only tests keep using
@@ -31,13 +31,13 @@ extension AppCoordinator {
             syncedRegistry: syncedRegistry,
             backgroundTaskManager: backgroundTaskManager,
             reconnectLoadingObservationDidChange: reconnectLoadingObservationDidChange,
-            claimScreenRestoration: claimScreenRestoration)
+            claimScreenRestoration: claimScreenRestoration
+        )
     }
 }
 
 @Suite(.serialized)
 final class AppCoordinatorTests {
-
     /// Per-test isolated persistence. Swift Testing creates a fresh suite
     /// instance per test, so each test gets its own UserDefaults suite and
     /// in-memory keychain — persisted navigation state written by one test
@@ -62,7 +62,9 @@ final class AppCoordinatorTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
-            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+            defaults: defaults,
+            keychainStorage: InMemoryKeychainStorage()
+        )
     }
 
     deinit {
@@ -89,11 +91,16 @@ final class AppCoordinatorTests {
         persistence.setActiveConnection(id: stored.id)
         let coordinator = AppCoordinator(
             backendID: BackendID(stored.id),
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
 
         coordinator.handleNotificationSelection(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
-            connectionId: stored.id)
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent",
+            connectionId: stored.id
+        )
         coordinator.onLoadComplete()
         if case .connecting = coordinator.currentScreen {
             // Normal cold-start routing remains in control until connection succeeds.
@@ -103,7 +110,7 @@ final class AppCoordinatorTests {
 
         coordinator.onConnectionSuccess()
 
-        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
             #expect(workspaceId == "workspace-1")
             #expect(agentName == "Build Agent")
@@ -121,14 +128,17 @@ final class AppCoordinatorTests {
 
         coordinator.currentScreen = .connectionFailed(error: "timeout")
         coordinator.handleNotificationSelection(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
-            connectionId: stored.id)
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent",
+            connectionId: stored.id
+        )
         if case .connectionFailed = coordinator.currentScreen {} else {
             Issue.record("Notification replaced the connection failure screen")
         }
         coordinator.onRetryConnection()
         coordinator.onConnectionSuccess()
-        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, _, _) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
         } else {
             Issue.record("Expected deferred notification after retry")
@@ -136,14 +146,17 @@ final class AppCoordinatorTests {
 
         coordinator.currentScreen = .disconnected
         coordinator.handleNotificationSelection(
-            agentId: "agent-2", workspaceId: "workspace-2", agentName: "Test Agent",
-            connectionId: stored.id)
+            agentId: "agent-2",
+            workspaceId: "workspace-2",
+            agentName: "Test Agent",
+            connectionId: stored.id
+        )
         if case .disconnected = coordinator.currentScreen {} else {
             Issue.record("Notification replaced the disconnected screen")
         }
         coordinator.onRetryConnection()
         coordinator.onConnectionSuccess()
-        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, _, _) = coordinator.currentScreen {
             #expect(agentId == "agent-2")
         } else {
             Issue.record("Expected deferred notification after reconnect")
@@ -160,8 +173,11 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(backendID: BackendID(first.id), persistence: persistence)
         coordinator.currentScreen = .connecting
         coordinator.handleNotificationSelection(
-            agentId: "agent-1", workspaceId: "workspace-1", agentName: "Build Agent",
-            connectionId: second.id)
+            agentId: "agent-1",
+            workspaceId: "workspace-1",
+            agentName: "Build Agent",
+            connectionId: second.id
+        )
 
         coordinator.onConnectionSuccess()
 
@@ -173,7 +189,7 @@ final class AppCoordinatorTests {
     @Test @MainActor func onConnectionFailed_setsConnectionFailed() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onConnectionFailed(error: "timeout")
-        if case .connectionFailed(let error) = coordinator.currentScreen {
+        if case let .connectionFailed(error) = coordinator.currentScreen {
             #expect(error == "timeout")
         } else {
             Issue.record("Expected .connectionFailed, got \(coordinator.currentScreen)")
@@ -198,8 +214,10 @@ final class AppCoordinatorTests {
         var retargeted: [BackendID] = []
         coordinator.retargetWindow = { retargeted.append($0) }
         coordinator.onPaired(stored)
-        #expect(retargeted == [BackendID(stored.id)],
-                "A pairing must route to the paired backend's window")
+        #expect(
+            retargeted == [BackendID(stored.id)],
+            "A pairing must route to the paired backend's window"
+        )
     }
 
     /// Regression (window model v2): pairing a different backend from a
@@ -213,23 +231,33 @@ final class AppCoordinatorTests {
         let paired = persistence.upsertConnection(Self.makeConnection(port: 5252))
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces(
-            [Self.makeWorkspace(id: "ws-paired-daemon", attention: "none")])
+            [Self.makeWorkspace(id: "ws-paired-daemon", attention: "none")]
+        )
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(
-            workspaceStore: store, connection: fake,
-            backendID: BackendID(own.id), persistence: persistence)
+            workspaceStore: store,
+            connection: fake,
+            backendID: BackendID(own.id),
+            persistence: persistence
+        )
         coordinator.currentScreen = .workspaceList
         var retargeted: [BackendID] = []
         coordinator.retargetWindow = { retargeted.append($0) }
 
         coordinator.onPaired(paired)
 
-        #expect(retargeted == [BackendID(paired.id)],
-                "The pairing must still route to the paired backend's window")
-        #expect(fake.disconnectCallCount == 1,
-                "The hijacked socket must be dropped")
-        #expect(store.workspaces.isEmpty,
-                "The paired daemon's workspace data must be dropped")
+        #expect(
+            retargeted == [BackendID(paired.id)],
+            "The pairing must still route to the paired backend's window"
+        )
+        #expect(
+            fake.disconnectCallCount == 1,
+            "The hijacked socket must be dropped"
+        )
+        #expect(
+            store.workspaces.isEmpty,
+            "The paired daemon's workspace data must be dropped"
+        )
         if case .connecting = coordinator.currentScreen {} else {
             Issue.record("Expected a re-dial of this window's own backend, got \(coordinator.currentScreen)")
         }
@@ -241,8 +269,11 @@ final class AppCoordinatorTests {
         let own = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
-            backendID: BackendID(own.id), persistence: persistence)
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: fake,
+            backendID: BackendID(own.id),
+            persistence: persistence
+        )
         coordinator.currentScreen = .workspaceList
         var retargeted: [BackendID] = []
         coordinator.retargetWindow = { retargeted.append($0) }
@@ -250,8 +281,10 @@ final class AppCoordinatorTests {
         coordinator.onPaired(own)
 
         #expect(retargeted == [BackendID(own.id)])
-        #expect(fake.disconnectCallCount == 0,
-                "A same-backend pairing must not drop this window's connection")
+        #expect(
+            fake.disconnectCallCount == 0,
+            "A same-backend pairing must not drop this window's connection"
+        )
         if case .workspaceList = coordinator.currentScreen {} else {
             Issue.record("Expected screen untouched, got \(coordinator.currentScreen)")
         }
@@ -264,8 +297,10 @@ final class AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let fake = FakeConnectionManager()
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
-            persistence: persistence)
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: fake,
+            persistence: persistence
+        )
         coordinator.currentScreen = .pairing
         var retargeted: [BackendID] = []
         coordinator.retargetWindow = { retargeted.append($0) }
@@ -355,28 +390,48 @@ final class AppCoordinatorTests {
 
     /// Remove all connection-related state (new blob, legacy entries, active pointer).
     private func resetConnectionState() {
-        let pm = persistence
-        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
-        pm.deleteFromKeychain(account: pm.keychainAccountServer)
-        pm.deleteFromKeychain(account: pm.keychainAccountToken)
-        pm.defaults.removeObject(forKey: pm.activeConnectionIdKey)
-        pm.defaults.removeObject(forKey: pm.serverKey)
+        let persistenceManager = persistence
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountConnections)
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountServer)
+        persistenceManager.deleteFromKeychain(account: persistenceManager.keychainAccountToken)
+        persistenceManager.defaults.removeObject(forKey: persistenceManager.activeConnectionIdKey)
+        persistenceManager.defaults.removeObject(forKey: persistenceManager.serverKey)
     }
 
     private static func makeConnection(port: Int) -> StoredConnection {
         StoredConnection(
             server: PairedServer(
-                hosts: ["10.0.0.1"], port: port, name: "daemon-\(port)", pairedAt: Date()),
-            token: "tok-\(port)")
+                hosts: ["10.0.0.1"],
+                port: port,
+                name: "daemon-\(port)",
+                pairedAt: Date()
+            ),
+            token: "tok-\(port)"
+        )
     }
 
     private static func makeWorkspace(id: String) -> Workspace {
         Workspace(
-            id: id, title: "WS \(id)", branch: nil, baseRef: nil, status: nil,
-            activity: nil, displayStatus: nil, lastActivity: nil, updatedAt: nil,
-            repositoryOwner: nil, repositoryName: nil, prStatus: nil, prNumber: nil,
-            diffSummaryTotalFiles: nil, taskStatsTotal: nil, taskStatsCompleted: nil,
-            taskStatsInProgress: nil, agentSummaryCount: nil, agentSummaryAgents: nil)
+            id: id,
+            title: "WS \(id)",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            lastActivity: nil,
+            updatedAt: nil,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            prStatus: nil,
+            prNumber: nil,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil,
+            agentSummaryAgents: nil
+        )
     }
 
     /// Seed WorkspaceStore.shared as if a previous daemon's list had loaded.
@@ -401,7 +456,9 @@ final class AppCoordinatorTests {
         // the default one would read the host machine's real keychain.
         let coordinator = AppCoordinator(
             backendID: BackendID(stored.id),
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         if case .connecting = coordinator.currentScreen {
@@ -420,7 +477,9 @@ final class AppCoordinatorTests {
         persistence.upsertConnection(Self.makeConnection(port: 4242))
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         if case .pairing = coordinator.currentScreen {
@@ -441,7 +500,8 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             backendID: BackendID(stored.id),
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: []))
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         if case .connecting = coordinator.currentScreen {
@@ -464,8 +524,10 @@ final class AppCoordinatorTests {
 
         #expect(persistence.loadConnections().map(\.id) == [other.id])
         #expect(persistence.activeConnection() == nil)
-        #expect(coordinator.pairingShowsSavedConnections,
-                "Pairing surface should offer the remaining saved connections")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "Pairing surface should offer the remaining saved connections"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -499,16 +561,27 @@ final class AppCoordinatorTests {
         persistence.keychainStorage = storage
         let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: stored.id)
-        persistence.saveLastScreen(PersistenceManager.SavedScreen(
-            screen: "workspaceList", workspaceId: nil, agentId: nil,
-            agentName: nil, noteId: nil, noteTitle: nil), for: stored.id)
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceList",
+                workspaceId: nil,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: stored.id
+        )
         storage.setSaveFailure(true)
         let fake = FakeConnectionManager()
         let registry = Self.markOnlySessionRegistry()
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore.shared, connection: fake,
-            backendID: BackendID(stored.id), persistence: persistence,
-            sessionRegistry: registry)
+            workspaceStore: WorkspaceStore.shared,
+            connection: fake,
+            backendID: BackendID(stored.id),
+            persistence: persistence,
+            sessionRegistry: registry
+        )
         coordinator.currentScreen = .settings
 
         #expect(!coordinator.onDeleteConnection(id: stored.id))
@@ -530,16 +603,27 @@ final class AppCoordinatorTests {
         persistence.keychainStorage = storage
         let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: stored.id)
-        persistence.saveLastScreen(PersistenceManager.SavedScreen(
-            screen: "workspaceList", workspaceId: nil, agentId: nil,
-            agentName: nil, noteId: nil, noteTitle: nil), for: stored.id)
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceList",
+                workspaceId: nil,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: stored.id
+        )
         storage.setSaveFailure(true)
         let fake = FakeConnectionManager()
         let registry = Self.markOnlySessionRegistry()
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore.shared, connection: fake,
-            backendID: BackendID(stored.id), persistence: persistence,
-            sessionRegistry: registry)
+            workspaceStore: WorkspaceStore.shared,
+            connection: fake,
+            backendID: BackendID(stored.id),
+            persistence: persistence,
+            sessionRegistry: registry
+        )
 
         #expect(!coordinator.onLogOff())
 
@@ -548,7 +632,7 @@ final class AppCoordinatorTests {
         #expect(persistence.loadLastScreen(for: stored.id) != nil)
         #expect(!registry.isBackendRemoved(BackendID(stored.id)))
         #expect(fake.disconnectCallCount == 1)
-        if case .connectionFailed(let message) = coordinator.currentScreen {
+        if case let .connectionFailed(message) = coordinator.currentScreen {
             #expect(message == "Could not forget this connection. Please try again.")
         } else {
             Issue.record("Expected persistence failure screen")
@@ -570,13 +654,18 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             backendID: BackendID(bound.id),
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: []))
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         #expect(coordinator.windowConnection?.id == bound.id)
 
         let pairingWindow = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
-        #expect(pairingWindow.windowConnection == nil,
-                "An unbound (pairing) window shows no connection record")
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
+        #expect(
+            pairingWindow.windowConnection == nil,
+            "An unbound (pairing) window shows no connection record"
+        )
     }
 
     @Test @MainActor func onLogOff_boundWindow_forgetsOwnBackendOnly() {
@@ -586,31 +675,56 @@ final class AppCoordinatorTests {
         let doomed = persistence.upsertConnection(Self.makeConnection(port: 1))
         let other = persistence.upsertConnection(Self.makeConnection(port: 2))
         persistence.setActiveConnection(id: other.id)
-        persistence.saveLastScreen(PersistenceManager.SavedScreen(
-            screen: "workspaceList", workspaceId: nil, agentId: nil,
-            agentName: nil, noteId: nil, noteTitle: nil), for: doomed.id)
-        persistence.saveLastScreen(PersistenceManager.SavedScreen(
-            screen: "workspaceList", workspaceId: nil, agentId: nil,
-            agentName: nil, noteId: nil, noteTitle: nil), for: other.id)
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceList",
+                workspaceId: nil,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: doomed.id
+        )
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceList",
+                workspaceId: nil,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: other.id
+        )
 
         let registry = BackendSessionRegistry()
         let coordinator = AppCoordinator(
             backendID: BackendID(doomed.id),
             persistence: persistence,
             sessionRegistry: registry,
-            syncedRegistry: Self.syncedRegistry(payloads: []))
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLogOff()
 
-        #expect(persistence.loadConnections().map(\.id) == [other.id],
-                "Log Off must forget only this window's backend")
-        #expect(persistence.activeConnection()?.id == other.id,
-                "Another backend's last-used pointer must survive")
+        #expect(
+            persistence.loadConnections().map(\.id) == [other.id],
+            "Log Off must forget only this window's backend"
+        )
+        #expect(
+            persistence.activeConnection()?.id == other.id,
+            "Another backend's last-used pointer must survive"
+        )
         #expect(registry.isBackendRemoved(BackendID(doomed.id)))
         #expect(!registry.isBackendRemoved(BackendID(other.id)))
-        #expect(persistence.loadLastScreen(for: doomed.id) == nil,
-                "The forgotten backend's saved screen must be cleared")
-        #expect(persistence.loadLastScreen(for: other.id) != nil,
-                "Log Off must not clear another backend's saved screen")
+        #expect(
+            persistence.loadLastScreen(for: doomed.id) == nil,
+            "The forgotten backend's saved screen must be cleared"
+        )
+        #expect(
+            persistence.loadLastScreen(for: other.id) != nil,
+            "Log Off must not clear another backend's saved screen"
+        )
     }
 
     @Test @MainActor func onConnectionSuccess_windowWithoutRestorationClaimLandsOnList() {
@@ -623,14 +737,20 @@ final class AppCoordinatorTests {
         // the restoring window's saved navigation.
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: "ws-owned",
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: Self.windowBackend.connectionID)
+                screen: "workspaceDetail",
+                workspaceId: "ws-owned",
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: Self.windowBackend.connectionID
+        )
 
         let coordinator = AppCoordinator(
             backendID: Self.windowBackend,
-            persistence: persistence,
-            claimScreenRestoration: { false })
+            persistence: persistence
+        ) { false }
         coordinator.onConnectionSuccess()
 
         if case .workspaceList = coordinator.currentScreen {
@@ -640,8 +760,10 @@ final class AppCoordinatorTests {
         }
 
         coordinator.onSelectWorkspace("ws-other")
-        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID)?.workspaceId == "ws-owned",
-                "A non-restoring window must not overwrite the saved screen")
+        #expect(
+            persistence.loadLastScreen(for: Self.windowBackend.connectionID)?.workspaceId == "ws-owned",
+            "A non-restoring window must not overwrite the saved screen"
+        )
     }
 
     @Test @MainActor func onPaired_resetsPairingShowsSavedConnections() {
@@ -665,16 +787,24 @@ final class AppCoordinatorTests {
 
     @Test func removedWindowCloseDismissesWhenOtherWindowsExist() {
         #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss)
+            connectedWindowScenes: 2,
+            attachedRemovedBackendWindows: 0
+        ) == .dismiss)
         #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 3, attachedRemovedBackendWindows: 0) == .dismiss)
+            connectedWindowScenes: 3,
+            attachedRemovedBackendWindows: 0
+        ) == .dismiss)
     }
 
     @Test func removedWindowCloseRetargetsLastWindowToPairing() {
         #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 1, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+            connectedWindowScenes: 1,
+            attachedRemovedBackendWindows: 0
+        ) == .retargetToPairing)
         #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 0, attachedRemovedBackendWindows: 0) == .retargetToPairing)
+            connectedWindowScenes: 0,
+            attachedRemovedBackendWindows: 0
+        ) == .retargetToPairing)
     }
 
     /// Regression: two windows on the removed backend as the app's only
@@ -683,15 +813,27 @@ final class AppCoordinatorTests {
     /// the first window to decide rebinds to pairing; the later one then
     /// counts the rebound survivor and dismisses.
     @Test func removedWindowCloseExcludesSiblingsStillOnRemovedBackend() {
-        #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 2, attachedRemovedBackendWindows: 1) == .retargetToPairing,
-            "First of two removed-backend windows to decide must become the pairing survivor")
-        #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 2, attachedRemovedBackendWindows: 0) == .dismiss,
-            "The later window counts the rebound survivor and dismisses")
-        #expect(RemovedWindowCloseAction.forWindowCounts(
-            connectedWindowScenes: 3, attachedRemovedBackendWindows: 1) == .dismiss,
-            "With a window on another backend surviving, every removed-backend window dismisses")
+        #expect(
+            RemovedWindowCloseAction.forWindowCounts(
+                connectedWindowScenes: 2,
+                attachedRemovedBackendWindows: 1
+            ) == .retargetToPairing,
+            "First of two removed-backend windows to decide must become the pairing survivor"
+        )
+        #expect(
+            RemovedWindowCloseAction.forWindowCounts(
+                connectedWindowScenes: 2,
+                attachedRemovedBackendWindows: 0
+            ) == .dismiss,
+            "The later window counts the rebound survivor and dismisses"
+        )
+        #expect(
+            RemovedWindowCloseAction.forWindowCounts(
+                connectedWindowScenes: 3,
+                attachedRemovedBackendWindows: 1
+            ) == .dismiss,
+            "With a window on another backend surviving, every removed-backend window dismisses"
+        )
     }
 
     // MARK: - Window retarget policy (window model v2)
@@ -704,37 +846,55 @@ final class AppCoordinatorTests {
     @Test func retargetRouteOpensTargetWindowOnMultiWindowPlatforms() {
         let current = BackendID(UUID())
         let target = BackendID(UUID())
-        #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: target,
-            supportsMultipleWindows: true) == .openTargetWindow,
-            "A bound window on a multi-window platform never retargets; the target's window is opened or raised")
+        #expect(
+            WindowRetargetRoute.route(
+                currentBackendID: current,
+                target: target,
+                supportsMultipleWindows: true
+            ) == .openTargetWindow,
+            "A bound window on a multi-window platform never retargets; the target's window is opened or raised"
+        )
     }
 
     @Test func retargetRouteRebindsInPlaceWhenTargetIsCurrentBackend() {
         let current = BackendID(UUID())
-        #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: current,
-            supportsMultipleWindows: true) == .rebindInPlace,
-            "Switching to the backend the window is already bound to stays in place")
+        #expect(
+            WindowRetargetRoute.route(
+                currentBackendID: current,
+                target: current,
+                supportsMultipleWindows: true
+            ) == .rebindInPlace,
+            "Switching to the backend the window is already bound to stays in place"
+        )
     }
 
     @Test func retargetRouteReplacesUnboundPairingWindow() {
-        #expect(WindowRetargetRoute.route(
-            currentBackendID: nil, target: BackendID(UUID()),
-            supportsMultipleWindows: true) == .replaceWindow,
-            "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)")
+        #expect(
+            WindowRetargetRoute.route(
+                currentBackendID: nil,
+                target: BackendID(UUID()),
+                supportsMultipleWindows: true
+            ) == .replaceWindow,
+            "An unbound (pairing) window on a multi-window platform is replaced by the target's own window so the scene value is set at creation and stays raisable by openWindow(value:)"
+        )
     }
 
     @Test func retargetRouteRebindsInPlaceOnSingleWindowPlatforms() {
         let current = BackendID(UUID())
         let target = BackendID(UUID())
+        #expect(
+            WindowRetargetRoute.route(
+                currentBackendID: current,
+                target: target,
+                supportsMultipleWindows: false
+            ) == .rebindInPlace,
+            "iPhone (single-window) always rebinds the one window in place"
+        )
         #expect(WindowRetargetRoute.route(
-            currentBackendID: current, target: target,
-            supportsMultipleWindows: false) == .rebindInPlace,
-            "iPhone (single-window) always rebinds the one window in place")
-        #expect(WindowRetargetRoute.route(
-            currentBackendID: nil, target: target,
-            supportsMultipleWindows: false) == .rebindInPlace)
+            currentBackendID: nil,
+            target: target,
+            supportsMultipleWindows: false
+        ) == .rebindInPlace)
     }
 
     // MARK: - Deep-link URL routing (intent://)
@@ -744,15 +904,22 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         coordinator.handleIncomingURL(
-            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!)
+            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!
+        )
 
         #expect(coordinator.pendingDeepLinkPairing?.payload == PairingPayload(
-            hosts: ["127.0.0.1"], port: 5181, token: "t",
-            certFingerprint: nil, tcAddress: nil))
+            hosts: ["127.0.0.1"],
+            port: 5181,
+            token: "t",
+            certFingerprint: nil,
+            tcAddress: nil
+        ))
     }
 
     @Test @MainActor func handleIncomingURL_nonPairURL_isIgnored() {
@@ -760,7 +927,9 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         coordinator.handleIncomingURL(URL(string: "intent://something?x=1")!)
@@ -778,12 +947,15 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
 
         // Missing token — PairingPayload.parse rejects it.
         coordinator.handleIncomingURL(
-            URL(string: "intent://pair?host=127.0.0.1&port=5181")!)
+            URL(string: "intent://pair?host=127.0.0.1&port=5181")!
+        )
 
         #expect(coordinator.pendingDeepLinkPairing == nil)
         if case .pairing = coordinator.currentScreen {
@@ -798,11 +970,14 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
 
         // Cold start: the URL arrives while currentScreen is still .loading.
         coordinator.handleIncomingURL(
-            URL(string: "intent://pair?token=t&host=10.0.0.5&port=4242")!)
+            URL(string: "intent://pair?token=t&host=10.0.0.5&port=4242")!
+        )
         #expect(coordinator.pendingDeepLinkPairing == nil)
 
         coordinator.onLoadComplete()
@@ -819,10 +994,13 @@ final class AppCoordinatorTests {
         defer { resetConnectionState() }
 
         let coordinator = AppCoordinator(
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.onLoadComplete()
         coordinator.handleIncomingURL(
-            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!)
+            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!
+        )
 
         coordinator.onDeepLinkPaired(Self.makeConnection(port: 5181))
 
@@ -843,8 +1021,13 @@ final class AppCoordinatorTests {
         coordinator.currentScreen = .workspaceList
         coordinator.pendingDeepLinkPairing = DeepLinkPairingRequest(
             payload: PairingPayload(
-                hosts: ["10.0.0.1"], port: 4242, token: "tok-4242",
-                certFingerprint: nil, tcAddress: nil))
+                hosts: ["10.0.0.1"],
+                port: 4242,
+                token: "tok-4242",
+                certFingerprint: nil,
+                tcAddress: nil
+            )
+        )
 
         coordinator.onDeepLinkPaired(stored)
 
@@ -867,9 +1050,12 @@ final class AppCoordinatorTests {
         persistence.setActiveConnection(id: old.id)
         let coordinator = AppCoordinator(
             backendID: BackendID(old.id),
-            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+            persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: [])
+        )
         coordinator.handleIncomingURL(
-            URL(string: "intent://pair?token=t&host=10.0.0.2&port=2222")!)
+            URL(string: "intent://pair?token=t&host=10.0.0.2&port=2222")!
+        )
         coordinator.onLoadComplete()
         if case .connecting = coordinator.currentScreen {
             // as expected — the deep-link sheet is presented over .connecting
@@ -885,8 +1071,10 @@ final class AppCoordinatorTests {
         // from the attempt id that keys ConnectingView's .task(id:).
         #expect(coordinator.pendingDeepLinkPairing == nil)
         #expect(persistence.activeConnection()?.id == paired.id)
-        #expect(coordinator.connectionAttemptId != attemptBefore,
-                "Switching while already on .connecting must restart the attempt")
+        #expect(
+            coordinator.connectionAttemptId != attemptBefore,
+            "Switching while already on .connecting must restart the attempt"
+        )
         if case .connecting = coordinator.currentScreen {
             // pass
         } else {
@@ -901,12 +1089,13 @@ final class AppCoordinatorTests {
         let rows: [[String: Any]] = payloads.enumerated().map { index, payload in
             [
                 kSecAttrAccount as String: "row-\(index)",
-                kSecValueData as String: Data(payload.utf8),
+                kSecValueData as String: Data(payload.utf8)
             ]
         }
         return SyncedBackendRegistry(
             keychain: FakeSyncedKeychain(outcome: .rows(rows)),
-            accessGroup: "T.dev.intentapp.backends")
+            accessGroup: "T.dev.intentapp.backends"
+        )
     }
 
     private static let syncedLivePayload = #"{"v": 1, "label": "Synced Mac", "#
@@ -919,13 +1108,16 @@ final class AppCoordinatorTests {
 
         let coordinator = AppCoordinator(
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload])
+        )
         coordinator.onLoadComplete()
 
         let loaded = persistence.loadConnections()
         #expect(loaded.map(\.token) == ["tok-sync"])
-        #expect(coordinator.pairingShowsSavedConnections,
-                "A merged synced connection must be offered on the pairing surface")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "A merged synced connection must be offered on the pairing surface"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -939,7 +1131,8 @@ final class AppCoordinatorTests {
 
         let coordinator = AppCoordinator(
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload])
+        )
         coordinator.onScenePhaseActive()
 
         #expect(persistence.loadConnections().count == 1)
@@ -975,15 +1168,18 @@ final class AppCoordinatorTests {
         // First-run pairing screen, empty registry: nothing offered.
         let coordinator = AppCoordinator(
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload])
+        )
         coordinator.currentScreen = .pairing
         #expect(!coordinator.pairingShowsSavedConnections)
 
         // A foreground merge that adds a synced connection while the pairing
         // surface is up must start offering it.
         coordinator.onScenePhaseActive()
-        #expect(coordinator.pairingShowsSavedConnections,
-                "A merged synced connection must be offered on the already-visible pairing surface")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "A merged synced connection must be offered on the already-visible pairing surface"
+        )
     }
 
     @Test @MainActor func refreshSyncedBackends_unavailableRegistryIsANoOp() {
@@ -993,7 +1189,8 @@ final class AppCoordinatorTests {
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         let registry = SyncedBackendRegistry(
             keychain: FakeSyncedKeychain(outcome: .failure(errSecNotAvailable)),
-            accessGroup: "T.dev.intentapp.backends")
+            accessGroup: "T.dev.intentapp.backends"
+        )
         let coordinator = AppCoordinator(persistence: persistence, syncedRegistry: registry)
 
         #expect(coordinator.refreshSyncedBackends() == nil)
@@ -1007,9 +1204,15 @@ final class AppCoordinatorTests {
         let doomed = persistence.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok"))
+                    hosts: ["10.9.9.9"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok"
+            )
+        )
         let other = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: doomed.id)
 
@@ -1022,14 +1225,17 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             backendID: BackendID(doomed.id),
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone])
+        )
         let outcome = coordinator.refreshSyncedBackends()
 
         #expect(outcome?.removedActiveConnection == true)
         #expect(persistence.loadConnections().map(\.id) == [other.id])
         #expect(persistence.activeConnection() == nil)
-        #expect(coordinator.pairingShowsSavedConnections,
-                "The remaining saved connection must be offered on the pairing surface")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "The remaining saved connection must be offered on the pairing surface"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -1044,9 +1250,15 @@ final class AppCoordinatorTests {
         let doomed = persistence.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok"))
+                    hosts: ["10.9.9.9"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok"
+            )
+        )
         let active = persistence.upsertConnection(Self.makeConnection(port: 1))
         persistence.setActiveConnection(id: active.id)
 
@@ -1059,7 +1271,8 @@ final class AppCoordinatorTests {
             backendID: BackendID(doomed.id),
             persistence: persistence,
             sessionRegistry: registry,
-            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone])
+        )
         let outcome = coordinator.refreshSyncedBackends()
 
         // The tombstone removed this window's backend — not the last-used
@@ -1082,9 +1295,16 @@ final class AppCoordinatorTests {
         let active = persistence.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok-old", syncUpdatedAt: 100))
+                    hosts: ["10.9.9.9"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok-old",
+                syncUpdatedAt: 100
+            )
+        )
         persistence.setActiveConnection(id: active.id)
 
         let rotated = #"{"v": 1, "label": "Synced Mac", "#
@@ -1093,7 +1313,8 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             backendID: BackendID(active.id),
             persistence: persistence,
-            syncedRegistry: Self.syncedRegistry(payloads: [rotated]))
+            syncedRegistry: Self.syncedRegistry(payloads: [rotated])
+        )
         let outcome = coordinator.refreshSyncedBackends()
 
         #expect(outcome?.updatedIds == [active.id])
@@ -1114,8 +1335,10 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onReconnect()
 
-        #expect(coordinator.pairingShowsSavedConnections,
-                "Pairing surface should offer saved connections after a startup connection failure")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "Pairing surface should offer saved connections after a startup connection failure"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -1131,8 +1354,10 @@ final class AppCoordinatorTests {
         coordinator.pairingShowsSavedConnections = true
         coordinator.onReconnect()
 
-        #expect(!coordinator.pairingShowsSavedConnections,
-                "No saved connections must leave the pairing surface in first-run mode")
+        #expect(
+            !coordinator.pairingShowsSavedConnections,
+            "No saved connections must leave the pairing surface in first-run mode"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -1147,7 +1372,9 @@ final class AppCoordinatorTests {
         let other = Self.makeConnection(port: 2)
 
         let result = ConnectionFailureView.alternativeConnections(
-            connections: [active, other], activeId: active.id)
+            connections: [active, other],
+            activeId: active.id
+        )
 
         #expect(result.map(\.id) == [other.id])
     }
@@ -1155,16 +1382,23 @@ final class AppCoordinatorTests {
     @Test func alternativeConnections_sortsMostRecentlyUsedFirst() {
         let older = StoredConnection(
             server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),
-            token: "t1", lastConnectedAt: Date(timeIntervalSinceNow: -3600))
+            token: "t1",
+            lastConnectedAt: Date(timeIntervalSinceNow: -3600)
+        )
         let newer = StoredConnection(
             server: PairedServer(hosts: ["10.0.0.2"], port: 2, name: "b", pairedAt: Date()),
-            token: "t2", lastConnectedAt: Date())
+            token: "t2",
+            lastConnectedAt: Date()
+        )
         let never = StoredConnection(
             server: PairedServer(hosts: ["10.0.0.3"], port: 3, name: "c", pairedAt: Date()),
-            token: "t3")
+            token: "t3"
+        )
 
         let result = ConnectionFailureView.alternativeConnections(
-            connections: [never, older, newer], activeId: nil)
+            connections: [never, older, newer],
+            activeId: nil
+        )
 
         #expect(result.map(\.id) == [newer.id, older.id, never.id])
     }
@@ -1176,24 +1410,34 @@ final class AppCoordinatorTests {
             cleanupLastScreen()
         }
 
-        let a = persistence.upsertConnection(Self.makeConnection(port: 1))
-        let b = persistence.upsertConnection(Self.makeConnection(port: 2))
-        persistence.setActiveConnection(id: a.id)
+        let originalConnection = persistence.upsertConnection(Self.makeConnection(port: 1))
+        let targetConnection = persistence.upsertConnection(Self.makeConnection(port: 2))
+        persistence.setActiveConnection(id: originalConnection.id)
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: "ws-1",
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: b.id)
+                screen: "workspaceDetail",
+                workspaceId: "ws-1",
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: targetConnection.id
+        )
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace("ws-1")
-        coordinator.onSwitchConnection(id: b.id)
+        coordinator.onSwitchConnection(id: targetConnection.id)
 
-        #expect(persistence.activeConnection()?.id == b.id)
-        #expect(persistence.loadLastScreen(for: b.id) == nil,
-                "The target backend's last-screen state must be cleared on switch")
-        #expect(coordinator.selectedWorkspaceId == nil,
-                "selectedWorkspaceId must be reset on switch")
+        #expect(persistence.activeConnection()?.id == targetConnection.id)
+        #expect(
+            persistence.loadLastScreen(for: targetConnection.id) == nil,
+            "The target backend's last-screen state must be cleared on switch"
+        )
+        #expect(
+            coordinator.selectedWorkspaceId == nil,
+            "selectedWorkspaceId must be reset on switch"
+        )
         if case .connecting = coordinator.currentScreen {
             // pass
         } else {
@@ -1214,10 +1458,14 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSwitchConnection(id: target.id)
 
-        #expect(WorkspaceStore.shared.workspaces.isEmpty,
-                "Previous daemon's workspaces must be dropped on switch")
-        #expect(WorkspaceStore.shared.lastUpdated == nil,
-                "lastUpdated must be reset so ConnectingView waits for the new daemon's data")
+        #expect(
+            WorkspaceStore.shared.workspaces.isEmpty,
+            "Previous daemon's workspaces must be dropped on switch"
+        )
+        #expect(
+            WorkspaceStore.shared.lastUpdated == nil,
+            "lastUpdated must be reset so ConnectingView waits for the new daemon's data"
+        )
     }
 
     @Test @MainActor func onLogOff_resetsWorkspaceStore() {
@@ -1301,8 +1549,10 @@ final class AppCoordinatorTests {
 
         #expect(persistence.loadConnections().map(\.id) == [other.id])
         #expect(persistence.activeConnection() == nil)
-        #expect(coordinator.pairingShowsSavedConnections,
-                "Pairing surface should offer the remaining saved connections")
+        #expect(
+            coordinator.pairingShowsSavedConnections,
+            "Pairing surface should offer the remaining saved connections"
+        )
         if case .pairing = coordinator.currentScreen {
             // pass
         } else {
@@ -1341,8 +1591,10 @@ final class AppCoordinatorTests {
         coordinator.onDeleteConnection(id: remaining.id)
 
         #expect(persistence.loadConnections().isEmpty)
-        #expect(!coordinator.pairingShowsSavedConnections,
-                "Flag must clear once no saved connections remain")
+        #expect(
+            !coordinator.pairingShowsSavedConnections,
+            "Flag must clear once no saved connections remain"
+        )
     }
 
     // MARK: - Backend removal marks pinned windows for auto-close (spec decision 2)
@@ -1362,12 +1614,16 @@ final class AppCoordinatorTests {
         let doomed = persistence.upsertConnection(Self.makeConnection(port: 1))
         let registry = Self.markOnlySessionRegistry()
         let coordinator = AppCoordinator(
-            persistence: persistence, sessionRegistry: registry)
+            persistence: persistence,
+            sessionRegistry: registry
+        )
 
         coordinator.onDeleteConnection(id: doomed.id)
 
-        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
-                "Deleting a saved connection must auto-close its pinned windows")
+        #expect(
+            registry.isBackendRemoved(BackendID(doomed.id)),
+            "Deleting a saved connection must auto-close its pinned windows"
+        )
     }
 
     @Test @MainActor func onLogOff_marksActiveBackendRemovedInSessionRegistry() {
@@ -1379,12 +1635,16 @@ final class AppCoordinatorTests {
         let registry = Self.markOnlySessionRegistry()
         let coordinator = AppCoordinator(
             backendID: BackendID(active.id),
-            persistence: persistence, sessionRegistry: registry)
+            persistence: persistence,
+            sessionRegistry: registry
+        )
 
         coordinator.onLogOff()
 
-        #expect(registry.isBackendRemoved(BackendID(active.id)),
-                "Log Off forgets the active connection; its pinned windows must close")
+        #expect(
+            registry.isBackendRemoved(BackendID(active.id)),
+            "Log Off forgets the active connection; its pinned windows must close"
+        )
     }
 
     @Test @MainActor func refreshSyncedBackends_tombstoneMarksBackendRemovedInSessionRegistry() {
@@ -1394,9 +1654,15 @@ final class AppCoordinatorTests {
         let doomed = persistence.upsertConnection(
             StoredConnection(
                 server: PairedServer(
-                    hosts: ["10.9.9.9"], port: 4242, name: "daemon",
-                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
-                token: "tok"))
+                    hosts: ["10.9.9.9"],
+                    port: 4242,
+                    name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0),
+                    certFingerprint: "aa:bb"
+                ),
+                token: "tok"
+            )
+        )
 
         let clock = Date().timeIntervalSince1970 * 1000
         let tombstone = #"{"v": 1, "label": "Synced Mac", "#
@@ -1406,13 +1672,16 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             persistence: persistence,
             sessionRegistry: registry,
-            syncedRegistry: Self.syncedRegistry(payloads: [tombstone]))
+            syncedRegistry: Self.syncedRegistry(payloads: [tombstone])
+        )
 
         let outcome = coordinator.refreshSyncedBackends()
 
         #expect(outcome?.removedIds == [doomed.id])
-        #expect(registry.isBackendRemoved(BackendID(doomed.id)),
-                "A synced tombstone must auto-close the removed backend's pinned windows")
+        #expect(
+            registry.isBackendRemoved(BackendID(doomed.id)),
+            "A synced tombstone must auto-close the removed backend's pinned windows"
+        )
     }
 
     @Test @MainActor func refreshSyncedBackends_mergeAddNeverMarksBackendsRemoved() {
@@ -1423,13 +1692,16 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             persistence: persistence,
             sessionRegistry: registry,
-            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload]))
+            syncedRegistry: Self.syncedRegistry(payloads: [Self.syncedLivePayload])
+        )
 
         let outcome = coordinator.refreshSyncedBackends()
 
         #expect(outcome?.addedIds.count == 1)
-        #expect(registry.removedBackendIDs.isEmpty,
-                "A merge that only adds must not mark anything removed")
+        #expect(
+            registry.removedBackendIDs.isEmpty,
+            "A merge that only adds must not mark anything removed"
+        )
     }
 
     @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {
@@ -1443,14 +1715,19 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: wsId,
-                agentId: "agent-x", agentName: "Tester",
-                noteId: nil, noteTitle: nil))
+                screen: "conversation",
+                workspaceId: wsId,
+                agentId: "agent-x",
+                agentName: "Tester",
+                noteId: nil,
+                noteTitle: nil
+            )
+        )
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case .agentConversation(let agentId, let wId, let name) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, name) = coordinator.currentScreen {
             #expect(agentId == "agent-x")
             #expect(wId == wsId)
             #expect(name == "Tester")
@@ -1469,14 +1746,19 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: wsId,
-                agentId: nil, agentName: nil,
-                noteId: "note-abc", noteTitle: "My Note"))
+                screen: "note",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: "note-abc",
+                noteTitle: "My Note"
+            )
+        )
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case .noteDetail(let noteId, let wId, let title) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, title) = coordinator.currentScreen {
             #expect(noteId == "note-abc")
             #expect(wId == wsId)
             #expect(title == "My Note")
@@ -1494,7 +1776,7 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
@@ -1512,9 +1794,14 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: wsId,
-                agentId: "a", agentName: "A",
-                noteId: nil, noteTitle: nil))
+                screen: "conversation",
+                workspaceId: wsId,
+                agentId: "a",
+                agentName: "A",
+                noteId: nil,
+                noteTitle: nil
+            )
+        )
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -1616,22 +1903,35 @@ final class AppCoordinatorTests {
         // Save both last screen and per-workspace screen
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: wsId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: Self.windowBackend.connectionID)
+                screen: "workspaceDetail",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: Self.windowBackend.connectionID
+        )
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: wsId,
-                agentId: "agent-1", agentName: "Worker",
-                noteId: nil, noteTitle: nil))
+                screen: "conversation",
+                workspaceId: wsId,
+                agentId: "agent-1",
+                agentName: "Worker",
+                noteId: nil,
+                noteTitle: nil
+            )
+        )
 
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
         coordinator.handleMissingWorkspace(workspaceId: wsId)
 
         // Both should be cleared
-        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
-                "Last screen should be cleared")
+        #expect(
+            persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
+            "Last screen should be cleared"
+        )
         #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 
@@ -1673,7 +1973,7 @@ final class AppCoordinatorTests {
         coordinator.onSelectWorkspace(wsId)
         coordinator.onSelectNote("note-reg-1", workspaceId: wsId, noteTitle: "Regression Note")
 
-        if case .noteDetail(let noteId, let wId, let title) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, title) = coordinator.currentScreen {
             #expect(noteId == "note-reg-1")
             #expect(wId == wsId)
             #expect(title == "Regression Note")
@@ -1695,7 +1995,7 @@ final class AppCoordinatorTests {
         coordinator.onSelectNote("note-reg-2", workspaceId: wsId, noteTitle: "Back Test Note")
         coordinator.onBackFromNote()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId, "Should return to the same workspace")
         } else {
             Issue.record("Expected .workspaceDetail after onBackFromNote, got \(coordinator.currentScreen)")
@@ -1731,7 +2031,8 @@ final class AppCoordinatorTests {
         let repush = RootView.shouldRepushConversation(
             currentScreen: .workspaceDetail(workspaceId: "ws-1"),
             pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1")
+            conversationAgentId: "agent-1"
+        )
         #expect(!repush, "Must not re-push the conversation when currentScreen is no longer .agentConversation")
     }
 
@@ -1739,7 +2040,8 @@ final class AppCoordinatorTests {
         let repush = RootView.shouldRepushConversation(
             currentScreen: .agentConversation(agentId: "agent-1", workspaceId: "ws-1", agentName: "Worker"),
             pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1")
+            conversationAgentId: "agent-1"
+        )
         #expect(repush, "Should re-push when the same conversation is still the current screen")
     }
 
@@ -1747,7 +2049,8 @@ final class AppCoordinatorTests {
         let repush = RootView.shouldRepushConversation(
             currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
             pendingAgentId: "agent-1",
-            conversationAgentId: "agent-2")
+            conversationAgentId: "agent-2"
+        )
         #expect(!repush, "A stale re-push for a superseded agent must be dropped")
     }
 
@@ -1758,7 +2061,8 @@ final class AppCoordinatorTests {
         let repush = RootView.shouldRepushConversation(
             currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
             pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1")
+            conversationAgentId: "agent-1"
+        )
         #expect(!repush, "Re-push must be dropped when the coordinator now shows a different conversation")
     }
 
@@ -1773,7 +2077,7 @@ final class AppCoordinatorTests {
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
         coordinator.onBackToWorkspaceDetail()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after onBackToWorkspaceDetail, got \(coordinator.currentScreen)")
@@ -1795,33 +2099,55 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "conversation", workspaceId: wsId,
-                agentId: "agent-1", agentName: "Worker",
-                noteId: nil, noteTitle: nil))
+                screen: "conversation",
+                workspaceId: wsId,
+                agentId: "agent-1",
+                agentName: "Worker",
+                noteId: nil,
+                noteTitle: nil
+            )
+        )
         coordinator.onBackToWorkspaceDetail()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after repeated onBackToWorkspaceDetail, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-                "Repeated onBackToWorkspaceDetail should still clear the per-workspace screen")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
+            "Repeated onBackToWorkspaceDetail should still clear the per-workspace screen"
+        )
     }
 
     // MARK: - Fetch-driven workspace validation (lastUpdated race)
 
-    private static func makeWorkspace(id: String, status: String? = nil,
-                                      attention: String? = nil) -> Workspace {
+    private static func makeWorkspace(
+        id: String,
+        status: String? = nil,
+        attention: String? = nil
+    ) -> Workspace {
         Workspace(
-            id: id, title: "WS \(id)", branch: nil, baseRef: nil,
-            status: status, activity: nil, displayStatus: nil,
+            id: id,
+            title: "WS \(id)",
+            branch: nil,
+            baseRef: nil,
+            status: status,
+            activity: nil,
+            displayStatus: nil,
             attention: attention,
-            lastActivity: nil, updatedAt: nil,
-            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
-            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
-            taskStatsCompleted: nil, taskStatsInProgress: nil,
-            agentSummaryCount: nil, agentSummaryAgents: nil
+            lastActivity: nil,
+            updatedAt: nil,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            prStatus: nil,
+            prNumber: nil,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil,
+            agentSummaryAgents: nil
         )
     }
 
@@ -1850,8 +2176,10 @@ final class AppCoordinatorTests {
 
         #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
-        #expect(store.workspaces.first?.attention == "none",
-                "Opening a workspace must optimistically clear the local unread flag")
+        #expect(
+            store.workspaces.first?.attention == "none",
+            "Opening a workspace must optimistically clear the local unread flag"
+        )
     }
 
     @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async {
@@ -1865,26 +2193,37 @@ final class AppCoordinatorTests {
         // the FE, which marks seen whenever the workspace surface activates).
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: wsId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: Self.windowBackend.connectionID)
+                screen: "workspaceDetail",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: Self.windowBackend.connectionID
+        )
 
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
         let fake = FakeConnectionManager()
         fake.responseMap["workspace.markSeen"] = ["workspace": ["id": wsId]] as [String: Any]
         let coordinator = AppCoordinator(
-            workspaceStore: store, connection: fake,
-            backendID: Self.windowBackend, persistence: persistence)
+            workspaceStore: store,
+            connection: fake,
+            backendID: Self.windowBackend,
+            persistence: persistence
+        )
 
         coordinator.onConnectionSuccess()
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
-        #expect(store.workspaces.first?.attention == "none",
-                "Restoring into a workspace must clear the local unread flag")
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        #expect(
+            store.workspaces.first?.attention == "none",
+            "Restoring into a workspace must clear the local unread flag"
+        )
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
@@ -1903,14 +2242,16 @@ final class AppCoordinatorTests {
         let fake = FakeConnectionManager()
         // Older daemon without the method — must not disturb navigation
         fake.errorMap["workspace.markSeen"] = NSError(
-            domain: "WebSocket", code: -32601,
-            userInfo: [NSLocalizedDescriptionKey: "Method not found"])
+            domain: "WebSocket",
+            code: -32_601,
+            userInfo: [NSLocalizedDescriptionKey: "Method not found"]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
         await Self.drainMainQueue()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("markSeen failure must not affect navigation, got \(coordinator.currentScreen)")
@@ -1926,8 +2267,11 @@ final class AppCoordinatorTests {
 
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(
-            workspaceStore: store, connection: FakeConnectionManager(),
-            backendID: Self.windowBackend, persistence: persistence)
+            workspaceStore: store,
+            connection: FakeConnectionManager(),
+            backendID: Self.windowBackend,
+            persistence: persistence
+        )
         coordinator.onSelectWorkspace(wsId)
 
         // Regression: the very first post-launch fetch must trigger validation
@@ -1942,8 +2286,10 @@ final class AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceList after first fetch without the workspace, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
-                "Last screen should be cleared")
+        #expect(
+            persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
+            "Last screen should be cleared"
+        )
         #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 
@@ -1962,7 +2308,7 @@ final class AppCoordinatorTests {
         store.workspaces = []
         await Self.drainMainQueue()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("An empty pre-fetch publish must not navigate away, got \(coordinator.currentScreen)")
@@ -2004,7 +2350,7 @@ final class AppCoordinatorTests {
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
         await Self.drainMainQueue()
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected to stay on .workspaceDetail, got \(coordinator.currentScreen)")
@@ -2020,16 +2366,28 @@ final class AppCoordinatorTests {
         createdByAgentId: String? = nil
     ) -> AgentSession {
         AgentSession(
-            id: id, name: name, status: "Idle",
-            isBackground: isBackground, isStreaming: false,
-            isProcessing: false, isResponding: false,
-            isWaitingForOtherAgents: false, waitingForAgentIds: [],
-            createdAt: nil, updatedAt: nil, lastActivity: nil,
-            lastAgentResponse: nil, lastUserMessage: nil,
-            lastMessageRole: nil, digest: nil, specialist: nil,
+            id: id,
+            name: name,
+            status: "Idle",
+            isBackground: isBackground,
+            isStreaming: false,
+            isProcessing: false,
+            isResponding: false,
+            isWaitingForOtherAgents: false,
+            waitingForAgentIds: [],
+            createdAt: nil,
+            updatedAt: nil,
+            lastActivity: nil,
+            lastAgentResponse: nil,
+            lastUserMessage: nil,
+            lastMessageRole: nil,
+            digest: nil,
+            specialist: nil,
             createdByAgentId: createdByAgentId,
-            attentionRequestKind: nil, attentionRequestReason: nil,
-            attentionRequestTimestamp: nil)
+            attentionRequestKind: nil,
+            attentionRequestReason: nil,
+            attentionRequestTimestamp: nil
+        )
     }
 
     /// The agent list feeds the coordinator its `foregroundAgents`; building
@@ -2054,16 +2412,18 @@ final class AppCoordinatorTests {
             foregroundAgents: Self.foregroundAgents([
                 Self.makeAgent(id: "agent-solo", name: "Solo"),
                 Self.makeAgent(id: "agent-bg", name: "Hook", isBackground: true),
-                Self.makeAgent(id: "agent-sub", name: "Delegate", createdByAgentId: "agent-solo"),
-            ]))
+                Self.makeAgent(id: "agent-sub", name: "Delegate", createdByAgentId: "agent-solo")
+            ])
+        )
 
-        if case .agentConversation(let agentId, let wId, let agentName) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, agentName) = coordinator.currentScreen {
             #expect(agentId == "agent-solo")
             #expect(wId == wsId)
             #expect(agentName == "Solo")
         } else {
             Issue.record(
-                "Expected to continue into the sole top-level agent, got \(coordinator.currentScreen)")
+                "Expected to continue into the sole top-level agent, got \(coordinator.currentScreen)"
+            )
         }
     }
 
@@ -2080,10 +2440,11 @@ final class AppCoordinatorTests {
             workspaceId: wsId,
             foregroundAgents: Self.foregroundAgents([
                 Self.makeAgent(id: "agent-1", name: "One"),
-                Self.makeAgent(id: "agent-2", name: "Two"),
-            ]))
+                Self.makeAgent(id: "agent-2", name: "Two")
+            ])
+        )
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Two top-level agents must keep the agent list, got \(coordinator.currentScreen)")
@@ -2102,10 +2463,11 @@ final class AppCoordinatorTests {
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
             foregroundAgents: Self.foregroundAgents([
-                Self.makeAgent(id: "agent-bg", name: "Hook", isBackground: true),
-            ]))
+                Self.makeAgent(id: "agent-bg", name: "Hook", isBackground: true)
+            ])
+        )
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("A background-only workspace must keep the agent list, got \(coordinator.currentScreen)")
@@ -2128,7 +2490,7 @@ final class AppCoordinatorTests {
         // The agent list reappearing (and refetching) must not forward again.
         coordinator.autoOpenSoleAgentIfArmed(workspaceId: wsId, foregroundAgents: agents)
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Back from the auto-opened conversation must stay on the agent list, got \(coordinator.currentScreen)")
@@ -2145,25 +2507,37 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: wsId,
-                agentId: nil, agentName: nil,
-                noteId: "note-live", noteTitle: "Live Note"))
+                screen: "note",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: "note-live",
+                noteTitle: "Live Note"
+            )
+        )
 
         let fake = FakeConnectionManager()
-        fake.responseMap["note.get"] = ["note": [
-            "id": "note-live", "title": "Live Note", "content": "hello"
-        ] as [String: Any]] as [String: Any]
+        fake.responseMap["note.get"] = [
+            "note": [
+                "id": "note-live",
+                "title": "Live Note",
+                "content": "hello"
+            ] as [String: Any]
+        ] as [String: Any]
         let coordinator = AppCoordinator(
-            workspaceStore: WorkspaceStore(forTesting: true), connection: fake,
-            persistence: persistence)
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: fake,
+            persistence: persistence
+        )
 
         coordinator.onSelectWorkspace(wsId)
         await Self.drainMainQueue()
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
-            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")]))
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")])
+        )
 
-        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-live")
             #expect(wId == wsId)
         } else {
@@ -2180,18 +2554,27 @@ final class AppCoordinatorTests {
 
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
-                screen: "workspaceDetail", workspaceId: wsId,
-                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
-            for: Self.windowBackend.connectionID)
+                screen: "workspaceDetail",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: Self.windowBackend.connectionID
+        )
 
         let coordinator = AppCoordinator(
-            backendID: Self.windowBackend, persistence: persistence)
+            backendID: Self.windowBackend,
+            persistence: persistence
+        )
         coordinator.onConnectionSuccess()
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
-            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")]))
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo")])
+        )
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Restoring the agent list must not auto-forward, got \(coordinator.currentScreen)")
@@ -2212,9 +2595,10 @@ final class AppCoordinatorTests {
 
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
-            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")])
+        )
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("A cancelled arm must never forward, got \(coordinator.currentScreen)")
@@ -2235,9 +2619,10 @@ final class AppCoordinatorTests {
 
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
-            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")])
+        )
 
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-solo")
             #expect(wId == wsId)
         } else {
@@ -2259,11 +2644,14 @@ final class AppCoordinatorTests {
 
         coordinator.autoOpenSoleAgentIfArmed(
             workspaceId: wsId,
-            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")]))
+            foregroundAgents: Self.foregroundAgents([Self.makeAgent(id: "agent-solo", name: "Solo")])
+        )
 
-        if case .agentConversation(let agentId, _, _) = coordinator.currentScreen {
-            #expect(agentId == "agent-tapped",
-                    "A late auto-open must not replace the conversation the user already opened")
+        if case let .agentConversation(agentId, _, _) = coordinator.currentScreen {
+            #expect(
+                agentId == "agent-tapped",
+                "A late auto-open must not replace the conversation the user already opened"
+            )
         } else {
             Issue.record("Expected to stay on the tapped conversation, got \(coordinator.currentScreen)")
         }
@@ -2278,10 +2666,10 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             workspaceStore: store,
             connection: fake,
-            persistence: persistence,
-            reconnectLoadingObservationDidChange: {
+            persistence: persistence
+        ) {
                 callbackCount.withLock { $0 += 1 }
-            })
+        }
 
         fake.simulateConnect()
         await Self.drainMainQueue()
@@ -2301,16 +2689,20 @@ final class AppCoordinatorTests {
         store.isLoading = true
         await Self.drainMainQueue()
 
-        #expect(callbackCount.withLock { $0 } == baseline + 1,
-                "Only the current reconnect registration may receive a loading change")
+        #expect(
+            callbackCount.withLock { $0 } == baseline + 1,
+            "Only the current reconnect registration may receive a loading change"
+        )
         #expect(coordinator.isDisconnected)
 
         store.isLoading = false
         await Self.drainMainQueue()
 
         #expect(callbackCount.withLock { $0 } == baseline + 2)
-        #expect(!coordinator.isDisconnected,
-                "The overlay must clear when workspace loading finishes")
+        #expect(
+            !coordinator.isDisconnected,
+            "The overlay must clear when workspace loading finishes"
+        )
     }
 
     @Test @MainActor func reconnectTimeoutRemovesWorkspaceLoadingObservation() async throws {
@@ -2320,10 +2712,10 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             workspaceStore: store,
             connection: fake,
-            persistence: persistence,
-            reconnectLoadingObservationDidChange: {
+            persistence: persistence
+        ) {
                 callbackCount.withLock { $0 += 1 }
-            })
+        }
 
         fake.simulateConnect()
         await Self.drainMainQueue()
@@ -2332,15 +2724,17 @@ final class AppCoordinatorTests {
         fake.simulateConnect()
         await Self.drainMainQueue()
 
-        try await Task.sleep(for: .milliseconds(5_200))
+        try await Task.sleep(for: .milliseconds(5200))
         #expect(!coordinator.isDisconnected)
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
         await Self.drainMainQueue()
 
-        #expect(callbackCount.withLock { $0 } == baseline,
-                "A timed-out reconnect must not leave a loading callback registered")
+        #expect(
+            callbackCount.withLock { $0 } == baseline,
+            "A timed-out reconnect must not leave a loading callback registered"
+        )
     }
 
     @Test @MainActor func coordinatorDeallocationRemovesWorkspaceLoadingObservation() async {
@@ -2353,10 +2747,10 @@ final class AppCoordinatorTests {
             var coordinator: AppCoordinator? = AppCoordinator(
                 workspaceStore: store,
                 connection: fake,
-                persistence: persistence,
-                reconnectLoadingObservationDidChange: {
+                persistence: persistence
+            ) {
                     callbackCount.withLock { $0 += 1 }
-                })
+            }
             weakCoordinator = coordinator
 
             fake.simulateConnect()
@@ -2375,8 +2769,10 @@ final class AppCoordinatorTests {
         store.isLoading = true
         await Self.drainMainQueue()
 
-        #expect(callbackCount.withLock { $0 } == baseline,
-                "Deallocation must consume the pending loading registration")
+        #expect(
+            callbackCount.withLock { $0 } == baseline,
+            "Deallocation must consume the pending loading registration"
+        )
     }
 
     @Test @MainActor func staleOverlayTimeoutDoesNotHideLaterDisconnection() async throws {
@@ -2386,10 +2782,10 @@ final class AppCoordinatorTests {
         let coordinator = AppCoordinator(
             workspaceStore: store,
             connection: fake,
-            persistence: persistence,
-            reconnectLoadingObservationDidChange: {
+            persistence: persistence
+        ) {
                 callbackCount.withLock { $0 += 1 }
-            })
+        }
 
         fake.simulateConnect()
         await Self.drainMainQueue()
@@ -2401,15 +2797,19 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(coordinator.isDisconnected)
-        try await Task.sleep(for: .milliseconds(5_200))
-        #expect(coordinator.isDisconnected,
-                "A timeout from the prior reconnect must not hide a later disconnection")
+        try await Task.sleep(for: .milliseconds(5200))
+        #expect(
+            coordinator.isDisconnected,
+            "A timeout from the prior reconnect must not hide a later disconnection"
+        )
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
         await Self.drainMainQueue()
-        #expect(callbackCount.withLock { $0 } == baseline,
-                "Disconnect must consume the pending loading registration")
+        #expect(
+            callbackCount.withLock { $0 } == baseline,
+            "Disconnect must consume the pending loading registration"
+        )
     }
 
     @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async {
@@ -2422,9 +2822,13 @@ final class AppCoordinatorTests {
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "agent not found",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "agent not found",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         // Seed the store so the reconnect overlay clears immediately.
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
@@ -2436,13 +2840,15 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("agent.get"), "Reconnect must re-validate the open conversation's agent")
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after reconnect with missing agent, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-                "Per-workspace saved sub-screen should be cleared for the missing agent")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
+            "Per-workspace saved sub-screen should be cleared for the missing agent"
+        )
     }
 
     @Test @MainActor func reconnect_agentStillExists_staysOnConversation() async {
@@ -2465,7 +2871,7 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("agent.get"))
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-live")
             #expect(wId == wsId)
         } else {
@@ -2484,8 +2890,10 @@ final class AppCoordinatorTests {
         let fake = FakeConnectionManager()
         // Transport-level timeout must not read as deletion
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            domain: "WebSocket",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
@@ -2496,7 +2904,7 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("agent.get"))
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-live")
             #expect(wId == wsId)
         } else {
@@ -2516,8 +2924,10 @@ final class AppCoordinatorTests {
         // -32602 without data.code == "not-found" (invalid-params or a legacy
         // daemon omitting data) must NOT read as deletion (docs/PROTOCOL.md §9)
         fake.errorMap["agent.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSLocalizedDescriptionKey: "Missing required parameter: agentId"]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId)])
 
@@ -2528,7 +2938,7 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("agent.get"))
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-live")
             #expect(wId == wsId)
         } else {
@@ -2555,7 +2965,7 @@ final class AppCoordinatorTests {
         await Self.drainMainQueue()
 
         #expect(!fake.didCallMethod("agent.get"), "agent.get must not be called when not on a conversation screen")
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after reconnect, got \(coordinator.currentScreen)")
@@ -2577,13 +2987,15 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingAgent(agentId: "agent-gone", workspaceId: wsId)
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after handleMissingAgent, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-                "Per-workspace saved sub-screen should be cleared for the missing agent")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
+            "Per-workspace saved sub-screen should be cleared for the missing agent"
+        )
     }
 
     @Test @MainActor func handleMissingAgent_ignoredWhenNotOnConversationScreen() {
@@ -2601,7 +3013,7 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingAgent(agentId: "agent-1", workspaceId: wsId)
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("handleMissingAgent off a conversation must not navigate, got \(coordinator.currentScreen)")
@@ -2620,7 +3032,7 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingAgent(agentId: "agent-1", workspaceId: "some-other-workspace")
 
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
             #expect(wId == wsId)
         } else {
@@ -2642,14 +3054,16 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingAgent(agentId: "agent-a", workspaceId: wsId)
 
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-b")
             #expect(wId == wsId)
         } else {
             Issue.record("handleMissingAgent for another agent must not navigate, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
-                "The live conversation's saved sub-screen must not be cleared")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
+            "The live conversation's saved sub-screen must not be cleared"
+        )
     }
 
     // MARK: - Missing note handling
@@ -2668,13 +3082,15 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingNote(noteId: "note-gone", workspaceId: wsId)
 
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after handleMissingNote, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-                "Per-workspace saved note screen should be cleared for the missing note")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
+            "Per-workspace saved note screen should be cleared for the missing note"
+        )
     }
 
     @Test @MainActor func handleMissingNote_ignoredWhenNotOnNoteScreen() {
@@ -2689,7 +3105,7 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingNote(noteId: "note-1", workspaceId: wsId)
 
-        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
             #expect(agentId == "agent-1")
             #expect(wId == wsId)
         } else {
@@ -2710,7 +3126,7 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingNote(noteId: "note-1", workspaceId: "some-other-workspace")
 
-        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-1")
             #expect(wId == wsId)
         } else {
@@ -2733,14 +3149,16 @@ final class AppCoordinatorTests {
 
         coordinator.handleMissingNote(noteId: "note-a", workspaceId: wsId)
 
-        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-b")
             #expect(wId == wsId)
         } else {
             Issue.record("handleMissingNote for another note must not navigate, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
-                "The live note screen's saved sub-screen must not be cleared")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
+            "The live note screen's saved sub-screen must not be cleared"
+        )
     }
 
     // MARK: - Note validation on restore
@@ -2755,9 +3173,14 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: wsId,
-                agentId: nil, agentName: nil,
-                noteId: "note-dead", noteTitle: "Dead Note"))
+                screen: "note",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: "note-dead",
+                noteTitle: "Dead Note"
+            )
+        )
 
         // No workspace publish: keep lastUpdated nil so the workspace-existence
         // validation stays inert and only the note validation path is exercised.
@@ -2766,22 +3189,28 @@ final class AppCoordinatorTests {
         // note.get answers -32602 with data.code == "not-found" for a
         // nonexistent note (docs/PROTOCOL.md §3.3/§9)
         fake.errorMap["note.get"] = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSLocalizedDescriptionKey: "note not found",
-                       NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [
+                NSLocalizedDescriptionKey: "note not found",
+                NSError.intentErrorDataCodeKey: "not-found"
+            ]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("note.get"), "Restoring a note screen must re-validate the note")
-        if case .workspaceDetail(let wId) = coordinator.currentScreen {
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
         } else {
             Issue.record("Expected .workspaceDetail after restoring a missing note, got \(coordinator.currentScreen)")
         }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-                "Per-workspace saved note screen should be cleared for the missing note")
+        #expect(
+            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
+            "Per-workspace saved note screen should be cleared for the missing note"
+        )
     }
 
     @Test @MainActor func onSelectWorkspace_restoredNoteTransientError_staysOnNote() async {
@@ -2794,22 +3223,29 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: wsId,
-                agentId: nil, agentName: nil,
-                noteId: "note-1", noteTitle: "Flaky Network Note"))
+                screen: "note",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: "note-1",
+                noteTitle: "Flaky Network Note"
+            )
+        )
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         // Transport-level timeout must not read as deletion
         fake.errorMap["note.get"] = NSError(
-            domain: "WebSocket", code: -2,
-            userInfo: [NSLocalizedDescriptionKey: "Request timed out"])
+            domain: "WebSocket",
+            code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
+        )
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
         await Self.drainMainQueue()
 
-        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-1")
             #expect(wId == wsId)
         } else {
@@ -2827,22 +3263,31 @@ final class AppCoordinatorTests {
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
-                screen: "note", workspaceId: wsId,
-                agentId: nil, agentName: nil,
-                noteId: "note-live", noteTitle: "Live Note"))
+                screen: "note",
+                workspaceId: wsId,
+                agentId: nil,
+                agentName: nil,
+                noteId: "note-live",
+                noteTitle: "Live Note"
+            )
+        )
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
-        fake.responseMap["note.get"] = ["note": [
-            "id": "note-live", "title": "Live Note", "content": "hello"
-        ] as [String: Any]] as [String: Any]
+        fake.responseMap["note.get"] = [
+            "note": [
+                "id": "note-live",
+                "title": "Live Note",
+                "content": "hello"
+            ] as [String: Any]
+        ] as [String: Any]
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("note.get"))
-        if case .noteDetail(let noteId, let wId, _) = coordinator.currentScreen {
+        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
             #expect(noteId == "note-live")
             #expect(wId == wsId)
         } else {
@@ -2850,4 +3295,3 @@ final class AppCoordinatorTests {
         }
     }
 }
-

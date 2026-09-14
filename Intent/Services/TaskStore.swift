@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 /// Observable task state for a single workspace.
@@ -160,7 +160,7 @@ import Observation
 
         // Only refetch if not in live mode (avoid double-apply)
         // Scope task:* events to this workspace to avoid cross-workspace refetches
-        if eventType.hasPrefix("task:") && !tasksLive {
+        if eventType.hasPrefix("task:"), !tasksLive {
             let eventWorkspaceId = event["workspaceId"] as? String
             if eventWorkspaceId == workspaceId {
                 Task { await fetchAll() }
@@ -217,7 +217,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await connectionManager.request("task.unsubscribe", params: [
+                _ = try await connectionManager.request("task.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {

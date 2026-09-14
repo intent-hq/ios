@@ -67,7 +67,8 @@ import SwiftUI
     var newMessagesDividerAnchorId: String? {
         NewMessagesDivider.resolveLatchedAnchor(
             messageIds: store.messages.map(\.id),
-            latchedAnchorId: latchedNewMessagesDividerAnchorId)
+            latchedAnchorId: latchedNewMessagesDividerAnchorId
+        )
     }
 
     /// Latched divider anchor for this viewing session (FE parity: Redux
@@ -126,7 +127,9 @@ import SwiftUI
     }
 
     init(
-        agentId: String, workspaceId: String, agentName: String,
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
         connection: any ConnectionManagerRouting,
         uploadService: AttachmentUploadService
     ) {
@@ -141,7 +144,9 @@ import SwiftUI
 
         // Restore saved draft
         self.messageText = PersistenceManager.shared.loadDraft(
-            workspaceId: workspaceId, agentId: agentId)
+            workspaceId: workspaceId,
+            agentId: agentId
+        )
 
         // Debounced draft saving (0.5s)
         draftSaveCancellable = draftTextSubject
@@ -150,9 +155,12 @@ import SwiftUI
                 scheduler: DispatchQueue.main
             )
             .sink { [weak self] text in
-                guard let self = self else { return }
+                guard let self else { return }
                 PersistenceManager.shared.saveDraft(
-                    text, workspaceId: self.workspaceId, agentId: self.agentId)
+                    text,
+                    workspaceId: self.workspaceId,
+                    agentId: self.agentId
+                )
             }
 
         observeStreaming()
@@ -202,7 +210,8 @@ import SwiftUI
         hasLatchedNewMessagesDividerAnchor = true
         latchedNewMessagesDividerAnchorId = NewMessagesDivider.resolveAnchor(
             messageIds: store.messages.map(\.id),
-            lastSeenMessageId: store.lastSeenMessageId)
+            lastSeenMessageId: store.lastSeenMessageId
+        )
     }
 
     /// Tears down the live-store subscriptions (background hooks + PR
@@ -233,11 +242,11 @@ import SwiftUI
         let observedStore = store
         previousIsStreaming = observedStore.isStreaming
         observedStore.onStreamingChanged = { [weak self, weak observedStore] streaming in
-            guard let self, let observedStore, self.store === observedStore else { return }
-            let wasStreaming = self.previousIsStreaming
-            self.previousIsStreaming = streaming
-            if wasStreaming && !streaming {
-                self.turnFinished()
+            guard let self, let observedStore, store === observedStore else { return }
+            let wasStreaming = previousIsStreaming
+            previousIsStreaming = streaming
+            if wasStreaming, !streaming {
+                turnFinished()
             }
         }
     }
@@ -246,7 +255,7 @@ import SwiftUI
     /// markSeen only while the conversation is on screen and the app is
     /// active — otherwise the user is not looking at the new content.
     private func turnFinished() {
-        guard isOnScreen && isAppActive else { return }
+        guard isOnScreen, isAppActive else { return }
         scheduleDebouncedMarkSeen()
     }
 
@@ -286,9 +295,9 @@ import SwiftUI
         markSeenDebounceTask = Task { [weak self] in
             guard let duration = self?.markSeenDebounceDuration else { return }
             try? await Task.sleep(for: duration)
-            guard let self = self, !Task.isCancelled else { return }
-            self.markSeenDebounceTask = nil
-            await self.store.markSeen(agentId: self.agentId, workspaceId: self.workspaceId)
+            guard let self, !Task.isCancelled else { return }
+            markSeenDebounceTask = nil
+            await store.markSeen(agentId: agentId, workspaceId: workspaceId)
         }
     }
 
@@ -309,8 +318,10 @@ import SwiftUI
 
     func stopAgent(agentId: String) async {
         do {
-            let _ = try await connection.request(
-                "agent.stop", params: ["agentId": agentId])
+            _ = try await connection.request(
+                "agent.stop",
+                params: ["agentId": agentId]
+            )
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Failed to stop agent: \(error)")
         }
@@ -319,7 +330,10 @@ import SwiftUI
     func stopAllWatchedAgents() async {
         let ids = store.watchedAgentIds
         await store.stopWatchedAgents(
-            agentIds: ids, parentAgentId: agentId, workspaceId: workspaceId)
+            agentIds: ids,
+            parentAgentId: agentId,
+            workspaceId: workspaceId
+        )
     }
 
     /// Fetch the agent's current model and specialist from the backend.
@@ -371,8 +385,11 @@ import SwiftUI
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
             attachmentPipeline.surfaceImagePlacementFailure(
-                error, content: content, images: images != nil ? sourceImages : nil,
-                messageText: &messageText)
+                error,
+                content: content,
+                images: images != nil ? sourceImages : nil,
+                messageText: &messageText
+            )
             return
         }
         let fileBlocks: [[String: Any]]?
@@ -383,8 +400,11 @@ import SwiftUI
             // `pendingFiles` is never pre-cleared by the view, so the files
             // stay attached; restore text + any captured images too.
             attachmentPipeline.surfaceFilePlacementFailure(
-                error, content: content, images: images != nil ? sourceImages : nil,
-                messageText: &messageText)
+                error,
+                content: content,
+                images: images != nil ? sourceImages : nil,
+                messageText: &messageText
+            )
             return
         }
         do {
@@ -425,7 +445,11 @@ import SwiftUI
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
             // `pendingImages` was never cleared on this path — composer intact.
             attachmentPipeline.surfaceImagePlacementFailure(
-                error, content: content, images: nil, messageText: &messageText)
+                error,
+                content: content,
+                images: nil,
+                messageText: &messageText
+            )
             return
         }
         let fileBlocks: [[String: Any]]?
@@ -435,7 +459,11 @@ import SwiftUI
             AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
             // `pendingFiles` was never cleared on this path — composer intact.
             attachmentPipeline.surfaceFilePlacementFailure(
-                error, content: content, images: nil, messageText: &messageText)
+                error,
+                content: content,
+                images: nil,
+                messageText: &messageText
+            )
             return
         }
         do {
@@ -504,7 +532,7 @@ import SwiftUI
     }
 
     func renameAgent(_ newName: String) async throws {
-        let _ = try await connection.request(
+        _ = try await connection.request(
             "agent.rename",
             params: [
                 "agentId": agentId,
@@ -519,15 +547,19 @@ import SwiftUI
 
     typealias ImagePlacementError = ConversationAttachmentPipeline.ImagePlacementError
     typealias FilePlacementError = ConversationAttachmentPipeline.FilePlacementError
+
     static let maxImageReferenceBytes = ConversationAttachmentPipeline.maxImageReferenceBytes
 
     func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
     func loadSelectedPhotos() async { await attachmentPipeline.loadSelectedPhotos() }
+
     var hasPendingAttachments: Bool { attachmentPipeline.hasPendingAttachments }
+
     func addFiles(_ urls: [URL]) { attachmentPipeline.addFiles(urls) }
     func removePendingFile(at index: Int) { attachmentPipeline.removePendingFile(at: index) }
     func clearPendingFiles() { attachmentPipeline.clearPendingFiles() }
+
     var isUploadingFiles: Bool { attachmentPipeline.isUploadingFiles }
 
     func buildImageBlocks(from images: [UIImage]) async throws -> [[String: Any]]? {
@@ -573,11 +605,14 @@ import SwiftUI
             derivationMessages.insert(recovered, at: 0)
         }
         return PendingQuestionSet.derive(
-            messages: derivationMessages, isTurnActive: isStreaming,
+            messages: derivationMessages,
+            isTurnActive: isStreaming,
             dismissedQuestionsMessageId: store.dismissedQuestionsMessageId,
             pendingQuestionsMessageId: store.pendingQuestionsMessageId,
             queuedAnsweredQuestionsMessageIds: Set(
-                store.queuedMessages.compactMap(\.answeredQuestionsMessageId)))
+                store.queuedMessages.compactMap(\.answeredQuestionsMessageId)
+            )
+        )
     }
 
     /// The marker's id when it names a row that is NOT in the loaded
@@ -613,8 +648,10 @@ import SwiftUI
         guard !isLoading, let markedId = nonResidentMarkedMessageId else { return false }
         guard let recovered = recoveredMarkedMessage else { return true }
         return PendingQuestionSet.derive(
-            messages: [recovered], isTurnActive: false,
-            pendingQuestionsMessageId: markedId) == nil
+            messages: [recovered],
+            isTurnActive: false,
+            pendingQuestionsMessageId: markedId
+        ) == nil
     }
 
     /// Flatten the wizard's answers into ONE plain-text user message of
@@ -631,8 +668,10 @@ import SwiftUI
     /// untagged. Completing the wizard clears any pending composer image
     /// attachments (FE parity: `ChatPanel.performLocalSendCleanup`) so stale
     /// images never ride a later message.
-    func submitQuestionAnswers(_ answers: [QuestionAnswer],
-                               answeredQuestionsMessageId: String) async {
+    func submitQuestionAnswers(
+        _ answers: [QuestionAnswer],
+        answeredQuestionsMessageId: String
+    ) async {
         pendingImages.removeAll()
         do {
             try await store.sendMessage(
@@ -641,8 +680,9 @@ import SwiftUI
                 workspaceId: workspaceId,
                 messageMetadata: [
                     "type": "question_answers",
-                    "answeredQuestionsMessageId": answeredQuestionsMessageId,
-                ])
+                    "answeredQuestionsMessageId": answeredQuestionsMessageId
+                ]
+            )
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
             store.rollbackFailedSend()
@@ -666,7 +706,10 @@ import SwiftUI
         dismissQuestionsError = nil
         do {
             try await store.dismissQuestions(
-                agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+                agentId: agentId,
+                messageId: messageId,
+                workspaceId: workspaceId
+            )
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Dismiss questions failed: \(error)")
             dismissQuestionsError = error.localizedDescription
@@ -691,4 +734,3 @@ import SwiftUI
         return SuggestedPrompts.parse(contentBlocks: lastMessage.contentBlocks ?? []).prompts
     }
 }
-

@@ -29,6 +29,7 @@ struct MonitoredPrsRow: View {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text("Monitored PRs")
                     .font(.caption)
                     .fontWeight(.medium)
@@ -61,7 +62,9 @@ struct MonitoredPrsRow: View {
             Button {
                 Task {
                     await monitoredPrStore.flush(
-                        monitorId: monitor.monitorId, check: true)
+                        monitorId: monitor.monitorId,
+                        check: true
+                    )
                 }
             } label: {
                 Label("Check and flush", systemImage: "arrow.triangle.2.circlepath")
@@ -105,13 +108,15 @@ struct MonitoredPrsRow: View {
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme).opacity(Constants.Conversation.StatusStrip.chipBorderOpacity),
-                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth)
+                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth
+                )
         )
     }
 
     private var workspaceRepo: String? {
         guard let workspace = session.workspaceStore.workspaces.first(
-                where: { $0.id == viewModel.workspaceId }),
+                where: { $0.id == viewModel.workspaceId }
+        ),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"

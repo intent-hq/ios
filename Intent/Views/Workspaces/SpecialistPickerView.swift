@@ -166,7 +166,7 @@ struct SpecialistPickerView: View {
                 )
                 HapticManager.notification(.success)
                 dismiss()
-                if let agent = agent {
+                if let agent {
                     coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
                 }
             } catch {

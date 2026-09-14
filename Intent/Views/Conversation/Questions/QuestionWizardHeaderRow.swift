@@ -19,6 +19,7 @@ struct QuestionWizardHeaderRow: View {
             Image(systemName: "questionmark.circle")
                 .font(.caption)
                 .foregroundStyle(Theme.primary(for: colorScheme))
+                .accessibilityHidden(true)
             Text("Questions")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -34,7 +35,8 @@ struct QuestionWizardHeaderRow: View {
                         .fill(segmentColor(i))
                         .frame(
                             width: Constants.Conversation.QuestionWizard.progressSegmentWidth,
-                            height: Constants.Conversation.QuestionWizard.progressSegmentHeight)
+                            height: Constants.Conversation.QuestionWizard.progressSegmentHeight
+                        )
                     }
                 }
             }
@@ -53,7 +55,8 @@ struct QuestionWizardHeaderRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .frame(
                         minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                        minHeight: Constants.Accessibility.minimumTapTarget
+                    )
             }
             .buttonStyle(.plain)
             if showsDismiss {
@@ -67,11 +70,14 @@ struct QuestionWizardHeaderRow: View {
     private func segmentColor(_ segment: Int) -> Color {
         if segment < index {
             return Theme.primary(for: colorScheme).opacity(
-                colorSchemeContrast == .increased ? 0.7 : 0.4)
+                colorSchemeContrast == .increased ? 0.7 : 0.4
+            )
         }
         if segment == index { return Theme.primary(for: colorScheme) }
         return Theme.mutedForeground(
-            for: colorScheme, contrast: colorSchemeContrast).opacity(
-                colorSchemeContrast == .increased ? 0.55 : 0.25)
+            for: colorScheme,
+            contrast: colorSchemeContrast
+        )
+            .opacity(colorSchemeContrast == .increased ? 0.55 : 0.25)
     }
 }

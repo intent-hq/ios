@@ -1,7 +1,7 @@
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// Covers the attachment-reference resolution path: `file.getAttachmentInfo`
 /// → workspace-relative path → `file.readChunk` bytes, plus path caching,
@@ -22,8 +22,12 @@ struct AttachmentImageLoaderTests {
 
     private static func infoResponse(path: String, exists: Bool = true) -> [String: Any] {
         [
-            "attachmentId": "att-1", "fileName": "pic.png", "size": 10,
-            "uploadedAt": "2026-01-01T00:00:00Z", "path": path, "exists": exists,
+            "attachmentId": "att-1",
+            "fileName": "pic.png",
+            "size": 10,
+            "uploadedAt": "2026-01-01T00:00:00Z",
+            "path": path,
+            "exists": exists
         ]
     }
 
@@ -33,7 +37,9 @@ struct AttachmentImageLoaderTests {
 
     private static func makeLoader(_ fake: FakeConnectionManager) -> AttachmentImageLoader {
         AttachmentImageLoader(
-            connection: fake, fileLoader: WorkspaceFileImageLoader(connection: fake))
+            connection: fake,
+            fileLoader: WorkspaceFileImageLoader(connection: fake)
+        )
     }
 
     @Test func resolvesPathAndFetchesImage() async throws {
@@ -72,7 +78,9 @@ struct AttachmentImageLoaderTests {
     @Test func missingFileThrowsFileMissing() async {
         let fake = FakeConnectionManager()
         fake.responseMap["file.getAttachmentInfo"] = Self.infoResponse(
-            path: ".intent/attachments/pic.png", exists: false)
+            path: ".intent/attachments/pic.png",
+            exists: false
+        )
         let loader = Self.makeLoader(fake)
 
         await #expect(throws: LoadError.fileMissing) {
@@ -138,9 +146,9 @@ struct AttachmentImageLoaderTests {
         fake.responseMap["file.readChunk"] = Self.chunkResponse(png)
         let loader = Self.makeLoader(fake)
 
-        async let a = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        async let b = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
-        let (first, second) = try await (a, b)
+        async let firstLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
+        async let secondLoad = loader.image(workspaceId: "ws-1", attachmentId: "att-1")
+        let (first, second) = try await (firstLoad, secondLoad)
 
         #expect(first === second)
         #expect(fake.paramsForMethod("file.getAttachmentInfo").count == 1)

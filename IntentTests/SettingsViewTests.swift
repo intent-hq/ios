@@ -1,6 +1,6 @@
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 struct SettingsViewTests {
     @Test func connectionSummaryStaysHorizontalAtStandardTextSizes() {

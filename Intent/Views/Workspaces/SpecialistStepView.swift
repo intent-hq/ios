@@ -22,6 +22,7 @@ struct SpecialistStepView: View {
                     Image(systemName: "person.crop.rectangle.badge.plus")
                         .font(.largeTitle)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .accessibilityHidden(true)
                     Text("No specialists available")
                         .font(.headline)
                         .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -41,6 +42,9 @@ struct SpecialistStepView: View {
                             specialistRow(specialist)
                         }
                         .listRowBackground(Theme.card(for: colorScheme))
+                        .accessibilityAddTraits(
+                            selectedSpecialist?.id == specialist.id ? .isSelected : []
+                        )
                     }
                 }
                 .listStyle(.insetGrouped)
@@ -68,8 +72,12 @@ struct SpecialistStepView: View {
     @ViewBuilder
     private func specialistRow(_ specialist: SpecialistInfo) -> some View {
         HStack(spacing: Constants.ModalPicker.rowSpacing) {
-            AgentAvatarView(agentId: specialist.id, size: Constants.ModalPicker.rowAvatarSize,
-                            specialist: specialist.id, icon: specialist.icon)
+            AgentAvatarView(
+                agentId: specialist.id,
+                size: Constants.ModalPicker.rowAvatarSize,
+                specialist: specialist.id,
+                icon: specialist.icon
+            )
 
             VStack(alignment: .leading, spacing: Constants.ModalPicker.rowTextSpacing) {
                 Text(specialist.name)
@@ -87,6 +95,7 @@ struct SpecialistStepView: View {
                 Image(systemName: "checkmark")
                     .foregroundStyle(Theme.primary(for: colorScheme))
                     .fontWeight(.semibold)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.vertical, Constants.ModalPicker.rowVerticalPadding)

@@ -37,9 +37,8 @@ struct NoteContentView: View {
                         )
                     } else {
                         PlainTaskRow(
-                            line: line,
-                            onSetStatus: { onSetLineStatus(line.lineNumber, $0) }
-                        )
+                            line: line
+                        ) { onSetLineStatus(line.lineNumber, $0) }
                     }
                 }
             }
@@ -76,7 +75,8 @@ private struct PlainTaskRow: View {
                     .padding(.top, Constants.Notes.Content.taskIconTopPadding)
                     .contentShape(Rectangle().inset(by: -(
                         Constants.Accessibility.minimumTapTarget
-                            - Constants.Notes.Content.taskIconSize) / 2))
+                            - Constants.Notes.Content.taskIconSize
+                    ) / 2))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Change status for \(line.text)")
@@ -107,7 +107,7 @@ private struct LinkedTaskCardRow: View {
         (.inProgress, "in_progress"),
         (.reviewRequired, "review_required"),
         (.complete, "complete"),
-        (.cancelled, "cancelled"),
+        (.cancelled, "cancelled")
     ]
 
     /// Live status from the linked note when resolved, else the checkbox
@@ -134,7 +134,8 @@ private struct LinkedTaskCardRow: View {
                 TaskStatusIconView(status: status, size: Constants.Notes.Content.taskIconSize)
                     .frame(
                         minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                        minHeight: Constants.Accessibility.minimumTapTarget
+                    )
             }
             .accessibilityLabel("Change status for \(title)")
             .accessibilityValue(status.label)
@@ -152,7 +153,8 @@ private struct LinkedTaskCardRow: View {
                 .frame(
                     maxWidth: .infinity,
                     minHeight: Constants.Accessibility.minimumTapTarget,
-                    alignment: .leading)
+                    alignment: .leading
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -164,8 +166,10 @@ private struct LinkedTaskCardRow: View {
         .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Content.linkedTaskCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Notes.Content.linkedTaskCornerRadius)
-                .stroke(Theme.border(for: colorScheme),
-                        lineWidth: Constants.Notes.Content.linkedTaskBorderWidth)
+                .stroke(
+                    Theme.border(for: colorScheme),
+                    lineWidth: Constants.Notes.Content.linkedTaskBorderWidth
+                )
         )
         .padding(.leading, indentPadding(line.indentColumns))
     }

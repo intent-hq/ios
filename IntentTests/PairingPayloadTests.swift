@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Regression coverage for intent-hq/monorepo#3014: the QR pairing parser
 /// must understand BOTH pairing-URI dialects — the canonical daemon payload
@@ -9,7 +9,6 @@ import Testing
 /// fingerprint of a canonical payload (which previously downgraded the
 /// connection to plain ws:// against the TLS-only WSS listener).
 struct PairingPayloadTests {
-
     // MARK: - Canonical daemon dialect (intentd pair)
 
     /// Exact URI shape documented in docs/protocol/05-method-catalog.md for
@@ -162,7 +161,7 @@ struct PairingPayloadTests {
 
     @Test func leavesShortTcAddressUnchanged() {
         #expect(TcAddressDisplay.truncated("tc-abc") == "tc-abc")
-        #expect(TcAddressDisplay.truncated("") == "")
+        #expect(TcAddressDisplay.truncated("").isEmpty)
     }
 
     @Test func truncatesElevenCharTcAddress() {

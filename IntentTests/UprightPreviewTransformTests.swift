@@ -1,6 +1,6 @@
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// Corrective-transform math for the upright context-menu previews
 /// (CopyContextMenuOverlay): the preview target must cancel whatever flip the

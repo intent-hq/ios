@@ -63,7 +63,7 @@ final class ConversationLiveTranscript {
         do {
             var params: [String: Any] = [
                 "agentId": agentId,
-                "projection": "slim",
+                "projection": "slim"
             ]
             if let workspaceId = workspaceId ?? self.workspaceId {
                 params["workspaceId"] = workspaceId
@@ -89,7 +89,8 @@ final class ConversationLiveTranscript {
         } catch {
             onFetchError?(error)
             AppLog.conversation.error(
-                "[ConversationStore] Failed to fetch conversation: \(error)")
+                "[ConversationStore] Failed to fetch conversation: \(error)"
+            )
         }
 
         if isInitialLoad {
@@ -119,8 +120,8 @@ final class ConversationLiveTranscript {
         }
 
         let order = Dictionary(uniqueKeysWithValues: fetched.enumerated().map { ($1.id, $0) })
-        messages.sort {
-            (order[$0.id] ?? Int.max) < (order[$1.id] ?? Int.max)
+        messages.sort { lhs, rhs in
+            (order[lhs.id] ?? Int.max) < (order[rhs.id] ?? Int.max)
         }
     }
 
@@ -152,7 +153,7 @@ final class ConversationLiveTranscript {
                 params: [
                     "agentId": agentId,
                     "messageId": messageId,
-                    "blockId": blockId,
+                    "blockId": blockId
                 ]
             )
             guard self.agentId == agentId else { return }
@@ -162,14 +163,16 @@ final class ConversationLiveTranscript {
                   let block = try? blockDecoder.decode(ContentBlock.self, from: data)
             else {
                 AppLog.conversation.error(
-                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
+                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)"
+                )
                 return
             }
             storeHydratedBlock(block, forKey: key)
             remergeHydratedBlocks()
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to hydrate block \(key): \(error)")
+                "[ConversationStore] Failed to hydrate block \(key): \(error)"
+            )
         }
     }
 
@@ -218,7 +221,7 @@ final class ConversationLiveTranscript {
             let result = try await connectionManager.request("chat.subscribe", params: [
                 "agentId": agentId,
                 "replaceGroup": "ios-chat-\(agentId)",
-                "projection": "slim",
+                "projection": "slim"
             ])
             guard let response = result as? [String: Any],
                   let subscriptionId = response["subscriptionId"] as? String
@@ -235,11 +238,13 @@ final class ConversationLiveTranscript {
                 self?.handlePush(push)
             }
             AppLog.conversation.info(
-                "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)")
+                "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)"
+            )
         } catch {
             clearChannelForLegacyFallback()
             AppLog.conversation.warning(
-                "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
+                "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy"
+            )
         }
     }
 
@@ -264,19 +269,20 @@ final class ConversationLiveTranscript {
 
         switch push.kind {
         case .snapshot:
-            if chatSeeded && push.seq + 1 < chatExpectedSeq { return }
+            if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
             applySnapshot(push)
         case .delta:
             guard let delta = push.delta else { return }
-            if chatSeeded && push.seq == chatExpectedSeq {
+            if chatSeeded, push.seq == chatExpectedSeq {
                 applyDelta(delta)
                 chatExpectedSeq = push.seq + 1
-            } else if chatSeeded && push.seq < chatExpectedSeq {
+            } else if chatSeeded, push.seq < chatExpectedSeq {
                 return
             } else if !resnapshotInProgress {
                 resnapshotInProgress = true
                 AppLog.conversation.warning(
-                    "[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
+                    "[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing..."
+                )
                 Task { await resnapshot() }
             }
         }
@@ -297,7 +303,8 @@ final class ConversationLiveTranscript {
         let turnInFlight = push.snapshotMeta?["turnInFlight"] as? Bool ?? false
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
         AppLog.conversation.debug(
-            "[ConversationStore] Applied chat snapshot with \(items.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
+            "[ConversationStore] Applied chat snapshot with \(items.count) messages, seq=\(push.seq), streaming=\(isStreaming)"
+        )
         onTranscriptReplaced?()
     }
 
@@ -328,7 +335,8 @@ final class ConversationLiveTranscript {
             streamingUpdateCount += 1
         }
         AppLog.conversation.debug(
-            "[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
+            "[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)"
+        )
         onTranscriptReplaced?()
     }
 
@@ -407,11 +415,12 @@ final class ConversationLiveTranscript {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
             do {
                 _ = try await connectionManager.request("chat.unsubscribe", params: [
-                    "subscriptionId": subscriptionId,
+                    "subscriptionId": subscriptionId
                 ])
             } catch {
                 AppLog.conversation.error(
-                    "[ConversationStore] chat.unsubscribe failed: \(error)")
+                    "[ConversationStore] chat.unsubscribe failed: \(error)"
+                )
             }
         }
         chatSubscriptionId = nil

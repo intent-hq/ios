@@ -13,9 +13,9 @@ enum HapticManager {
         case success, warning, error
     }
 
-    static func impact(_ style: ImpactStyle = .medium) {}
+    static func impact(_: ImpactStyle = .medium) {}
 
-    static func notification(_ type: NotificationType) {}
+    static func notification(_: NotificationType) {}
 
     static func selection() {}
 }
@@ -34,4 +34,3 @@ enum HapticManager {
     }
 }
 #endif
-

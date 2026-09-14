@@ -4,13 +4,13 @@ struct ContentBlockView: View {
     let block: ContentBlock
     let allBlocks: [ContentBlock]
     let workspaceId: String
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     /// Block ids of this message with an agent.getMessageBlock hydration
     /// fetch in flight (slim projection, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
     /// Fetch the full body of a slim-truncated block by id; absent → no
     /// hydration (bounded previews stay).
-    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(AppCoordinator.self) var coordinator
     @Environment(\.colorScheme) var colorScheme
     @State private var thinkingExpanded = false
@@ -25,18 +25,22 @@ struct ContentBlockView: View {
             if let text = block.resolvedText {
                 let cleaned = Self.stripSuggestedPrompts(text)
                 if !cleaned.isEmpty {
-                    MarkdownTextView(text: cleaned, onOpenURL: { url in
-                        if let link = NoteDetailView.parseIntentNoteLink(url) {
-                            let targetWorkspaceId = link.workspaceId ?? workspaceId
-                            if let onNavigateToNote = onNavigateToNote {
-                                onNavigateToNote(link.id, targetWorkspaceId, "Note")
-                            } else {
-                                coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+                    MarkdownTextView(
+                        text: cleaned,
+                        onOpenURL: { url in
+                            if let link = NoteDetailView.parseIntentNoteLink(url) {
+                                let targetWorkspaceId = link.workspaceId ?? workspaceId
+                                if let onNavigateToNote {
+                                    onNavigateToNote(link.id, targetWorkspaceId, "Note")
+                                } else {
+                                    coordinator.onSelectNote(link.id, workspaceId: targetWorkspaceId, noteTitle: "Note")
+                                }
+                                return .handled
                             }
-                            return .handled
-                        }
-                        return .systemAction
-                    }, workspaceId: workspaceId)
+                            return .systemAction
+                        },
+                        workspaceId: workspaceId
+                    )
                 }
             }
 
@@ -97,6 +101,7 @@ struct ContentBlockView: View {
             HStack(spacing: 4) {
                 Image(systemName: "brain")
                     .font(.caption)
+                    .accessibilityHidden(true)
                 Text("Thinking")
                     .font(.caption.weight(.medium))
             }
@@ -122,7 +127,10 @@ struct ContentBlockView: View {
             // Attachment-reference block (PROTOCOL §5.5): no inline bytes —
             // resolve the registry row and fetch via file.readChunk.
             AttachmentReferenceImageView(
-                workspaceId: workspaceId, attachmentId: attachmentId, style: .inline)
+                workspaceId: workspaceId,
+                attachmentId: attachmentId,
+                style: .inline
+            )
         } else if let uiImage = Self.decodeImage(block) {
             // Full image, or the write-time thumbnail served by the slim
             // projection (dataIsThumbnail) — tapping a thumbnail hydrates.
@@ -157,7 +165,7 @@ struct ContentBlockView: View {
             .onChange(of: block.dataTruncated) { _, truncated in
                 // Hydration merged the full block in (the truncation flag
                 // cleared): open the lightbox the tap asked for.
-                if truncated != true && lightboxPendingHydration {
+                if truncated != true, lightboxPendingHydration {
                     lightboxPendingHydration = false
                     lightboxPresented = true
                 }
@@ -165,7 +173,7 @@ struct ContentBlockView: View {
             .onChange(of: isHydratingImage) { _, hydrating in
                 // Fetch settled without clearing the flag (failure): drop the
                 // pending open so a later unrelated merge can't surprise-open.
-                if !hydrating && block.dataTruncated == true {
+                if !hydrating, block.dataTruncated == true {
                     lightboxPendingHydration = false
                 }
             }
@@ -182,6 +190,7 @@ struct ContentBlockView: View {
                         Text("Loading image…")
                     } else {
                         Image(systemName: "photo")
+                            .accessibilityHidden(true)
                         Text(imageNeedsHydration ? "Tap to load image" : "Image")
                     }
                 }
@@ -201,6 +210,7 @@ struct ContentBlockView: View {
         HStack(spacing: 6) {
             Image(systemName: "doc")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text(block.fileName ?? "File")
                 .font(.caption.monospaced())
         }
@@ -269,6 +279,7 @@ struct ImageDecodeFailureView: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: "photo")
+                .accessibilityHidden(true)
             Text("Image")
         }
         .font(.caption)
@@ -290,7 +301,10 @@ struct ImageAttachmentThumbnail: View {
             // Attachment-reference block (PROTOCOL §5.5): fetch the bytes
             // from the workspace's attachment store.
             AttachmentReferenceImageView(
-                workspaceId: workspaceId, attachmentId: attachmentId, style: .thumbnail)
+                workspaceId: workspaceId,
+                attachmentId: attachmentId,
+                style: .thumbnail
+            )
         } else if let uiImage = ContentBlockView.decodeImage(block) {
             let imageData = ContentBlockView.decodeImageData(block)
             Button { lightboxPresented = true } label: {
@@ -418,4 +432,3 @@ struct AttachmentReferenceImageView: View {
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
     }
 }
-

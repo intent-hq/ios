@@ -4,11 +4,11 @@ import ImageIO
 /// Decoded frames and source timing for the bundled launch splash GIF.
 struct SplashAnimation {
     static let resourceName = "IntentSplash"
-    static let bundled: SplashAnimation? = {
+    static let bundled: Self? = {
         guard let url = Bundle.main.url(forResource: resourceName, withExtension: "gif") else {
             return nil
         }
-        return SplashAnimation(url: url)
+        return Self(url: url)
     }()
 
     private static let fallbackFrameDuration: TimeInterval = 0.1
@@ -65,9 +65,9 @@ struct SplashAnimation {
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any]
         else { return fallbackFrameDuration }
 
-        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber
-            ?? gif[kCGImagePropertyGIFDelayTime] as? NSNumber
-        let duration = value?.doubleValue ?? fallbackFrameDuration
+        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double
+            ?? gif[kCGImagePropertyGIFDelayTime] as? Double
+        let duration = value ?? fallbackFrameDuration
         return duration > 0 ? duration : fallbackFrameDuration
     }
 
@@ -75,8 +75,8 @@ struct SplashAnimation {
         guard
             let properties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any],
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
-            let count = gif[kCGImagePropertyGIFLoopCount] as? NSNumber
+            let count = gif[kCGImagePropertyGIFLoopCount] as? Int
         else { return nil }
-        return count.intValue
+        return count
     }
 }

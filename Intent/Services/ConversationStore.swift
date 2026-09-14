@@ -191,14 +191,14 @@ import SwiftUI
         liveTranscript.prepareForReconnect()
 
         // Re-fetch conversation on reconnection
-        guard let agentId = agentId else { return }
+        guard let agentId else { return }
         // Parallel fetch of independent data
         async let conv: () = fetchConversation(agentId: agentId, workspaceId: workspaceId)
         async let queue: () = fetchQueue(agentId: agentId)
         // Restore authoritative streaming state from the server
         async let streaming: () = fetchAgentStreamingState(agentId: agentId)
         _ = await (conv, queue, streaming)
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await subscribeToStreaming(agentId: agentId, workspaceId: workspaceId)
             await subscribeLiveChat(agentId: agentId)
             await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId)
@@ -273,13 +273,15 @@ import SwiftUI
         if nsError.isEntityNotFound {
             AppLog.conversation.warning(
                 "[ConversationStore] not-found for agent \(agentId ?? "?") — "
-                    + "treating as deleted: \(nsError.localizedDescription)")
+                    + "treating as deleted: \(nsError.localizedDescription)"
+            )
             agentNotFound = true
-        } else if nsError.domain == "WebSocket" && nsError.code == -32602 {
+        } else if nsError.domain == "WebSocket", nsError.code == -32_602 {
             AppLog.conversation.error(
                 "[ConversationStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "agent \(agentId ?? "?") (data.code: \(nsError.intentErrorDataCode ?? "absent")) — "
-                    + "NOT treating as deletion: \(nsError.localizedDescription)")
+                    + "NOT treating as deletion: \(nsError.localizedDescription)"
+            )
         }
     }
 
@@ -300,7 +302,7 @@ import SwiftUI
 
     func fetchConversation(agentId: String, workspaceId: String? = nil) async {
         bindAgent(agentId)
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             self.workspaceId = workspaceId
         }
         await liveTranscript.fetchConversation(agentId: agentId, workspaceId: workspaceId)
@@ -330,7 +332,10 @@ import SwiftUI
                 pendingQuestionRecoveryTask?.cancel()
                 pendingQuestionRecoveryTask = nil
                 pendingQuestionRecovery = PendingQuestionRecovery(
-                    messageId: markedId, status: .found, message: resident)
+                    messageId: markedId,
+                    status: .found,
+                    message: resident
+                )
             }
             return
         }
@@ -358,7 +363,10 @@ import SwiftUI
         for attempt in 0...delays.count {
             do {
                 let message = try await commands.fetchMessage(
-                    agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+                    agentId: agentId,
+                    messageId: messageId,
+                    workspaceId: workspaceId
+                )
                 guard isPendingQuestionRecoveryCurrent(messageId) else { return }
                 if let message {
                     settlePendingQuestionRecovery(messageId, status: .found, message: message)
@@ -371,7 +379,7 @@ import SwiftUI
             } catch {
                 guard isPendingQuestionRecoveryCurrent(messageId) else { return }
                 let nsError = error as NSError
-                if nsError.domain == "WebSocket" && nsError.code == -32602 {
+                if nsError.domain == "WebSocket", nsError.code == -32_602 {
                     if nsError.isEntityNotFound {
                         raiseAgentNotFoundIfDefinitive(error)
                         clearPendingQuestionRecovery()
@@ -379,20 +387,23 @@ import SwiftUI
                     }
                     AppLog.conversation.warning(
                         "[ConversationStore] marked question message \(messageId) unknown to the daemon: "
-                            + nsError.localizedDescription)
+                            + nsError.localizedDescription
+                    )
                     settlePendingQuestionRecovery(messageId, status: .notFound)
                     return
                 }
                 guard attempt < delays.count else {
                     AppLog.conversation.error(
                         "[ConversationStore] Failed to recover marked question message \(messageId) "
-                            + "after bounded retries: \(error)")
+                            + "after bounded retries: \(error)"
+                    )
                     settlePendingQuestionRecovery(messageId, status: .error)
                     return
                 }
                 AppLog.conversation.warning(
                     "[ConversationStore] Retrying marked question recovery for \(messageId) "
-                        + "(attempt \(attempt + 1)): \(error)")
+                        + "(attempt \(attempt + 1)): \(error)"
+                )
                 do {
                     try await Task.sleep(for: delays[attempt])
                 } catch {
@@ -410,12 +421,16 @@ import SwiftUI
     }
 
     private func settlePendingQuestionRecovery(
-        _ messageId: String, status: PendingQuestionRecovery.Status,
+        _ messageId: String,
+        status: PendingQuestionRecovery.Status,
         message: ConversationMessage? = nil
     ) {
         pendingQuestionRecoveryTask = nil
         pendingQuestionRecovery = PendingQuestionRecovery(
-            messageId: messageId, status: status, message: message)
+            messageId: messageId,
+            status: status,
+            message: message
+        )
     }
 
     // MARK: - Slim block hydration (agent.getMessageBlock, PROTOCOL §5.5)
@@ -461,8 +476,8 @@ import SwiftUI
         // agent.get may have raced ahead of the daemon's marker write. Run ONE
         // refresh regardless of how many boundaries were buffered, and before
         // the firehose discard: the live channel covers transcript content only.
-        let hasTurnBoundary = buffer.contains {
-            $0.eventType == "agent:idle" || $0.eventType == "agent:status-changed"
+        let hasTurnBoundary = buffer.contains { event in
+            event.eventType == "agent:idle" || event.eventType == "agent:status-changed"
         }
         if hasTurnBoundary, let agentId = self.agentId {
             Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
@@ -526,7 +541,9 @@ import SwiftUI
         // Subscribe to agent stream events
         do {
             subscriptionId = try await commands.subscribeToEvents(
-                agentId: agentId, workspaceId: workspaceId)
+                agentId: agentId,
+                workspaceId: workspaceId
+            )
             AppLog.conversation.info("[ConversationStore] Subscribed to streaming events")
         } catch {
             AppLog.conversation.error("[ConversationStore] Failed to subscribe: \(error)")
@@ -575,11 +592,11 @@ import SwiftUI
         if let myAgentId = agentId {
             let eventAgentId: String? = {
                 if let inner = dict["event"] as? [String: Any] {
-                    let d = inner["data"] as? [String: Any] ?? inner
-                    return d["agentId"] as? String ?? inner["agentId"] as? String
+                    let eventData = inner["data"] as? [String: Any] ?? inner
+                    return eventData["agentId"] as? String ?? inner["agentId"] as? String
                 }
-                let d = dict["data"] as? [String: Any] ?? dict
-                return d["agentId"] as? String ?? dict["agentId"] as? String
+                let eventData = dict["data"] as? [String: Any] ?? dict
+                return eventData["agentId"] as? String ?? dict["agentId"] as? String
             }()
             if let eAgentId = eventAgentId, eAgentId != myAgentId,
                !watchedAgentIds.contains(eAgentId) {
@@ -643,7 +660,8 @@ import SwiftUI
                 watchedAgentCoordinator.handleActivity(
                     agentId: eventAgentId,
                     lastAgentResponse: data["lastAgentResponse"] as? String,
-                    digest: data["digest"] as? String)
+                    digest: data["digest"] as? String
+                )
             }
             guard eventAgentId == agentId else { return }
         case "agent:stream:end":
@@ -758,7 +776,7 @@ import SwiftUI
         isStreaming = true
     }
 
-    private func handleStreamEnd(_ data: [String: Any]) {
+    private func handleStreamEnd(_: [String: Any]) {
         isStreaming = false
         currentStreamId = nil
         streamingUpdateCount = 0
@@ -771,7 +789,7 @@ import SwiftUI
 
         // Re-fetch to get the final server-side state (unless in live mode)
         if liveTranscript.shouldRefetchAfterLegacyStreamEnd,
-           let agentId = agentId {
+           let agentId {
             Task { await fetchConversation(agentId: agentId) }
         }
     }
@@ -786,7 +804,7 @@ import SwiftUI
             }
         }
         // Fallback: re-fetch the queue
-        if let agentId = agentId {
+        if let agentId {
             Task { await fetchQueue(agentId: agentId) }
         }
     }
@@ -795,7 +813,7 @@ import SwiftUI
         // A queued message is being processed — remove it from local queue
         if let messageId = data["messageId"] as? String {
             queuedMessages.removeAll { $0.id == messageId }
-        } else if let agentId = agentId {
+        } else if let agentId {
             // Fallback: re-fetch queue
             Task { await fetchQueue(agentId: agentId) }
         }
@@ -836,10 +854,14 @@ import SwiftUI
     /// The optimistic user row mirrors the tag on its `metadata` so the wizard
     /// gate sees the answer immediately (`PendingQuestionSet.isQuestionSetAnswered`)
     /// instead of waiting for the daemon's `agent:updated` marker clear.
-    func sendMessage(agentId: String, content: String, workspaceId: String,
-                     imageBlocks: [[String: Any]]? = nil,
-                     fileBlocks: [[String: Any]]? = nil,
-                     messageMetadata: [String: Any]? = nil) async throws {
+    func sendMessage(
+        agentId: String,
+        content: String,
+        workspaceId: String,
+        imageBlocks: [[String: Any]]? = nil,
+        fileBlocks: [[String: Any]]? = nil,
+        messageMetadata: [String: Any]? = nil
+    ) async throws {
         // Reuse messageId if retrying the same content after a failure
         let messageId: String
         if let failed = lastFailedSend, failed.content == content {
@@ -882,7 +904,8 @@ import SwiftUI
                 messageId: messageId,
                 imageBlocks: imageBlocks,
                 fileBlocks: fileBlocks,
-                messageMetadata: messageMetadata)
+                messageMetadata: messageMetadata
+            )
         } catch {
             // Track the failed send so retrying reuses the same messageId
             lastFailedSend = (messageId: messageId, content: content)
@@ -941,7 +964,10 @@ import SwiftUI
     /// the marker back (the wizard re-pends) and rethrows.
     func dismissQuestions(agentId: String, messageId: String, workspaceId: String) async throws {
         try await commands.dismissQuestions(
-            agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+            agentId: agentId,
+            messageId: messageId,
+            workspaceId: workspaceId
+        )
     }
 
     // MARK: - Seen marker (agent.markSeen, PROTOCOL §5.5)
@@ -952,15 +978,24 @@ import SwiftUI
     /// and the next trigger retries (the dedupe record is rolled back).
     func markSeen(agentId: String, workspaceId: String) async {
         await commands.markSeen(
-            agentId: agentId, workspaceId: workspaceId, messages: messages)
+            agentId: agentId,
+            workspaceId: workspaceId,
+            messages: messages
+        )
     }
 
-    func queueMessage(agentId: String, content: String,
-                      imageBlocks: [[String: Any]]? = nil,
-                      fileBlocks: [[String: Any]]? = nil) async throws {
+    func queueMessage(
+        agentId: String,
+        content: String,
+        imageBlocks: [[String: Any]]? = nil,
+        fileBlocks: [[String: Any]]? = nil
+    ) async throws {
         try await commands.queueMessage(
-            agentId: agentId, content: content,
-            imageBlocks: imageBlocks, fileBlocks: fileBlocks)
+            agentId: agentId,
+            content: content,
+            imageBlocks: imageBlocks,
+            fileBlocks: fileBlocks
+        )
     }
 
     func stopStreaming(agentId: String) async {
@@ -981,12 +1016,18 @@ import SwiftUI
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {
         try await commands.editQueuedMessage(
-            agentId: agentId, messageId: messageId, content: content)
+            agentId: agentId,
+            messageId: messageId,
+            content: content
+        )
     }
 
     func sendQueuedMessageNow(agentId: String, messageId: String, workspaceId: String) async throws {
         try await commands.sendQueuedMessageNow(
-            agentId: agentId, messageId: messageId, workspaceId: workspaceId)
+            agentId: agentId,
+            messageId: messageId,
+            workspaceId: workspaceId
+        )
     }
 
     func removeQueuedMessage(agentId: String, messageId: String) async throws {
@@ -1001,24 +1042,34 @@ import SwiftUI
 
     func setModel(agentId: String, modelId: String, workspaceId: String) async throws {
         try await commands.setModel(
-            agentId: agentId, modelId: modelId, workspaceId: workspaceId)
+            agentId: agentId,
+            modelId: modelId,
+            workspaceId: workspaceId
+        )
     }
 
     // MARK: - Agent subscriptions
 
     func fetchSubscriptions(agentId: String, workspaceId: String) async {
         await watchedAgentCoordinator.fetchSubscriptions(
-            agentId: agentId, workspaceId: workspaceId)
+            agentId: agentId,
+            workspaceId: workspaceId
+        )
     }
 
     func cancelSubscriptions(agentId: String, workspaceId: String) async {
         await watchedAgentCoordinator.cancelSubscriptions(
-            agentId: agentId, workspaceId: workspaceId)
+            agentId: agentId,
+            workspaceId: workspaceId
+        )
     }
 
     func stopWatchedAgents(agentIds: [String], parentAgentId: String, workspaceId: String) async {
         await watchedAgentCoordinator.stopAgents(
-            agentIds: agentIds, parentAgentId: parentAgentId, workspaceId: workspaceId)
+            agentIds: agentIds,
+            parentAgentId: parentAgentId,
+            workspaceId: workspaceId
+        )
     }
 
     // MARK: - Cleanup

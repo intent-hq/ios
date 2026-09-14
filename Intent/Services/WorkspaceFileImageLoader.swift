@@ -37,7 +37,7 @@ final class WorkspaceFileImageLoader {
                 "workspaceId": workspaceId,
                 "path": path,
                 "offset": offset,
-                "length": WorkspaceFileImageLoader.chunkLength,
+                "length": WorkspaceFileImageLoader.chunkLength
             ])
             guard let dict = result as? [String: Any],
                   let content = dict["content"] as? String,
@@ -88,7 +88,10 @@ final class WorkspaceFileImageLoader {
         }
         let task = Task<UIImage, Error> { [chunkRequester, cache] in
             let image = try await Self.fetchAndDecode(
-                chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+                chunkRequester: chunkRequester,
+                workspaceId: workspaceId,
+                path: path
+            )
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
@@ -125,11 +128,16 @@ final class WorkspaceFileImageLoader {
     /// decode run on the global executor — only each `file.readChunk` RPC
     /// hops to the main actor. Keeps large decodes off the UI thread.
     @concurrent
-    private nonisolated static func fetchAndDecode(
-        chunkRequester: ChunkRequester, workspaceId: String, path: String
+    nonisolated private static func fetchAndDecode(
+        chunkRequester: ChunkRequester,
+        workspaceId: String,
+        path: String
     ) async throws -> UIImage {
         let data = try await fetchBytes(
-            chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+            chunkRequester: chunkRequester,
+            workspaceId: workspaceId,
+            path: path
+        )
         guard let image = decodeImage(data) else {
             throw LoadError.notAnImage
         }
@@ -139,14 +147,19 @@ final class WorkspaceFileImageLoader {
     /// Assemble the file's raw bytes from sequential `file.readChunk` slices
     /// on the global executor, hopping to the main actor only for each RPC.
     @concurrent
-    private nonisolated static func fetchBytes(
-        chunkRequester: ChunkRequester, workspaceId: String, path: String
+    nonisolated private static func fetchBytes(
+        chunkRequester: ChunkRequester,
+        workspaceId: String,
+        path: String
     ) async throws -> Data {
         var data = Data()
         var offset = 0
         while true {
             let result = try await chunkRequester.request(
-                workspaceId: workspaceId, path: path, offset: offset)
+                workspaceId: workspaceId,
+                path: path,
+                offset: offset
+            )
             guard result.size <= maxFileBytes else { throw LoadError.fileTooLarge }
             guard let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead
             else { throw LoadError.malformedResponse }
@@ -171,7 +184,7 @@ final class WorkspaceFileImageLoader {
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
         ] as CFDictionary
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
             return nil

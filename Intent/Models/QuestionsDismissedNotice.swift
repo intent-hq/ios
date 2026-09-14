@@ -51,13 +51,17 @@ extension ConversationMessage {
         }
         let dismissedId = metadata["dismissedQuestionsMessageId"]?.value as? String ?? ""
         return QuestionsDismissedNotice(
-            dismissedQuestionsMessageId: dismissedId, fullText: "")
+            dismissedQuestionsMessageId: dismissedId,
+            fullText: ""
+        )
     }
 }
 
 private extension QuestionsDismissedNotice {
     func withText(_ text: String) -> QuestionsDismissedNotice {
         QuestionsDismissedNotice(
-            dismissedQuestionsMessageId: dismissedQuestionsMessageId, fullText: text)
+            dismissedQuestionsMessageId: dismissedQuestionsMessageId,
+            fullText: text
+        )
     }
 }

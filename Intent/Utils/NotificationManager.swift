@@ -1,6 +1,6 @@
-import SwiftUI
-import Observation
 import AudioToolbox
+import Observation
+import SwiftUI
 import UserNotifications
 
 struct ToastInfo: Equatable {
@@ -13,8 +13,13 @@ struct ToastInfo: Equatable {
     /// concrete source connection, so taps can route to its window).
     let sourceBackendID: BackendID
 
-    init(agentId: String, workspaceId: String, agentName: String, workspaceName: String,
-         sourceBackendID: BackendID) {
+    init(
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        workspaceName: String,
+        sourceBackendID: BackendID
+    ) {
         self.id = UUID()
         self.agentId = agentId
         self.workspaceId = workspaceId
@@ -26,6 +31,8 @@ struct ToastInfo: Equatable {
 
 @MainActor
 @Observable class NotificationManager {
+    private static let agentIdleFeedbackSoundID: SystemSoundID = 1152
+
     static let shared = NotificationManager()
 
     var currentToast: ToastInfo?
@@ -108,7 +115,7 @@ struct ToastInfo: Equatable {
         },
         presentFeedback: @escaping () -> Void = {
             HapticManager.notification(.success)
-            AudioServicesPlaySystemSound(1152)
+            AudioServicesPlaySystemSound(Self.agentIdleFeedbackSoundID)
         },
         windowEmitsFeedbackSound: Bool = NotificationManager.platformWindowEmitsFeedbackSound,
         connection: ConnectionManagerRouting = ConnectionManager.shared,
@@ -140,7 +147,9 @@ struct ToastInfo: Equatable {
     func conversationOpened(agentId: String, connectionId: UUID) {
         openAgentIds[connectionId, default: [:]][agentId, default: 0] += 1
         localNotificationService.removeDeliveredNotifications(
-            forAgentId: agentId, connectionId: connectionId)
+            forAgentId: agentId,
+            connectionId: connectionId
+        )
     }
 
     /// Balances `conversationOpened`. Keyed by (agent, connection), so a
@@ -161,7 +170,9 @@ struct ToastInfo: Equatable {
     }
 
     private func decrement(
-        _ counts: inout [UUID: [String: Int]], id: String, connectionId: UUID
+        _ counts: inout [UUID: [String: Int]],
+        id: String,
+        connectionId: UUID
     ) {
         guard let count = counts[connectionId]?[id] else { return }
         counts[connectionId]?[id] = count > 1 ? count - 1 : nil
@@ -192,8 +203,11 @@ struct ToastInfo: Equatable {
         if let pending = pendingAgentSelection {
             pendingAgentSelection = nil
             routeAgentSelection(
-                agentId: pending.agentId, workspaceId: pending.workspaceId,
-                agentName: pending.agentName, connectionId: pending.connectionId)
+                agentId: pending.agentId,
+                workspaceId: pending.workspaceId,
+                agentName: pending.agentName,
+                connectionId: pending.connectionId
+            )
         }
         return token
     }
@@ -216,8 +230,11 @@ struct ToastInfo: Equatable {
               let connectionId = response.connectionId
         else { return }
         routeAgentSelection(
-            agentId: agentId, workspaceId: workspaceId,
-            agentName: agentName, connectionId: connectionId)
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            connectionId: connectionId
+        )
     }
 
     /// Routes a tapped agent alert to the window bound to its source
@@ -227,18 +244,25 @@ struct ToastInfo: Equatable {
     /// cross-backend taps on single-window platforms — the same visible
     /// behavior as the old coordinator-side connection guard.
     func routeAgentSelection(
-        agentId: String, workspaceId: String, agentName: String, connectionId: UUID
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        connectionId: UUID
     ) {
         let source = BackendID(connectionId)
         switch Self.selectionRoute(
             source: source,
             registeredBackends: Set(agentSelectionHandlers.keys),
-            supportsMultipleWindows: supportsMultipleWindows)
-        {
+            supportsMultipleWindows: supportsMultipleWindows
+        ) {
         case .deliverToWindow:
             pendingAgentSelection = nil
             agentSelectionHandlers[source]?.handler(
-                agentId, workspaceId, agentName, connectionId)
+                agentId,
+                workspaceId,
+                agentName,
+                connectionId
+            )
         case .openSourceWindow:
             pendingAgentSelection = (agentId, workspaceId, agentName, connectionId)
             openBackendWindow?(source)
@@ -327,13 +351,16 @@ struct ToastInfo: Equatable {
               let connectionId = response.connectionId
         else { return }
         presentForegroundAlert(
-            agentId: agentId, workspaceId: workspaceId, agentName: agentName,
-            connectionId: connectionId)
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            connectionId: connectionId
+        )
     }
 
     private func registerEventHandler() {
         AppLog.notifications.debug("[NotificationManager] Registering event handler")
-        connection.onEvent { [weak self] method, params in
+        connection.onEvent { [weak self] _, params in
             Task { @MainActor in
                 self?.handleEvent(params, from: nil)
             }
@@ -427,18 +454,23 @@ struct ToastInfo: Equatable {
         // the idle agent is background per metadata. Fail-open on read failure.
         Task { @MainActor [weak self] in
             let agents = await self?.fetchWorkspaceAgents(
-                workspaceId: workspaceId, from: sourceBackendID)
+                workspaceId: workspaceId,
+                from: sourceBackendID
+            )
             guard let self,
-                  self.sourceStillCurrent(sourceBackendID, connectionId: connectionId)
+                  sourceStillCurrent(sourceBackendID, connectionId: connectionId)
             else { return }
             if Self.shouldSuppressIdleAlert(idleAgentId: agentId, agents: agents) {
                 AppLog.notifications.debug("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
                 return
             }
-            self.presentIdleAlert(
-                agentId: agentId, workspaceId: workspaceId,
-                agentName: agentName, connectionId: connectionId,
-                sourceBackendID: sourceBackendID)
+            presentIdleAlert(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                connectionId: connectionId,
+                sourceBackendID: sourceBackendID
+            )
         }
     }
 
@@ -494,7 +526,8 @@ struct ToastInfo: Equatable {
     /// event source's own connection. Returns nil when the source session is
     /// gone, the read fails, or the response is malformed.
     private func fetchWorkspaceAgents(
-        workspaceId: String, from sourceBackendID: BackendID?
+        workspaceId: String,
+        from sourceBackendID: BackendID?
     ) async -> [AgentSession]? {
         let sourceConnection: ConnectionManagerRouting
         if let sourceBackendID {
@@ -522,8 +555,12 @@ struct ToastInfo: Equatable {
     func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         guard let connectionId = activeConnectionId() else { return }
         presentIdleAlert(
-            agentId: agentId, workspaceId: workspaceId,
-            agentName: agentName, connectionId: connectionId, sourceBackendID: nil)
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            connectionId: connectionId,
+            sourceBackendID: nil
+        )
     }
 
     private func presentIdleAlert(
@@ -536,7 +573,7 @@ struct ToastInfo: Equatable {
         guard sourceStillCurrent(sourceBackendID, connectionId: connectionId) else { return }
         // Look up workspace name in the source session's store
         let workspaceName = workspaceStore(for: sourceBackendID).workspaces
-            .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
+            .first { $0.id == workspaceId }?.title ?? "Workspace"
 
         guard applicationState() == .active else {
             localNotificationService.postAgentIdleNotification(
@@ -550,9 +587,12 @@ struct ToastInfo: Equatable {
         }
 
         presentForegroundAlert(
-            agentId: agentId, workspaceId: workspaceId,
-            agentName: agentName, workspaceName: workspaceName,
-            connectionId: connectionId)
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            workspaceName: workspaceName,
+            connectionId: connectionId
+        )
     }
 
     // Suppression is connection-scoped (window model v2): only the SAME
@@ -575,10 +615,11 @@ struct ToastInfo: Equatable {
         guard Self.alertPresents(
             source: sourceBackendID,
             registeredBackends: Set(agentSelectionHandlers.keys),
-            supportsMultipleWindows: supportsMultipleWindows)
+            supportsMultipleWindows: supportsMultipleWindows
+        )
         else { return }
         let workspaceName = workspaceName ?? workspaceStore(for: sourceBackendID).workspaces
-            .first(where: { $0.id == workspaceId })?.title ?? "Workspace"
+            .first { $0.id == workspaceId }?.title ?? "Workspace"
         if isAgentOpen(agentId, connectionId: connectionId) {
             // Currently viewing this exact agent's conversation — feedback, no toast
             playFeedback(source: sourceBackendID, workspaceId: workspaceId)
@@ -589,9 +630,13 @@ struct ToastInfo: Equatable {
         } else {
             // Different workspace — feedback + toast
             playFeedback(source: sourceBackendID, workspaceId: workspaceId)
-            showToast(agentId: agentId, workspaceId: workspaceId,
-                      agentName: agentName, workspaceName: workspaceName,
-                      sourceBackendID: sourceBackendID)
+            showToast(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                workspaceName: workspaceName,
+                sourceBackendID: sourceBackendID
+            )
         }
     }
 
@@ -616,9 +661,13 @@ struct ToastInfo: Equatable {
         }
     }
 
-    private func showToast(agentId: String, workspaceId: String,
-                           agentName: String, workspaceName: String,
-                           sourceBackendID: BackendID) {
+    private func showToast(
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
+        workspaceName: String,
+        sourceBackendID: BackendID
+    ) {
         dismissTask?.cancel()
 
         withAnimation(.spring(
@@ -626,9 +675,12 @@ struct ToastInfo: Equatable {
             dampingFraction: Constants.Notification.presentationSpringDamping
         )) {
             currentToast = ToastInfo(
-                agentId: agentId, workspaceId: workspaceId,
-                agentName: agentName, workspaceName: workspaceName,
-                sourceBackendID: sourceBackendID)
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                workspaceName: workspaceName,
+                sourceBackendID: sourceBackendID
+            )
         }
 
         dismissTask = Task { @MainActor in
@@ -645,4 +697,3 @@ struct ToastInfo: Equatable {
         }
     }
 }
-

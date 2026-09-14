@@ -21,11 +21,17 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var tunnelDialer: any TunnelDialing { get }
 
     func connect(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) async throws
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     )
     func refreshHostRoutes() async

@@ -27,7 +27,7 @@ struct TaskMetadataHeaderView: View {
         (.inProgress, "in_progress"),
         (.reviewRequired, "review_required"),
         (.complete, "complete"),
-        (.cancelled, "cancelled"),
+        (.cancelled, "cancelled")
     ]
 
     /// Reverse dependency edges computed client-side (fe parity): non-archived
@@ -52,17 +52,18 @@ struct TaskMetadataHeaderView: View {
     /// occurrence, then sorted by agent creation date (oldest first; agents
     /// with no resolvable date sort last, keeping their wire order).
     static func sortedAssigneeIds(
-        _ ids: [String], createdAt: (String) -> Date?
+        _ ids: [String],
+        createdAt: (String) -> Date?
     ) -> [String] {
         var seen = Set<String>()
         let unique = ids.filter { seen.insert($0).inserted }
         return unique
             .enumerated()
-            .sorted { a, b in
-                let dateA = createdAt(a.element) ?? .distantFuture
-                let dateB = createdAt(b.element) ?? .distantFuture
+            .sorted { firstAssignee, secondAssignee in
+                let dateA = createdAt(firstAssignee.element) ?? .distantFuture
+                let dateB = createdAt(secondAssignee.element) ?? .distantFuture
                 if dateA != dateB { return dateA < dateB }
-                return a.offset < b.offset
+                return firstAssignee.offset < secondAssignee.offset
             }
             .map(\.element)
     }
@@ -77,8 +78,10 @@ struct TaskMetadataHeaderView: View {
             if !note.dependsOn.isEmpty {
                 row("Depends on") {
                     chips(note.dependsOn) { depId in
-                        (variant: ChipVariant.dependency,
-                         unmet: Self.showsUnmetDependency(depId, note: note))
+                        (
+                            variant: ChipVariant.dependency,
+                            unmet: Self.showsUnmetDependency(depId, note: note)
+                        )
                     }
                 }
             }
@@ -121,8 +124,10 @@ struct TaskMetadataHeaderView: View {
             }
         } label: {
             HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
-                TaskStatusIconView(status: note.taskDisplayStatus ?? .unknown,
-                                   size: Constants.Notes.Metadata.statusIconSize)
+                TaskStatusIconView(
+                    status: note.taskDisplayStatus ?? .unknown,
+                    size: Constants.Notes.Metadata.statusIconSize
+                )
                 Text((note.taskDisplayStatus ?? .unknown).label)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -158,14 +163,13 @@ struct TaskMetadataHeaderView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Constants.Notes.Metadata.chipStackSpacing) {
             ForEach(ids, id: \.self) { relatedId in
-                let s = style(relatedId)
+                let chipStyle = style(relatedId)
                 TaskRelationChip(
                     relatedNote: notes.first { $0.id == relatedId },
                     fallbackId: relatedId,
-                    variant: s.variant,
-                    unmet: s.unmet,
-                    onTap: { onNavigateToNote(relatedId) }
-                )
+                    variant: chipStyle.variant,
+                    unmet: chipStyle.unmet
+                ) { onNavigateToNote(relatedId) }
             }
         }
     }
@@ -209,10 +213,12 @@ private struct TaskRelationChip: View {
                     Image(systemName: "exclamationmark.triangle")
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Self.warning)
+                        .accessibilityHidden(true)
                 } else {
                     TaskStatusIconView(
                         status: relatedNote?.taskDisplayStatus ?? .unknown,
-                        size: Constants.Notes.Metadata.relationIconSize)
+                        size: Constants.Notes.Metadata.relationIconSize
+                    )
                 }
                 Text(title)
                     .font(.footnote.weight(.medium))
@@ -220,12 +226,14 @@ private struct TaskRelationChip: View {
                     .foregroundStyle(
                         variant == .conflict
                             ? Self.warning
-                            : Theme.mutedForeground(for: colorScheme))
+                            : Theme.mutedForeground(for: colorScheme)
+                    )
                     .lineLimit(1)
-                if variant == .dependency && unmet {
+                if variant == .dependency, unmet {
                     Image(systemName: "hourglass")
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
@@ -236,16 +244,20 @@ private struct TaskRelationChip: View {
                     : unmet
                         ? Theme.muted(for: colorScheme)
                         : Theme.muted(for: colorScheme).opacity(
-                            Constants.Notes.Metadata.mutedBackgroundOpacity))
+                            Constants.Notes.Metadata.mutedBackgroundOpacity
+                        )
+            )
             .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Metadata.chipCornerRadius))
             .frame(
                 minWidth: Constants.Accessibility.minimumTapTarget,
-                minHeight: Constants.Accessibility.minimumTapTarget)
+                minHeight: Constants.Accessibility.minimumTapTarget
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open related task \(title)")
         .accessibilityValue(
-            variant == .conflict ? "Conflict" : unmet ? "Unmet dependency" : "Dependency")
+            variant == .conflict ? "Conflict" : unmet ? "Unmet dependency" : "Dependency"
+        )
     }
 }

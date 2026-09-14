@@ -71,7 +71,7 @@ struct GitHubRepoPickerView: View {
 
     private var repoList: some View {
         Group {
-            if (store.isLoading || pendingSearchQuery != nil) && suggestions.isEmpty {
+            if store.isLoading || pendingSearchQuery != nil, suggestions.isEmpty {
                 ProgressView("Loading repositories...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if suggestions.isEmpty {

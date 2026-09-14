@@ -28,6 +28,7 @@ struct ModelPickerView: View {
                                         if viewModel.currentModelId == model.id {
                                             Image(systemName: "checkmark")
                                                 .foregroundStyle(Theme.primary(for: colorScheme))
+                                                .accessibilityLabel("Selected model")
                                         }
                                     }
                                 }
@@ -49,4 +50,3 @@ struct ModelPickerView: View {
         }
     }
 }
-

@@ -8,11 +8,19 @@ import SwiftUI
 /// route that still has stale mismatching siblings. Purely informational —
 /// no actions.
 struct CertMismatchListView: View {
+    private enum Layout {
+        static let contentSpacing: CGFloat = 8
+        static let verticalPadding: CGFloat = 10
+        static let horizontalPadding: CGFloat = 12
+        static let backgroundOpacity = 0.12
+        static let cornerRadius: CGFloat = 12
+    }
+
     @Environment(\.colorScheme) var colorScheme
     let mismatches: [HostCertMismatch]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             Label("Certificate mismatch", systemImage: "exclamationmark.shield")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.orange)
@@ -30,10 +38,10 @@ struct CertMismatchListView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
-        .background(Color.orange.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.vertical, Layout.verticalPadding)
+        .padding(.horizontal, Layout.horizontalPadding)
+        .background(Color.orange.opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
     }
 
     /// Truncates a colon-separated SHA-256 fingerprint (32 bytes) to its
@@ -51,8 +59,9 @@ struct CertMismatchListView: View {
         HostCertMismatch(
             host: "192.168.1.42",
             fingerprint: "ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89:"
-                + "ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89"),
-        HostCertMismatch(host: "mac.local", fingerprint: "ee:ff:00:11"),
+                + "ab:cd:ef:01:23:45:67:89:ab:cd:ef:01:23:45:67:89"
+        ),
+        HostCertMismatch(host: "mac.local", fingerprint: "ee:ff:00:11")
     ])
     .padding()
 }

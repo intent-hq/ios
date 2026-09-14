@@ -22,14 +22,17 @@ struct DisconnectedView: View {
                 // Pulsing dot animation
                 Circle()
                     .fill(Color.orange)
-                    .frame(width: Constants.Disconnected.indicatorSize,
-                           height: Constants.Disconnected.indicatorSize)
+                    .frame(
+                        width: Constants.Disconnected.indicatorSize,
+                        height: Constants.Disconnected.indicatorSize
+                    )
                     .scaleEffect(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorScale : 1.0)
                     .opacity(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorOpacity : 1.0)
                     .animation(
                         .easeInOut(duration: Constants.Disconnected.indicatorAnimationDuration)
                             .repeatForever(autoreverses: true),
-                        value: attemptNumber)
+                        value: attemptNumber
+                    )
 
                 Text("Connection Lost")
                     .font(.title2.bold())
@@ -59,7 +62,7 @@ struct DisconnectedView: View {
                 // gets wired up.
                 if !session.connection.certMismatches.isEmpty {
                     CertMismatchListView(mismatches: session.connection.certMismatches)
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, Constants.Disconnected.horizontalPadding)
                 }
 
                 Spacer()
@@ -67,7 +70,7 @@ struct DisconnectedView: View {
                 Button(action: {
                     session.connection.disconnect()
                     coordinator.onLogOff()
-                }) {
+                }, label: {
                     Text("Log Off")
                         .font(.body.weight(.medium))
                         .foregroundStyle(.red)
@@ -75,11 +78,10 @@ struct DisconnectedView: View {
                         .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
                         .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
                         .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
-                }
+                })
                 .padding(.horizontal, Constants.Disconnected.horizontalPadding)
                 .padding(.bottom, Constants.Disconnected.bottomPadding)
             }
         }
     }
 }
-

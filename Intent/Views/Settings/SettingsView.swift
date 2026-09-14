@@ -30,6 +30,7 @@ struct SettingsView: View {
                                 Image(systemName: "desktopcomputer")
                                     .font(.title2)
                                     .foregroundStyle(Theme.primary(for: colorScheme))
+                                    .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: Constants.Settings.connectionTextSpacing) {
                                     Text(connection.displayName)
@@ -37,7 +38,9 @@ struct SettingsView: View {
                                     Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
                                         .font(.caption)
                                         .foregroundStyle(Theme.mutedForeground(
-                                            for: colorScheme, contrast: colorSchemeContrast))
+                                            for: colorScheme,
+                                            contrast: colorSchemeContrast
+                                        ))
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -46,8 +49,10 @@ struct SettingsView: View {
                             HStack(spacing: Constants.Settings.statusSpacing) {
                                 Circle()
                                     .fill(.green)
-                                    .frame(width: Constants.Settings.statusDotSize,
-                                           height: Constants.Settings.statusDotSize)
+                                    .frame(
+                                        width: Constants.Settings.statusDotSize,
+                                        height: Constants.Settings.statusDotSize
+                                    )
                                 Text("Connected")
                                     .font(.caption)
                             }
@@ -121,4 +126,3 @@ struct SettingsView: View {
         .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
-

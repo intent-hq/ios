@@ -1,7 +1,7 @@
 import Foundation
+@testable import Intent
 import Synchronization
 import Testing
-@testable import Intent
 
 /// Covers attachment placement (PROTOCOL §5.9): the single-shot
 /// `file.placeAttachment` path, the chunked `file.attachmentUpload.*`
@@ -13,7 +13,9 @@ struct AttachmentUploadServiceTests {
 
     /// Canonical daemon placement result (placeAttachment / commit).
     private static func placementResponse(
-        fileName: String = "doc.pdf", mimeType: String? = "application/pdf", size: Int = 5
+        fileName: String = "doc.pdf",
+        mimeType: String? = "application/pdf",
+        size: Int = 5
     ) -> [String: Any] {
         var response: [String: Any] = [
             "ok": true,
@@ -21,14 +23,15 @@ struct AttachmentUploadServiceTests {
             "fileName": fileName,
             "size": size,
             "attachmentId": "att-1",
-            "uploadedAt": "2026-08-27T00:00:00Z",
+            "uploadedAt": "2026-08-27T00:00:00Z"
         ]
         if let mimeType { response["mimeType"] = mimeType }
         return response
     }
 
     private static func beginResponse(
-        uploadId: String = "up-1", maxChunkBytes: Int = 16 * 1024 * 1024
+        uploadId: String = "up-1",
+        maxChunkBytes: Int = 16 * 1024 * 1024
     ) -> [String: Any] {
         ["uploadId": uploadId, "maxChunkBytes": maxChunkBytes]
     }
@@ -48,7 +51,8 @@ struct AttachmentUploadServiceTests {
         var pipeline: ConversationAttachmentPipeline? = ConversationAttachmentPipeline(
             uploadService: AttachmentUploadService(connection: FakeConnectionManager()),
             startSecurityScopedAccess: { _ in true },
-            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } })
+            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } }
+        )
         let first = URL(fileURLWithPath: "/tmp/first.txt")
         let second = URL(fileURLWithPath: "/tmp/second.txt")
         let third = URL(fileURLWithPath: "/tmp/third.txt")
@@ -72,13 +76,16 @@ struct AttachmentUploadServiceTests {
         let pipeline = ConversationAttachmentPipeline(
             uploadService: AttachmentUploadService(connection: fake),
             startSecurityScopedAccess: { _ in true },
-            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } })
+            stopSecurityScopedAccess: { _ in stoppedCount.withLock { $0 += 1 } }
+        )
         let file = URL(fileURLWithPath: "/tmp/pending.txt")
         pipeline.addFiles([file])
 
         await #expect(throws: (any Error).self) {
             _ = try await pipeline.buildFileBlocks(
-                from: pipeline.pendingFiles, workspaceId: "ws-1")
+                from: pipeline.pendingFiles,
+                workspaceId: "ws-1"
+            )
         }
 
         #expect(pipeline.pendingFiles.count == 1)
@@ -97,8 +104,11 @@ struct AttachmentUploadServiceTests {
         let service = AttachmentUploadService(connection: fake)
 
         let placed = try await service.placeData(
-            workspaceId: "ws-1", fileName: "doc.pdf", data: payload,
-            mimeType: "application/pdf")
+            workspaceId: "ws-1",
+            fileName: "doc.pdf",
+            data: payload,
+            mimeType: "application/pdf"
+        )
 
         let params = fake.paramsForMethod("file.placeAttachment")
         #expect(params.count == 1)
@@ -108,9 +118,13 @@ struct AttachmentUploadServiceTests {
         #expect(params[0]["mimeType"] as? String == "application/pdf")
         #expect(!fake.didCallMethod("file.attachmentUpload.begin"))
         #expect(placed == AttachmentUploadService.PlacedAttachment(
-            attachmentId: "att-1", fileName: "doc.pdf",
-            path: ".intent/attachments/doc.pdf", size: 5,
-            mimeType: "application/pdf", uploadedAt: "2026-08-27T00:00:00Z"))
+            attachmentId: "att-1",
+            fileName: "doc.pdf",
+            path: ".intent/attachments/doc.pdf",
+            size: 5,
+            mimeType: "application/pdf",
+            uploadedAt: "2026-08-27T00:00:00Z"
+        ))
     }
 
     @Test func nilMimeTypeIsOmittedFromParams() async throws {
@@ -119,7 +133,10 @@ struct AttachmentUploadServiceTests {
         let service = AttachmentUploadService(connection: fake)
 
         let placed = try await service.placeData(
-            workspaceId: "ws-1", fileName: "doc.pdf", data: Data([1, 2, 3]))
+            workspaceId: "ws-1",
+            fileName: "doc.pdf",
+            data: Data([1, 2, 3])
+        )
 
         let params = fake.paramsForMethod("file.placeAttachment")
         #expect(params[0]["mimeType"] == nil)
@@ -134,7 +151,10 @@ struct AttachmentUploadServiceTests {
         let service = AttachmentUploadService(connection: fake)
 
         _ = try await service.placeFile(
-            workspaceId: "ws-1", fileName: "doc.pdf", fileURL: url)
+            workspaceId: "ws-1",
+            fileName: "doc.pdf",
+            fileURL: url
+        )
 
         let params = fake.paramsForMethod("file.placeAttachment")
         #expect(params.count == 1)
@@ -148,7 +168,10 @@ struct AttachmentUploadServiceTests {
 
         await #expect(throws: UploadError.malformedResponse(method: "file.placeAttachment")) {
             _ = try await service.placeData(
-                workspaceId: "ws-1", fileName: "doc.pdf", data: Data([1]))
+                workspaceId: "ws-1",
+                fileName: "doc.pdf",
+                data: Data([1])
+            )
         }
     }
 
@@ -166,7 +189,11 @@ struct AttachmentUploadServiceTests {
         let service = AttachmentUploadService(connection: fake)
 
         let placed = try await service.placeData(
-            workspaceId: "ws-1", fileName: "big.bin", data: payload, mimeType: "application/octet-stream")
+            workspaceId: "ws-1",
+            fileName: "big.bin",
+            data: payload,
+            mimeType: "application/octet-stream"
+        )
 
         #expect(!fake.didCallMethod("file.placeAttachment"))
         let begin = fake.paramsForMethod("file.attachmentUpload.begin")
@@ -199,13 +226,17 @@ struct AttachmentUploadServiceTests {
         var fractions: [Double] = []
 
         _ = try await AttachmentUploadService.placeChunked(
-            connection: fake, workspaceId: "ws-1", fileName: "tiny.bin",
-            mimeType: nil, size: payload.count,
+            connection: fake,
+            workspaceId: "ws-1",
+            fileName: "tiny.bin",
+            mimeType: nil,
+            size: payload.count,
             sha256: AttachmentUploadService.sha256Hex(of: payload),
             readChunk: { offset, length in
                 payload.subdata(in: offset..<min(offset + length, payload.count))
             },
-            onProgress: { fractions.append($0) })
+            onProgress: { fractions.append($0) }
+        )
 
         let chunks = fake.paramsForMethod("file.attachmentUpload.chunk")
         #expect(chunks.count == 3)
@@ -256,13 +287,17 @@ struct AttachmentUploadServiceTests {
 
         await #expect(throws: (any Error).self) {
             _ = try await AttachmentUploadService.placeChunked(
-                connection: fake, workspaceId: "ws-1", fileName: "tiny.bin",
-                mimeType: nil, size: payload.count,
+                connection: fake,
+                workspaceId: "ws-1",
+                fileName: "tiny.bin",
+                mimeType: nil,
+                size: payload.count,
                 sha256: AttachmentUploadService.sha256Hex(of: payload),
                 readChunk: { offset, length in
                     payload.subdata(in: offset..<min(offset + length, payload.count))
                 },
-                onProgress: nil)
+                onProgress: nil
+            )
         }
 
         #expect(!fake.didCallMethod("file.attachmentUpload.commit"))
@@ -282,13 +317,17 @@ struct AttachmentUploadServiceTests {
 
         await #expect(throws: NSError(domain: "test", code: -8)) {
             _ = try await AttachmentUploadService.placeChunked(
-                connection: fake, workspaceId: "ws-1", fileName: "tiny.bin",
-                mimeType: nil, size: payload.count,
+                connection: fake,
+                workspaceId: "ws-1",
+                fileName: "tiny.bin",
+                mimeType: nil,
+                size: payload.count,
                 sha256: AttachmentUploadService.sha256Hex(of: payload),
                 readChunk: { offset, length in
                     payload.subdata(in: offset..<min(offset + length, payload.count))
                 },
-                onProgress: nil)
+                onProgress: nil
+            )
         }
 
         #expect(fake.paramsForMethod("file.attachmentUpload.abort").count == 1)
@@ -300,9 +339,15 @@ struct AttachmentUploadServiceTests {
 
         await #expect(throws: UploadError.malformedResponse(method: "file.attachmentUpload.begin")) {
             _ = try await AttachmentUploadService.placeChunked(
-                connection: fake, workspaceId: "ws-1", fileName: "tiny.bin",
-                mimeType: nil, size: 4, sha256: String(repeating: "a", count: 64),
-                readChunk: { _, _ in Data() }, onProgress: nil)
+                connection: fake,
+                workspaceId: "ws-1",
+                fileName: "tiny.bin",
+                mimeType: nil,
+                size: 4,
+                sha256: String(repeating: "a", count: 64),
+                readChunk: { _, _ in Data() },
+                onProgress: nil
+            )
         }
 
         #expect(!fake.didCallMethod("file.attachmentUpload.abort"))
@@ -341,10 +386,14 @@ struct AttachmentUploadServiceTests {
         let service = AttachmentUploadService(connection: fake)
 
         await #expect(throws: UploadError.payloadTooLarge(
-            size: AttachmentUploadService.maxAttachmentBytes + 1)
+            size: AttachmentUploadService.maxAttachmentBytes + 1
+        )
         ) {
             _ = try await service.placeFile(
-                workspaceId: "ws-1", fileName: "huge.bin", fileURL: url)
+                workspaceId: "ws-1",
+                fileName: "huge.bin",
+                fileURL: url
+            )
         }
 
         #expect(fake.requestLog.isEmpty)
@@ -358,7 +407,10 @@ struct AttachmentUploadServiceTests {
 
         await #expect(throws: UploadError.unreadableFile) {
             _ = try await service.placeFile(
-                workspaceId: "ws-1", fileName: "missing.bin", fileURL: missing)
+                workspaceId: "ws-1",
+                fileName: "missing.bin",
+                fileURL: missing
+            )
         }
 
         #expect(fake.requestLog.isEmpty)

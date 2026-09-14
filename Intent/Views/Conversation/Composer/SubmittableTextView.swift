@@ -77,9 +77,12 @@ class KeyCommandTextView: UITextView {
         ComposerSubmitPolicy.returnSubmits(
             isVisionOS: isVisionOS,
             idiom: UIDevice.current.userInterfaceIdiom,
-            hasHardwareKeyboard: GCKeyboard.coalesced != nil)
+            hasHardwareKeyboard: GCKeyboard.coalesced != nil
+        )
     }
 
+    // UIKit's override requires this optional collection type.
+    // swiftlint:disable:next discouraged_optional_collection
     override var keyCommands: [UIKeyCommand]? {
         // Don't intercept Return where it should insert a newline (iPhone
         // always; visionOS without a hardware keyboard)
@@ -151,7 +154,8 @@ struct SubmittableTextView: UIViewRepresentable {
         // inside the rounded field (the outer RoundedRectangle clip in
         // MessageInputView does not affect it).
         textView.hoverStyle = UIHoverStyle(
-            shape: .rect(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+            shape: .rect(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius)
+        )
         #endif
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)
@@ -163,7 +167,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Report height whenever layout changes (e.g. initial layout, rotation)
         textView.onLayoutChange = { [weak textView] in
-            guard let textView = textView else { return }
+            guard let textView else { return }
             onHeightChange?(textView.naturalHeight)
         }
 
@@ -184,14 +188,14 @@ struct SubmittableTextView: UIViewRepresentable {
 
             let idealHeight = textView.naturalHeight
             DispatchQueue.main.async {
-                self.onHeightChange?(idealHeight)
+                onHeightChange?(idealHeight)
             }
         }
 
         // Sync focus
-        if isFocused && !textView.isFirstResponder {
+        if isFocused, !textView.isFirstResponder {
             DispatchQueue.main.async { textView.becomeFirstResponder() }
-        } else if !isFocused && textView.isFirstResponder {
+        } else if !isFocused, textView.isFirstResponder {
             DispatchQueue.main.async { textView.resignFirstResponder() }
         }
     }
@@ -231,13 +235,13 @@ struct SubmittableTextView: UIViewRepresentable {
             parent.onCaretChange?(range.location + range.length)
         }
 
-        func textViewDidBeginEditing(_ textView: UITextView) {
+        func textViewDidBeginEditing(_: UITextView) {
             DispatchQueue.main.async {
                 self.parent.isFocused = true
             }
         }
 
-        func textViewDidEndEditing(_ textView: UITextView) {
+        func textViewDidEndEditing(_: UITextView) {
             DispatchQueue.main.async {
                 self.parent.isFocused = false
             }
@@ -249,7 +253,7 @@ struct SubmittableTextView: UIViewRepresentable {
         /// detect the held Shift key and allow the newline insertion.
         func textView(
             _ textView: UITextView,
-            shouldChangeTextIn range: NSRange,
+            shouldChangeTextIn _: NSRange,
             replacementText text: String
         ) -> Bool {
             if text == "\n" {
@@ -268,4 +272,3 @@ struct SubmittableTextView: UIViewRepresentable {
         }
     }
 }
-

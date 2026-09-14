@@ -8,7 +8,7 @@ struct NoteListView: View {
     @State private var collapsedIds: Set<String> = []
 
     var body: some View {
-        if (noteStore.isLoading || !noteStore.hasLoaded) && noteStore.notes.isEmpty {
+        if noteStore.isLoading || !noteStore.hasLoaded, noteStore.notes.isEmpty {
             Spacer()
             ProgressView("Loading notes...")
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -92,9 +92,9 @@ struct NoteTreeNodeView: View {
             )
 
             // Children (if expanded)
-            if hasChildren && !isCollapsed {
+            if hasChildren, !isCollapsed {
                 ForEach(children) { child in
-                    NoteTreeNodeView(
+                    Self(
                         note: child,
                         noteStore: noteStore,
                         workspaceId: workspaceId,
@@ -120,8 +120,8 @@ struct NoteRowView: View {
     var hasChildren: Bool = false
     var isCollapsed: Bool = false
     let colorScheme: ColorScheme
-    var onToggleCollapse: (() -> Void)? = nil
-    var onNavigate: (() -> Void)? = nil
+    var onToggleCollapse: (() -> Void)?
+    var onNavigate: (() -> Void)?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var usesAccessibilityLayout: Bool {
@@ -134,7 +134,9 @@ struct NoteRowView: View {
             if depth > 0 {
                 Spacer()
                     .frame(width: NoteRowLayout.indentation(
-                        for: depth, usesAccessibilityLayout: usesAccessibilityLayout))
+                        for: depth,
+                        usesAccessibilityLayout: usesAccessibilityLayout
+                    ))
             }
 
             // Disclosure chevron (or spacer for alignment)
@@ -146,10 +148,13 @@ struct NoteRowView: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .padding(.top, NoteRowLayout.firstLineIconTopPadding)
-                        .frame(width: NoteRowLayout.disclosureTargetSize,
-                               height: NoteRowLayout.disclosureTargetSize,
-                               alignment: .top)
+                        .frame(
+                            width: NoteRowLayout.disclosureTargetSize,
+                            height: NoteRowLayout.disclosureTargetSize,
+                            alignment: .top
+                        )
                         .contentShape(Rectangle())
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Child notes for \(note.title)")
@@ -178,13 +183,14 @@ struct NoteRowView: View {
                             starIcon
                             TaskProgressRingView(stats: stats)
                         case .taskStatus(let status):
-                            TaskStatusIconView(status: status, size: 14)
+                            TaskStatusIconView(status: status, size: NoteRowLayout.leadingIconSize)
                         case .progressRing(let stats):
                             TaskProgressRingView(stats: stats)
                         case .document:
                             Image(systemName: "doc.text")
                                 .font(.caption)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .accessibilityHidden(true)
                         }
                     }
                     .padding(.top, NoteRowLayout.firstLineIconTopPadding)
@@ -195,7 +201,8 @@ struct NoteRowView: View {
                             .font(depth == 0 ? .headline : .body)
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .lineLimit(NoteRowLayout.titleLineLimit(
-                                usesAccessibilityLayout: usesAccessibilityLayout))
+                                usesAccessibilityLayout: usesAccessibilityLayout
+                            ))
 
                         let visibleTags = NoteRowLayout.visibleTags(for: note)
                         if !visibleTags.isEmpty {
@@ -207,7 +214,8 @@ struct NoteRowView: View {
                                         .padding(.vertical, Constants.Notes.List.tagVerticalPadding)
                                         .background(Theme.muted(for: colorScheme))
                                         .clipShape(RoundedRectangle(
-                                            cornerRadius: Constants.Notes.List.tagCornerRadius))
+                                            cornerRadius: Constants.Notes.List.tagCornerRadius
+                                        ))
                                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                 }
                             }
@@ -225,14 +233,18 @@ struct NoteRowView: View {
                     minWidth: Constants.Accessibility.minimumTapTarget,
                     maxWidth: .infinity,
                     minHeight: Constants.Accessibility.minimumTapTarget,
-                    alignment: .leading)
+                    alignment: .leading
+                )
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, depth == 0
+        .padding(
+            .vertical,
+            depth == 0
             ? Constants.Notes.List.rootVerticalPadding
-            : Constants.Notes.List.nestedVerticalPadding)
+            : Constants.Notes.List.nestedVerticalPadding
+        )
         .padding(.trailing, Constants.Notes.List.horizontalRowPadding)
     }
 
@@ -240,10 +252,12 @@ struct NoteRowView: View {
         Image(systemName: "star.fill")
             .font(.caption)
             .foregroundStyle(.yellow)
+            .accessibilityLabel("Spec note")
     }
 }
 
 enum NoteRowLayout {
+    static let leadingIconSize: CGFloat = 14
     static let firstLineIconTopPadding = Constants.Notes.List.titleSpacing
 
     static var disclosureTargetSize: CGFloat {
@@ -272,10 +286,9 @@ enum NoteRowLayout {
     static func visibleTags(for note: Note) -> [String] {
         guard note.isDefault else { return note.tags }
         let title = note.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return note.tags.filter {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        return note.tags.filter { tag in
+            tag.trimmingCharacters(in: .whitespacesAndNewlines)
                 .localizedCaseInsensitiveCompare(title) != .orderedSame
         }
     }
 }
-

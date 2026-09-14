@@ -13,7 +13,7 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
         TaskDisplayStatus(wire: status)
     }
 
-    static func parseTask(_ dict: [String: Any]) -> WorkspaceTask? {
+    static func parseTask(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let title = dict["title"] as? String,
               let status = dict["status"] as? String,
@@ -21,7 +21,7 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
             return nil
         }
 
-        return WorkspaceTask(
+        return Self(
             id: id,
             title: title,
             status: status,

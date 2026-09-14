@@ -22,6 +22,7 @@ struct QuestionWizardFooterRow: View {
                     HStack(spacing: 4) {
                         Image(systemName: "chevron.left")
                             .font(.caption.weight(.semibold))
+                            .accessibilityHidden(true)
                         Text("Back")
                             .font(.caption)
                     }
@@ -31,12 +32,13 @@ struct QuestionWizardFooterRow: View {
                     )
                     .frame(
                         minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                        minHeight: Constants.Accessibility.minimumTapTarget
+                    )
                 }
                 .buttonStyle(.plain)
                 .disabled(index == 0)
             }
-            if !isMulti && !isLast {
+            if !isMulti, !isLast {
                 Text("Selecting an option advances")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
@@ -48,7 +50,8 @@ struct QuestionWizardFooterRow: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                     .frame(
                         minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                        minHeight: Constants.Accessibility.minimumTapTarget
+                    )
             }
             .buttonStyle(.plain)
             if showNext {
@@ -58,6 +61,7 @@ struct QuestionWizardFooterRow: View {
                             .font(.caption.weight(.semibold))
                         Image(systemName: isLast ? "arrow.up" : "arrow.right")
                             .font(.caption.weight(.semibold))
+                            .accessibilityHidden(true)
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 12)
@@ -65,7 +69,8 @@ struct QuestionWizardFooterRow: View {
                     .background(Capsule().fill(Theme.primary(for: colorScheme)))
                     .frame(
                         minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget)
+                        minHeight: Constants.Accessibility.minimumTapTarget
+                    )
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

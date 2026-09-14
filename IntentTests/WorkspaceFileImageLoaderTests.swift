@@ -1,7 +1,7 @@
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// Covers the `file.readChunk` fetch path: chunk assembly, malformed
 /// responses, the size cap, decode failure, and caching.
@@ -46,7 +46,7 @@ struct WorkspaceFileImageLoaderTests {
         let fake = FakeConnectionManager()
         fake.responseQueueMap["file.readChunk"] = [
             Self.chunkResponse(Data(first), size: png.count),
-            Self.chunkResponse(Data(second), size: png.count),
+            Self.chunkResponse(Data(second), size: png.count)
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
@@ -72,7 +72,7 @@ struct WorkspaceFileImageLoaderTests {
     @Test func bytesReadMismatchThrowsMalformedResponse() async {
         let fake = FakeConnectionManager()
         fake.responseMap["file.readChunk"] = [
-            "content": Data([1, 2, 3]).base64EncodedString(), "bytesRead": 99, "size": 3,
+            "content": Data([1, 2, 3]).base64EncodedString(), "bytesRead": 99, "size": 3
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
@@ -85,7 +85,7 @@ struct WorkspaceFileImageLoaderTests {
         let fake = FakeConnectionManager()
         fake.responseMap["file.readChunk"] = [
             "content": Data([1]).base64EncodedString(), "bytesRead": 1,
-            "size": WorkspaceFileImageLoader.maxFileBytes + 1,
+            "size": WorkspaceFileImageLoader.maxFileBytes + 1
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 

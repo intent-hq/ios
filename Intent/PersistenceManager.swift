@@ -16,8 +16,10 @@ class PersistenceManager {
     /// between tests or into the real app container.
     let defaults: UserDefaults
 
-    init(defaults: UserDefaults = .standard,
-         keychainStorage: KeychainStorage = SecItemKeychainStorage()) {
+    init(
+        defaults: UserDefaults = .standard,
+        keychainStorage: KeychainStorage = SecItemKeychainStorage()
+    ) {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
     }
@@ -58,11 +60,11 @@ class PersistenceManager {
         migrateLegacyPairingIfNeeded()
         var connections = loadConnectionsLocked()
         let stored: StoredConnection
-        if let index = connections.firstIndex(where: {
-            $0.server.port == connection.server.port
-                && (!Set($0.server.hosts).isDisjoint(with: connection.server.hosts)
+        if let index = connections.firstIndex(where: { storedConnection in
+            storedConnection.server.port == connection.server.port
+                && (!Set(storedConnection.server.hosts).isDisjoint(with: connection.server.hosts)
                     || (connection.server.tcAddress != nil
-                        && $0.server.tcAddress == connection.server.tcAddress))
+                        && storedConnection.server.tcAddress == connection.server.tcAddress))
         }) {
             let existing = connections[index]
             let server = connection.server
@@ -70,7 +72,9 @@ class PersistenceManager {
                 id: existing.id,
                 server: PairedServer(
                     hosts: Self.mergeHostLists(
-                        existing: existing.server.hosts, incoming: server.hosts),
+                        existing: existing.server.hosts,
+                        incoming: server.hosts
+                    ),
                     port: server.port,
                     name: server.name,
                     pairedAt: server.pairedAt,
@@ -194,8 +198,8 @@ class PersistenceManager {
     /// else the most recently connected saved record.
     func lastUsedConnection() -> StoredConnection? {
         if let active = activeConnection() { return active }
-        return loadConnections().max {
-            ($0.lastConnectedAt ?? .distantPast) < ($1.lastConnectedAt ?? .distantPast)
+        return loadConnections().max { lhs, rhs in
+            (lhs.lastConnectedAt ?? .distantPast) < (rhs.lastConnectedAt ?? .distantPast)
         }
     }
 
@@ -225,12 +229,14 @@ class PersistenceManager {
         if result.changed {
             guard saveConnectionsLocked(result.connections) else {
                 return SyncedBackendMergeOutcome(
-                    addedIds: [], updatedIds: [], removedIds: [],
-                    removedActiveConnection: false)
+                    addedIds: [],
+                    updatedIds: [],
+                    removedIds: [],
+                    removedActiveConnection: false
+                )
             }
             if let activeId = activeConnectionIdLocked(),
-                result.removedIds.contains(activeId)
-            {
+                result.removedIds.contains(activeId) {
                 defaults.removeObject(forKey: activeConnectionIdKey)
                 removedActive = true
             }
@@ -239,7 +245,8 @@ class PersistenceManager {
             addedIds: result.addedIds,
             updatedIds: result.updatedIds,
             removedIds: result.removedIds,
-            removedActiveConnection: removedActive)
+            removedActiveConnection: removedActive
+        )
     }
 
     private func loadConnectionsLocked() -> [StoredConnection] {
@@ -291,7 +298,8 @@ class PersistenceManager {
     @discardableResult
     func savePairing(server: PairedServer, token: String) -> Bool {
         let outcome = upsertConnectionWithOutcome(
-            StoredConnection(server: server, token: token))
+            StoredConnection(server: server, token: token)
+        )
         guard outcome.persisted else { return false }
         setActiveConnection(id: outcome.connection.id)
         return true
@@ -441,7 +449,7 @@ class PersistenceManager {
     }
 
     private func loadWorkspaceScreensDict() -> [String: Data] {
-        return (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
+        (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
     }
 
     // MARK: - Per-Workspace Tab
@@ -459,7 +467,7 @@ class PersistenceManager {
     }
 
     private func loadWorkspaceTabsDict() -> [String: Int] {
-        return (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
+        (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
     }
 
     // MARK: - Keychain
@@ -502,7 +510,7 @@ struct SecItemKeychainStorage: KeychainStorage {
         let add: ([String: Any]) -> OSStatus
         let delete: ([String: Any]) -> OSStatus
 
-        static let live = SecurityCalls(
+        static let live = Self(
             update: { query, attributes in
                 SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
             },
@@ -522,7 +530,7 @@ struct SecItemKeychainStorage: KeychainStorage {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account
         ]
         let updateStatus = security.update(query, [kSecValueData as String: data])
         if updateStatus == errSecSuccess { return true }
@@ -531,7 +539,7 @@ struct SecItemKeychainStorage: KeychainStorage {
         var addQuery = query
         addQuery.merge([
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]) { _, new in new }
         return security.add(addQuery) == errSecSuccess
     }
@@ -542,7 +550,7 @@ struct SecItemKeychainStorage: KeychainStorage {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
@@ -554,9 +562,8 @@ struct SecItemKeychainStorage: KeychainStorage {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: account
         ]
         _ = security.delete(query)
     }
 }
-

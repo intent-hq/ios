@@ -30,6 +30,7 @@ struct BackgroundHooksRow: View {
                 Image(systemName: "bolt.fill")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text("Running hooks")
                     .font(.caption)
                     .fontWeight(.medium)
@@ -85,6 +86,7 @@ struct BackgroundHooksRow: View {
             if hook.perpetual {
                 Image(systemName: "repeat")
                     .font(.system(size: 8))
+                    .accessibilityLabel("Repeating hook")
             }
             if hook.state == .running {
                 ProgressView()
@@ -113,7 +115,8 @@ struct BackgroundHooksRow: View {
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme).opacity(Constants.Conversation.StatusStrip.chipBorderOpacity),
-                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth)
+                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth
+                )
         )
     }
 

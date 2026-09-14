@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 @MainActor
@@ -30,7 +30,7 @@ import Observation
     }
 
     /// Test-only initializer that skips connection observation
-    init(forTesting: Bool) {
+    init(forTesting _: Bool) {
         self.connectionManager = ConnectionManager.shared
         // No connection observation for unit tests
     }
@@ -133,7 +133,7 @@ import Observation
         // Initialize workspace reconciler
         workspaceReconciler = DeltaReconciler<Workspace>(
             getId: { dict in dict["id"] as? String },
-            normalize: { dict in WorkspaceStore.parseWorkspace(dict) }
+            normalize: { dict in Self.parseWorkspace(dict) }
         )
 
         // Try to subscribe - if server doesn't support it, error response falls back to legacy
@@ -194,7 +194,7 @@ import Observation
                 Task { await fetchAll() }
             }
 
-        case let t where t.hasPrefix("workspace:"):
+        case let eventName where eventName.hasPrefix("workspace:"):
             // workspace:updated carrying lastActivity is an intentd-derived value —
             // patch the row in place as received.
             if eventType == "workspace:updated",
@@ -223,9 +223,9 @@ import Observation
                 }
             }
 
-        case let t where t.hasPrefix("agent:"):
+        case let eventName where eventName.hasPrefix("agent:"):
             // Unknown agent event — log and ignore (all known types handled above)
-            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(t)")
+            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(eventName)")
 
         default:
             break
@@ -279,7 +279,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await connectionManager.request("workspace.unsubscribe", params: [
+                _ = try await connectionManager.request("workspace.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -300,32 +300,32 @@ import Observation
     func updateLastActivity(workspaceId: String, lastActivity: String) {
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
               workspaces[index].lastActivity != lastActivity else { return }
-        let ws = workspaces[index]
+        let workspace = workspaces[index]
         let updated = Workspace(
-            id: ws.id,
-            title: ws.title,
-            branch: ws.branch,
-            baseRef: ws.baseRef,
-            status: ws.status,
-            activity: ws.activity,
-            displayStatus: ws.displayStatus,
-            attention: ws.attention,
-            waiting: ws.waiting,
+            id: workspace.id,
+            title: workspace.title,
+            branch: workspace.branch,
+            baseRef: workspace.baseRef,
+            status: workspace.status,
+            activity: workspace.activity,
+            displayStatus: workspace.displayStatus,
+            attention: workspace.attention,
+            waiting: workspace.waiting,
             lastActivity: lastActivity,
-            createdAt: ws.createdAt,
-            updatedAt: ws.updatedAt,
-            repositoryOwner: ws.repositoryOwner,
-            repositoryName: ws.repositoryName,
-            prStatus: ws.prStatus,
-            prNumber: ws.prNumber,
-            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
-            taskStatsTotal: ws.taskStatsTotal,
-            taskStatsCompleted: ws.taskStatsCompleted,
-            taskStatsInProgress: ws.taskStatsInProgress,
-            agentSummaryCount: ws.agentSummaryCount,
-            agentSummaryAgents: ws.agentSummaryAgents,
-            pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            createdAt: workspace.createdAt,
+            updatedAt: workspace.updatedAt,
+            repositoryOwner: workspace.repositoryOwner,
+            repositoryName: workspace.repositoryName,
+            prStatus: workspace.prStatus,
+            prNumber: workspace.prNumber,
+            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
+            taskStatsTotal: workspace.taskStatsTotal,
+            taskStatsCompleted: workspace.taskStatsCompleted,
+            taskStatsInProgress: workspace.taskStatsInProgress,
+            agentSummaryCount: workspace.agentSummaryCount,
+            agentSummaryAgents: workspace.agentSummaryAgents,
+            pullRequests: workspace.pullRequests,
+            activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -337,32 +337,32 @@ import Observation
     func updateWaiting(workspaceId: String, waiting: Bool) {
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
               workspaces[index].waiting != waiting else { return }
-        let ws = workspaces[index]
+        let workspace = workspaces[index]
         let updated = Workspace(
-            id: ws.id,
-            title: ws.title,
-            branch: ws.branch,
-            baseRef: ws.baseRef,
-            status: ws.status,
-            activity: ws.activity,
-            displayStatus: ws.displayStatus,
-            attention: ws.attention,
+            id: workspace.id,
+            title: workspace.title,
+            branch: workspace.branch,
+            baseRef: workspace.baseRef,
+            status: workspace.status,
+            activity: workspace.activity,
+            displayStatus: workspace.displayStatus,
+            attention: workspace.attention,
             waiting: waiting,
-            lastActivity: ws.lastActivity,
-            createdAt: ws.createdAt,
-            updatedAt: ws.updatedAt,
-            repositoryOwner: ws.repositoryOwner,
-            repositoryName: ws.repositoryName,
-            prStatus: ws.prStatus,
-            prNumber: ws.prNumber,
-            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
-            taskStatsTotal: ws.taskStatsTotal,
-            taskStatsCompleted: ws.taskStatsCompleted,
-            taskStatsInProgress: ws.taskStatsInProgress,
-            agentSummaryCount: ws.agentSummaryCount,
-            agentSummaryAgents: ws.agentSummaryAgents,
-            pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            lastActivity: workspace.lastActivity,
+            createdAt: workspace.createdAt,
+            updatedAt: workspace.updatedAt,
+            repositoryOwner: workspace.repositoryOwner,
+            repositoryName: workspace.repositoryName,
+            prStatus: workspace.prStatus,
+            prNumber: workspace.prNumber,
+            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
+            taskStatsTotal: workspace.taskStatsTotal,
+            taskStatsCompleted: workspace.taskStatsCompleted,
+            taskStatsInProgress: workspace.taskStatsInProgress,
+            agentSummaryCount: workspace.agentSummaryCount,
+            agentSummaryAgents: workspace.agentSummaryAgents,
+            pullRequests: workspace.pullRequests,
+            activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -375,32 +375,32 @@ import Observation
     func clearUnreadAttentionLocally(workspaceId: String) {
         guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }),
               workspaces[index].attention == "unread" else { return }
-        let ws = workspaces[index]
+        let workspace = workspaces[index]
         let updated = Workspace(
-            id: ws.id,
-            title: ws.title,
-            branch: ws.branch,
-            baseRef: ws.baseRef,
-            status: ws.status,
-            activity: ws.activity,
-            displayStatus: ws.displayStatus,
+            id: workspace.id,
+            title: workspace.title,
+            branch: workspace.branch,
+            baseRef: workspace.baseRef,
+            status: workspace.status,
+            activity: workspace.activity,
+            displayStatus: workspace.displayStatus,
             attention: "none",
-            waiting: ws.waiting,
-            lastActivity: ws.lastActivity,
-            createdAt: ws.createdAt,
-            updatedAt: ws.updatedAt,
-            repositoryOwner: ws.repositoryOwner,
-            repositoryName: ws.repositoryName,
-            prStatus: ws.prStatus,
-            prNumber: ws.prNumber,
-            diffSummaryTotalFiles: ws.diffSummaryTotalFiles,
-            taskStatsTotal: ws.taskStatsTotal,
-            taskStatsCompleted: ws.taskStatsCompleted,
-            taskStatsInProgress: ws.taskStatsInProgress,
-            agentSummaryCount: ws.agentSummaryCount,
-            agentSummaryAgents: ws.agentSummaryAgents,
-            pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            waiting: workspace.waiting,
+            lastActivity: workspace.lastActivity,
+            createdAt: workspace.createdAt,
+            updatedAt: workspace.updatedAt,
+            repositoryOwner: workspace.repositoryOwner,
+            repositoryName: workspace.repositoryName,
+            prStatus: workspace.prStatus,
+            prNumber: workspace.prNumber,
+            diffSummaryTotalFiles: workspace.diffSummaryTotalFiles,
+            taskStatsTotal: workspace.taskStatsTotal,
+            taskStatsCompleted: workspace.taskStatsCompleted,
+            taskStatsInProgress: workspace.taskStatsInProgress,
+            agentSummaryCount: workspace.agentSummaryCount,
+            agentSummaryAgents: workspace.agentSummaryAgents,
+            pullRequests: workspace.pullRequests,
+            activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -426,7 +426,9 @@ import Observation
         let agentSummary = dict["agentSummary"] as? [String: Any]
 
         // DEBUG: Log agent summary data
-        AppLog.workspace.debug("[WorkspaceStore] Parsing workspace '\(title)': agentSummary=\(agentSummary != nil ? "present" : "nil"), count=\(agentSummary?["count"] ?? "nil"), agents=\((agentSummary?["agents"] as? [[String: Any]])?.count ?? 0)")
+        AppLog.workspace.debug(
+        "[WorkspaceStore] Parsing workspace '\(title)': agentSummary=\(agentSummary != nil ? "present" : "nil"), count=\(agentSummary?["count"] ?? "nil"), agents=\((agentSummary?["agents"] as? [[String: Any]])?.count ?? 0)"
+        )
         if let agents = agentSummary?["agents"] as? [[String: Any]] {
             for agent in agents {
                 AppLog.workspace.debug("[WorkspaceStore]   Agent: id=\(agent["id"] ?? "?"), name=\(agent["name"] ?? "?"), status=\(agent["status"] ?? "?")")
@@ -490,4 +492,3 @@ import Observation
         )
     }
 }
-

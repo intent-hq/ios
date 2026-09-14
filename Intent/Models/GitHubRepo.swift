@@ -16,11 +16,11 @@ struct GitHubRepo: Identifiable, Equatable {
     /// The canonical `owner/name` display form.
     var fullName: String { "\(owner)/\(name)" }
 
-    static func parseRepo(_ dict: [String: Any]) -> GitHubRepo? {
+    static func parseRepo(_ dict: [String: Any]) -> Self? {
         guard let owner = dict["owner"] as? String,
               let name = dict["name"] as? String,
               !owner.isEmpty, !name.isEmpty else { return nil }
-        return GitHubRepo(
+        return Self(
             owner: owner,
             name: name,
             htmlUrl: dict["htmlUrl"] as? String,

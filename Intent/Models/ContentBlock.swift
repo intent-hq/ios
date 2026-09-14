@@ -14,7 +14,7 @@ enum ContentBlockType: String, Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
-        self = ContentBlockType(rawValue: rawValue) ?? .text
+        self = Self(rawValue: rawValue) ?? .text
     }
 }
 
@@ -240,4 +240,3 @@ struct ContentBlock: Identifiable, Codable {
         self.dataBytes = dataBytes
     }
 }
-

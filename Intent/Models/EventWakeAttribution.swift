@@ -8,6 +8,8 @@ import Foundation
 /// metadata returns nil so the message renders exactly as before (FE parity:
 /// `EventWakeupBanner.svelte`).
 struct EventWakeAttribution: Equatable {
+    private static let summaryEventCountThreshold = 5
+
     /// One structured event from the wake's `events` payload.
     struct Event: Equatable {
         let type: String
@@ -27,7 +29,7 @@ struct EventWakeAttribution: Equatable {
 
     /// Extracts event-wake attribution from an opaque metadata dictionary.
     /// Returns nil unless `metadata.type == "event_notification"`.
-    static func from(_ metadata: [String: AnyCodable]?) -> EventWakeAttribution? {
+    static func from(_ metadata: [String: AnyCodable]?) -> Self? {
         guard let metadata, metadata["type"]?.stringValue == "event_notification" else { return nil }
         let eventTypes = (metadata["eventTypes"]?.arrayValue ?? [])
             .compactMap { $0 as? String }
@@ -39,17 +41,18 @@ struct EventWakeAttribution: Equatable {
         }
         let eventCount = metadata["eventCount"]?.intValue
             ?? (events.isEmpty ? eventTypes.count : events.count)
-        return EventWakeAttribution(
+        return Self(
             eventCount: eventCount,
             eventTypes: eventTypes,
-            events: events)
+            events: events
+        )
     }
 
     /// Compact human summary of the wake, in daemon order. Large bursts stay
     /// count-only; small wakes list deduplicated per-event labels (FE parity:
     /// EventWakeupBanner `friendlySummary`).
     var summaryLabel: String {
-        if eventCount >= 5 { return "\(eventCount) events" }
+        if eventCount >= Self.summaryEventCountThreshold { return "\(eventCount) events" }
         let sources = events.isEmpty
             ? eventTypes.map { Event(type: $0, agentName: nil) }
             : events
@@ -110,7 +113,7 @@ struct EventWakeAttribution: Equatable {
         ("comment:", "Comment updates"),
         ("workspace:", "Workspace updates"),
         ("spec:", "Spec updates"),
-        ("goal:", "Goal updates"),
+        ("goal:", "Goal updates")
     ]
 
     private static func categoryLabel(for type: String) -> String? {
@@ -134,7 +137,8 @@ struct EventWakeAttribution: Equatable {
     static func looksLikeAgentId(_ value: String) -> Bool {
         value.range(
             of: "^agent-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-            options: .regularExpression) != nil
+            options: .regularExpression
+        ) != nil
     }
 }
 

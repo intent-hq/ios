@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 /// Live PR-monitor list for one workspace (PROTOCOL §5.42, §6.5).
@@ -59,7 +59,7 @@ import Observation
         if let subscriptionId {
             let connectionManager = self.connectionManager
             Task { @MainActor in
-                let _ = try? await connectionManager.request("events.unsubscribe", params: [
+                _ = try? await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subscriptionId
                 ])
             }
@@ -69,7 +69,7 @@ import Observation
     private func onConnected() async {
         // Subscriptions are per-connection (§6.1) — replay and re-seed
         subscriptionId = nil
-        if let wsId = workspaceId, let agentId = agentId {
+        if let wsId = workspaceId, let agentId {
             await subscribe(workspaceId: wsId, agentId: agentId)
         }
     }
@@ -119,7 +119,7 @@ import Observation
         if let subId = subscriptionId {
             subscriptionId = nil
             do {
-                let _ = try await connectionManager.request("events.unsubscribe", params: [
+                _ = try await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -147,7 +147,7 @@ import Observation
             params["check"] = check
         }
         do {
-            let _ = try await connectionManager.request("prMonitor.flush", params: params)
+            _ = try await connectionManager.request("prMonitor.flush", params: params)
         } catch {
             AppLog.prs.error("[MonitoredPrStore] prMonitor.flush failed: \(error)")
         }
@@ -158,7 +158,7 @@ import Observation
     func cancel(monitorId: String) async {
         guard let wsId = workspaceId else { return }
         do {
-            let _ = try await connectionManager.request("prMonitor.cancel", params: [
+            _ = try await connectionManager.request("prMonitor.cancel", params: [
                 "workspaceId": wsId,
                 "monitorId": monitorId
             ])
@@ -249,7 +249,7 @@ import Observation
 
     // MARK: - Event handling
 
-    func handleEvent(_ method: String, params: Any) {
+    func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         // Events from the event bridge are wrapped:

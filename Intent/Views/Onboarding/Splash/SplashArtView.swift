@@ -25,8 +25,10 @@ struct SplashArtView: View {
                         SplashFrameView(
                             image: animation.image(
                                 at: playback.elapsedTime(at: CACurrentMediaTime()),
-                                animated: !reduceMotion),
-                            colorScheme: colorScheme)
+                                animated: !reduceMotion
+                            ),
+                            colorScheme: colorScheme
+                        )
                     }
                 }
             }
@@ -54,7 +56,7 @@ struct SplashFrameView: View {
             .mask {
                 Image(decorative: image, scale: 1)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     // The source is an opaque black-on-white GIF. Inverting
                     // before deriving alpha keeps only the mark, including its
                     // antialiased gray edge coverage, without pixel processing.
@@ -63,7 +65,8 @@ struct SplashFrameView: View {
             }
             .frame(
                 maxWidth: Constants.Splash.maximumLogoDimension,
-                maxHeight: Constants.Splash.maximumLogoDimension)
+                maxHeight: Constants.Splash.maximumLogoDimension
+            )
     }
 }
 

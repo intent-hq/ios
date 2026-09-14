@@ -24,7 +24,7 @@ extension SpecialistPickerView {
         if let current, let updated = selectable.first(where: { $0.id == current.id }) {
             return updated
         }
-        return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
+        return selectable.first { $0.id == "auggie" } ?? selectable.first
     }
 
     /// Returns nil for a superseded fetch. A current fetch only applies models

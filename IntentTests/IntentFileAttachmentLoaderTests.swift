@@ -1,8 +1,8 @@
 import Foundation
+@testable import Intent
 import Testing
 import Textual
 import UIKit
-@testable import Intent
 
 /// Covers markdown-image URL routing (which URLs the loader claims) and the
 /// remote-image attachment path, including tap routing into the lightbox.
@@ -11,7 +11,11 @@ struct IntentFileAttachmentLoaderTests {
     // MARK: - URL routing
 
     private func route(_ string: String) -> MarkdownImageRoute {
-        MarkdownImageRoute.route(for: URL(string: string)!)
+        guard let url = URL(string: string) else {
+            Issue.record("Expected a valid fixture URL: \(string)")
+            return .fallback
+        }
+        return MarkdownImageRoute.route(for: url)
     }
 
     @Test func httpsURLRoutesToRemote() {
@@ -33,13 +37,15 @@ struct IntentFileAttachmentLoaderTests {
     @Test func intentFileLinkRoutesToIntentFile() {
         #expect(
             route("intent://local/file/pic.png")
-                == .intentFile(IntentFileLink(workspaceId: nil, path: "pic.png")))
+                == .intentFile(IntentFileLink(workspaceId: nil, path: "pic.png"))
+        )
     }
 
     @Test func longFormIntentFileLinkRoutesToIntentFile() {
         #expect(
             route("intent://local/ws-1/file/a/b.png")
-                == .intentFile(IntentFileLink(workspaceId: "ws-1", path: "a/b.png")))
+                == .intentFile(IntentFileLink(workspaceId: "ws-1", path: "a/b.png"))
+        )
     }
 
     @Test func intentNoteLinkRoutesToFallback() {
@@ -59,6 +65,7 @@ struct IntentFileAttachmentLoaderTests {
 
     @MainActor private final class FileImageFetchLog {
         var entries: [(workspaceId: String, path: String)] = []
+
         func record(_ workspaceId: String, _ path: String) {
             entries.append((workspaceId, path))
         }
@@ -74,7 +81,8 @@ struct IntentFileAttachmentLoaderTests {
         }
 
         let attachment = try await loader.resolvedAttachment(
-            for: URL(string: "intent://local/file/pic.png")!, text: "alt"
+            for: URL(string: "intent://local/file/pic.png")!,
+            text: "alt"
         ) {
             Issue.record("intent-file links must not consult the fallback loader")
             return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
@@ -93,7 +101,9 @@ struct IntentFileAttachmentLoaderTests {
     @Test func loadedRemoteImageYieldsLightboxCapableAttachment() async {
         let image = UIImage()
         let loader = IntentFileAttachmentLoader(
-            workspaceId: nil, fallback: .image(), remoteImage: { _ in image })
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in image }
 
         let attachment = await loader.remoteImageAttachment(for: Self.remoteURL, text: "alt")
 
@@ -105,7 +115,9 @@ struct IntentFileAttachmentLoaderTests {
     @Test func tappedRemoteImageAttachmentRoutesToLightbox() async {
         let image = UIImage()
         let loader = IntentFileAttachmentLoader(
-            workspaceId: nil, fallback: .image(), remoteImage: { _ in image })
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in image }
 
         guard let attachment = await loader.remoteImageAttachment(for: Self.remoteURL, text: "alt")
         else {
@@ -119,7 +131,9 @@ struct IntentFileAttachmentLoaderTests {
     @Test func remoteFetchFailureDelegatesToFallbackLoader() async throws {
         struct FetchFailure: Error {}
         let loader = IntentFileAttachmentLoader(
-            workspaceId: nil, fallback: .image(), remoteImage: { _ in throw FetchFailure() })
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in throw FetchFailure() }
         var fallbackCalls = 0
 
         let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {
@@ -134,7 +148,9 @@ struct IntentFileAttachmentLoaderTests {
     @Test func loadedRemoteImageDoesNotInvokeFallbackLoader() async throws {
         let image = UIImage()
         let loader = IntentFileAttachmentLoader(
-            workspaceId: nil, fallback: .image(), remoteImage: { _ in image })
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in image }
         var fallbackCalls = 0
 
         let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {
@@ -148,15 +164,17 @@ struct IntentFileAttachmentLoaderTests {
 
     @Test func nonImageURLDelegatesToFallbackLoader() async throws {
         let loader = IntentFileAttachmentLoader(
-            workspaceId: nil, fallback: .image(),
-            remoteImage: { _ in
-                Issue.record("remote loader must not be consulted for non-http(s) URLs")
-                return UIImage()
-            })
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in
+            Issue.record("remote loader must not be consulted for non-http(s) URLs")
+            return UIImage()
+        }
         var fallbackCalls = 0
 
         let attachment = try await loader.resolvedAttachment(
-            for: URL(string: "intent://local/note/spec")!, text: "alt"
+            for: URL(string: "intent://local/note/spec")!,
+            text: "alt"
         ) {
             fallbackCalls += 1
             return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
@@ -172,15 +190,18 @@ struct IntentFileAttachmentLoaderTests {
         let side = SquareImageThumbnail.transcriptSide
         #expect(
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 1000)
-                == CGSize(width: side, height: side))
+                == CGSize(width: side, height: side)
+        )
         #expect(
             IntentFileImageAttachment.thumbnailSize(proposedWidth: nil)
-                == CGSize(width: side, height: side))
+                == CGSize(width: side, height: side)
+        )
     }
 
     @Test func attachmentSizeClampsToNarrowProposals() {
         #expect(
             IntentFileImageAttachment.thumbnailSize(proposedWidth: 100)
-                == CGSize(width: 100, height: 100))
+                == CGSize(width: 100, height: 100)
+        )
     }
 }

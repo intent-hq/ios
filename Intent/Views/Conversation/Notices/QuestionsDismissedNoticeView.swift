@@ -26,7 +26,8 @@ struct QuestionsDismissedNoticeView: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            notice.fullText.isEmpty ? "Questions dismissed" : notice.fullText)
+            notice.fullText.isEmpty ? "Questions dismissed" : notice.fullText
+        )
     }
 
     private var line: some View {

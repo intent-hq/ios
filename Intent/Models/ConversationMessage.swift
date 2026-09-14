@@ -10,7 +10,7 @@ enum MessageRole: String, Codable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let rawValue = try container.decode(String.self)
-        self = MessageRole(rawValue: rawValue) ?? .system
+        self = Self(rawValue: rawValue) ?? .system
     }
 }
 
@@ -56,8 +56,14 @@ struct ToolCall: Identifiable, Codable {
         timestamp = try? container.decode(String.self, forKey: .timestamp)
     }
 
-    init(id: String, name: String, arguments: AnyCodable? = nil, result: AnyCodable? = nil,
-         error: String? = nil, status: String? = nil) {
+    init(
+        id: String,
+        name: String,
+        arguments: AnyCodable? = nil,
+        result: AnyCodable? = nil,
+        error: String? = nil,
+        status: String? = nil
+    ) {
         self.id = id
         self.name = name
         self.arguments = arguments
@@ -103,7 +109,7 @@ struct QueuedMessage: Identifiable, Codable {
     let queuedAt: String
     var position: Int
     var imageBlocks: [ImageBlock]?
-    var messageMetadata: [String: AnyCodable]? = nil
+    var messageMetadata: [String: AnyCodable]?
 
     /// Whether this entry was authored by the user. Non-user entries carry
     /// `messageMetadata` with a string `type` (except the user-authored
@@ -185,7 +191,7 @@ struct ConversationMessage: Identifiable, Codable {
 
     // MARK: - Parsing from dictionary (JSON-RPC response)
 
-    static func parseMessage(_ dict: [String: Any]) -> ConversationMessage? {
+    static func parseMessage(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String else { return nil }
 
         let roleStr = dict["role"] as? String ?? "system"
@@ -229,7 +235,7 @@ struct ConversationMessage: Identifiable, Codable {
             metadata = metaDict.mapValues { AnyCodable($0) }
         }
 
-        return ConversationMessage(
+        return Self(
             id: id,
             role: role,
             contentBlocks: contentBlocks,
@@ -243,4 +249,3 @@ struct ConversationMessage: Identifiable, Codable {
         )
     }
 }
-

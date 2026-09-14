@@ -107,7 +107,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var specialistPicker: some View {
         Picker("Specialist", selection: Binding(
             get: { selectedSpecialist?.id ?? "" },
-            set: { id in selectedSpecialist = specialists.first(where: { $0.id == id }) }
+            set: { id in selectedSpecialist = specialists.first { $0.id == id } }
         )) {
             ForEach(specialists) { specialist in
                 Text(specialist.name).tag(specialist.id)
@@ -142,7 +142,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var modelPicker: some View {
         Picker("Model", selection: Binding(
             get: { selectedModel?.id ?? "" },
-            set: { id in selectedModel = models.first(where: { $0.id == id }) }
+            set: { id in selectedModel = models.first { $0.id == id } }
         )) {
             Text(SpecialistInfo.daemonDefaultLabel(
                 for: selectedSpecialist,

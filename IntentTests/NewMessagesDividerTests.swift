@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Ports of the desktop cases in new-messages-divider.test.ts.
 struct NewMessagesDividerAnchorTests {
@@ -29,7 +29,9 @@ struct NewMessagesDividerAnchorTests {
 
     @Test func nilForDanglingMarker() {
         #expect(NewMessagesDivider.resolveAnchor(
-            messageIds: ids, lastSeenMessageId: "truncated-away") == nil)
+            messageIds: ids,
+            lastSeenMessageId: "truncated-away"
+        ) == nil)
     }
 
     @Test func nilForEmptyTranscript() {
@@ -42,7 +44,9 @@ struct NewMessagesDividerLatchedTests {
 
     @Test func rendersAtLatchedAnchorWhilePresent() {
         #expect(NewMessagesDivider.resolveLatchedAnchor(
-            messageIds: ids, latchedAnchorId: "m2") == "m2")
+            messageIds: ids,
+            latchedAnchorId: "m2"
+        ) == "m2")
     }
 
     @Test func keepsLatchedAnchorEvenWhenNewest() {
@@ -50,14 +54,20 @@ struct NewMessagesDividerLatchedTests {
         // latched anchor that BECAME newest (trailing rows truncated) still
         // renders as-is.
         #expect(NewMessagesDivider.resolveLatchedAnchor(
-            messageIds: ids, latchedAnchorId: "m4") == "m4")
+            messageIds: ids,
+            latchedAnchorId: "m4"
+        ) == "m4")
     }
 
     @Test func staysPutAsTranscriptGrows() {
         #expect(NewMessagesDivider.resolveLatchedAnchor(
-            messageIds: ids, latchedAnchorId: "m2") == "m2")
+            messageIds: ids,
+            latchedAnchorId: "m2"
+        ) == "m2")
         #expect(NewMessagesDivider.resolveLatchedAnchor(
-            messageIds: ids + ["m5", "m6"], latchedAnchorId: "m2") == "m2")
+            messageIds: ids + ["m5", "m6"],
+            latchedAnchorId: "m2"
+        ) == "m2")
     }
 
     @Test func nilForNilLatch() {
@@ -67,7 +77,9 @@ struct NewMessagesDividerLatchedTests {
 
     @Test func hidesNotRecomputesWhenAnchorLeftTranscript() {
         #expect(NewMessagesDivider.resolveLatchedAnchor(
-            messageIds: ["m1", "m3", "m4"], latchedAnchorId: "m2") == nil)
+            messageIds: ["m1", "m3", "m4"],
+            latchedAnchorId: "m2"
+        ) == nil)
     }
 
     @Test func nilForEmptyTranscript() {
@@ -93,14 +105,18 @@ struct NewMessagesDividerEntryScrollTests {
 
     @Test func followDisabledWhenLandedOnDividerAwayFromBottom() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 51))
-        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 2_000))
+        #expect(NewMessagesDivider.followDisabledAfterEntryScroll(flippedContentOffsetY: 2000))
     }
 
     @Test func honorsCustomThreshold() {
         #expect(NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 10))
+            flippedContentOffsetY: 30,
+            atBottomThreshold: 10
+        ))
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(
-            flippedContentOffsetY: 30, atBottomThreshold: 100))
+            flippedContentOffsetY: 30,
+            atBottomThreshold: 100
+        ))
     }
 }
 
@@ -132,73 +148,78 @@ struct ConversationTranscriptScrollPolicyTests {
 struct ConversationViewModelDividerLatchTests {
     private func makeVM() -> ConversationViewModel {
         ConversationViewModel(
-            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared, uploadService: .shared)
+            agentId: "test-agent",
+            workspaceId: "test-ws",
+            agentName: "Test",
+            connection: ConnectionManager.shared,
+            uploadService: .shared
+        )
     }
 
     private func message(_ id: String, role: MessageRole = .assistant) -> ConversationMessage {
         ConversationMessage(
-            id: id, role: role,
+            id: id,
+            role: role,
             contentBlocks: [ContentBlock(type: .text, text: "text for \(id)")]
         )
     }
 
     @Test func latchesAnchorOnEntryAndExposesIt() {
-        let vm = makeVM()
-        vm.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
-        vm.store.lastSeenMessageId = "m2"
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == "m2")
+        let viewModel = makeVM()
+        viewModel.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
+        viewModel.store.lastSeenMessageId = "m2"
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == "m2")
     }
 
     @Test func markerConvergenceAfterEntryDoesNotMoveDivider() {
-        let vm = makeVM()
-        vm.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
-        vm.store.lastSeenMessageId = "m2"
-        vm.latchNewMessagesDividerAnchorIfNeeded()
+        let viewModel = makeVM()
+        viewModel.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
+        viewModel.store.lastSeenMessageId = "m2"
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
         // Later `agent:updated` convergence advances the marker — the latched
         // divider must not move.
-        vm.store.lastSeenMessageId = "m4"
-        #expect(vm.newMessagesDividerAnchorId == "m2")
+        viewModel.store.lastSeenMessageId = "m4"
+        #expect(viewModel.newMessagesDividerAnchorId == "m2")
         // New messages arriving never move it either.
-        vm.store.messages.append(message("m5"))
-        #expect(vm.newMessagesDividerAnchorId == "m2")
+        viewModel.store.messages.append(message("m5"))
+        #expect(viewModel.newMessagesDividerAnchorId == "m2")
         // A repeat latch attempt (e.g. re-entry `load()`) never re-derives.
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == "m2")
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == "m2")
     }
 
     @Test func nilLatchMeansNoDividerAllSession() {
-        let vm = makeVM()
-        vm.store.messages = ["m1", "m2"].map { message($0) }
-        vm.store.lastSeenMessageId = nil
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == nil)
+        let viewModel = makeVM()
+        viewModel.store.messages = ["m1", "m2"].map { message($0) }
+        viewModel.store.lastSeenMessageId = nil
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == nil)
         // Marker converging after entry may not add a divider mid-session.
-        vm.store.lastSeenMessageId = "m1"
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == nil)
+        viewModel.store.lastSeenMessageId = "m1"
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == nil)
     }
 
     @Test func markerAtNewestLatchesNil() {
-        let vm = makeVM()
-        vm.store.messages = ["m1", "m2"].map { message($0) }
-        vm.store.lastSeenMessageId = "m2"
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == nil)
+        let viewModel = makeVM()
+        viewModel.store.messages = ["m1", "m2"].map { message($0) }
+        viewModel.store.lastSeenMessageId = "m2"
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == nil)
     }
 
     @Test func anchorTruncatedAwayHidesWithoutRederiving() {
-        let vm = makeVM()
-        vm.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
-        vm.store.lastSeenMessageId = "m2"
-        vm.latchNewMessagesDividerAnchorIfNeeded()
-        #expect(vm.newMessagesDividerAnchorId == "m2")
+        let viewModel = makeVM()
+        viewModel.store.messages = ["m1", "m2", "m3", "m4"].map { message($0) }
+        viewModel.store.lastSeenMessageId = "m2"
+        viewModel.latchNewMessagesDividerAnchorIfNeeded()
+        #expect(viewModel.newMessagesDividerAnchorId == "m2")
         // `agent.editAndRegenerate` truncation drops the anchor row. Even with
         // a live marker pointing at a still-present, non-newest message, the
         // divider hides rather than re-deriving to "m1".
-        vm.store.messages = ["m1", "m3", "m4"].map { message($0) }
-        vm.store.lastSeenMessageId = "m1"
-        #expect(vm.newMessagesDividerAnchorId == nil)
+        viewModel.store.messages = ["m1", "m3", "m4"].map { message($0) }
+        viewModel.store.lastSeenMessageId = "m1"
+        #expect(viewModel.newMessagesDividerAnchorId == nil)
     }
 }

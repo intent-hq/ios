@@ -55,7 +55,8 @@ struct CreateWorkspaceView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             CreateWorkspaceRepoStepView(
-                store: githubStore, selectedRepo: $selectedRepo,
+                store: githubStore,
+                selectedRepo: $selectedRepo,
                 onClose: { dismiss() },
                 onNext: { navigationPath.append(.branches) },
                 onRepoChanged: resetRepositoryState
@@ -65,11 +66,15 @@ struct CreateWorkspaceView: View {
                     case .branches:
                         CreateWorkspaceBranchStepView(
                             repositoryFullName: selectedRepo?.fullName ?? "",
-                            displayedBranches: displayedBranches, defaultBranch: defaultBranch,
-                            isLoading: isLoadingBranches, loadError: branchLoadError,
-                            selectedBranch: $selectedBranch, searchText: $branchSearchText,
+                            displayedBranches: displayedBranches,
+                            defaultBranch: defaultBranch,
+                            isLoading: isLoadingBranches,
+                            loadError: branchLoadError,
+                            selectedBranch: $selectedBranch,
+                            searchText: $branchSearchText,
                             colorScheme: colorScheme,
-                            onRetry: { Task { await fetchBranches() } }, onNext: { navigationPath.append(.create) },
+                            onRetry: { Task { await fetchBranches() } },
+                            onNext: { navigationPath.append(.create) },
                             onLoad: { await fetchBranches() },
                             onBranchChanged: { idempotencyKey = UUID().uuidString },
                             onSearchTextChanged: scheduleBranchSearch
@@ -78,19 +83,24 @@ struct CreateWorkspaceView: View {
                         CreateWorkspaceSpecialistStepView(
                             repositoryFullName: selectedRepo?.fullName ?? "",
                             branch: selectedBranch ?? "",
-                            specialists: specialists, isLoadingSpecialists: isLoadingSpecialists,
+                            specialists: specialists,
+                            isLoadingSpecialists: isLoadingSpecialists,
                             selectedSpecialist: $selectedSpecialist,
-                            providers: providers, isLoadingProviders: isLoadingProviders,
+                            providers: providers,
+                            isLoadingProviders: isLoadingProviders,
                             selectedProvider: $selectedProvider,
-                            models: models, selectedModel: $selectedModel,
+                            models: models,
+                            selectedModel: $selectedModel,
                             messageText: $messageText,
-                            isCreating: isCreating, errorMessage: errorMessage,
+                            isCreating: isCreating,
+                            errorMessage: errorMessage,
                             showError: $showError,
                             colorScheme: colorScheme,
                             onSelectProvider: selectProvider,
-                            onCreate: createWorkspace,
-                            onLoad: { await fetchCreationOptions() }
-                        )
+                            onCreate: createWorkspace
+                        ) {
+                            await fetchCreationOptions()
+                        }
                     }
                 }
         }
@@ -98,11 +108,14 @@ struct CreateWorkspaceView: View {
 
     private var displayedBranches: [String] {
         Self.displayedBranches(
-            loaded: remoteBranches, defaultBranch: defaultBranch,
-            query: branchSearchText, searchResults: branchSearchResults,
+            loaded: remoteBranches,
+            defaultBranch: defaultBranch,
+            query: branchSearchText,
+            searchResults: branchSearchResults,
             completedQuery: completedBranchQuery
         )
     }
+
     private func resetRepositoryState() {
         idempotencyKey = UUID().uuidString
         selectedBranch = nil
@@ -151,7 +164,9 @@ struct CreateWorkspaceView: View {
             try? await Task.sleep(for: Constants.CreateWorkspace.branchSearchDebounce)
             guard !Task.isCancelled else { return }
             guard let results = try? await githubStore.fetchRemoteBranches(
-                owner: repo.owner, repo: repo.name, prefix: query
+                owner: repo.owner,
+                repo: repo.name,
+                prefix: query
             ) else { return }
             guard !Task.isCancelled else { return }
             branchSearchResults = results
@@ -164,11 +179,11 @@ struct CreateWorkspaceView: View {
         let agentStore = AgentStore(connectionManager: session.connection)
         var fetched = await agentStore.fetchSpecialists().modalPickable
         let orchestratorId = fetched.orchestrator?.id
-        fetched.sort { a, b in
-            let aIsOrchestrator = a.id == orchestratorId
-            let bIsOrchestrator = b.id == orchestratorId
-            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
-            return a.name < b.name
+        fetched.sort { firstSpecialist, secondSpecialist in
+            let firstIsOrchestrator = firstSpecialist.id == orchestratorId
+            let secondIsOrchestrator = secondSpecialist.id == orchestratorId
+            if firstIsOrchestrator != secondIsOrchestrator { return firstIsOrchestrator }
+            return firstSpecialist.name < secondSpecialist.name
         }
         specialists = fetched
         if selectedSpecialist == nil {
@@ -190,10 +205,10 @@ struct CreateWorkspaceView: View {
         providers = await agentStore.fetchProviders()
         let selectable = providers.filter { $0.authenticated != false }
         let currentStillSelectable = selectedProvider.map { current in
-            selectable.contains(where: { $0.id == current.id })
+            selectable.contains { $0.id == current.id }
         } ?? false
         if !currentStillSelectable {
-            selectedProvider = selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
+            selectedProvider = selectable.first { $0.id == "auggie" } ?? selectable.first
         }
         if let provider = selectedProvider {
             await fetchModels(providerId: provider.id)
@@ -259,7 +274,10 @@ struct CreateWorkspaceView: View {
                 )
 
                 let result = try await session.connection.request(
-                    "workspace.create", params: params, timeout: Self.createRequestTimeout)
+                    "workspace.create",
+                    params: params,
+                    timeout: Self.createRequestTimeout
+                )
 
                 if let dict = result as? [String: Any],
                    let wsDict = dict["workspace"] as? [String: Any],
@@ -280,5 +298,4 @@ struct CreateWorkspaceView: View {
             isCreating = false
         }
     }
-
 }

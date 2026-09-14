@@ -13,26 +13,34 @@ struct AssistantMessageView: View {
         VStack(alignment: .leading, spacing: 8) {
             let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
             let renderBlocks = MessageBlockPartitioning.groupContentBlocks(
-                strippedBlocks, isStreaming: message.isStreaming == true)
+                strippedBlocks,
+                isStreaming: message.isStreaming == true
+            )
 
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
                     ContentBlockView(
-                        block: block, allBlocks: blocks, workspaceId: workspaceId,
+                        block: block,
+                        allBlocks: blocks,
+                        workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         hydratingBlockIds: hydratingBlockIds,
-                        onHydrateBlock: onHydrateBlock)
+                        onHydrateBlock: onHydrateBlock
+                    )
                 case .group(let group):
-                    let isLastGroup = !renderBlocks.suffix(from: index + 1).contains(where: {
-                        if case .group = $0 { return true }
+                    let isLastGroup = !renderBlocks.suffix(from: index + 1).contains { candidate in
+                        if case .group = candidate { return true }
                         return false
-                    })
+                    }
                     ResponseGroupView(
-                        group: group, isLast: isLastGroup, workspaceId: workspaceId,
+                        group: group,
+                        isLast: isLastGroup,
+                        workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         hydratingBlockIds: hydratingBlockIds,
-                        onHydrateBlock: onHydrateBlock)
+                        onHydrateBlock: onHydrateBlock
+                    )
                 }
             }
         }
@@ -53,6 +61,7 @@ struct ErrorMessageView: View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.destructive(for: colorScheme))
+                .accessibilityHidden(true)
             Text(message.error ?? "An error occurred")
                 .font(.callout)
                 .foregroundStyle(Theme.destructive(for: colorScheme))

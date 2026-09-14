@@ -33,18 +33,22 @@ struct ResponseGroupView: View {
     let group: ResponseGroup
     let isLast: Bool
     let workspaceId: String
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
     /// Slim-projection hydration passthrough (PROTOCOL §5.5): in-flight block
     /// ids and the on-demand full-block fetch, forwarded to ContentBlockView.
     var hydratingBlockIds: Set<String> = []
-    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
     @Environment(\.colorScheme) var colorScheme
     @State private var isExpanded: Bool
 
-    init(group: ResponseGroup, isLast: Bool, workspaceId: String,
-         onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
-         hydratingBlockIds: Set<String> = [],
-         onHydrateBlock: ((_ blockId: String) -> Void)? = nil) {
+    init(
+        group: ResponseGroup,
+        isLast: Bool,
+        workspaceId: String,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil,
+        hydratingBlockIds: Set<String> = [],
+        onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    ) {
         self.group = group
         self.isLast = isLast
         self.workspaceId = workspaceId
@@ -66,6 +70,7 @@ struct ResponseGroupView: View {
                     Image(systemName: "rectangle.stack")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                        .accessibilityHidden(true)
 
                     Text(group.name)
                         .font(.subheadline.weight(.semibold))
@@ -86,6 +91,7 @@ struct ResponseGroupView: View {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.caption2)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.4))
+                        .accessibilityHidden(true)
                 }
                 .padding(.vertical, 4)
             }
@@ -144,12 +150,14 @@ struct ResponseGroupView: View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(group.children) { block in
                 ContentBlockView(
-                    block: block, allBlocks: group.children, workspaceId: workspaceId,
+                    block: block,
+                    allBlocks: group.children,
+                    workspaceId: workspaceId,
                     onNavigateToNote: onNavigateToNote,
                     hydratingBlockIds: hydratingBlockIds,
-                    onHydrateBlock: onHydrateBlock)
+                    onHydrateBlock: onHydrateBlock
+                )
             }
         }
     }
 }
-

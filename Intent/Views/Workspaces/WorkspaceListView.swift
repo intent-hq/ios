@@ -29,7 +29,7 @@ struct WorkspaceListView: View {
             ZStack {
                 Theme.background(for: colorScheme).ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.workspaces.isEmpty {
+                if viewModel.isLoading, viewModel.workspaces.isEmpty {
                     ProgressView("Loading workspaces...")
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
@@ -152,4 +152,3 @@ struct WorkspaceListView: View {
         #endif
     }
 }
-

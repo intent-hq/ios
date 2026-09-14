@@ -8,7 +8,6 @@ import Testing
 /// plist — so this test enforces the sync: every iOS key must be mirrored
 /// verbatim, and the visionOS extras must be exactly the dictation pair.
 struct InfoPlistSyncTests {
-
     private static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // IntentTests/
         .deletingLastPathComponent()  // repo root
@@ -39,7 +38,7 @@ struct InfoPlistSyncTests {
         #expect(
             extraKeys == [
                 "NSMicrophoneUsageDescription",
-                "NSSpeechRecognitionUsageDescription",
+                "NSSpeechRecognitionUsageDescription"
             ],
             "Info-visionOS.plist extras must be exactly the dictation usage keys"
         )

@@ -36,7 +36,7 @@ struct MessageInputView: View {
         VStack(spacing: 0) {
             #if os(visionOS)
             // Suggested prompts as large gaze-targetable chips above the field
-            if !viewModel.suggestedPrompts.isEmpty && !store.isStreaming {
+            if !viewModel.suggestedPrompts.isEmpty, !store.isStreaming {
                 suggestedPromptChipsRow
             }
 
@@ -71,7 +71,8 @@ struct MessageInputView: View {
                             .foregroundStyle(Theme.destructive(for: colorScheme))
                             .frame(
                                 minWidth: Constants.Conversation.Composer.controlTarget,
-                                minHeight: Constants.Conversation.Composer.controlTarget)
+                                minHeight: Constants.Conversation.Composer.controlTarget
+                            )
                     }
                     .accessibilityLabel("Stop response")
                 } else {
@@ -93,7 +94,8 @@ struct MessageInputView: View {
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                             .frame(
                                 minWidth: Constants.Conversation.Composer.controlTarget,
-                                minHeight: Constants.Conversation.Composer.controlTarget)
+                                minHeight: Constants.Conversation.Composer.controlTarget
+                            )
                     }
                     .accessibilityLabel("Add attachment")
                 }
@@ -108,7 +110,8 @@ struct MessageInputView: View {
                         onHeightChange: { newHeight in
                             textViewHeight = min(
                                 max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
-                                Constants.Conversation.Composer.maximumTextViewHeight)
+                                Constants.Conversation.Composer.maximumTextViewHeight
+                            )
                         },
                         onCaretChange: { offset in
                             #if os(visionOS)
@@ -161,7 +164,8 @@ struct MessageInputView: View {
                                 )
                                 .frame(
                                     minWidth: Constants.Conversation.Composer.controlTarget,
-                                    minHeight: Constants.Conversation.Composer.controlTarget)
+                                    minHeight: Constants.Conversation.Composer.controlTarget
+                                )
                         }
                         .disabled(!hasContent)
                         .accessibilityLabel("Send message")
@@ -226,7 +230,6 @@ struct MessageInputView: View {
     }
 
     // MARK: - Pending images
-
     @ViewBuilder
     private var pendingImagesRow: some View {
         ScrollView(.horizontal) {
@@ -236,9 +239,11 @@ struct MessageInputView: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
+                            .accessibilityLabel("Attached image \(index + 1)")
                             .frame(
                                 width: Constants.Conversation.Composer.pendingImageSide,
-                                height: Constants.Conversation.Composer.pendingImageSide)
+                                height: Constants.Conversation.Composer.pendingImageSide
+                            )
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
                         Button {
@@ -251,7 +256,8 @@ struct MessageInputView: View {
                                 .frame(
                                     minWidth: Constants.Conversation.Composer.controlTarget,
                                     minHeight: Constants.Conversation.Composer.controlTarget,
-                                    alignment: .topTrailing)
+                                    alignment: .topTrailing
+                                )
                                 .contentShape(Rectangle())
                         }
                         .offset(x: 4, y: -4)
@@ -294,6 +300,7 @@ struct MessageInputView: View {
                             Image(systemName: "doc.fill")
                                 .font(.caption)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(file.displayName)
@@ -313,7 +320,8 @@ struct MessageInputView: View {
                                     .font(.caption)
                                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                                     .contentShape(Rectangle().inset(
-                                        by: -Constants.Conversation.Composer.controlTarget / 2))
+                                        by: -Constants.Conversation.Composer.controlTarget / 2
+                                    ))
                             }
                             .accessibilityLabel("Remove \(file.displayName)")
                         }
@@ -350,7 +358,8 @@ struct MessageInputView: View {
                 )
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
-                    minHeight: Constants.Conversation.Composer.controlTarget)
+                    minHeight: Constants.Conversation.Composer.controlTarget
+                )
         }
         .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
     }
@@ -398,6 +407,7 @@ struct MessageInputView: View {
         HStack(spacing: 6) {
             Image(systemName: "mic.slash")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text(hint)
                 .font(.caption)
         }
@@ -422,6 +432,7 @@ struct MessageInputView: View {
                             Image(systemName: "paperplane")
                                 .font(.callout)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .accessibilityHidden(true)
                             Text(prompt)
                                 .font(.body)
                                 .lineLimit(2)
@@ -487,4 +498,3 @@ struct MessageInputView: View {
         }
     }
 }
-

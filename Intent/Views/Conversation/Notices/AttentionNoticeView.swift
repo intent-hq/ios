@@ -39,6 +39,7 @@ struct AttentionNoticeView: View {
             Image(systemName: iconName)
                 .font(.subheadline)
                 .foregroundStyle(tint)
+                .accessibilityHidden(true)
                 .padding(.top, Constants.Conversation.NoticeCard.iconTopPadding)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -60,7 +61,8 @@ struct AttentionNoticeView: View {
         .background(tint.opacity(
             colorSchemeContrast == .increased
                 ? Constants.Conversation.NoticeCard.backgroundOpacity * 1.75
-                : Constants.Conversation.NoticeCard.backgroundOpacity))
+                : Constants.Conversation.NoticeCard.backgroundOpacity
+        ))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.NoticeCard.cornerRadius)
@@ -70,7 +72,8 @@ struct AttentionNoticeView: View {
                         : Constants.Conversation.NoticeCard.borderOpacity),
                     lineWidth: colorSchemeContrast == .increased
                         ? Constants.Conversation.NoticeCard.borderWidth * 2
-                        : Constants.Conversation.NoticeCard.borderWidth)
+                        : Constants.Conversation.NoticeCard.borderWidth
+                )
         )
     }
 }

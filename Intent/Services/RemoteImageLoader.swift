@@ -57,8 +57,10 @@ final class RemoteImageLoader {
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(
-                image, forKey: key as NSString,
-                cost: WorkspaceFileImageLoader.decodedCost(of: image))
+                image,
+                forKey: key as NSString,
+                cost: WorkspaceFileImageLoader.decodedCost(of: image)
+            )
             return image
         }
         inFlight[key] = task
@@ -78,8 +80,9 @@ final class RemoteImageLoader {
     /// Explicitly concurrent so the download and image decode run on the
     /// global executor, keeping large decodes off the UI thread.
     @concurrent
-    private nonisolated static func fetchAndDecode(
-        fetchData: DataFetcher, url: URL
+    nonisolated private static func fetchAndDecode(
+        fetchData: DataFetcher,
+        url: URL
     ) async throws -> UIImage {
         let (data, response) = try await fetchData(url)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
@@ -96,7 +99,7 @@ final class RemoteImageLoader {
     /// exceeds `maxFileBytes`, so a hostile or indefinitely streaming server
     /// cannot buffer unbounded data before the size guard runs.
     @concurrent
-    private nonisolated static func streamCappedBytes(
+    nonisolated private static func streamCappedBytes(
         from url: URL
     ) async throws -> (Data, URLResponse) {
         let (bytes, response) = try await URLSession.shared.bytes(from: url)

@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 /// Workspace-keyed PR-monitor pool for list-row rendering (PROTOCOL §5.42,
@@ -104,7 +104,7 @@ import Observation
 
     // MARK: - Event handling
 
-    func handleEvent(_ method: String, params: Any) {
+    func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         let event: [String: Any]
@@ -134,7 +134,10 @@ import Observation
         }
 
         let result = MonitoredPrStore.foldMonitorEvent(
-            monitors: monitors(for: workspaceId), eventType: eventType, data: data)
+            monitors: monitors(for: workspaceId),
+            eventType: eventType,
+            data: data
+        )
         generation[workspaceId, default: 0] += 1
         monitorsByWorkspace[workspaceId] = result.monitors
         if result.needsRefetch {
@@ -163,8 +166,8 @@ import Observation
                 refetchQueued.insert(workspaceId)
             } else if let dict = result as? [String: Any],
                       let monitorsArray = dict["monitors"] as? [[String: Any]] {
-                monitorsByWorkspace[workspaceId] = monitorsArray.compactMap {
-                    MonitoredPr.parseMonitor($0)
+                monitorsByWorkspace[workspaceId] = monitorsArray.compactMap { monitor in
+                    MonitoredPr.parseMonitor(monitor)
                 }
             }
         } catch {

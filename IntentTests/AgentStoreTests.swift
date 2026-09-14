@@ -1,11 +1,10 @@
-import Foundation
-import Testing
 import Combine
+import Foundation
 @testable import Intent
+import Testing
 
 @MainActor
 struct AgentStoreTests {
-
     // MARK: - hasLoaded gating (empty state waits for first completed load)
 
     @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
@@ -20,9 +19,11 @@ struct AgentStoreTests {
         #expect(store.hasLoaded == false)
         #expect(store.isLoading == true)
 
-        fake.resolvePending("agent.list", with: ["agents": [
-            ["id": "agent-1", "name": "Agent 1"]
-        ]])
+        fake.resolvePending("agent.list", with: [
+            "agents": [
+                ["id": "agent-1", "name": "Agent 1"]
+            ]
+        ])
         await fetch.value
         #expect(store.hasLoaded == true)
         #expect(store.isLoading == false)
@@ -35,8 +36,10 @@ struct AgentStoreTests {
         // ConnectionManager.request throws immediately while the socket is
         // still connecting ("Not connected") — must not flip to empty state.
         fake.errorMap["agent.list"] = NSError(
-            domain: "WebSocket", code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+            domain: "WebSocket",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+        )
 
         await store.fetchAgents(workspaceId: "ws-1")
 
@@ -59,9 +62,11 @@ struct AgentStoreTests {
     @Test func workspaceChangeResetsHasLoaded() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
-        fake.responseMap["agent.list"] = ["agents": [
-            ["id": "agent-1", "name": "Agent 1"]
-        ]]
+        fake.responseMap["agent.list"] = [
+            "agents": [
+                ["id": "agent-1", "name": "Agent 1"]
+            ]
+        ]
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(store.hasLoaded == true)
 
@@ -69,8 +74,10 @@ struct AgentStoreTests {
         // workspace keeps it false.
         fake.responseMap.removeValue(forKey: "agent.list")
         fake.errorMap["agent.list"] = NSError(
-            domain: "WebSocket", code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+            domain: "WebSocket",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+        )
         await store.fetchAgents(workspaceId: "ws-2")
         #expect(store.hasLoaded == false)
         #expect(store.agents.isEmpty)
@@ -88,9 +95,11 @@ struct AgentStoreTests {
 
         // The stale ws-1 fetch completing must not mark ws-2 as loaded
         // nor replace ws-2's agents with ws-1's.
-        fake.resolvePending("agent.list", with: ["agents": [
-            ["id": "agent-old", "name": "Old"]
-        ]])
+        fake.resolvePending("agent.list", with: [
+            "agents": [
+                ["id": "agent-old", "name": "Old"]
+            ]
+        ])
         await staleFetch.value
         #expect(store.hasLoaded == false)
         #expect(store.agents.isEmpty)
@@ -112,9 +121,11 @@ struct AgentStoreTests {
         // started yet. The old ws-1 response landing in this window must not
         // supply agents nor flip hasLoaded for ws-2.
         store.prepareForWorkspaceChange(to: "ws-2")
-        fake.resolvePending("agent.list", with: ["agents": [
-            ["id": "agent-old", "name": "Old"]
-        ]])
+        fake.resolvePending("agent.list", with: [
+            "agents": [
+                ["id": "agent-old", "name": "Old"]
+            ]
+        ])
         await staleFetch.value
 
         #expect(store.hasLoaded == false)
@@ -124,9 +135,11 @@ struct AgentStoreTests {
     @Test func prepareForWorkspaceChangeResetsSynchronously() async {
         let fake = FakeConnectionManager()
         let store = AgentStore(connectionManager: fake)
-        fake.responseMap["agent.list"] = ["agents": [
-            ["id": "agent-1", "name": "Agent 1"]
-        ]]
+        fake.responseMap["agent.list"] = [
+            "agents": [
+                ["id": "agent-1", "name": "Agent 1"]
+            ]
+        ]
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(store.hasLoaded == true)
 
@@ -148,17 +161,21 @@ struct AgentStoreTests {
         let store = AgentStore(connectionManager: fake)
         // Initial fetch fails while the socket is still connecting.
         fake.errorMap["agent.list"] = NSError(
-            domain: "WebSocket", code: -1,
-            userInfo: [NSLocalizedDescriptionKey: "Not connected"])
+            domain: "WebSocket",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "Not connected"]
+        )
         await store.fetchAgents(workspaceId: "ws-1")
         #expect(store.hasLoaded == false)
 
         // Connection comes up: the store must retry on its own, not wait
         // for a coincidental agent event.
         fake.errorMap.removeValue(forKey: "agent.list")
-        fake.responseMap["agent.list"] = ["agents": [
-            ["id": "agent-1", "name": "Agent 1"]
-        ]]
+        fake.responseMap["agent.list"] = [
+            "agents": [
+                ["id": "agent-1", "name": "Agent 1"]
+            ]
+        ]
         fake.clearRequestLog()
         fake.simulateConnect()
         try await Task.sleep(nanoseconds: 200_000_000)

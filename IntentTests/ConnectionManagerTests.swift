@@ -1,9 +1,9 @@
 import Combine
 import Foundation
+@testable import Intent
 import Network
 import os
 import Testing
-@testable import Intent
 
 @Suite(.serialized)
 struct ConnectionManagerTests {
@@ -47,11 +47,11 @@ struct ConnectionManagerTests {
         var receivedConnectionStates: [ConnectionState] = []
         var receivedCertMismatches: [Bool] = []
 
-        let connectionCancellable = manager.connectionStatePublisher.sink {
-            receivedConnectionStates.append($0)
+        let connectionCancellable = manager.connectionStatePublisher.sink { state in
+            receivedConnectionStates.append(state)
         }
-        let certCancellable = manager.certMismatchPublisher.sink {
-            receivedCertMismatches.append($0)
+        let certCancellable = manager.certMismatchPublisher.sink { mismatchDetected in
+            receivedCertMismatches.append(mismatchDetected)
         }
 
         manager.connectionState = .connecting
@@ -67,13 +67,21 @@ struct ConnectionManagerTests {
 
     @Test @MainActor func shortLivedConnectionCarriesReconnectBackoffForward() {
         #expect(ConnectionManager.reconnectStartingAttempt(
-            connectionLifetime: nil, previousAttempt: 4) == 1)
+            connectionLifetime: nil,
+            previousAttempt: 4
+        ) == 1)
         #expect(ConnectionManager.reconnectStartingAttempt(
-            connectionLifetime: 10, previousAttempt: 4) == 1)
+            connectionLifetime: 10,
+            previousAttempt: 4
+        ) == 1)
         #expect(ConnectionManager.reconnectStartingAttempt(
-            connectionLifetime: 9.9, previousAttempt: 0) == 2)
+            connectionLifetime: 9.9,
+            previousAttempt: 0
+        ) == 2)
         #expect(ConnectionManager.reconnectStartingAttempt(
-            connectionLifetime: 1, previousAttempt: 4) == 5)
+            connectionLifetime: 1,
+            previousAttempt: 4
+        ) == 5)
     }
 
     // MARK: - Event handlers
@@ -109,7 +117,7 @@ struct ConnectionManagerTests {
 
     // MARK: - Message dispatch (response routing)
 
-    @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async throws {
+    @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 999)
@@ -159,7 +167,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
         do {
-            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05, write: { nil })
+            _ = try await manager.awaitResponse(id: 7003, timeout: 0.05) { nil }
             Issue.record("Expected timeout error but got success")
         } catch {
             #expect(error.localizedDescription.contains("timed out"))
@@ -179,7 +187,7 @@ struct ConnectionManagerTests {
         let capture = ResponseCapture()
         let pending = Task { @MainActor in
             do {
-                capture.value = try await manager.awaitResponse(id: 7001, timeout: 0.05, write: { nil })
+                capture.value = try await manager.awaitResponse(id: 7001, timeout: 0.05) { nil }
             } catch {
                 capture.error = error
             }
@@ -205,12 +213,12 @@ struct ConnectionManagerTests {
     /// A response arriving after a delay but within the per-call override must
     /// resolve the request instead of timing out (the daemon's structured
     /// result wins over the client-side transport timeout).
-    @Test @MainActor func perCallTimeoutOverrideHonored() async throws {
+    @Test @MainActor func perCallTimeoutOverrideHonored() async {
         let manager = ConnectionManager.shared
         let capture = ResponseCapture()
         let pending = Task { @MainActor in
             do {
-                capture.value = try await manager.awaitResponse(id: 7002, timeout: 5.0, write: { nil })
+                capture.value = try await manager.awaitResponse(id: 7002, timeout: 5.0) { nil }
             } catch {
                 capture.error = error
             }
@@ -320,7 +328,7 @@ struct ConnectionManagerTests {
         if let error = capture.error {
             let nsError = error as NSError
             #expect(nsError.domain == "WebSocket")
-            #expect(nsError.code == -32602)
+            #expect(nsError.code == -32_602)
             #expect(nsError.intentErrorDataCode == "not-found")
             #expect(nsError.isEntityNotFound)
         } else {
@@ -344,7 +352,7 @@ struct ConnectionManagerTests {
         await expectation.value
         if let error = capture.error {
             let nsError = error as NSError
-            #expect(nsError.code == -32602)
+            #expect(nsError.code == -32_602)
             #expect(nsError.intentErrorDataCode == nil)
             #expect(!nsError.isEntityNotFound, "a -32602 without data.code must not read as entity-not-found")
         } else {
@@ -356,26 +364,34 @@ struct ConnectionManagerTests {
 
     @Test func isEntityNotFoundRequiresDomainCodeAndDataCode() {
         let notFound = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"]
+        )
         #expect(notFound.isEntityNotFound)
 
         let invalidParams = NSError(
-            domain: "WebSocket", code: -32602,
-            userInfo: [NSError.intentErrorDataCodeKey: "invalid-params"])
+            domain: "WebSocket",
+            code: -32_602,
+            userInfo: [NSError.intentErrorDataCodeKey: "invalid-params"]
+        )
         #expect(!invalidParams.isEntityNotFound)
 
-        let bare = NSError(domain: "WebSocket", code: -32602)
+        let bare = NSError(domain: "WebSocket", code: -32_602)
         #expect(!bare.isEntityNotFound)
 
         let wrongCode = NSError(
-            domain: "WebSocket", code: -32603,
-            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "WebSocket",
+            code: -32_603,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"]
+        )
         #expect(!wrongCode.isEntityNotFound)
 
         let wrongDomain = NSError(
-            domain: "SomeOtherDomain", code: -32602,
-            userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+            domain: "SomeOtherDomain",
+            code: -32_602,
+            userInfo: [NSError.intentErrorDataCodeKey: "not-found"]
+        )
         #expect(!wrongDomain.isEntityNotFound)
     }
 
@@ -409,14 +425,20 @@ struct ConnectionManagerTests {
 
     @Test func webSocketURLUsesPlainSchemeWithoutFingerprint() throws {
         let url = try WebSocketConnection.makeURL(
-            host: "daemon.local", port: 4242, certFingerprint: nil)
+            host: "daemon.local",
+            port: 4242,
+            certFingerprint: nil
+        )
 
         #expect(url.absoluteString == "ws://daemon.local:4242/ws")
     }
 
     @Test func pinnedWebSocketURLUsesSecureScheme() throws {
         let url = try WebSocketConnection.makeURL(
-            host: "daemon.local", port: 4242, certFingerprint: "aa:bb")
+            host: "daemon.local",
+            port: 4242,
+            certFingerprint: "aa:bb"
+        )
 
         #expect(url.absoluteString == "wss://daemon.local:4242/ws")
     }
@@ -445,12 +467,12 @@ struct ConnectionManagerTests {
 
     // URLSessionWebSocketTask.Message is not Equatable; extract payloads for asserting.
     private func text(of message: URLSessionWebSocketTask.Message?) -> String? {
-        if case .string(let value)? = message { return value }
+        if case let .string(value)? = message { return value }
         return nil
     }
 
     private func data(of message: URLSessionWebSocketTask.Message?) -> Data? {
-        if case .data(let value)? = message { return value }
+        if case let .data(value)? = message { return value }
         return nil
     }
 
@@ -458,7 +480,10 @@ struct ConnectionManagerTests {
         var assembler = WebSocketConnection.MessageAssembler()
 
         let message = assembler.consume(
-            kind: .text, data: Data("hello".utf8), isComplete: true)
+            kind: .text,
+            data: Data("hello".utf8),
+            isComplete: true
+        )
 
         #expect(text(of: message) == "hello")
     }
@@ -470,11 +495,20 @@ struct ConnectionManagerTests {
         let bytes = Array("héllo".utf8)
 
         #expect(assembler.consume(
-            kind: .text, data: Data(bytes[0..<2]), isComplete: false) == nil)
+            kind: .text,
+            data: Data(bytes[0..<2]),
+            isComplete: false
+        ) == nil)
         #expect(assembler.consume(
-            kind: .continuation, data: Data(bytes[2..<4]), isComplete: false) == nil)
+            kind: .continuation,
+            data: Data(bytes[2..<4]),
+            isComplete: false
+        ) == nil)
         let message = assembler.consume(
-            kind: .continuation, data: Data(bytes[4...]), isComplete: true)
+            kind: .continuation,
+            data: Data(bytes[4...]),
+            isComplete: true
+        )
 
         #expect(text(of: message) == "héllo")
     }
@@ -483,9 +517,15 @@ struct ConnectionManagerTests {
         var assembler = WebSocketConnection.MessageAssembler()
 
         #expect(assembler.consume(
-            kind: .binary, data: Data([0x01, 0x02]), isComplete: false) == nil)
+            kind: .binary,
+            data: Data([0x01, 0x02]),
+            isComplete: false
+        ) == nil)
         let message = assembler.consume(
-            kind: .continuation, data: Data([0x03]), isComplete: true)
+            kind: .continuation,
+            data: Data([0x03]),
+            isComplete: true
+        )
 
         #expect(data(of: message) == Data([0x01, 0x02, 0x03]))
     }
@@ -494,10 +534,16 @@ struct ConnectionManagerTests {
         var assembler = WebSocketConnection.MessageAssembler()
 
         #expect(assembler.consume(
-            kind: .continuation, data: Data([0xff]), isComplete: true) == nil)
+            kind: .continuation,
+            data: Data([0xff]),
+            isComplete: true
+        ) == nil)
         // A well-formed message afterwards is unaffected.
         let message = assembler.consume(
-            kind: .text, data: Data("ok".utf8), isComplete: true)
+            kind: .text,
+            data: Data("ok".utf8),
+            isComplete: true
+        )
         #expect(text(of: message) == "ok")
     }
 
@@ -505,9 +551,15 @@ struct ConnectionManagerTests {
         var assembler = WebSocketConnection.MessageAssembler()
 
         let first = assembler.consume(
-            kind: .text, data: Data("first".utf8), isComplete: true)
+            kind: .text,
+            data: Data("first".utf8),
+            isComplete: true
+        )
         let second = assembler.consume(
-            kind: .text, data: Data("second".utf8), isComplete: true)
+            kind: .text,
+            data: Data("second".utf8),
+            isComplete: true
+        )
 
         #expect(text(of: first) == "first")
         #expect(text(of: second) == "second")
@@ -515,7 +567,9 @@ struct ConnectionManagerTests {
 
     @Test @MainActor func certificateMismatchErrorIncludesReceivedFingerprint() {
         let error = WebSocketTransportError.certificateMismatch(
-            host: "daemon.local", fingerprint: "de:ad:be:ef")
+            host: "daemon.local",
+            fingerprint: "de:ad:be:ef"
+        )
 
         #expect(error.isCertificateMismatch)
         #expect(error.localizedDescription.contains("de:ad:be:ef"))
@@ -525,6 +579,7 @@ struct ConnectionManagerTests {
 
     private actor FakeRaceConnection: HostRacingConnection {
         nonisolated let host: String
+
         init(host: String) { self.host = host }
         func disconnect() {}
     }
@@ -535,7 +590,9 @@ struct ConnectionManagerTests {
         ) { host -> FakeRaceConnection in
             if host == "bad.host" {
                 throw WebSocketTransportError.certificateMismatch(
-                    host: host, fingerprint: "aa:bb")
+                    host: host,
+                    fingerprint: "aa:bb"
+                )
             }
             try? await Task.sleep(for: .milliseconds(50))
             return FakeRaceConnection(host: host)
@@ -548,7 +605,8 @@ struct ConnectionManagerTests {
         // depends on scheduling; either way it must not be swallowed.
         let lateMismatches = await outcome.drain?.value ?? []
         #expect(outcome.mismatches + lateMismatches == [
-            HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")])
+            HostCertMismatch(host: "bad.host", fingerprint: "aa:bb")
+        ])
     }
 
     @Test func mismatchAfterWinnerSettledIsNotSwallowed() async {
@@ -558,7 +616,9 @@ struct ConnectionManagerTests {
             if host == "bad.host" {
                 try? await Task.sleep(for: .milliseconds(50))
                 throw WebSocketTransportError.certificateMismatch(
-                    host: host, fingerprint: "cc:dd")
+                    host: host,
+                    fingerprint: "cc:dd"
+                )
             }
             return FakeRaceConnection(host: host)
         }
@@ -568,7 +628,8 @@ struct ConnectionManagerTests {
         // is reported by the background drain rather than the outcome itself.
         let lateMismatches = await outcome.drain?.value ?? []
         #expect(outcome.mismatches + lateMismatches == [
-            HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")])
+            HostCertMismatch(host: "bad.host", fingerprint: "cc:dd")
+        ])
     }
 
     @Test func allMismatchRaceFailsWithEveryHostCollected() async {
@@ -576,17 +637,19 @@ struct ConnectionManagerTests {
             ["a.host", "b.host"]
         ) { host -> FakeRaceConnection in
             throw WebSocketTransportError.certificateMismatch(
-                host: host, fingerprint: "ff:\(host)")
+                host: host,
+                fingerprint: "ff:\(host)"
+            )
         }
 
         #expect(outcome.winner == nil)
         #expect(Set(outcome.mismatches) == Set([
             HostCertMismatch(host: "a.host", fingerprint: "ff:a.host"),
-            HostCertMismatch(host: "b.host", fingerprint: "ff:b.host"),
+            HostCertMismatch(host: "b.host", fingerprint: "ff:b.host")
         ]))
         let failure = outcome.failure as? WebSocketTransportError
         #expect(failure?.isCertificateMismatch == true)
-        guard case .certificateMismatches(let carried)? = failure else {
+        guard case let .certificateMismatches(carried)? = failure else {
             Issue.record("expected aggregate certificate error, got \(String(describing: outcome.failure))")
             return
         }
@@ -600,14 +663,17 @@ struct ConnectionManagerTests {
             if host == "bad.host" {
                 try? await Task.sleep(for: .milliseconds(20))
                 throw WebSocketTransportError.certificateMismatch(
-                    host: host, fingerprint: "ee:ff")
+                    host: host,
+                    fingerprint: "ee:ff"
+                )
             }
             throw WebSocketTransportError.failed(host: host, message: "unreachable")
         }
 
         #expect(outcome.winner == nil)
         #expect(outcome.mismatches == [
-            HostCertMismatch(host: "bad.host", fingerprint: "ee:ff")])
+            HostCertMismatch(host: "bad.host", fingerprint: "ee:ff")
+        ])
         let failure = outcome.failure as? WebSocketTransportError
         #expect(failure?.isCertificateMismatch == true)
     }
@@ -621,12 +687,12 @@ struct ConnectionManagerTests {
         manager.recordCertMismatches([HostCertMismatch(host: "a", fingerprint: "f1")])
         manager.recordCertMismatches([
             HostCertMismatch(host: "a", fingerprint: "f2"),
-            HostCertMismatch(host: "b", fingerprint: "f3"),
+            HostCertMismatch(host: "b", fingerprint: "f3")
         ])
 
         #expect(manager.certMismatches == [
             HostCertMismatch(host: "a", fingerprint: "f2"),
-            HostCertMismatch(host: "b", fingerprint: "f3"),
+            HostCertMismatch(host: "b", fingerprint: "f3")
         ])
         #expect(received.last == manager.certMismatches)
 
@@ -646,13 +712,20 @@ struct ConnectionManagerTests {
     @Test @MainActor func connectToDifferentTargetClearsMismatchesSameTargetKeepsThem() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1234, token: "tok", certFingerprint: "pin",
-            tcAddress: nil)
+            hosts: ["h1"],
+            port: 1234,
+            token: "tok",
+            certFingerprint: "pin",
+            tcAddress: nil
+        )
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h1"], port: 1234, certFingerprint: "pin")
+            hosts: ["h1"],
+            port: 1234,
+            certFingerprint: "pin"
+        )
         #expect(manager.certMismatches == seeded)
 
         // Pinned targets are identified by port + pin: a drifted host list
@@ -660,33 +733,52 @@ struct ConnectionManagerTests {
         // same daemon, so the list survives an app-driven reconnect from the
         // stored record.
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h2"], port: 1234, certFingerprint: "pin")
+            hosts: ["h2"],
+            port: 1234,
+            certFingerprint: "pin"
+        )
         #expect(manager.certMismatches == seeded)
 
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h1"], port: 1234, certFingerprint: "other-pin")
+            hosts: ["h1"],
+            port: 1234,
+            certFingerprint: "other-pin"
+        )
         #expect(manager.certMismatches.isEmpty)
 
         manager.certMismatches = seeded
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h1"], port: 5678, certFingerprint: "pin")
+            hosts: ["h1"],
+            port: 5678,
+            certFingerprint: "pin"
+        )
         #expect(manager.certMismatches.isEmpty)
     }
 
     @Test @MainActor func pinlessTargetIdentityFallsBackToHostOverlap() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1", "h2"], port: 1234, token: "tok", certFingerprint: nil,
-            tcAddress: nil)
+            hosts: ["h1", "h2"],
+            port: 1234,
+            token: "tok",
+            certFingerprint: nil,
+            tcAddress: nil
+        )
         let seeded = [HostCertMismatch(host: "h1", fingerprint: "f1")]
         manager.certMismatches = seeded
 
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h2", "h3"], port: 1234, certFingerprint: nil)
+            hosts: ["h2", "h3"],
+            port: 1234,
+            certFingerprint: nil
+        )
         #expect(manager.certMismatches == seeded)
 
         manager.resetCertMismatchesIfTargetChanged(
-            hosts: ["h4"], port: 1234, certFingerprint: nil)
+            hosts: ["h4"],
+            port: 1234,
+            certFingerprint: nil
+        )
         #expect(manager.certMismatches.isEmpty)
     }
 
@@ -695,8 +787,12 @@ struct ConnectionManagerTests {
     @Test @MainActor func updateCachedCredentialsReplacesReconnectFields() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["10.0.0.9", "mac.local"], port: 9999,
-            token: "tok-rotated", certFingerprint: "ff:ee", tcAddress: nil)
+            hosts: ["10.0.0.9", "mac.local"],
+            port: 9999,
+            token: "tok-rotated",
+            certFingerprint: "ff:ee",
+            tcAddress: nil
+        )
         #expect(manager.hosts == ["10.0.0.9", "mac.local"])
         #expect(manager.port == 9999)
         #expect(manager.token == "tok-rotated")
@@ -1021,15 +1117,21 @@ struct ConnectionManagerTests {
 
     @Test @MainActor func bufferTTLExpiresOldPushes() async {
         var currentDate = Date()
-        let router = ConnectionSubscriptionRouter(now: { currentDate })
+        let router = ConnectionSubscriptionRouter { currentDate }
         let delta: [String: Any] = ["added": [], "updated": [], "removedIds": []]
 
         _ = router.route(method: "subscription.push", params: [
-            "subscriptionId": "buf-sub-ttl", "kind": "delta", "seq": 1, "delta": delta
+            "subscriptionId": "buf-sub-ttl",
+            "kind": "delta",
+            "seq": 1,
+            "delta": delta
         ])
         currentDate.addTimeInterval(ConnectionSubscriptionRouter.defaultBufferTTL + 1)
         _ = router.route(method: "subscription.push", params: [
-            "subscriptionId": "buf-sub-ttl", "kind": "delta", "seq": 2, "delta": delta
+            "subscriptionId": "buf-sub-ttl",
+            "kind": "delta",
+            "seq": 2,
+            "delta": delta
         ])
 
         var receivedSeqs: [Int] = []
@@ -1220,7 +1322,8 @@ struct ConnectionManagerTests {
     @Test @MainActor func mergeHostsAppendsNewReportedIps() {
         let merged = ConnectionManager.mergeHosts(
             existing: ["192.168.1.10"],
-            reported: ["192.168.1.10", "10.0.0.5", "172.16.0.2"])
+            reported: ["192.168.1.10", "10.0.0.5", "172.16.0.2"]
+        )
         #expect(merged == ["192.168.1.10", "10.0.0.5", "172.16.0.2"])
     }
 
@@ -1229,14 +1332,16 @@ struct ConnectionManagerTests {
         // hostname or NAT address) — it must stay, and stay first.
         let merged = ConnectionManager.mergeHosts(
             existing: ["daemon.local", "10.0.0.5"],
-            reported: ["10.0.0.5", "192.168.1.10"])
+            reported: ["10.0.0.5", "192.168.1.10"]
+        )
         #expect(merged == ["daemon.local", "10.0.0.5", "192.168.1.10"])
     }
 
     @Test @MainActor func mergeHostsDedupesAndSkipsEmptyReportedEntries() {
         let merged = ConnectionManager.mergeHosts(
             existing: ["a"],
-            reported: ["b", "b", "", "  ", "a", " c "])
+            reported: ["b", "b", "", "  ", "a", " c "]
+        )
         #expect(merged == ["a", "b", "c"])
     }
 
@@ -1251,7 +1356,8 @@ struct ConnectionManagerTests {
         let storedHosts = ["nat.example.com", "192.168.1.10"]
         let sessionMerged = ConnectionManager.mergeHosts(
             existing: ["192.168.1.10"],
-            reported: ["192.168.1.10", "10.0.0.5"])
+            reported: ["192.168.1.10", "10.0.0.5"]
+        )
         #expect(sessionMerged == ["192.168.1.10", "10.0.0.5"])
 
         let persisted = ConnectionManager.mergeHosts(existing: storedHosts, reported: sessionMerged)
@@ -1264,7 +1370,7 @@ struct ConnectionManagerTests {
         let result: [String: Any] = [
             "version": "1.2.3",
             "hostname": "mac.local",
-            "localIps": ["192.168.1.10", "10.0.0.5"],
+            "localIps": ["192.168.1.10", "10.0.0.5"]
         ]
         #expect(ConnectionManager.localIps(fromSystemStatus: result) == ["192.168.1.10", "10.0.0.5"])
     }
@@ -1286,7 +1392,7 @@ struct ConnectionManagerTests {
     @Test @MainActor func tcAddressParsedFromSystemStatusResult() {
         let result: [String: Any] = [
             "version": "1.2.3",
-            "tcAddress": "tc-abcdef123456",
+            "tcAddress": "tc-abcdef123456"
         ]
         #expect(ConnectionManager.tcAddress(fromSystemStatus: result) == "tc-abcdef123456")
     }
@@ -1301,28 +1407,39 @@ struct ConnectionManagerTests {
     @Test @MainActor func updateCachedCredentialsAdoptsTcAddress() {
         let manager = ConnectionManager.shared
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
-            tcAddress: "tc-tunnel-token")
+            hosts: ["h1"],
+            port: 1,
+            token: "t",
+            certFingerprint: nil,
+            tcAddress: "tc-tunnel-token"
+        )
         #expect(manager.tcAddress == "tc-tunnel-token")
         manager.updateCachedCredentials(
-            hosts: ["h1"], port: 1, token: "t", certFingerprint: nil,
-            tcAddress: nil)
+            hosts: ["h1"],
+            port: 1,
+            token: "t",
+            certFingerprint: nil,
+            tcAddress: nil
+        )
         #expect(manager.tcAddress == nil)
     }
 
     // MARK: - Tunnel race candidate
 
-    private nonisolated final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
+    nonisolated private final class FakeTunnelSession: TunnelSession, @unchecked Sendable {
         let localPort: Int
         let closed = OSAllocatedUnfairLock(initialState: false)
+
         init(localPort: Int) { self.localPort = localPort }
         func close() async { closed.withLock { $0 = true } }
+
         var isClosed: Bool { closed.withLock { $0 } }
     }
 
-    private nonisolated struct FakeTunnelDialer: TunnelDialing {
+    nonisolated private struct FakeTunnelDialer: TunnelDialing {
         let result: Result<FakeTunnelSession, WebSocketTransportError>
-        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+
+        func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
             try result.get()
         }
     }
@@ -1333,11 +1450,15 @@ struct ConnectionManagerTests {
     @Test func unavailableTunnelDialerFailsWithClearError() async {
         do {
             _ = try await ConnectionManager.connectViaTunnel(
-                dialer: UnavailableTunnelDialer(), tcAddress: "tc-x", remotePort: 5181,
-                token: "t", certFingerprint: nil)
+                dialer: UnavailableTunnelDialer(),
+                tcAddress: "tc-x",
+                remotePort: 5181,
+                token: "t",
+                certFingerprint: nil
+            )
             Issue.record("expected connectViaTunnel to throw")
         } catch let error as WebSocketTransportError {
-            guard case .failed(let host, let message) = error else {
+            guard case let .failed(host, message) = error else {
                 Issue.record("unexpected transport error: \(error)")
                 return
             }
@@ -1353,11 +1474,18 @@ struct ConnectionManagerTests {
     @Test func tunnelDialFailurePropagates() async {
         let dialer = FakeTunnelDialer(
             result: .failure(.failed(
-                host: ConnectionManager.tunnelCandidateLabel, message: "no derp")))
+                host: ConnectionManager.tunnelCandidateLabel,
+                message: "no derp"
+            ))
+        )
         await #expect(throws: WebSocketTransportError.self) {
             _ = try await ConnectionManager.connectViaTunnel(
-                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
-                token: "t", certFingerprint: nil)
+                dialer: dialer,
+                tcAddress: "tc-x",
+                remotePort: 5181,
+                token: "t",
+                certFingerprint: nil
+            )
         }
     }
 
@@ -1369,15 +1497,19 @@ struct ConnectionManagerTests {
         let dialer = FakeTunnelDialer(result: .success(tunnel))
         await #expect(throws: (any Error).self) {
             _ = try await ConnectionManager.connectViaTunnel(
-                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
-                token: "t", certFingerprint: nil)
+                dialer: dialer,
+                tcAddress: "tc-x",
+                remotePort: 5181,
+                token: "t",
+                certFingerprint: nil
+            )
         }
         #expect(tunnel.isClosed)
     }
 
     /// A raced candidate that mirrors `RacedConnection`: `disconnect()` closes
     /// the carried tunnel session, so loser cleanup releases tunnel resources.
-    private nonisolated struct FakeTunnelRaceConnection: HostRacingConnection {
+    nonisolated private struct FakeTunnelRaceConnection: HostRacingConnection {
         let host: String
         let tunnel: FakeTunnelSession?
 
@@ -1444,7 +1576,7 @@ struct ConnectionManagerTests {
     /// a connection still serves round-trips. Nonisolated for the same
     /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
     /// on the listener queue and must not inherit MainActor isolation.
-    private nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
+    nonisolated private final class LoopbackWebSocketServer: @unchecked Sendable {
         private struct State {
             var accepted: [NWConnection] = []
             // Connections held back by a gated server: accepted but not
@@ -1474,7 +1606,9 @@ struct ConnectionManagerTests {
             wsOptions.autoReplyPing = true
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
             let server = LoopbackWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any), gated: gated)
+                listener: try NWListener(using: parameters, on: .any),
+                gated: gated
+            )
             server.listener.newConnectionHandler = { [weak server] connection in
                 guard let server else { return }
                 let startNow = server.state.withLock { state in
@@ -1538,18 +1672,24 @@ struct ConnectionManagerTests {
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
                     let response: [String: Any] = [
-                        "jsonrpc": "2.0", "id": id, "result": [String: Any](),
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": [String: Any]()
                     ]
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
                         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
                         let context = NWConnection.ContentContext(
-                            identifier: "response", metadata: [metadata])
+                            identifier: "response",
+                            metadata: [metadata]
+                        )
                         connection.send(
-                            content: payload, contentContext: context,
-                            completion: .idempotent)
+                            content: payload,
+                            contentContext: context,
+                            completion: .idempotent
+                        )
                     }
                 }
-                self.receiveNext(on: connection)
+                receiveNext(on: connection)
             }
         }
     }
@@ -1576,13 +1716,19 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: server.port, token: "live-token")
+            hosts: ["127.0.0.1"],
+            port: server.port,
+            token: "live-token"
+        )
         #expect(manager.connectionState == .connected)
 
         let deadPort = try await Self.unusedLoopbackPort()
         await #expect(throws: (any Error).self) {
             try await manager.connect(
-                hosts: ["127.0.0.1"], port: deadPort, token: "new-token")
+                hosts: ["127.0.0.1"],
+                port: deadPort,
+                token: "new-token"
+            )
         }
 
         // The live connection was never torn down: state and target are
@@ -1607,7 +1753,10 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: server.port, token: "live-token")
+            hosts: ["127.0.0.1"],
+            port: server.port,
+            token: "live-token"
+        )
         #expect(manager.connectionState == .connected)
         let liveMismatches = [HostCertMismatch(host: "127.0.0.1", fingerprint: "aa:bb")]
         manager.certMismatches = liveMismatches
@@ -1615,7 +1764,10 @@ struct ConnectionManagerTests {
         let deadPort = try await Self.unusedLoopbackPort()
         await #expect(throws: (any Error).self) {
             try await manager.connect(
-                hosts: ["127.0.0.1"], port: deadPort, token: "new-token")
+                hosts: ["127.0.0.1"],
+                port: deadPort,
+                token: "new-token"
+            )
         }
 
         #expect(manager.certMismatches == liveMismatches)
@@ -1635,11 +1787,17 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+            hosts: ["127.0.0.1"],
+            port: serverA.port,
+            token: "token-a"
+        )
         #expect(manager.connectionState == .connected)
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+            hosts: ["127.0.0.1"],
+            port: serverB.port,
+            token: "token-b"
+        )
 
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
@@ -1651,14 +1809,17 @@ struct ConnectionManagerTests {
     /// A tunnel dialer that reports a certificate mismatch only after a delay
     /// the race's loser cancellation cannot cut short, so a direct candidate
     /// wins first and the mismatch is reported by the background drain.
-    private nonisolated struct SlowMismatchTunnelDialer: TunnelDialing {
+    nonisolated private struct SlowMismatchTunnelDialer: TunnelDialing {
         let fingerprint: String
-        func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+
+        func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
             _ = await Task.detached {
                 try? await Task.sleep(for: .milliseconds(300))
             }.value
             throw WebSocketTransportError.certificateMismatch(
-                host: ConnectionManager.tunnelCandidateLabel, fingerprint: fingerprint)
+                host: ConnectionManager.tunnelCandidateLabel,
+                fingerprint: fingerprint
+            )
         }
     }
 
@@ -1679,19 +1840,29 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+            hosts: ["127.0.0.1"],
+            port: serverA.port,
+            token: "token-a"
+        )
         #expect(manager.connectionState == .connected)
 
         manager.tunnelDialer = SlowMismatchTunnelDialer(fingerprint: "cc:dd")
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: serverB.port, token: "token-b",
-            tcAddress: "tc-slow")
+            hosts: ["127.0.0.1"],
+            port: serverB.port,
+            token: "token-b",
+            tcAddress: "tc-slow"
+        )
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
         #expect(manager.token == "token-b")
 
-        let expected = [HostCertMismatch(
-            host: ConnectionManager.tunnelCandidateLabel, fingerprint: "cc:dd")]
+        let expected = [
+            HostCertMismatch(
+                host: ConnectionManager.tunnelCandidateLabel,
+                fingerprint: "cc:dd"
+            )
+        ]
         let deadline = Date().addingTimeInterval(3)
         while Date() < deadline, manager.certMismatches != expected {
             try await Task.sleep(for: .milliseconds(20))
@@ -1718,18 +1889,27 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: liveServer.port, token: "live-token")
+            hosts: ["127.0.0.1"],
+            port: liveServer.port,
+            token: "live-token"
+        )
         #expect(manager.connectionState == .connected)
 
         // Both attempts hang in their WS handshake until their server opens.
         let older = Task {
             try await manager.connect(
-                hosts: ["127.0.0.1"], port: olderTarget.port, token: "token-old")
+                hosts: ["127.0.0.1"],
+                port: olderTarget.port,
+                token: "token-old"
+            )
         }
         try await Task.sleep(for: .milliseconds(100))
         let newer = Task {
             try await manager.connect(
-                hosts: ["127.0.0.1"], port: newerTarget.port, token: "token-new")
+                hosts: ["127.0.0.1"],
+                port: newerTarget.port,
+                token: "token-new"
+            )
         }
         try await Task.sleep(for: .milliseconds(100))
 
@@ -1761,7 +1941,10 @@ struct ConnectionManagerTests {
         }
 
         try await manager.connect(
-            hosts: ["127.0.0.1"], port: server.port, token: "live-token")
+            hosts: ["127.0.0.1"],
+            port: server.port,
+            token: "live-token"
+        )
         #expect(manager.connectionState == .connected)
         let livePort = server.port
 
@@ -1780,7 +1963,10 @@ struct ConnectionManagerTests {
         let deadPort = try await Self.unusedLoopbackPort()
         await #expect(throws: (any Error).self) {
             try await manager.connect(
-                hosts: ["127.0.0.1"], port: deadPort, token: "new-token")
+                hosts: ["127.0.0.1"],
+                port: deadPort,
+                token: "new-token"
+            )
         }
 
         // Still recovering toward the ORIGINAL target — not stuck in
@@ -1793,4 +1979,3 @@ struct ConnectionManagerTests {
         #expect(manager.token == "live-token")
     }
 }
-

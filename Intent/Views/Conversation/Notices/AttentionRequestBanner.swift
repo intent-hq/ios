@@ -11,6 +11,7 @@ struct AttentionRequestBanner: View {
             Image(systemName: attention.kind.systemImage)
                 .font(.subheadline)
                 .foregroundStyle(attention.kind.color)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -22,7 +23,9 @@ struct AttentionRequestBanner: View {
                         (Text(min(raisedAt, Date()), style: .relative) + Text(" ago"))
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(
-                                for: colorScheme, contrast: colorSchemeContrast))
+                                for: colorScheme,
+                                contrast: colorSchemeContrast
+                            ))
                     }
                 }
 
@@ -30,7 +33,9 @@ struct AttentionRequestBanner: View {
                     Text(reason)
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(
-                            for: colorScheme, contrast: colorSchemeContrast))
+                            for: colorScheme,
+                            contrast: colorSchemeContrast
+                        ))
                         .lineLimit(Constants.Conversation.AttentionRequest.reasonLineLimit)
                         .fixedSize(horizontal: false, vertical: true)
                 }

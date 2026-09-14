@@ -37,7 +37,7 @@ struct ChatImageActionsTests {
     // MARK: - File-size formatting
 
     @Test func byteCountTextIsNonEmptyAndSizeDependent() {
-        let small = ImageInfoFormat.byteCountText(1_024)
+        let small = ImageInfoFormat.byteCountText(1024)
         let large = ImageInfoFormat.byteCountText(1_500_000)
         #expect(!small.isEmpty)
         #expect(!large.isEmpty)
@@ -49,21 +49,21 @@ struct ChatImageActionsTests {
     @Test func decodeImageDataRoundtripsBase64() throws {
         let payload = Data("hello".utf8)
         let json = #"{"type":"image","data":"\#(payload.base64EncodedString())","mimeType":"image/png"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
 
         #expect(ContentBlockView.decodeImageData(block) == payload)
     }
 
     @Test func decodeImageDataRejectsInvalidBase64() throws {
         let json = #"{"type":"image","data":"not base64!!","mimeType":"image/png"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
 
         #expect(ContentBlockView.decodeImageData(block) == nil)
     }
 
     @Test func decodeImageDataIsNilWithoutPayload() throws {
         let json = #"{"type":"image","attachmentId":"att-1","mimeType":"image/png"}"#
-        let block = try JSONDecoder().decode(ContentBlock.self, from: json.data(using: .utf8)!)
+        let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
 
         #expect(ContentBlockView.decodeImageData(block) == nil)
     }

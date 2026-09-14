@@ -11,7 +11,6 @@ import Testing
 /// cannot bypass the scan; the patterns' escaped spelling also keeps this
 /// file from matching its own scan.)
 struct PlatformGuardAllowlistTests {
-
     private static let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // IntentTests/
         .deletingLastPathComponent()  // repo root
@@ -40,13 +39,13 @@ struct PlatformGuardAllowlistTests {
         "Intent/Views/Workspaces/WorkspaceDetailView.swift",
         "Intent/Views/Workspaces/WorkspaceListSidebar.swift",
         "Intent/Views/Workspaces/WorkspaceListView.swift",
-        "IntentTests/PairingOptionTests.swift",
+        "IntentTests/PairingOptionTests.swift"
     ]
 
     private static let tailcatKitAllowlist: Set<String> = [
         "Intent/Services/ConnectionManager.swift",
         "Intent/Services/TailcatTunnel.swift",
-        "IntentTests/TailcatKitSmokeTests.swift",
+        "IntentTests/TailcatKitSmokeTests.swift"
     ]
 
     /// Repo-relative paths of .swift files under Intent/ and IntentTests/
@@ -59,7 +58,9 @@ struct PlatformGuardAllowlistTests {
             var isDirectory: ObjCBool = false
             try #require(
                 FileManager.default.fileExists(
-                    atPath: root.path, isDirectory: &isDirectory)
+                    atPath: root.path,
+                    isDirectory: &isDirectory
+                )
                     && isDirectory.boolValue,
                 "scan root \(directory)/ is missing or not a directory at \(root.path)"
             )
@@ -87,7 +88,8 @@ struct PlatformGuardAllowlistTests {
     }
 
     private func assertMatchesAllowlist(
-        pattern: String, allowlist: Set<String>
+        pattern: String,
+        allowlist: Set<String>
     ) throws {
         let actual = try filesContaining(pattern)
         let added = actual.subtracting(allowlist).sorted()
@@ -108,11 +110,15 @@ struct PlatformGuardAllowlistTests {
 
     @Test func visionOSGuardsMatchAllowlist() throws {
         try assertMatchesAllowlist(
-            pattern: Self.visionOSGuard, allowlist: Self.visionOSAllowlist)
+            pattern: Self.visionOSGuard,
+            allowlist: Self.visionOSAllowlist
+        )
     }
 
     @Test func tailcatKitGuardsMatchAllowlist() throws {
         try assertMatchesAllowlist(
-            pattern: Self.tailcatKitGuard, allowlist: Self.tailcatKitAllowlist)
+            pattern: Self.tailcatKitGuard,
+            allowlist: Self.tailcatKitAllowlist
+        )
     }
 }

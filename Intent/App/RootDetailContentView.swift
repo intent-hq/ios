@@ -20,11 +20,10 @@ extension RootView {
                             noteId: dest.noteId,
                             workspaceId: dest.workspaceId,
                             noteTitle: dest.noteTitle,
-                            session: session,
-                            onNavigateToNote: { noteId, wsId, title in
-                                noteStack.append(NoteDestination(noteId: noteId, workspaceId: wsId, noteTitle: title))
-                            }
-                        )
+                            session: session
+                        ) { noteId, workspaceId, title in
+                            noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+                        }
                     }
             }
             .onAppear {

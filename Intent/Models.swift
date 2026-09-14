@@ -12,8 +12,14 @@ struct PairedServer: Codable, Equatable {
     /// existed and on daemons without a running tunnel.
     let tcAddress: String?
 
-    init(hosts: [String], port: Int, name: String, pairedAt: Date,
-         certFingerprint: String? = nil, tcAddress: String? = nil) {
+    init(
+        hosts: [String],
+        port: Int,
+        name: String,
+        pairedAt: Date,
+        certFingerprint: String? = nil,
+        tcAddress: String? = nil
+    ) {
         self.hosts = hosts
         self.port = port
         self.name = name
@@ -48,7 +54,7 @@ struct StoredConnection: Codable, Identifiable, Equatable {
         self.id = id
         self.server = server
         self.token = token
-        self.displayName = displayName ?? StoredConnection.fallbackDisplayName(for: server)
+        self.displayName = displayName ?? Self.fallbackDisplayName(for: server)
         self.lastConnectedAt = lastConnectedAt
         self.syncUpdatedAt = syncUpdatedAt
     }
@@ -85,8 +91,14 @@ struct WorkspacePullRequest: Codable, Identifiable, Equatable {
 
     var id: Int { number }
 
-    init(number: Int, status: String, title: String? = nil, url: String? = nil,
-         createdAt: String? = nil, updatedAt: String? = nil) {
+    init(
+        number: Int,
+        status: String,
+        title: String? = nil,
+        url: String? = nil,
+        createdAt: String? = nil,
+        updatedAt: String? = nil
+    ) {
         self.number = number
         self.status = status
         self.title = title
@@ -140,17 +152,32 @@ struct Workspace: Codable, Identifiable, Equatable {
     /// Explicit initializer so `attention` / `waiting` / `createdAt` /
     /// `pullRequests` / `activePullRequest` can default — existing call sites
     /// (and test fixtures) that predate the fields stay valid.
-    init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
-         activity: String?, displayStatus: String?, attention: String? = nil,
-         waiting: Bool = false,
-         lastActivity: String?, createdAt: String? = nil, updatedAt: String?,
-         repositoryOwner: String?,
-         repositoryName: String?, prStatus: String?, prNumber: Int?,
-         diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
-         taskStatsInProgress: Int?, agentSummaryCount: Int?,
-         agentSummaryAgents: [WorkspaceAgentInfo]?,
-         pullRequests: [WorkspacePullRequest]? = nil,
-         activePullRequest: WorkspacePullRequest? = nil) {
+    init(
+        id: String,
+        title: String,
+        branch: String?,
+        baseRef: String?,
+        status: String?,
+        activity: String?,
+        displayStatus: String?,
+        attention: String? = nil,
+        waiting: Bool = false,
+        lastActivity: String?,
+        createdAt: String? = nil,
+        updatedAt: String?,
+        repositoryOwner: String?,
+        repositoryName: String?,
+        prStatus: String?,
+        prNumber: Int?,
+        diffSummaryTotalFiles: Int?,
+        taskStatsTotal: Int?,
+        taskStatsCompleted: Int?,
+        taskStatsInProgress: Int?,
+        agentSummaryCount: Int?,
+        agentSummaryAgents: [WorkspaceAgentInfo]?,
+        pullRequests: [WorkspacePullRequest]? = nil,
+        activePullRequest: WorkspacePullRequest? = nil
+    ) {
         self.id = id
         self.title = title
         self.branch = branch
@@ -181,31 +208,31 @@ struct Workspace: Codable, Identifiable, Equatable {
     /// omitted when false) — the synthesized decoder would throw keyNotFound
     /// on the common not-waiting shape if a JSONDecoder path is ever added.
     init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        title = try c.decode(String.self, forKey: .title)
-        branch = try c.decodeIfPresent(String.self, forKey: .branch)
-        baseRef = try c.decodeIfPresent(String.self, forKey: .baseRef)
-        status = try c.decodeIfPresent(String.self, forKey: .status)
-        activity = try c.decodeIfPresent(String.self, forKey: .activity)
-        displayStatus = try c.decodeIfPresent(String.self, forKey: .displayStatus)
-        attention = try c.decodeIfPresent(String.self, forKey: .attention)
-        waiting = try c.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
-        lastActivity = try c.decodeIfPresent(String.self, forKey: .lastActivity)
-        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
-        updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
-        repositoryOwner = try c.decodeIfPresent(String.self, forKey: .repositoryOwner)
-        repositoryName = try c.decodeIfPresent(String.self, forKey: .repositoryName)
-        prStatus = try c.decodeIfPresent(String.self, forKey: .prStatus)
-        prNumber = try c.decodeIfPresent(Int.self, forKey: .prNumber)
-        diffSummaryTotalFiles = try c.decodeIfPresent(Int.self, forKey: .diffSummaryTotalFiles)
-        taskStatsTotal = try c.decodeIfPresent(Int.self, forKey: .taskStatsTotal)
-        taskStatsCompleted = try c.decodeIfPresent(Int.self, forKey: .taskStatsCompleted)
-        taskStatsInProgress = try c.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
-        agentSummaryCount = try c.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
-        agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
-        pullRequests = try c.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
-        activePullRequest = try c.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
+        baseRef = try container.decodeIfPresent(String.self, forKey: .baseRef)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        activity = try container.decodeIfPresent(String.self, forKey: .activity)
+        displayStatus = try container.decodeIfPresent(String.self, forKey: .displayStatus)
+        attention = try container.decodeIfPresent(String.self, forKey: .attention)
+        waiting = try container.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
+        lastActivity = try container.decodeIfPresent(String.self, forKey: .lastActivity)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+        repositoryOwner = try container.decodeIfPresent(String.self, forKey: .repositoryOwner)
+        repositoryName = try container.decodeIfPresent(String.self, forKey: .repositoryName)
+        prStatus = try container.decodeIfPresent(String.self, forKey: .prStatus)
+        prNumber = try container.decodeIfPresent(Int.self, forKey: .prNumber)
+        diffSummaryTotalFiles = try container.decodeIfPresent(Int.self, forKey: .diffSummaryTotalFiles)
+        taskStatsTotal = try container.decodeIfPresent(Int.self, forKey: .taskStatsTotal)
+        taskStatsCompleted = try container.decodeIfPresent(Int.self, forKey: .taskStatsCompleted)
+        taskStatsInProgress = try container.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
+        agentSummaryCount = try container.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
+        agentSummaryAgents = try container.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
+        pullRequests = try container.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
+        activePullRequest = try container.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
     }
 }
 
@@ -227,7 +254,7 @@ struct ProviderInfo: Identifiable, Equatable {
     /// `nil` (unknown) stays selectable since probes can fail transiently.
     var isSelectable: Bool { authenticated != false }
 
-    var displayName: String { ProviderInfo.displayName(for: id) }
+    var displayName: String { Self.displayName(for: id) }
 
     static func displayName(for id: String) -> String {
         switch id {
@@ -248,7 +275,6 @@ extension Array where Element == ProviderInfo {
     /// signed out). The pickers show desktop-setup guidance instead of an
     /// empty-value menu in that state (monorepo#985).
     var noneSelectable: Bool {
-        !isEmpty && !contains(where: { $0.isSelectable })
+        !isEmpty && !contains { $0.isSelectable }
     }
 }
-
