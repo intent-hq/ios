@@ -459,14 +459,34 @@ import Observation
         let eventWorkspaceId = event["workspaceId"] as? String
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
+        // Explicit allowlist (mirrors AgentStore / WorkspaceStore). intentd
+        // emits exactly three note types — `note:created`, `note:updated`,
+        // `note:deleted` — each with a `{ noteId, title, action }` payload that
+        // does not distinguish a body edit from a title/metadata write, so any
+        // of them can change a slim list row (title, updatedAt, contentPreview)
+        // or list membership. Comment/thread activity is its own `comment:*`
+        // family and never reaches this store; a `comment.add` that rewrites
+        // the note markdown rides `note:updated` and legitimately refreshes
+        // the row's preview/updatedAt. Any other `note:`-prefixed type a newer
+        // daemon may add is ignored rather than refetching by prefix.
+        //
+        // The refetch below runs only in the non-live fallback (no
+        // `note.subscribe` snapshot yet, or after a subscription loss); while
+        // live, deltas arrive via the subscription push and a refetch here
+        // would double-apply.
         switch eventType {
-        case let t where t.hasPrefix("note:"):
-            // Only refetch if not in live mode (avoid double-apply)
+        case "note:created", "note:updated", "note:deleted":
             if !noteLive {
                 guard let workspaceId = workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
             }
-            onNoteChanged?()
+            // `onNoteChanged` re-reads the note currently open in
+            // `NoteDetailView` (`refreshNote`, which also navigates away on a
+            // definitive not-found), so only an update or deletion is
+            // relevant — a newly created note can never be the open one.
+            if eventType != "note:created" {
+                onNoteChanged?()
+            }
         default:
             break
         }

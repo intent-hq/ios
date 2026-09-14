@@ -679,6 +679,64 @@ struct NoteStoreIntegrationTests {
         #expect(called, "note:deleted must invoke onNoteChanged so the detail view can re-validate")
     }
 
+    // MARK: - Event allowlist (non-live fallback)
+
+    @Test func allowlistedNoteEventRefetchesAndFiresCallbackWhenNotLive() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        store.startObservingEvents(workspaceId: "ws-1")
+
+        var called = false
+        store.onNoteChanged = { called = true }
+
+        fake.deliverEvent(method: "events.event", params: [
+            "event": ["type": "note:updated", "workspaceId": "ws-1", "noteId": "note-1"]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.didCallMethod("note.list"))
+        #expect(called)
+    }
+
+    @Test func noteCreatedRefetchesButDoesNotFireOnNoteChanged() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        store.startObservingEvents(workspaceId: "ws-1")
+
+        var called = false
+        store.onNoteChanged = { called = true }
+
+        fake.deliverEvent(method: "events.event", params: [
+            "event": ["type": "note:created", "workspaceId": "ws-1", "noteId": "note-2"]
+        ])
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.didCallMethod("note.list"), "a new note changes list membership")
+        #expect(!called, "a newly created note can never be the open note; refreshNote is not needed")
+    }
+
+    @Test func nonAllowlistedEventsDoNotRefetchOrFireCallback() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.responseMap["note.list"] = ["notes": []]
+        store.startObservingEvents(workspaceId: "ws-1")
+
+        var called = false
+        store.onNoteChanged = { called = true }
+
+        for type in ["comment:added", "comment:resolved", "note:archived", "task:status-changed"] {
+            fake.deliverEvent(method: "events.event", params: [
+                "event": ["type": type, "workspaceId": "ws-1", "noteId": "note-1"]
+            ])
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!fake.didCallMethod("note.list"))
+        #expect(!called)
+    }
+
     // MARK: - deinit removes event + subscription handlers (monorepo#2211, monorepo#2213)
 
     @Test func deinitRemovesEventHandler() async throws {
