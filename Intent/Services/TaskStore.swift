@@ -158,13 +158,33 @@ import Observation
 
         guard let eventType = event["type"] as? String else { return }
 
-        // Only refetch if not in live mode (avoid double-apply)
         // Scope task:* events to this workspace to avoid cross-workspace refetches
-        if eventType.hasPrefix("task:") && !tasksLive {
-            let eventWorkspaceId = event["workspaceId"] as? String
-            if eventWorkspaceId == workspaceId {
+        let eventWorkspaceId = event["workspaceId"] as? String
+        guard eventWorkspaceId == workspaceId else { return }
+
+        // Explicit allowlist (mirrors AgentStore / WorkspaceStore): only events
+        // that can change a field a `WorkspaceTask` row renders (id, title,
+        // status, updatedAt) refetch `task.list`. `task:created` changes list
+        // membership; `task:status-changed` changes status/updatedAt.
+        //
+        // Deliberately excluded: `task:ready-tasks-changed` — readiness is not
+        // rendered, and its status-change emissions always pair with a
+        // `task:status-changed` that already refetches (its relation-change /
+        // note-deleted emissions carry no rendered field); `task:agent-linked`
+        // / `task:agent-unlinked` — the assignee is not part of the row. Task
+        // body/title edits ride `note:updated`, not `task:*`, so they never
+        // reached this store either way.
+        //
+        // The refetch runs only in the non-live fallback (no `task.subscribe`
+        // snapshot yet, or after a subscription loss); while live, deltas
+        // arrive via the subscription push and a refetch would double-apply.
+        switch eventType {
+        case "task:created", "task:status-changed":
+            if !tasksLive {
                 Task { await fetchAll() }
             }
+        default:
+            break
         }
     }
 

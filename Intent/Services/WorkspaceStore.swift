@@ -195,12 +195,11 @@ import Observation
             }
 
         case let t where t.hasPrefix("workspace:"):
+            let changes = (event["data"] as? [String: Any])?["changes"] as? [String: Any]
             // workspace:updated carrying lastActivity is an intentd-derived value —
             // patch the row in place as received.
             if eventType == "workspace:updated",
-               let data = event["data"] as? [String: Any],
-               let changes = data["changes"] as? [String: Any],
-               let lastActivity = changes["lastActivity"] as? String,
+               let lastActivity = changes?["lastActivity"] as? String,
                let wsId = eventWorkspaceId {
                 updateLastActivity(workspaceId: wsId, lastActivity: lastActivity)
             }
@@ -213,14 +212,35 @@ import Observation
                 updateWaiting(workspaceId: wsId, waiting: waiting)
             }
             // Only refetch if not in live mode (avoid double-apply)
-            if !workspaceLive {
-                if eventType == "workspace:activity-changed" ||
-                   eventType == "workspace:displayStatus-changed" ||
-                   eventType == "workspace:attention-changed" ||
-                   eventType == "workspace:updated" ||
-                   eventType == "workspace:deleted" {
-                    Task { await fetchAll() }
+            guard !workspaceLive else { return }
+
+            // Explicit allowlist: only events that can change a field a
+            // `Workspace` row renders (title/branch/status/activity/
+            // displayStatus/attention/lastActivity/repo+PR/taskStats/
+            // agentSummary) or list membership refetch `workspace.list`.
+            // `workspace:created` is included because a workspace created on
+            // another client otherwise never appears in the non-live fallback.
+            //
+            // Deliberately excluded (no rendered field, or already patched in
+            // place above): `workspace:waiting-changed`, the debounced
+            // `lastActivity`-only `workspace:updated` delta (≤1 per 3 s per
+            // workspace — the patch above is the complete application),
+            // `workspace:delete-scheduled` / `:delete-cancelled`,
+            // `workspace:opened` / `:closed` / `:activity` (raw, pre-derivation),
+            // `workspace:setup:*`, `workspace:transfer:*`,
+            // `workspace:tokenUsage-changed`, `workspace:context-changed`.
+            switch eventType {
+            case "workspace:updated":
+                if let changes, changes.count == 1, changes["lastActivity"] != nil {
+                    return
                 }
+                Task { await fetchAll() }
+            case "workspace:created", "workspace:deleted",
+                 "workspace:activity-changed", "workspace:displayStatus-changed",
+                 "workspace:attention-changed":
+                Task { await fetchAll() }
+            default:
+                break
             }
 
         case let t where t.hasPrefix("agent:"):

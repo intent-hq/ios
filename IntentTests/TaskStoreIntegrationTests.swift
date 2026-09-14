@@ -251,4 +251,48 @@ struct TaskStoreIntegrationTests {
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
     }
+
+    // MARK: - Event allowlist (non-live fallback)
+
+    private func taskEvent(_ type: String, workspaceId: String = "ws-1") -> [String: Any] {
+        ["event": ["type": type, "workspaceId": workspaceId, "noteId": "task-1"] as [String: Any]]
+    }
+
+    @Test func allowlistedTaskEventsRefetchWhenNotLive() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": []]
+
+        for type in ["task:created", "task:status-changed"] {
+            fake.clearRequestLog()
+            store.handleEvent("events.event", params: taskEvent(type))
+            try await Task.sleep(nanoseconds: 50_000_000)
+            #expect(fake.didCallMethod("task.list"), "\(type) must refetch task.list")
+        }
+    }
+
+    @Test func nonAllowlistedTaskEventsDoNotRefetch() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": []]
+
+        for type in ["task:ready-tasks-changed", "task:agent-linked", "task:agent-unlinked", "task:updated"] {
+            store.handleEvent("events.event", params: taskEvent(type))
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!fake.didCallMethod("task.list"))
+    }
+
+    @Test func allowlistedTaskEventForOtherWorkspaceDoesNotRefetch() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": []]
+
+        store.handleEvent("events.event", params: taskEvent("task:status-changed", workspaceId: "ws-other"))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!fake.didCallMethod("task.list"))
+    }
+
 }
