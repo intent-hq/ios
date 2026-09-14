@@ -64,19 +64,56 @@ struct EventCatalogCoverageTests {
         /// table names (golden `values`; the `absent` case is checked by
         /// classifying without the path present).
         let discriminatorValues: [String: Set<String>]
+        /// Per discriminated type: the classification each golden value
+        /// (and the `absent` shape) must produce. Spelled out here rather
+        /// than read from the store's table so a flipped table entry fails.
+        let discriminatorExpectations: [String: DiscriminatorExpectation]
         let classify: (String, [String: Any]?) -> EventClassification?
     }
+
+    private struct DiscriminatorExpectation {
+        let values: [String: EventClassification]
+        let absent: EventClassification
+    }
+
+    /// `task:ready-tasks-changed`: only `note-deleted` signals a row left the
+    /// list; `relations-changed` and the reason-less status-change shape are
+    /// covered by other events.
+    private static let readyTasksChangedExpectation = DiscriminatorExpectation(
+        values: ["note-deleted": .refetch, "relations-changed": .ignore],
+        absent: .ignore)
+
+    /// `workspace:updated`: only a `lastActivity`-only delta is patched in
+    /// place; every other key, and a missing `changes`, refetches.
+    private static let workspaceUpdatedExpectation = DiscriminatorExpectation(
+        values: [
+            "lastActivity": .patchInPlace,
+            "activePullRequest": .refetch, "archived": .refetch, "archivedAt": .refetch,
+            "attention": .refetch, "autoCommitEnabled": .refetch, "autoUnarchive": .refetch,
+            "baseCommitSha": .refetch, "baseRef": .refetch, "branch": .refetch,
+            "browserClientId": .refetch, "defaultModel": .refetch, "isRemote": .refetch,
+            "mcpServerToggled": .refetch, "path": .refetch, "prNumber": .refetch,
+            "prStatus": .refetch, "prUrl": .refetch, "pullRequests": .refetch,
+            "repositoryName": .refetch, "repositoryOwner": .refetch,
+            "repositoryPath": .refetch, "scope": .refetch, "setupScript": .refetch,
+            "skipIsolation": .refetch, "status": .refetch, "statusImageAssetId": .refetch,
+            "statusMessage": .refetch, "tags": .refetch, "title": .refetch,
+            "worktreePath": .refetch,
+        ],
+        absent: .refetch)
 
     private static let stores: [StoreTables] = [
         StoreTables(
             name: "AgentStore", channels: AgentStore.handledChannels,
             refetch: AgentStore.refetchEventTypes, patchInPlace: [],
             ignore: AgentStore.ignoredEventTypes, discriminatorValues: [:],
+            discriminatorExpectations: [:],
             classify: AgentStore.classify),
         StoreTables(
             name: "NoteStore", channels: NoteStore.handledChannels,
             refetch: NoteStore.refetchEventTypes, patchInPlace: [],
             ignore: NoteStore.ignoredEventTypes, discriminatorValues: [:],
+            discriminatorExpectations: [:],
             classify: NoteStore.classify),
         StoreTables(
             name: "TaskStore", channels: TaskStore.handledChannels,
@@ -85,6 +122,7 @@ struct EventCatalogCoverageTests {
             discriminatorValues: [
                 "task:ready-tasks-changed": Set(TaskStore.readyTasksChangedReasonClassification.keys),
             ],
+            discriminatorExpectations: ["task:ready-tasks-changed": readyTasksChangedExpectation],
             classify: TaskStore.classify),
         StoreTables(
             name: "WorkspaceStore", channels: WorkspaceStore.handledChannels,
@@ -94,6 +132,7 @@ struct EventCatalogCoverageTests {
             discriminatorValues: [
                 "workspace:updated": Set(WorkspaceStore.workspaceUpdatedChangeKeyClassification.keys),
             ],
+            discriminatorExpectations: ["workspace:updated": workspaceUpdatedExpectation],
             classify: WorkspaceStore.classify),
     ]
 
@@ -115,7 +154,9 @@ struct EventCatalogCoverageTests {
 
     /// Every discriminator value (or `changes` key) the golden lists for a
     /// type on the store's channels must be named by that store's table and
-    /// classify; the `absent` shape must classify too.
+    /// classify to the classification this test spells out for it; the
+    /// `absent` shape must classify to its expected value too. For `keys`
+    /// discriminators a refetch key must dominate a patch-in-place key.
     @Test func everyDiscriminatorValueIsClassified() {
         for store in Self.stores {
             for (type, d) in Self.golden.discriminators
@@ -124,9 +165,15 @@ struct EventCatalogCoverageTests {
                     Issue.record("\(store.name) has no discriminator table for \(type)")
                     continue
                 }
+                guard let expectation = store.discriminatorExpectations[type] else {
+                    Issue.record("\(store.name) has no expected classifications for \(type) in this test")
+                    continue
+                }
                 let goldenValues = Set(d.values)
                 #expect(named.subtracting(goldenValues).isEmpty,
                         "\(store.name) names \(type) discriminator values not in the catalog: \(named.subtracting(goldenValues))")
+                #expect(Set(expectation.values.keys) == goldenValues,
+                        "\(store.name) expectations for \(type) must list exactly the catalog's discriminator values; extra: \(Set(expectation.values.keys).subtracting(goldenValues)), missing: \(goldenValues.subtracting(expectation.values.keys))")
                 for value in d.values {
                     #expect(named.contains(value),
                             "\(store.name) does not classify \(type) with \(d.path) = \(value)")
@@ -136,17 +183,38 @@ struct EventCatalogCoverageTests {
                     case "keys": payload = Self.data(at: d.path, leaf: [value: "x"])
                     default: Issue.record("\(type): unknown discriminator kind \(d.kind)"); continue
                     }
-                    #expect(store.classify(type, payload) != nil,
+                    let expected = expectation.values[value]
+                    let actual = store.classify(type, payload)
+                    #expect(actual != nil,
                             "\(store.name) does not classify \(type) with \(d.path) = \(value)")
+                    #expect(actual == expected,
+                            "\(store.name) classifies \(type) with \(d.path) = \(value) as \(String(describing: actual)), expected \(String(describing: expected))")
                 }
-                if d.absent != nil {
-                    #expect(store.classify(type, [:]) != nil,
-                            "\(store.name) does not classify \(type) when \(d.path) is absent")
+                let absentActual = store.classify(type, [:])
+                #expect(absentActual != nil,
+                        "\(store.name) does not classify \(type) when \(d.path) is absent")
+                #expect(absentActual == expectation.absent,
+                        "\(store.name) classifies \(type) with \(d.path) absent as \(String(describing: absentActual)), expected \(expectation.absent)")
+                if d.kind == "keys" {
+                    let patched = expectation.values.filter { $0.value == .patchInPlace }.keys.sorted()
+                    let refetched = expectation.values.filter { $0.value == .refetch }.keys.sorted()
+                    for patchKey in patched {
+                        for refetchKey in refetched {
+                            let payload = Self.data(at: d.path, leaf: [patchKey: "x", refetchKey: "x"])
+                            let actual = store.classify(type, payload)
+                            #expect(actual == .refetch,
+                                    "\(store.name) classifies \(type) with \(d.path) keys [\(patchKey), \(refetchKey)] as \(String(describing: actual)); a refetch key must dominate")
+                        }
+                    }
                 }
             }
             for type in store.discriminatorValues.keys {
                 #expect(Self.golden.discriminators[type] != nil,
                         "\(store.name) has a discriminator table for \(type), which the catalog does not discriminate")
+            }
+            for type in store.discriminatorExpectations.keys {
+                #expect(store.discriminatorValues[type] != nil,
+                        "\(store.name) has expected classifications for \(type) but no discriminator table")
             }
         }
     }
