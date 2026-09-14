@@ -83,6 +83,75 @@ struct DemoFixturesTests {
         })
     }
 
+    // MARK: - Per-agent conversation routing
+
+    private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
+        var params: [String: Any] = [:]
+        if let agentId { params["agentId"] = agentId }
+        let result = DemoFixtures.response(for: "agent.getConversation", params: params)
+        let dict = try #require(result as? [String: Any])
+        let items = try #require(dict["messages"] as? [[String: Any]])
+        let total = try #require(dict["totalMessages"] as? Int)
+        return (items, total)
+    }
+
+    private func text(of message: [String: Any]) -> String {
+        let blocks = message["contentBlocks"] as? [[String: Any]] ?? []
+        return blocks.compactMap { $0["text"] as? String }.joined()
+    }
+
+    @Test func conversationDefaultsToScreenshotTranscript() throws {
+        let noAgent = try conversationMessages(agentId: nil)
+        let implementor = try conversationMessages(agentId: "demo-agent-implementor")
+        let reviewer = try conversationMessages(agentId: "demo-agent-reviewer")
+        for conversation in [noAgent, implementor, reviewer] {
+            #expect(conversation.items.count == 4)
+            #expect(conversation.total == 4)
+            #expect(conversation.items.contains { text(of: $0).contains("more than 90 days") })
+        }
+    }
+
+    @Test func longConversationRoutesByAgentId() throws {
+        let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
+        #expect(long.items.count >= 30)
+        #expect(long.total == long.items.count)
+
+        let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
+        #expect(messages.count == long.items.count)
+        for (index, message) in messages.enumerated() {
+            #expect(message.role == (index.isMultiple(of: 2) ? .user : .assistant))
+        }
+        #expect(Set(long.items.compactMap { $0["id"] as? String }).count == long.items.count)
+
+        let first = try #require(long.items.first)
+        let last = try #require(long.items.last)
+        #expect(text(of: first).hasPrefix(DemoFixtures.longConversationFirstSentence))
+        #expect(text(of: last).hasSuffix(DemoFixtures.longConversationLastSentence))
+        #expect(!long.items.contains { text(of: $0).contains("more than 90 days") })
+    }
+
+    @Test func agentListRoutesByWorkspaceId() throws {
+        func agentIds(workspaceId: String?) throws -> [String] {
+            var params: [String: Any] = [:]
+            if let workspaceId { params["workspaceId"] = workspaceId }
+            let result = DemoFixtures.response(for: "agent.list", params: params)
+            let dict = try #require(result as? [String: Any])
+            let items = try #require(dict["agents"] as? [[String: Any]])
+            return items.compactMap { AgentSession.parseAgent($0)?.id }
+        }
+        #expect(try agentIds(workspaceId: nil).contains("demo-agent-implementor"))
+        #expect(try agentIds(workspaceId: "demo-ws-dashboard").contains("demo-agent-implementor"))
+        #expect(try agentIds(workspaceId: DemoFixtures.longConversationWorkspaceId)
+            == [DemoFixtures.longConversationAgentId])
+
+        let result = DemoFixtures.response(
+            for: "agent.get", params: ["agentId": DemoFixtures.longConversationAgentId])
+        let dict = try #require(result as? [String: Any])
+        let agentDict = try #require(dict["agent"] as? [String: Any])
+        #expect(agentDict["id"] as? String == DemoFixtures.longConversationAgentId)
+        #expect(agentDict["status"] as? String == "idle")
+    }
+
     @Test func taskListFixtureParses() throws {
         let result = DemoFixtures.response(for: "task.list", params: [:])
         let dict = try #require(result as? [String: Any])
@@ -112,7 +181,11 @@ struct DemoFixturesTests {
             DemoFixtures.response(for: "workspace.list", params: [:]),
             DemoFixtures.response(for: "note.list", params: [:]),
             DemoFixtures.response(for: "agent.list", params: [:]),
+            DemoFixtures.response(
+                for: "agent.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]),
             DemoFixtures.response(for: "agent.getConversation", params: [:]),
+            DemoFixtures.response(
+                for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]),
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         let text = try #require(String(data: data, encoding: .utf8)).lowercased()
