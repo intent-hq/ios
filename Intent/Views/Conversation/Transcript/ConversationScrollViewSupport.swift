@@ -96,7 +96,7 @@ class ScrollViewMomentumProxy {
         let bottomInset: CGFloat
     }
 
-    enum RePinOutcome {
+    enum RePinOutcome: Equatable {
         case rePinned
         case notPastEnd
         /// Past the end but still dragging, decelerating or following (nil),

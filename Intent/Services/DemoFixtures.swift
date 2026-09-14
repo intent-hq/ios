@@ -52,8 +52,25 @@ enum DemoFixtures {
     /// delay, so the hooks row appears under an already-settled transcript —
     /// the container-resize path of #272 under `--demo-data`
     /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately.
-    static let longConversationHookListDelay: Duration = .seconds(4)
+    /// immediately. The default suits the screenshot flows; a UI test that
+    /// must observe the transcript before the row lands passes
+    /// `--demo-hook-list-delay-ms=<n>` to widen it.
+    static let longConversationHookListDelay = hookListDelay(from: ProcessInfo.processInfo.arguments)
+
+    static let defaultHookListDelay: Duration = .seconds(4)
+
+    static let hookListDelayArgumentPrefix = "--demo-hook-list-delay-ms="
+
+    /// `defaultHookListDelay` unless the arguments carry a well-formed
+    /// `--demo-hook-list-delay-ms=<milliseconds>`; the last one wins.
+    static func hookListDelay(from arguments: [String]) -> Duration {
+        let milliseconds = arguments
+            .filter { $0.hasPrefix(hookListDelayArgumentPrefix) }
+            .compactMap { Int($0.dropFirst(hookListDelayArgumentPrefix.count)) }
+            .last { $0 >= 0 }
+        guard let milliseconds else { return defaultHookListDelay }
+        return .milliseconds(milliseconds)
+    }
 
     /// Delay to apply before serving `response(for:params:)`, or nil for an
     /// immediate answer.

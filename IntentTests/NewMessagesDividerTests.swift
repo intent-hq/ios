@@ -408,17 +408,47 @@ struct ConversationTranscriptScrollPolicyTests {
 
     /// The two confirming reads must agree on the insets the clamp is
     /// computed from: a keyboard or safe-area change between them with the
-    /// offset, content and bounds unchanged is not a settled layout.
+    /// offset, content and bounds unchanged is not a settled layout. Drives
+    /// the live re-pin against a UIScrollView resting past the end.
+    @MainActor
     @Test func restingGeometryConfirmationIncludesAdjustedInsets() {
-        typealias Geometry = ScrollViewMomentumProxy.RestingGeometry
-        let first = Geometry(
-            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 34)
-        #expect(first == Geometry(
-            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 34))
-        #expect(first != Geometry(
-            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 336))
-        #expect(first != Geometry(
-            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 0, bottomInset: 34))
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.contentInset = UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0)
+        scrollView.contentSize = CGSize(width: 390, height: 1_000)
+        scrollView.contentOffset = CGPoint(x: 0, y: 500)
+        let proxy = ScrollViewMomentumProxy()
+        proxy.scrollView = scrollView
+
+        // First read past the end: deferred, carrying the insets it read.
+        guard case .deferred(let first?) = proxy.rePinIfRestingPastEnd(confirming: nil) else {
+            Issue.record("first past-end read was not deferred with a geometry")
+            return
+        }
+        #expect(first.topInset == 59)
+        #expect(first.bottomInset == 34)
+        #expect(first.contentOffsetY == 500)
+
+        // The bottom inset grows between the reads (still past the end) with
+        // offset, content and bounds unchanged: not confirmed, the new read
+        // replaces the first. UIKit clamps the offset into range when the
+        // inset changes on a resting scroll view; restore it, as the lazy
+        // stack's re-layout leaves it where it was.
+        scrollView.contentInset.bottom = 100
+        scrollView.contentOffset = CGPoint(x: 0, y: 500)
+        guard case .deferred(let second?) = proxy.rePinIfRestingPastEnd(confirming: first) else {
+            Issue.record("a changed inset was accepted as the confirming read")
+            return
+        }
+        #expect(second.bottomInset == 100)
+        #expect(second != first)
+        #expect(scrollView.contentOffset.y == 500)
+
+        // Two identical reads: clamped to the bottom the insets define
+        // (content 1_000 + bottom inset 100 − viewport 700).
+        let clampedOffsetY: CGFloat = 400
+        #expect(proxy.rePinIfRestingPastEnd(confirming: second) == .rePinned)
+        #expect(scrollView.contentOffset.y == clampedOffsetY)
     }
 
     @Test func pastEndGeometryIgnoresInteractionState() {
@@ -430,17 +460,34 @@ struct ConversationTranscriptScrollPolicyTests {
             distanceToBottom: -20, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
     }
 
+    private typealias ContainerRePin = ConversationTranscriptScrollPolicy.ContainerRePinDecision
+
     private func rePinOnContainerChange(
         from oldHeight: CGFloat, to newHeight: CGFloat,
         isInteracting: Bool = false,
         hasInitiallyScrolled: Bool = true, userIsScrolledAway: Bool = false
-    ) -> Bool {
-        ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
+    ) -> ContainerRePin {
+        ConversationTranscriptScrollPolicy.containerHeightChangeDecision(
             oldContainerHeight: oldHeight,
             newContainerHeight: newHeight,
             isInteracting: isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    private func deferredContainerRePin(
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool = false,
+        hasInitiallyScrolled: Bool = true, userIsScrolledAway: Bool = false
+    ) -> ContainerRePin {
+        ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
+            distanceToBottom: distanceToBottom,
+            isInteracting: isInteracting,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            driftTolerance: 1,
+            atBottomThreshold: 50
         )
     }
 
@@ -455,52 +502,65 @@ struct ConversationTranscriptScrollPolicyTests {
             contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 700)
         #expect(shrunk == 80)
         #expect(ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: shrunk))
-        #expect(rePinOnContainerChange(from: 780, to: 700))
+        #expect(rePinOnContainerChange(from: 780, to: 700) == .rePin)
     }
 
     /// The row disappearing grows the container back; a pinned viewport is
     /// re-pinned the other way rather than left past the end.
     @Test func containerGrowthWhilePinnedRePinsToBottom() {
-        #expect(rePinOnContainerChange(from: 700, to: 780))
+        #expect(rePinOnContainerChange(from: 700, to: 780) == .rePin)
     }
 
-    /// The pan would fight a re-pin under the user's finger; the edge then
-    /// shows Go to End as usual.
-    @Test func containerChangeUnderFingerIsLeftAlone() {
-        #expect(!rePinOnContainerChange(from: 780, to: 700, isInteracting: true))
-        #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: false))
+    /// Under the finger the re-pin would fight the pan; a fling released just
+    /// before the row lands is still decelerating (the bounce back included)
+    /// while the scrolled-away flag has not crossed the threshold yet, and the
+    /// re-pin would snap it back. Both defer to the settle re-check instead,
+    /// as the #271 past-end clamp does.
+    @Test func containerChangeWhileInteractingIsDeferred() {
+        #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: true) == .deferred)
+        #expect(rePinOnContainerChange(from: 700, to: 780, isInteracting: true) == .deferred)
+        #expect(rePinOnContainerChange(from: 780, to: 700, isInteracting: false) == .rePin)
     }
 
-    /// A fling released just before the row lands is still decelerating while
-    /// the scrolled-away flag has not crossed the threshold yet; the re-pin
-    /// would snap it back to the bottom. `isInteracting` covers deceleration
-    /// (and the bounce back) exactly as the #271 past-end clamp does.
-    @Test func containerChangeWhileDeceleratingIsLeftAlone() {
-        #expect(!rePinOnContainerChange(
-            from: 780, to: 700, isInteracting: true, userIsScrolledAway: false))
-        #expect(!rePinOnContainerChange(
-            from: 700, to: 780, isInteracting: true, userIsScrolledAway: false))
+    /// A 36 pt hooks row landing during the bounce back leaves the settled
+    /// viewport 36 pt short of the bottom: under the threshold, so no Go to
+    /// End and no further edge to close the gap — the settle re-check does.
+    /// Still interacting it waits again; a viewport that already rests at
+    /// the bottom, or that the fling carried past the threshold (its edge
+    /// applied on the way), is left where it is.
+    @Test func deferredContainerRePinFollowsOnSettleWithinBottomBand() {
+        #expect(deferredContainerRePin(distanceToBottom: 36) == .rePin)
+        #expect(deferredContainerRePin(distanceToBottom: 36, isInteracting: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 0) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: -80) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: 400) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: 36, userIsScrolledAway: true) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: 36, hasInitiallyScrolled: false) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: nil) == .none)
     }
 
     /// Scrolled away, the container resizes at its bottom edge and the content
     /// under the reader does not move (observed in the simulator: the anchored
     /// row kept its frame across both edges), so nothing is adjusted.
     @Test func containerChangeWhileScrolledAwayLeavesContentInPlace() {
-        #expect(!rePinOnContainerChange(from: 780, to: 700, userIsScrolledAway: true))
-        #expect(!rePinOnContainerChange(from: 700, to: 780, userIsScrolledAway: true))
+        #expect(rePinOnContainerChange(from: 780, to: 700, userIsScrolledAway: true) == .none)
+        #expect(rePinOnContainerChange(from: 700, to: 780, userIsScrolledAway: true) == .none)
+        #expect(rePinOnContainerChange(
+            from: 780, to: 700, isInteracting: true, userIsScrolledAway: true) == .none)
     }
 
     @Test func unchangedContainerNeverRePins() {
-        #expect(!rePinOnContainerChange(from: 780, to: 780))
-        #expect(!rePinOnContainerChange(from: 780, to: 780, userIsScrolledAway: true))
+        #expect(rePinOnContainerChange(from: 780, to: 780) == .none)
+        #expect(rePinOnContainerChange(from: 780, to: 780, isInteracting: true) == .none)
+        #expect(rePinOnContainerChange(from: 780, to: 780, userIsScrolledAway: true) == .none)
     }
 
     /// Before the entry scroll the viewport is not following yet; the entry
     /// scroll decides where it lands.
     @Test func containerChangeBeforeEntryScrollIsIgnored() {
-        #expect(!rePinOnContainerChange(from: 780, to: 700, hasInitiallyScrolled: false))
-        #expect(!rePinOnContainerChange(
-            from: 780, to: 700, hasInitiallyScrolled: false, userIsScrolledAway: true))
+        #expect(rePinOnContainerChange(from: 780, to: 700, hasInitiallyScrolled: false) == .none)
+        #expect(rePinOnContainerChange(
+            from: 780, to: 700, hasInitiallyScrolled: false, userIsScrolledAway: true) == .none)
     }
 
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {

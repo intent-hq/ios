@@ -23,12 +23,23 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let firstMessageFragment = "Start of the flake investigation"
         static let lastMessageFragment = "End of the flake investigation"
         static let goToEndIdentifier = "transcript.goToEnd"
+        // The transcript's own ScrollView; the hooks row is a horizontal
+        // ScrollView too, so `scrollViews.firstMatch` could resolve to it.
+        static let transcriptIdentifier = "transcript.scrollView"
         // BackgroundHooksRow's fixed label, and DemoFixtures.longConversationHookName.
         static let hooksRowLabel = "Running hooks"
         static let hookName = "Wait for CI on flake fix"
-        // Upper bound for the hooks row to appear after the transcript settles:
-        // DemoFixtures.longConversationHookListDelay (4 s) plus margin.
-        static let hooksRowTimeout: TimeInterval = 15
+        // The footer test widens DemoFixtures.longConversationHookListDelay
+        // (4 s by default) through this launch argument so the transcript is
+        // reliably observed settled before the row lands; the timeout is that
+        // delay plus margin.
+        static let hooksRowDelayMilliseconds = 10_000
+        static let hooksRowDelayArgument = "--demo-hook-list-delay-ms=\(hooksRowDelayMilliseconds)"
+        static let hooksRowTimeout: TimeInterval = TimeInterval(hooksRowDelayMilliseconds) / 1_000 + 15
+        // Slack for the last message to sit at the same distance from the
+        // transcript's bottom edge after the re-pin as before the row (an
+        // unpinned transcript is off by the row's full height, ~36 pt).
+        static let rePinTolerance: CGFloat = 4
     }
 
     /// The conversation's elements once the transcript has settled at the bottom.
@@ -101,10 +112,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// A footer row appearing under a transcript resting at the bottom shrinks
     /// the scroll container; the transcript must re-pin so the last message
-    /// stays on screen and Go to End stays hidden (#272).
+    /// keeps its distance from the transcript's bottom edge and Go to End
+    /// stays hidden (#272). The distance is what discriminates: the row is
+    /// shorter than the at-bottom threshold, so an unpinned transcript shows
+    /// no Go to End either and its last message, ~36 pt lower relative to
+    /// the shrunk transcript, still passes a midpoint visibility check.
     @MainActor
     func testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden() throws {
-        let app = launchDemoApp()
+        let app = launchDemoApp(extraArguments: [Fixture.hooksRowDelayArgument])
         let opened = openLongConversation(in: app)
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
@@ -119,6 +134,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             hooksRow.exists,
             "hooks row was already present when the transcript settled; the fixture delay did not hold")
         let bottomBeforeRow = transcript.frame.maxY
+        let gapBeforeRow = bottomBeforeRow - lastMessage.frame.maxY
 
         // 2. The hooks row appears and shrinks the transcript from below.
         XCTAssertTrue(
@@ -134,8 +150,18 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow },
             "transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
 
-        // 3. Still at the bottom: no Go to End over a window that outlasts the
-        //    re-pin and its settle delays, and the last message still on screen.
+        // 3. Re-pinned: the last message sits at the same distance from the
+        //    (new) bottom edge as before the row, no Go to End over a window
+        //    that outlasts the re-pin and its settle delays, and the last
+        //    message still on screen.
+        var gapAfterRow = transcript.frame.maxY - lastMessage.frame.maxY
+        XCTAssertTrue(
+            waitUntil(timeout: 5) {
+                gapAfterRow = transcript.frame.maxY - lastMessage.frame.maxY
+                return abs(gapAfterRow - gapBeforeRow) <= Fixture.rePinTolerance
+            },
+            "transcript did not re-pin to the bottom after the hooks row appeared: "
+                + "last message sat \(gapAfterRow) pt above the bottom edge, \(gapBeforeRow) pt before the row")
         XCTAssertFalse(
             goToEnd.waitForExistence(timeout: 3),
             "Go to End appeared after the hooks row shrank the transcript")
@@ -147,9 +173,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     // MARK: - Helpers
 
     @MainActor
-    private func launchDemoApp() -> XCUIApplication {
+    private func launchDemoApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
+        app.launchArguments += ["--demo-data"] + extraArguments
         app.launch()
         return app
     }
@@ -170,7 +196,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
         XCTAssertTrue(lastMessage.waitForExistence(timeout: 15), "last transcript message never appeared")
         let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
-        let transcript = app.scrollViews.firstMatch
+        let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
         return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
     }

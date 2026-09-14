@@ -108,6 +108,14 @@ enum ConversationTranscriptScrollPolicy {
         return isInteracting ? .deferred : .rePin(offsetY: contentOffsetY + distanceToBottom)
     }
 
+    enum ContainerRePinDecision: Equatable {
+        /// The container is unchanged or the viewport is not following.
+        case none
+        /// Following, but under the finger or decelerating; re-check on settle.
+        case deferred
+        case rePin
+    }
+
     /// A footer row appearing or disappearing under the transcript resizes
     /// its container while `contentOffset` stays where it was (#272). At rest
     /// at the bottom that slides the last rows under the new row and the
@@ -116,20 +124,53 @@ enum ConversationTranscriptScrollPolicy {
     /// the content under the reader does not move, so nothing is adjusted;
     /// before the entry scroll the viewport is not following yet. A viewport
     /// under the user's finger, or still decelerating from a fling released
-    /// just before the row lands (the scrolled-away flag may not have crossed
-    /// the threshold yet), is left alone too: the re-pin would fight the pan
-    /// or snap the fling back, and the edge then shows Go to End as usual.
-    static func shouldRePinOnContainerHeightChange(
+    /// just before the row lands (the bounce back at the bottom included), is
+    /// not pinned right away — the re-pin would fight the pan or snap the
+    /// fling back — but deferred to `deferredContainerRePinDecision` once the
+    /// gesture has settled, as the #271 past-end clamp does; the edge the
+    /// resize carries is applied meanwhile, so a row taller than the
+    /// threshold shows Go to End as usual.
+    static func containerHeightChangeDecision(
         oldContainerHeight: CGFloat,
         newContainerHeight: CGFloat,
         isInteracting: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
-    ) -> Bool {
-        oldContainerHeight != newContainerHeight && !isInteracting && shouldFollowToBottom(
+    ) -> ContainerRePinDecision {
+        guard oldContainerHeight != newContainerHeight, shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
-        )
+        ) else { return .none }
+        return isInteracting ? .deferred : .rePin
+    }
+
+    /// The settle re-check of a container re-pin deferred while interacting.
+    /// Still interacting, it is deferred again. Settled, the viewport is
+    /// followed to the bottom when it is still following and rests short of
+    /// the bottom within the at-bottom band — a row shorter than the threshold
+    /// leaves exactly that gap under the last message, with no Go to End and
+    /// no further geometry edge to close it. A fling that carried the user
+    /// past the threshold applied its edge on the way and is left where it
+    /// stopped; an unknown distance (no scroll view) proves nothing.
+    static func deferredContainerRePinDecision(
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool,
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> ContainerRePinDecision {
+        guard shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        ) else { return .none }
+        if isInteracting { return .deferred }
+        guard let distanceToBottom, isDriftedWithinBottomBand(
+            distanceToBottom: distanceToBottom,
+            driftTolerance: driftTolerance,
+            atBottomThreshold: atBottomThreshold
+        ) else { return .none }
+        return .rePin
     }
 
     /// The scrolled-away flag driving "Go to End" and follow-to-bottom.

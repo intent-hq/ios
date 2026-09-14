@@ -181,6 +181,19 @@ struct DemoFixturesTests {
         #expect(try hooks(workspaceId: "demo-ws-dashboard").isEmpty)
     }
 
+    @Test func hookListDelayComesFromTheLaunchArgumentWhenPresent() {
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-data"]) == DemoFixtures.defaultHookListDelay)
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-data", "--demo-hook-list-delay-ms=9000"])
+            == .milliseconds(9_000))
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=0"]) == .zero)
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=abc"])
+            == DemoFixtures.defaultHookListDelay)
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=-5"])
+            == DemoFixtures.defaultHookListDelay)
+        #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=100", "--demo-hook-list-delay-ms=250"])
+            == .milliseconds(250))
+    }
+
     @Test func onlyTheLongConversationHookListIsDelayed() {
         let long = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
         #expect(DemoFixtures.responseDelay(for: "hook.list", params: long)
