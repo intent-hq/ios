@@ -21,6 +21,21 @@ enum ConversationTranscriptScrollPolicy {
         distanceToBottom > atBottomThreshold
     }
 
+    /// The scrolled-away flag driving "Go to End" and follow-to-bottom.
+    /// `onScrollGeometryChange` is edge-triggered and its edges are ignored
+    /// while the entry scroll or a programmatic follow is in flight; an edge
+    /// that lands while gated would otherwise be lost for good, because the
+    /// geometry emits no new edge until the threshold is crossed again. The
+    /// live value is therefore kept and re-applied whenever the gate opens.
+    static func resolvedScrolledAway(
+        live: Bool,
+        current: Bool,
+        hasInitiallyScrolled: Bool,
+        isScrollingToBottom: Bool
+    ) -> Bool {
+        hasInitiallyScrolled && !isScrollingToBottom ? live : current
+    }
+
     /// Discrete, user-visible transitions (a message appended, "Go to End",
     /// chrome growing under the transcript) scroll whenever the transcript is
     /// following the bottom.

@@ -137,18 +137,34 @@ struct ConversationTranscriptView: View {
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: Bool.self) { geometry in
-            ConversationTranscriptScrollPolicy.isScrolledAway(
-                distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
-                    contentHeight: geometry.contentSize.height,
-                    contentOffsetY: geometry.contentOffset.y,
-                    containerHeight: geometry.containerSize.height,
-                    bottomInset: geometry.contentInsets.bottom
-                )
+            // `containerSize` excludes the safe-area insets while
+            // `contentOffset` includes them, so measuring with it reads the
+            // top inset (the navigation bar) at rest at the bottom.
+            // `visibleRect` spans the full bounds, matching UIScrollView.
+            let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: geometry.contentSize.height,
+                contentOffsetY: geometry.contentOffset.y,
+                containerHeight: geometry.visibleRect.height,
+                bottomInset: geometry.contentInsets.bottom
             )
+            return ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance)
         } action: { _, isScrolledAway in
-            if hasInitiallyScrolled && !isScrollingToBottom {
-                userIsScrolledAway = isScrolledAway
-            }
+            scrollState.liveIsScrolledAway = isScrolledAway
+            syncScrolledAwayFromGeometry()
+        }
+    }
+
+    /// Applies the latest geometry edge to `userIsScrolledAway` when the gate
+    /// is open; called on every edge and again whenever the gate opens.
+    private func syncScrolledAwayFromGeometry() {
+        let resolved = ConversationTranscriptScrollPolicy.resolvedScrolledAway(
+            live: scrollState.liveIsScrolledAway,
+            current: userIsScrolledAway,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            isScrollingToBottom: isScrollingToBottom
+        )
+        if resolved != userIsScrolledAway {
+            userIsScrolledAway = resolved
         }
     }
 
@@ -304,6 +320,7 @@ struct ConversationTranscriptView: View {
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
                 hasInitiallyScrolled = true
+                syncScrolledAwayFromGeometry()
             }
         }
     }
@@ -376,6 +393,7 @@ struct ConversationTranscriptView: View {
             }
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
+            syncScrolledAwayFromGeometry()
         }
     }
 }
