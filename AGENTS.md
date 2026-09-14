@@ -19,7 +19,12 @@ Run every xcodebuild build/test through `scripts/xcodebuild.sh` — the single b
 entry point that CI uses too: `scripts/xcodebuild.sh build-ios | build-visionos |
 test-ios`. It fixes the project, scheme, signing flags, and destinations (the
 rationale for the destination/SDK rules lives in the script's header comment), and
-refuses `-sdk`. iOS builds link the gitignored prebuilt
+refuses `-sdk`. `test-ios` remains the pre-PR gate; for iteration, re-running one
+crashed suite, or mutation checks use the subset forms — `scripts/xcodebuild.sh
+test-ios-unit` (skips the `IntentUITests` bundle) and
+`ONLY_TESTING='IntentTests/SomeTests ...' scripts/xcodebuild.sh test-without-building`
+(one `-only-testing:` per whitespace-separated `Target[/Class[/method]]`; also honoured
+by `test-ios` and `test-ios-unit`). iOS builds link the gitignored prebuilt
 `TailcatKit/build/TailcatKit.xcframework`: `scripts/xcodebuild.sh` builds it via
 `TailcatKit/build_xcframework.sh` when Go is on PATH and otherwise exits naming that
 script; `TAILCATKIT_AUTOBUILD=0` disables the auto-build.

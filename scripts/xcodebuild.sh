@@ -19,9 +19,10 @@
 #   build-for-testing       Build the iOS test bundle (CI split step)
 #   test-without-building   Run iOS unit tests against a prior build-for-testing
 #   test-ios                build-for-testing then test-without-building
+#   test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 #
-# iOS builds (build-ios, build-for-testing, test-ios) link the prebuilt,
+# iOS builds (build-ios, build-for-testing, test-ios, test-ios-unit) link the prebuilt,
 # gitignored TailcatKit/build/TailcatKit.xcframework. Those subcommands
 # preflight it: when missing, it is built via TailcatKit/build_xcframework.sh
 # if a Go toolchain is on PATH, otherwise the script exits naming that
@@ -34,6 +35,10 @@
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
 #   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
 #                         an existing bundle at that path is removed first.
+#   ONLY_TESTING          Whitespace-separated Target[/Class[/method]] identifiers;
+#                         each becomes one -only-testing: argument on the test
+#                         subcommands (test-without-building, test-ios,
+#                         test-ios-unit). Entries starting with '-' are refused.
 #   TAILCATKIT_AUTOBUILD  Set to 0 to never run TailcatKit/build_xcframework.sh
 #                         from the preflight; a missing xcframework then fails fast.
 set -euo pipefail
@@ -58,10 +63,11 @@ Usage: scripts/xcodebuild.sh <subcommand>
   build-for-testing       Build the iOS test bundle (CI split step)
   test-without-building   Run iOS unit tests against a prior build-for-testing
   test-ios                build-for-testing then test-without-building
+  test-ios-unit           test-ios minus the IntentUITests bundle (-skip-testing)
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
-Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, TAILCATKIT_AUTOBUILD
-(see script header).
+Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
+TAILCATKIT_AUTOBUILD (see script header).
 EOF
   exit 2
 }
@@ -184,9 +190,31 @@ enable_simulator_accessibility() {
     AccessibilityEnabled -bool true
 }
 
+# ONLY_TESTING narrows a test run: whitespace-separated Target[/Class[/method]]
+# identifiers, each forwarded as one -only-testing: argument. Entries starting
+# with '-' are refused so the knob cannot smuggle arbitrary xcodebuild flags
+# past the extra-argument check. Parsed before any simulator or xcodebuild work
+# so a typo fails fast. Unset/empty leaves the command line untouched.
+ONLY_TESTING_ARGS=()
+parse_only_testing() {
+  local ids=() id
+  ONLY_TESTING_ARGS=()
+  read -r -d '' -a ids <<< "${ONLY_TESTING:-}" || true
+  for id in ${ids+"${ids[@]}"}; do
+    case "$id" in
+      -*) die "ONLY_TESTING entry '$id' looks like a flag; entries must be Target[/Class[/method]] identifiers" ;;
+    esac
+    ONLY_TESTING_ARGS+=("-only-testing:$id")
+  done
+}
+
 # xcodebuild refuses an existing result bundle path, so remove it first.
+# Positional arguments are test-selection flags supplied by the subcommand
+# dispatch below (test-ios-unit passes -skip-testing:IntentUITests); they are
+# appended after the unconditional flags, as are the ONLY_TESTING arguments.
 cmd_test_without_building() {
   local udid extra=()
+  parse_only_testing
   udid=$(pick_simulator)
   enable_simulator_accessibility "$udid"
   if [ -n "${RESULT_BUNDLE:-}" ]; then
@@ -195,7 +223,8 @@ cmd_test_without_building() {
   fi
   run_xcodebuild test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
-    -parallel-testing-enabled NO ${extra+"${extra[@]}"}
+    -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
+    ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@"
 }
 
 [ $# -ge 1 ] || usage
@@ -214,7 +243,8 @@ case "$subcommand" in
   build-visionos)        cmd_build_visionos ;;
   build-for-testing)     cmd_build_for_testing ;;
   test-without-building) cmd_test_without_building ;;
-  test-ios)              cmd_build_for_testing && cmd_test_without_building ;;
+  test-ios)              parse_only_testing && cmd_build_for_testing && cmd_test_without_building ;;
+  test-ios-unit)         parse_only_testing && cmd_build_for_testing && cmd_test_without_building -skip-testing:IntentUITests ;;
   pick-simulator)        pick_simulator ;;
   *)                     usage ;;
 esac
