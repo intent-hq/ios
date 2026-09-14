@@ -143,7 +143,11 @@ struct QueuedMessage: Identifiable, Codable {
 /// `Equatable` is synthesized over every stored field so transcript rows can
 /// be compared by value and skip re-rendering when a streaming delta did not
 /// touch them (see `MessageRowContent`).
-struct ConversationMessage: Identifiable, Codable, Equatable {
+///
+/// Nonisolated so chat snapshots can be built off MainActor in the inbound
+/// frame parse and `Sendable` is checked structurally over the stored
+/// value-type fields.
+nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
     let role: MessageRole
     var contentBlocks: [ContentBlock]?
@@ -176,9 +180,7 @@ struct ConversationMessage: Identifiable, Codable, Equatable {
 
     // MARK: - Convenience initializer
 
-    /// Nonisolated (with `parseMessage`) so chat snapshots can be built off
-    /// MainActor in the inbound frame parse.
-    nonisolated init(
+    init(
         id: String,
         role: MessageRole,
         contentBlocks: [ContentBlock]? = nil,
@@ -204,7 +206,7 @@ struct ConversationMessage: Identifiable, Codable, Equatable {
 
     // MARK: - Parsing from dictionary (JSON-RPC response)
 
-    nonisolated static func parseMessage(_ dict: [String: Any]) -> ConversationMessage? {
+    static func parseMessage(_ dict: [String: Any]) -> ConversationMessage? {
         guard let id = dict["id"] as? String else { return nil }
 
         let roleStr = dict["role"] as? String ?? "system"

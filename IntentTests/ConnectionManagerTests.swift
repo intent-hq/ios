@@ -822,10 +822,12 @@ struct ConnectionManagerTests {
         #expect(result.value as? Bool == true)
     }
 
-    @Test func parseInboundFramePreDecodesChatPushOffMainActor() throws {
-        let frame = ConnectionManager.parseInboundFrame("""
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"sub-chat","kind":"delta","seq":3,"delta":{"added":[{"messageId":"m-1","role":"assistant","block":{"type":"text","id":"m-1:0","text":"hi"},"streamingComplete":true}],"updated":[],"removedIds":[]}}}
-        """)
+    @Test func parseInboundFramePreDecodesChatPushOffMainActor() async throws {
+        let frame = await Task.detached {
+            ConnectionManager.parseInboundFrame("""
+            {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"sub-chat","kind":"delta","seq":3,"delta":{"added":[{"messageId":"m-1","role":"assistant","block":{"type":"text","id":"m-1:0","text":"hi"},"streamingComplete":true}],"updated":[],"removedIds":[]}}}
+            """)
+        }.value
         guard case .subscriptionPush(let push)? = frame else {
             Issue.record("Expected .subscriptionPush, got \(String(describing: frame))")
             return
@@ -855,6 +857,25 @@ struct ConnectionManagerTests {
         #expect(messages.map(\.id) == ["m-1"])
         #expect(messages.first?.contentBlocks?.first?.resolvedText == "Run the tests")
         #expect(push.snapshotMeta?["agentId"] as? String == "a")
+    }
+
+    @Test func slowFrameLogLineIncludesMainActorWaitInThresholdCheck() {
+        let threshold = 0.05
+        // Fast parse and dispatch, but the frame sat behind a busy main thread.
+        let waited = ConnectionManager.slowFrameLogLine(
+            label: "method=subscription.push", byteCount: 512,
+            parseElapsed: 0.002, waitElapsed: 0.4, dispatchElapsed: 0.001, threshold: threshold)
+        #expect(waited == "[ConnectionManager] slow frame method=subscription.push bytes=512 parse=2ms wait=400ms dispatch=1ms")
+
+        #expect(ConnectionManager.slowFrameLogLine(
+            label: "id=1", byteCount: 10,
+            parseElapsed: 0.2, waitElapsed: 0, dispatchElapsed: 0, threshold: threshold) != nil)
+        #expect(ConnectionManager.slowFrameLogLine(
+            label: "id=1", byteCount: 10,
+            parseElapsed: 0, waitElapsed: 0, dispatchElapsed: 0.2, threshold: threshold) != nil)
+        #expect(ConnectionManager.slowFrameLogLine(
+            label: "id=1", byteCount: 10,
+            parseElapsed: 0.01, waitElapsed: 0.01, dispatchElapsed: 0.01, threshold: threshold) == nil)
     }
 
     @Test func parseInboundFrameMalformedPushStaysNotification() throws {

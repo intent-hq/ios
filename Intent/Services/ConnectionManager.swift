@@ -972,10 +972,11 @@ nonisolated enum InboundFrame: Sendable {
                         AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
                         let parseStart = CFAbsoluteTimeGetCurrent()
                         let frame = Self.parseInboundFrame(text)
-                        let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
+                        let parseEnd = CFAbsoluteTimeGetCurrent()
                         guard let frame else { continue }
                         let accepted = await self.acceptInboundFrame(
-                            frame, byteCount: text.utf8.count, parseElapsed: parseElapsed,
+                            frame, byteCount: text.utf8.count,
+                            parseElapsed: parseEnd - parseStart, parseEnd: parseEnd,
                             from: currentSocket)
                         if !accepted { return }
                     case .data(let data):
@@ -993,15 +994,18 @@ nonisolated enum InboundFrame: Sendable {
 
     /// MainActor half of the pump: dispatches `frame` unless `origin` is no
     /// longer the live socket. Returns `false` when the pump should stop.
+    /// `parseEnd` is when the off-main parse finished; the gap to now is the
+    /// time the frame spent waiting for MainActor.
     private func acceptInboundFrame(
-        _ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval,
+        _ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval, parseEnd: CFAbsoluteTime,
         from origin: WebSocketConnection
     ) -> Bool {
+        let waitElapsed = CFAbsoluteTimeGetCurrent() - parseEnd
         guard socket === origin else {
             AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
             return false
         }
-        dispatchInboundFrame(frame, byteCount: byteCount, parseElapsed: parseElapsed)
+        dispatchInboundFrame(frame, byteCount: byteCount, parseElapsed: parseElapsed, waitElapsed: waitElapsed)
         return true
     }
 
@@ -1065,15 +1069,17 @@ nonisolated enum InboundFrame: Sendable {
         let parseStart = CFAbsoluteTimeGetCurrent()
         guard let frame = Self.parseInboundFrame(text) else { return }
         let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
-        dispatchInboundFrame(frame, byteCount: text.utf8.count, parseElapsed: parseElapsed)
+        dispatchInboundFrame(frame, byteCount: text.utf8.count, parseElapsed: parseElapsed, waitElapsed: 0)
     }
 
     /// Dispatches a parsed frame — resumes the pending request, routes a
     /// subscription push, or broadcasts to the legacy event handlers — and
-    /// logs a single slow-frame line when the parse or this dispatch exceeded
-    /// `Constants.Connection.slowFrameLogThreshold`.
+    /// logs a single slow-frame line when the parse, the MainActor wait, or
+    /// this dispatch exceeded `Constants.Connection.slowFrameLogThreshold`.
     @MainActor
-    private func dispatchInboundFrame(_ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval) {
+    private func dispatchInboundFrame(
+        _ frame: InboundFrame, byteCount: Int, parseElapsed: TimeInterval, waitElapsed: TimeInterval
+    ) {
         let dispatchStart = CFAbsoluteTimeGetCurrent()
         switch frame {
         case .response(let id, let result):
@@ -1091,11 +1097,25 @@ nonisolated enum InboundFrame: Sendable {
             }
         }
         let dispatchElapsed = CFAbsoluteTimeGetCurrent() - dispatchStart
-        let threshold = Constants.Connection.slowFrameLogThreshold
-        if parseElapsed > threshold || dispatchElapsed > threshold {
-            AppLog.connection.info(
-                "[ConnectionManager] slow frame \(frame.label) bytes=\(byteCount) parse=\(Int(parseElapsed * 1000))ms dispatch=\(Int(dispatchElapsed * 1000))ms")
+        if let line = Self.slowFrameLogLine(
+            label: frame.label, byteCount: byteCount, parseElapsed: parseElapsed,
+            waitElapsed: waitElapsed, dispatchElapsed: dispatchElapsed,
+            threshold: Constants.Connection.slowFrameLogThreshold
+        ) {
+            AppLog.connection.info("\(line)")
         }
+    }
+
+    /// The slow-frame log line, or `nil` when no stage (parse, MainActor
+    /// wait, dispatch) exceeded `threshold`.
+    nonisolated static func slowFrameLogLine(
+        label: String, byteCount: Int, parseElapsed: TimeInterval, waitElapsed: TimeInterval,
+        dispatchElapsed: TimeInterval, threshold: TimeInterval
+    ) -> String? {
+        guard parseElapsed > threshold || waitElapsed > threshold || dispatchElapsed > threshold else {
+            return nil
+        }
+        return "[ConnectionManager] slow frame \(label) bytes=\(byteCount) parse=\(Int(parseElapsed * 1000))ms wait=\(Int(waitElapsed * 1000))ms dispatch=\(Int(dispatchElapsed * 1000))ms"
     }
 
     private func handleDisconnection() {
