@@ -101,13 +101,18 @@ nonisolated enum InboundFrame: Sendable {
     /// An error response, already shaped into the `NSError` the pending
     /// continuation throws.
     case error(id: Int, error: NSError)
-    /// A server notification (`subscription.push`, `events.event`, ...).
+    /// A well-formed `subscription.push`, parsed (and, for the chat channel,
+    /// pre-decoded into typed messages/blocks) off MainActor.
+    case subscriptionPush(SubscriptionPush)
+    /// Any other server notification (`events.event`, ...), plus a malformed
+    /// `subscription.push` so the router can log and drop it.
     case notification(method: String, params: InboundJSONValue)
 
     /// The method or response id, for slow-frame logging.
     var label: String {
         switch self {
         case .response(let id, _), .error(let id, _): return "id=\(id)"
+        case .subscriptionPush: return "method=subscription.push"
         case .notification(let method, _): return "method=\(method)"
         }
     }
@@ -1044,7 +1049,11 @@ nonisolated enum InboundFrame: Sendable {
                 userInfo: userInfo))
         }
         if let method = json["method"] as? String {
-            return .notification(method: method, params: InboundJSONValue(value: json["params"] as Any))
+            let params = json["params"] as Any
+            if let push = SubscriptionPush.parse(method: method, params: params) {
+                return .subscriptionPush(push)
+            }
+            return .notification(method: method, params: InboundJSONValue(value: params))
         }
         return nil
     }
@@ -1071,6 +1080,8 @@ nonisolated enum InboundFrame: Sendable {
             pendingRequests.removeValue(forKey: id)?.resume(returning: result.value)
         case .error(let id, let error):
             pendingRequests.removeValue(forKey: id)?.resume(throwing: error)
+        case .subscriptionPush(let push):
+            subscriptionRouter.route(push)
         case .notification(let method, let params):
             if !subscriptionRouter.route(method: method, params: params.value) {
                 // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)

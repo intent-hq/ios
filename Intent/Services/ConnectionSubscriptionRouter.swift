@@ -54,13 +54,17 @@ final class ConnectionSubscriptionRouter {
             AppLog.connection.warning("[ConnectionManager] Malformed subscription.push dropped (subscriptionId=\(subscriptionId), keys=[\(keys)])")
             return true
         }
+        route(push)
+        return true
+    }
 
+    /// Routes an already-parsed push (the live pump parses off MainActor).
+    func route(_ push: SubscriptionPush) {
         if let handler = handlers[push.subscriptionId] {
             handler(push)
         } else {
             bufferUnrouted(push)
         }
-        return true
     }
 
     func reset() {

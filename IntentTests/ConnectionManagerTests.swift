@@ -822,6 +822,54 @@ struct ConnectionManagerTests {
         #expect(result.value as? Bool == true)
     }
 
+    @Test func parseInboundFramePreDecodesChatPushOffMainActor() throws {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"sub-chat","kind":"delta","seq":3,"delta":{"added":[{"messageId":"m-1","role":"assistant","block":{"type":"text","id":"m-1:0","text":"hi"},"streamingComplete":true}],"updated":[],"removedIds":[]}}}
+        """)
+        guard case .subscriptionPush(let push)? = frame else {
+            Issue.record("Expected .subscriptionPush, got \(String(describing: frame))")
+            return
+        }
+        #expect(push.subscriptionId == "sub-chat")
+        #expect(push.kind == .delta)
+        #expect(push.seq == 3)
+        let chatBlocks = try #require(push.delta?.chatBlocks)
+        #expect(chatBlocks.count == 1)
+        #expect(chatBlocks.first?.messageId == "m-1")
+        #expect(chatBlocks.first?.block.resolvedText == "hi")
+        #expect(chatBlocks.first?.streamingComplete == true)
+        #expect(frame?.label == "method=subscription.push")
+    }
+
+    @Test func parseInboundFrameChatSnapshotPushRunsOffMainActor() async throws {
+        let frame = await Task.detached {
+            ConnectionManager.parseInboundFrame("""
+            {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"sub-chat","kind":"snapshot","seq":0,"snapshot":{"agentId":"a","truncated":false,"totalMessages":1,"messages":[{"id":"m-1","role":"user","timestamp":"t","contentBlocks":[{"type":"text","id":"m-1:0","text":"Run the tests"}]}]}}}
+            """)
+        }.value
+        guard case .subscriptionPush(let push)? = frame else {
+            Issue.record("Expected .subscriptionPush, got \(String(describing: frame))")
+            return
+        }
+        let messages = try #require(push.snapshotMessages)
+        #expect(messages.map(\.id) == ["m-1"])
+        #expect(messages.first?.contentBlocks?.first?.resolvedText == "Run the tests")
+        #expect(push.snapshotMeta?["agentId"] as? String == "a")
+    }
+
+    @Test func parseInboundFrameMalformedPushStaysNotification() throws {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"sub-1","kind":"snapshot","seq":0}}
+        """)
+        guard case .notification(let method, let params)? = frame else {
+            Issue.record("Expected .notification, got \(String(describing: frame))")
+            return
+        }
+        #expect(method == "subscription.push")
+        let dictionary = try #require(params.value as? [String: Any])
+        #expect(dictionary["subscriptionId"] as? String == "sub-1")
+    }
+
     // MARK: - Subscription Push Routing
 
     @Test @MainActor func registerSubscriptionHandlerStoresHandler() async {
