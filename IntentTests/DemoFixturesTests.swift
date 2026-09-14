@@ -152,6 +152,45 @@ struct DemoFixturesTests {
         #expect(agentDict["status"] as? String == "idle")
     }
 
+    // MARK: - Delayed hooks row for the long conversation
+
+    private func hooks(workspaceId: String?) throws -> [BackgroundHook] {
+        var params: [String: Any] = [:]
+        if let workspaceId { params["workspaceId"] = workspaceId }
+        let result = DemoFixtures.response(for: "hook.list", params: params)
+        let dict = try #require(result as? [String: Any])
+        let items = try #require(dict["hooks"] as? [[String: Any]])
+        let hooks = items.compactMap { BackgroundHook.parseHook($0) }
+        #expect(hooks.count == items.count)
+        return hooks
+    }
+
+    @Test func hookListServesOneActiveHookForTheLongConversationAgent() throws {
+        let hooks = try hooks(workspaceId: DemoFixtures.longConversationWorkspaceId)
+        let hook = try #require(hooks.first)
+        #expect(hooks.count == 1)
+        #expect(hook.isActive)
+        #expect(hook.agentId == DemoFixtures.longConversationAgentId)
+        #expect(hook.workspaceId == DemoFixtures.longConversationWorkspaceId)
+        #expect(hook.name == DemoFixtures.longConversationHookName)
+        #expect(hook.nextRunAt != nil)
+    }
+
+    @Test func hookListIsEmptyForOtherWorkspaces() throws {
+        #expect(try hooks(workspaceId: nil).isEmpty)
+        #expect(try hooks(workspaceId: "demo-ws-dashboard").isEmpty)
+    }
+
+    @Test func onlyTheLongConversationHookListIsDelayed() {
+        let long = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
+        #expect(DemoFixtures.responseDelay(for: "hook.list", params: long)
+            == DemoFixtures.longConversationHookListDelay)
+        #expect(DemoFixtures.responseDelay(for: "hook.list", params: [:]) == nil)
+        #expect(DemoFixtures.responseDelay(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
+        #expect(DemoFixtures.responseDelay(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.responseDelay(for: "prMonitor.list", params: long) == nil)
+    }
+
     @Test func taskListFixtureParses() throws {
         let result = DemoFixtures.response(for: "task.list", params: [:])
         let dict = try #require(result as? [String: Any])
@@ -186,6 +225,8 @@ struct DemoFixturesTests {
             DemoFixtures.response(for: "agent.getConversation", params: [:]),
             DemoFixtures.response(
                 for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]),
+            DemoFixtures.response(
+                for: "hook.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]),
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         let text = try #require(String(data: data, encoding: .utf8)).lowercased()

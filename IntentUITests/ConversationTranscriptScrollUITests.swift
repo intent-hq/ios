@@ -2,12 +2,17 @@ import XCTest
 
 /// Guards the "Go to End" affordance of the conversation transcript against
 /// `--demo-data` fixtures: hidden while resting at the bottom, shown once the
-/// user scrolls up, hidden again after tapping it or scrolling back down.
+/// user scrolls up, hidden again after tapping it or scrolling back down, and
+/// still hidden — with the last message still on screen — when a footer row
+/// (the background-hooks chip row) appears under the settled transcript.
 ///
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 /// The transcript is the 32-message `DemoFixtures.longConversationMessages`
 /// served for the "Deflake payment integration tests" workspace, whose single
-/// agent opens straight into the transcript from the workspace row.
+/// agent opens straight into the transcript from the workspace row. That
+/// workspace's `hook.list` fixture answers after
+/// `DemoFixtures.longConversationHookListDelay`, so its hooks row lands a few
+/// seconds after the conversation opens.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     private enum Fixture {
@@ -18,6 +23,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let firstMessageFragment = "Start of the flake investigation"
         static let lastMessageFragment = "End of the flake investigation"
         static let goToEndIdentifier = "transcript.goToEnd"
+        // BackgroundHooksRow's fixed label, and DemoFixtures.longConversationHookName.
+        static let hooksRowLabel = "Running hooks"
+        static let hookName = "Wait for CI on flake fix"
+        // Upper bound for the hooks row to appear after the transcript settles:
+        // DemoFixtures.longConversationHookListDelay (4 s) plus margin.
+        static let hooksRowTimeout: TimeInterval = 15
+    }
+
+    /// The conversation's elements once the transcript has settled at the bottom.
+    private struct OpenConversation {
+        let lastMessage: XCUIElement
+        let goToEnd: XCUIElement
+        let transcript: XCUIElement
     }
 
     override func setUpWithError() throws {
@@ -26,24 +44,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     @MainActor
     func testGoToEndAppearsWhenScrolledUpAndHidesAtBottom() throws {
-        let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"]
-        app.launch()
-
-        let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
-        if !workspaceRow.waitForExistence(timeout: 30) {
-            // Same fallback as AppStoreScreenshotTests: a collapsed iPad
-            // sidebar hides the workspace list behind the first nav button.
-            app.navigationBars.buttons.element(boundBy: 0).tap()
-            XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
-        }
-        workspaceRow.tap()
-
-        let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
-        XCTAssertTrue(lastMessage.waitForExistence(timeout: 15), "last transcript message never appeared")
-        let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
-        let transcript = app.scrollViews.firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
+        let app = launchDemoApp()
+        let opened = openLongConversation(in: app)
+        let lastMessage = opened.lastMessage
+        let goToEnd = opened.goToEnd
+        let transcript = opened.transcript
 
         // 1. At rest at the bottom the button must stay hidden. Wait for the
         //    initial scroll to land (last message on screen), then require the
@@ -94,6 +99,82 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "last transcript message is not visible after scrolling back to the bottom")
     }
 
+    /// A footer row appearing under a transcript resting at the bottom shrinks
+    /// the scroll container; the transcript must re-pin so the last message
+    /// stays on screen and Go to End stays hidden (#272).
+    @MainActor
+    func testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden() throws {
+        let app = launchDemoApp()
+        let opened = openLongConversation(in: app)
+        let lastMessage = opened.lastMessage
+        let goToEnd = opened.goToEnd
+        let transcript = opened.transcript
+
+        // 1. Settle at the bottom before the delayed hooks row arrives.
+        XCTAssertTrue(
+            waitUntilVisible(lastMessage, in: transcript, timeout: 10),
+            "transcript did not settle on the last message after opening")
+        let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
+        XCTAssertFalse(
+            hooksRow.exists,
+            "hooks row was already present when the transcript settled; the fixture delay did not hold")
+        let bottomBeforeRow = transcript.frame.maxY
+
+        // 2. The hooks row appears and shrinks the transcript from below.
+        XCTAssertTrue(
+            hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
+            "hooks row never appeared under the transcript")
+        let hookChip = app.descendants(matching: .any)
+            .containing(NSPredicate(format: "label CONTAINS %@", Fixture.hookName))
+            .firstMatch
+        XCTAssertTrue(
+            hookChip.waitForExistence(timeout: 5),
+            "hook chip never appeared in the hooks row")
+        XCTAssertTrue(
+            waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow },
+            "transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
+
+        // 3. Still at the bottom: no Go to End over a window that outlasts the
+        //    re-pin and its settle delays, and the last message still on screen.
+        XCTAssertFalse(
+            goToEnd.waitForExistence(timeout: 3),
+            "Go to End appeared after the hooks row shrank the transcript")
+        XCTAssertTrue(
+            waitUntilVisible(lastMessage, in: transcript, timeout: 5),
+            "last transcript message is not visible after the hooks row appeared")
+    }
+
+    // MARK: - Helpers
+
+    @MainActor
+    private func launchDemoApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["--demo-data"]
+        app.launch()
+        return app
+    }
+
+    /// Taps the long-conversation workspace row and waits for its transcript,
+    /// Go to End button handle and scroll view.
+    @MainActor
+    private func openLongConversation(in app: XCUIApplication) -> OpenConversation {
+        let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        if !workspaceRow.waitForExistence(timeout: 30) {
+            // Same fallback as AppStoreScreenshotTests: a collapsed iPad
+            // sidebar hides the workspace list behind the first nav button.
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(workspaceRow.waitForExistence(timeout: 15))
+        }
+        workspaceRow.tap()
+
+        let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
+        XCTAssertTrue(lastMessage.waitForExistence(timeout: 15), "last transcript message never appeared")
+        let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
+        let transcript = app.scrollViews.firstMatch
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
+        return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+    }
+
     @MainActor
     private func message(in app: XCUIApplication, containing fragment: String) -> XCUIElement {
         app.staticTexts
@@ -110,14 +191,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     private func waitUntilVisible(
         _ element: XCUIElement, in container: XCUIElement, timeout: TimeInterval
     ) -> Bool {
+        waitUntil(timeout: timeout) {
+            guard element.exists else { return false }
+            let frame = element.frame
+            return !frame.isEmpty && container.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
+        }
+    }
+
+    /// Polls `condition` every 0.25 s until it holds or `timeout` elapses.
+    @MainActor
+    private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            if element.exists {
-                let frame = element.frame
-                if !frame.isEmpty, container.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) {
-                    return true
-                }
-            }
+            if condition() { return true }
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         } while Date() < deadline
         return false

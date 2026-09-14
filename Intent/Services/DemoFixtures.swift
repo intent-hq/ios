@@ -43,6 +43,26 @@ enum DemoFixtures {
     /// `conversationMessages` used by App Store screenshot 03.
     static let longConversationAgentId = "demo-agent-deflake"
 
+    /// Name of the single scheduled hook `hook.list` serves for
+    /// `longConversationAgentId`. Rendered as a chip in the hooks row above
+    /// the composer; the row's own label is "Running hooks".
+    static let longConversationHookName = "Wait for CI on flake fix"
+
+    /// `hook.list` for `longConversationWorkspaceId` answers only after this
+    /// delay, so the hooks row appears under an already-settled transcript —
+    /// the container-resize path of #272 under `--demo-data`
+    /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
+    /// immediately.
+    static let longConversationHookListDelay: Duration = .seconds(4)
+
+    /// Delay to apply before serving `response(for:params:)`, or nil for an
+    /// immediate answer.
+    static func responseDelay(for method: String, params: [String: Any]) -> Duration? {
+        guard method == "hook.list",
+              params["workspaceId"] as? String == longConversationWorkspaceId else { return nil }
+        return longConversationHookListDelay
+    }
+
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
@@ -72,6 +92,9 @@ enum DemoFixtures {
             ] as [String: Any]
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
+        case "hook.list":
+            let workspaceId = params["workspaceId"] as? String
+            return ["hooks": workspaceId == longConversationWorkspaceId ? longConversationHooks : []]
         case "task.list":
             return ["tasks": tasks]
         case "specialist.list":
@@ -340,6 +363,27 @@ enum DemoFixtures {
                 "lastMessageRole": "assistant",
                 "digest": "Payment integration suite is green across 50 consecutive runs.",
                 "metadata": ["specialist": "implementor"],
+            ],
+        ]
+    }
+
+    /// Background hooks of `longConversationWorkspaceId` (PROTOCOL §5.40):
+    /// one scheduled hook owned by `longConversationAgentId`, mid-TTL.
+    static var longConversationHooks: [[String: Any]] {
+        [
+            [
+                "hookId": "demo-hook-deflake-ci",
+                "workspaceId": longConversationWorkspaceId,
+                "agentId": longConversationAgentId,
+                "name": longConversationHookName,
+                "delayMs": 600_000,
+                "state": "scheduled",
+                "createdAt": iso(minutesAgo: 42),
+                "expiresAt": iso(minutesAgo: -318),
+                "lastRunAt": iso(minutesAgo: 2),
+                "nextRunAt": iso(minutesAgo: -8),
+                "runCount": 4,
+                "perpetual": false,
             ],
         ]
     }
