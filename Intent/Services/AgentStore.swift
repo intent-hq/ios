@@ -354,7 +354,10 @@ extension SpecialistInfo {
         // several fire per token or per tool call mid-turn): `agent:stream:*`
         // — including `agent:stream:end`, since the turn's persisted row
         // arrives as `agent:last-message` and the flag flip as
-        // `agent:idle`/`agent:status-changed` — `agent:tool:call`,
+        // `agent:idle`/`agent:status-changed`. This is an accepted trade-off:
+        // a row's last-message preview refreshes at `agent:last-message` /
+        // `agent:idle` rather than on every mid-turn activity tick, in
+        // exchange for not refetching the list per token — `agent:tool:call`,
         // `agent:message` (lean echo; `agent:last-message` is the
         // content-bearing companion), `agent:permission:*`, `agent:process:*`,
         // `agent:queue:*` and `agent:subscriptions-*` (isWaitingForOtherAgents
