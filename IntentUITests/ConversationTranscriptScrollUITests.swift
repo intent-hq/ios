@@ -125,7 +125,10 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
 
-        // 1. Settle at the bottom before the delayed hooks row arrives.
+        // 1. Settle at the bottom before the delayed hooks row arrives. The
+        //    baseline gap is taken only once two consecutive polls agree, so
+        //    a sample during a still-animating follow (or its landing retry)
+        //    cannot become a stale baseline.
         XCTAssertTrue(
             waitUntilVisible(lastMessage, in: transcript, timeout: 10),
             "transcript did not settle on the last message after opening")
@@ -134,7 +137,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             hooksRow.exists,
             "hooks row was already present when the transcript settled; the fixture delay did not hold")
         let bottomBeforeRow = transcript.frame.maxY
-        let gapBeforeRow = bottomBeforeRow - lastMessage.frame.maxY
+        guard let gapBeforeRow = waitUntilSteady(timeout: 5, tolerance: Fixture.rePinTolerance, {
+            transcript.frame.maxY - lastMessage.frame.maxY
+        }) else {
+            return XCTFail("transcript kept moving after the last message became visible; no steady baseline gap")
+        }
 
         // 2. The hooks row appears and shrinks the transcript from below.
         XCTAssertTrue(
@@ -233,5 +240,23 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         } while Date() < deadline
         return false
+    }
+
+    /// Samples `value` every 0.25 s and returns it once two consecutive
+    /// samples agree within `tolerance`; nil if that never happens before
+    /// `timeout` elapses.
+    @MainActor
+    private func waitUntilSteady(
+        timeout: TimeInterval, tolerance: CGFloat, _ value: () -> CGFloat
+    ) -> CGFloat? {
+        let deadline = Date().addingTimeInterval(timeout)
+        var previous = value()
+        repeat {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            let current = value()
+            if abs(current - previous) <= tolerance { return current }
+            previous = current
+        } while Date() < deadline
+        return nil
     }
 }
