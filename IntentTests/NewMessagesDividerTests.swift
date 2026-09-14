@@ -129,9 +129,61 @@ struct ConversationTranscriptScrollPolicyTests {
             contentHeight: 1_000, contentOffsetY: 334, containerHeight: 700, bottomInset: 34) == 0)
     }
 
+    /// Regression: SwiftUI's `ScrollGeometry.containerSize` excludes the
+    /// safe-area insets while `contentOffset` includes them, so measuring
+    /// with it read the navigation-bar inset at rest at the bottom and
+    /// "scrolled away" never cleared. `visibleRect.height` spans the full
+    /// bounds (container + insets) and is the container the formula expects.
+    @Test func distanceToBottomIsZeroAtRestUnderTopInsetWhenMeasuredWithVisibleRect() {
+        // Simulator reading: content 1968, offset 1188, containerSize 664,
+        // contentInsets.top 116, visibleRect.height 780.
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 780) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 664) == 116)
+    }
+
     @Test func distanceToBottomGrowsAsViewportScrollsUp() {
         #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
             contentHeight: 1_000, contentOffsetY: 100, containerHeight: 700) == 200)
+    }
+
+    private func resolved(
+        live: Bool, current: Bool,
+        hasInitiallyScrolled: Bool = true, isScrollingToBottom: Bool = false
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.resolvedScrolledAway(
+            live: live, current: current,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            isScrollingToBottom: isScrollingToBottom)
+    }
+
+    @Test func scrolledAwayFollowsLiveGeometryWhileGateIsOpen() {
+        #expect(resolved(live: true, current: false))
+        #expect(!resolved(live: false, current: true))
+        #expect(resolved(live: true, current: true))
+        #expect(!resolved(live: false, current: false))
+    }
+
+    @Test func scrolledAwayIsFrozenWhileGateIsClosed() {
+        #expect(!resolved(live: true, current: false, hasInitiallyScrolled: false))
+        #expect(resolved(live: false, current: true, hasInitiallyScrolled: false))
+        #expect(!resolved(live: true, current: false, isScrollingToBottom: true))
+        #expect(resolved(live: false, current: true, isScrollingToBottom: true))
+    }
+
+    /// Regression: the geometry's only "scrolled away" edge landed while the
+    /// gate was closed (entry scroll) and was dropped; later user scrolls
+    /// produced no new edge, so Go to End never showed. Re-applying the
+    /// retained live value when the gate opens recovers it.
+    @Test func gateOpeningWhileAlreadyScrolledAwayAppliesLiveValue() {
+        #expect(!resolved(live: true, current: false, hasInitiallyScrolled: false))
+        #expect(resolved(live: true, current: false, hasInitiallyScrolled: true))
+        // The same after a forced follow ends with the user having dragged
+        // away mid-scroll, and the converse when it landed at the bottom.
+        #expect(!resolved(live: true, current: false, isScrollingToBottom: true))
+        #expect(resolved(live: true, current: false, isScrollingToBottom: false))
+        #expect(!resolved(live: false, current: false, isScrollingToBottom: false))
     }
 
     @Test func distanceToBottomIsNegativeForShortContentAndOverscroll() {

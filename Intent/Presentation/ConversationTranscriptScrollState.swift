@@ -6,6 +6,9 @@ final class ConversationTranscriptScrollState {
     let momentumProxy = ScrollViewMomentumProxy()
     var debounceTask: Task<Void, Never>?
     var userIsScrolledAway = false
+    /// Latest geometry-derived scrolled-away edge, recorded even while the
+    /// edge is gated so it can be applied once the gate opens.
+    @ObservationIgnored var liveIsScrolledAway = false
     var hasInitiallyScrolled = false
     var initialScrollScheduled = false
     var isScrollingToBottom = false
