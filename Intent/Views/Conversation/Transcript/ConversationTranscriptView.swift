@@ -144,6 +144,7 @@ struct ConversationTranscriptView: View {
         .defaultScrollAnchor(.bottom)
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
+        .accessibilityIdentifier("transcript.scrollView")
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
@@ -189,7 +190,10 @@ struct ConversationTranscriptView: View {
                 scheduleRePinIfRestingPastEnd()
             }
         }
-        .onDisappear(perform: cancelPastEndRePin)
+        .onDisappear {
+            cancelPastEndRePin()
+            cancelDeferredContainerRePin()
+        }
     }
 
     /// Re-checks the live scroll view once the geometry has had time to
@@ -239,26 +243,69 @@ struct ConversationTranscriptView: View {
     /// the pinned geometry that follows carries the real one. The pin goes
     /// through SwiftUI's own layout: when this action runs the UIScrollView's
     /// bounds still read the old height, so an offset computed from it lands
-    /// at the old bottom. Scrolled away, the content under the reader already
-    /// stays put (the container resizes at its bottom edge). Returns false
-    /// when the edge is to be applied as usual.
+    /// at the old bottom. Under the finger or decelerating, the pin is
+    /// deferred to a settle re-check and the edge is applied as usual (see
+    /// `ConversationTranscriptScrollPolicy.containerHeightChangeDecision`).
+    /// Scrolled away, the content under the reader already stays put (the
+    /// container resizes at its bottom edge). Returns false when the edge is
+    /// to be applied as usual.
     private func rePinAfterContainerHeightChange(
         from oldContainerHeight: CGFloat,
         to newContainerHeight: CGFloat,
         proxy: ScrollViewProxy
     ) -> Bool {
-        guard ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
+        switch ConversationTranscriptScrollPolicy.containerHeightChangeDecision(
             oldContainerHeight: oldContainerHeight,
             newContainerHeight: newContainerHeight,
-            isDragging: scrollMomentumProxy.isDragging,
+            isInteracting: scrollMomentumProxy.isInteracting,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
-        ) else { return false }
-        proxy.scrollTo("scroll-bottom", anchor: .bottom)
-        if scrollDebounceTask != nil {
-            scrollToBottom(proxy: proxy, forced: scrollState.pendingFollowIsForced)
+        ) {
+        case .none:
+            return false
+        case .deferred:
+            scheduleDeferredContainerRePin(proxy: proxy)
+            return false
+        case .rePin:
+            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+            if scrollDebounceTask != nil {
+                scrollToBottom(proxy: proxy, forced: scrollState.pendingFollowIsForced)
+            }
+            return true
         }
-        return true
+    }
+
+    /// Re-checks a container re-pin deferred while interacting once the
+    /// gesture has had time to settle, and re-checks again while it has not;
+    /// a viewport that came to rest short of the bottom while still following
+    /// is followed there through the ordinary automatic follow, which
+    /// re-validates the geometry when it runs.
+    private func scheduleDeferredContainerRePin(proxy: ScrollViewProxy) {
+        scrollState.containerRePinTask?.cancel()
+        scrollState.containerRePinTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+            guard !Task.isCancelled else { return }
+            scrollState.containerRePinTask = nil
+            switch ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
+                distanceToBottom: scrollMomentumProxy.distanceToBottom,
+                isInteracting: scrollMomentumProxy.isInteracting,
+                hasInitiallyScrolled: hasInitiallyScrolled,
+                userIsScrolledAway: userIsScrolledAway
+            ) {
+            case .deferred:
+                scheduleDeferredContainerRePin(proxy: proxy)
+            case .rePin:
+                AppLog.ui.debug("[SCROLL] Container changed while interacting; following to the bottom after settle")
+                scrollToBottom(proxy: proxy, forced: false)
+            case .none:
+                break
+            }
+        }
+    }
+
+    private func cancelDeferredContainerRePin() {
+        scrollState.containerRePinTask?.cancel()
+        scrollState.containerRePinTask = nil
     }
 
     /// Applies the latest geometry edge to `userIsScrolledAway` when the gate
@@ -556,7 +603,7 @@ struct ConversationTranscriptView: View {
                     guard ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
                         forced: forced,
                         distanceToBottom: scrollMomentumProxy.distanceToBottom,
-                        isInteracting: scrollMomentumProxy.isDragging,
+                        isInteracting: scrollMomentumProxy.isInteracting,
                         retriesLeft: retriesLeft
                     ) else { break }
                     retriesLeft -= 1

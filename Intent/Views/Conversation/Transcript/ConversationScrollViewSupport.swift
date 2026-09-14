@@ -66,7 +66,9 @@ class ScrollViewMomentumProxy {
             let geometry = RestingGeometry(
                 contentOffsetY: scrollView.contentOffset.y,
                 contentHeight: scrollView.contentSize.height,
-                boundsHeight: scrollView.bounds.height
+                boundsHeight: scrollView.bounds.height,
+                topInset: insets.top,
+                bottomInset: insets.bottom
             )
             guard geometry == confirming else { return .deferred(geometry) }
             AppLog.ui.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
@@ -75,20 +77,26 @@ class ScrollViewMomentumProxy {
         }
     }
 
-    /// True while the user's finger is on the scroll view (not while it is
-    /// only decelerating); false before the scroll view has been found.
-    var isDragging: Bool {
+    /// True while the user's finger is on the scroll view or a fling is
+    /// still decelerating (the bounce back included); false before the
+    /// scroll view has been found.
+    var isInteracting: Bool {
         guard let scrollView else { return false }
-        return scrollView.isTracking || scrollView.isDragging
+        return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
     }
 
+    /// Everything the re-pin decision reads: the adjusted insets are part of
+    /// it because the keyboard or safe area can change them between the two
+    /// confirming reads while offset, content size and bounds stay the same.
     struct RestingGeometry: Equatable {
         let contentOffsetY: CGFloat
         let contentHeight: CGFloat
         let boundsHeight: CGFloat
+        let topInset: CGFloat
+        let bottomInset: CGFloat
     }
 
-    enum RePinOutcome {
+    enum RePinOutcome: Equatable {
         case rePinned
         case notPastEnd
         /// Past the end but still dragging, decelerating or following (nil),

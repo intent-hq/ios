@@ -409,6 +409,9 @@ nonisolated enum InboundFrame: Sendable {
     func request(_ method: String, params: [String: Any] = [:],
                  timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
         if DemoMode.isEnabled {
+            if let gate = DemoFixtures.responseGate(for: method, params: params) {
+                try await DemoFixtures.wait(for: gate)
+            }
             return DemoFixtures.response(for: method, params: params)
         }
         guard let currentSocket = socket else {
