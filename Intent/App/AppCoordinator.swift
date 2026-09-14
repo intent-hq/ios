@@ -28,6 +28,34 @@ struct DeepLinkPairingRequest: Identifiable, Equatable {
     let payload: PairingPayload
 }
 
+/// Classification of an incoming `intent://` URL by its URI host. Pure so
+/// the routing can be unit-tested without a coordinator; the URL is never
+/// logged since pair payloads carry the auth token and invite payloads a
+/// single-use secret.
+enum IncomingDeepLink: Equatable {
+    /// A well-formed `intent://pair` payload.
+    case pair(PairingPayload)
+    /// An `intent://invite` link. Invites are redeemed on the desktop only in
+    /// v1; iOS surfaces a notice and never parses or redeems the payload.
+    case invite
+    /// Any other or malformed `intent://` URL.
+    case unhandled
+
+    static func classify(_ url: URL) -> IncomingDeepLink {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme == "intent" else {
+            return .unhandled
+        }
+        if components.host == "invite" {
+            return .invite
+        }
+        if let payload = PairingPayload.parse(url.absoluteString) {
+            return .pair(payload)
+        }
+        return .unhandled
+    }
+}
+
 @MainActor
 @Observable
 class AppCoordinator {
@@ -41,6 +69,10 @@ class AppCoordinator {
     /// Deep-link pairing awaiting user confirmation; drives the
     /// DeepLinkPairingView sheet in RootView.
     var pendingDeepLinkPairing: DeepLinkPairingRequest?
+    /// True while the "open this link on your Mac" notice for an
+    /// `intent://invite` deep link is shown; drives an alert in RootView.
+    /// Invites are desktop-only in v1 — nothing is parsed, paired or joined.
+    var isInviteNoticePresented = false
     /// Keys ConnectingView's one-shot connection-attempt task. Bumped by
     /// onSwitchConnection so a switch performed while currentScreen is
     /// already .connecting (e.g. a deep-link pairing confirmed over the
@@ -52,6 +84,9 @@ class AppCoordinator {
     /// Pair payload from a URL that arrived before onLoadComplete (cold
     /// start); surfaced as pendingDeepLinkPairing once load finishes.
     @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
+    /// An invite link arrived before onLoadComplete (cold start); the notice
+    /// is surfaced once load finishes.
+    @ObservationIgnored private var stashedInviteNotice = false
     /// Notification selection awaiting completion of connection or retry routing.
     @ObservationIgnored private var pendingNotificationSelection: (
         agentId: String, workspaceId: String, agentName: String, connectionId: UUID
@@ -325,27 +360,41 @@ class AppCoordinator {
             stashedDeepLinkPayload = nil
             pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
         }
+        if stashedInviteNotice {
+            stashedInviteNotice = false
+            isInviteNoticePresented = true
+        }
     }
 
     // MARK: - Deep links (intent:// URLs)
 
     /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Only
     /// `intent://pair` URIs are actionable: they surface a confirmation
-    /// (DeepLinkPairingView) before any connection is attempted. Every other
-    /// or malformed `intent://` URL is ignored without disturbing app state.
-    /// The URL itself is never logged — pair payloads carry the auth token.
+    /// (DeepLinkPairingView) before any connection is attempted.
+    /// `intent://invite` links are desktop-only in v1: they surface a notice
+    /// and pair nothing. Every other or malformed `intent://` URL is ignored
+    /// without disturbing app state. The URL itself is never logged — pair
+    /// payloads carry the auth token and invite payloads a single-use secret.
     func handleIncomingURL(_ url: URL) {
-        guard let payload = PairingPayload.parse(url.absoluteString) else {
+        switch IncomingDeepLink.classify(url) {
+        case .pair(let payload):
+            guard hasLoadCompleted else {
+                // Cold start: the URL can arrive before onLoadComplete has routed
+                // to the first screen — stash it and surface it after load.
+                stashedDeepLinkPayload = payload
+                return
+            }
+            pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
+        case .invite:
+            AppLog.app.info("[AppCoordinator] Invite deep link received; invites are desktop-only")
+            guard hasLoadCompleted else {
+                stashedInviteNotice = true
+                return
+            }
+            isInviteNoticePresented = true
+        case .unhandled:
             AppLog.app.info("[AppCoordinator] Ignoring non-pairing deep link")
-            return
         }
-        guard hasLoadCompleted else {
-            // Cold start: the URL can arrive before onLoadComplete has routed
-            // to the first screen — stash it and surface it after load.
-            stashedDeepLinkPayload = payload
-            return
-        }
-        pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
     }
 
     /// A deep-link pairing connected and persisted successfully.

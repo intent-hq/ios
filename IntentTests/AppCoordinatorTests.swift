@@ -737,7 +737,80 @@ final class AppCoordinatorTests {
             supportsMultipleWindows: false) == .rebindInPlace)
     }
 
+    // MARK: - Deep-link URL classification (intent://)
+
+    @Test func incomingDeepLink_classifiesPairURL() {
+        let link = IncomingDeepLink.classify(
+            URL(string: "intent://pair?token=t&host=127.0.0.1&port=5181")!)
+        #expect(link == .pair(PairingPayload(
+            hosts: ["127.0.0.1"], port: 5181, token: "t",
+            certFingerprint: nil, tcAddress: nil)))
+    }
+
+    @Test func incomingDeepLink_classifiesInviteURLByHostOnly() {
+        // The daemon's envelope (pair minus token, plus inviteId/secret).
+        #expect(IncomingDeepLink.classify(URL(string:
+            "intent://invite?v=1&host=10.0.0.5&port=7443&fp=AB:CD&inviteId=inv-1&secret=s3cret")!)
+            == .invite)
+        // The host alone decides: iOS never parses the invite payload.
+        #expect(IncomingDeepLink.classify(URL(string: "intent://invite")!) == .invite)
+        #expect(IncomingDeepLink.classify(URL(string: "intent://invite?token=t&host=h&port=1")!)
+            == .invite)
+    }
+
+    @Test func incomingDeepLink_classifiesOtherURLsAsUnhandled() {
+        #expect(IncomingDeepLink.classify(URL(string: "intent://something?x=1")!) == .unhandled)
+        // Missing token — PairingPayload.parse rejects it.
+        #expect(IncomingDeepLink.classify(URL(string: "intent://pair?host=127.0.0.1&port=5181")!)
+            == .unhandled)
+        // Wrong scheme, even with the invite host.
+        #expect(IncomingDeepLink.classify(URL(string: "https://invite?inviteId=inv-1")!)
+            == .unhandled)
+    }
+
     // MARK: - Deep-link URL routing (intent://)
+
+    @Test @MainActor func handleIncomingURL_inviteURL_presentsNoticeAndPairsNothing() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+        coordinator.onLoadComplete()
+
+        coordinator.handleIncomingURL(URL(string:
+            "intent://invite?v=1&host=10.0.0.5&port=7443&fp=AB:CD&inviteId=inv-1&secret=s3cret")!)
+
+        #expect(coordinator.isInviteNoticePresented)
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(persistence.loadConnections().isEmpty)
+        if case .pairing = coordinator.currentScreen {
+            // pass — app state untouched
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func handleIncomingURL_inviteURL_beforeLoadComplete_stashesUntilLoad() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let coordinator = AppCoordinator(
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+
+        // Cold start: the URL arrives while currentScreen is still .loading.
+        coordinator.handleIncomingURL(URL(string: "intent://invite?inviteId=inv-1&secret=s")!)
+        #expect(!coordinator.isInviteNoticePresented)
+
+        coordinator.onLoadComplete()
+        #expect(coordinator.isInviteNoticePresented)
+        #expect(coordinator.pendingDeepLinkPairing == nil)
+        if case .pairing = coordinator.currentScreen {
+            // pass — load still routed to its normal first screen
+        } else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+        }
+    }
 
     @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
         resetConnectionState()
@@ -766,6 +839,7 @@ final class AppCoordinatorTests {
         coordinator.handleIncomingURL(URL(string: "intent://something?x=1")!)
 
         #expect(coordinator.pendingDeepLinkPairing == nil)
+        #expect(!coordinator.isInviteNoticePresented, "Only the invite host surfaces the notice")
         if case .pairing = coordinator.currentScreen {
             // pass — app state untouched
         } else {

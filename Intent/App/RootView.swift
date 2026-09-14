@@ -235,6 +235,13 @@ struct RootView: View {
         .sheet(item: $coordinator.pendingDeepLinkPairing) { request in
             DeepLinkPairingView(payload: request.payload)
         }
+        // intent://invite deep link — invites are redeemed on the desktop
+        // only in v1; the phone shows a notice and pairs nothing.
+        .alert("Open This Link on Your Mac", isPresented: $coordinator.isInviteNoticePresented) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Workspace invites can only be accepted in the Intent desktop app. Open this invite link on your Mac to join.")
+        }
         .onAppear {
             let supportsMultipleWindows = supportsMultipleWindows
             let openWindow = openWindow
