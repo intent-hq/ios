@@ -48,6 +48,12 @@ enum Constants {
             /// Distance from the bottom (points) at or under which the viewport
             /// counts as pinned and a streaming delta issues no scroll at all.
             static let streamingFollowDriftTolerance: CGFloat = 1
+            /// Delay between a geometry edge reading past the end of the
+            /// content and the re-check that re-pins the viewport, so a bounce
+            /// or a mid-animation frame has settled first.
+            static let pastEndSettleMilliseconds = 150
+            /// Padding under the last row; part of the content's measured end.
+            static let contentBottomPadding: CGFloat = 12
         }
 
         enum QuestionWizard {}

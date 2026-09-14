@@ -8,6 +8,9 @@ struct ConversationTranscriptView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
+    /// The scroll content's own space: frames in it are content offsets.
+    private static let contentCoordinateSpace = "conversation-transcript-content"
+
     private var scrollMomentumProxy: ScrollViewMomentumProxy {
         scrollState.momentumProxy
     }
@@ -131,7 +134,8 @@ struct ConversationTranscriptView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
-            .padding(.bottom, 12)
+            .padding(.bottom, Constants.Conversation.Transcript.contentBottomPadding)
+            .coordinateSpace(.named(Self.contentCoordinateSpace))
             // Hosted on the stack itself, not a lazily realized row, so the
             // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
@@ -156,6 +160,63 @@ struct ConversationTranscriptView: View {
         } action: { _, isScrolledAway in
             scrollState.liveIsScrolledAway = isScrolledAway
             syncScrolledAwayFromGeometry()
+            // "At bottom" without the end row on screen is the lazy stack
+            // stretched under an overshot viewport (#271); see the policy.
+            if !isScrolledAway && !scrollState.isEndRowRealized {
+                scheduleRePinIfRestingPastEnd()
+            }
+        }
+        // A viewport resting past the end of content taller than the container
+        // (blank band under the last message) reads "at bottom" above, so it
+        // is watched separately and re-pinned (#271).
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            ConversationTranscriptScrollPolicy.isPastEnd(
+                distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
+                    contentHeight: geometry.contentSize.height,
+                    contentOffsetY: geometry.contentOffset.y,
+                    containerHeight: geometry.visibleRect.height,
+                    bottomInset: geometry.contentInsets.bottom
+                ),
+                contentHeight: geometry.contentSize.height,
+                containerHeight: geometry.visibleRect.height,
+                verticalInsets: geometry.contentInsets.top + geometry.contentInsets.bottom
+            )
+        } action: { _, isPastEnd in
+            if isPastEnd {
+                scheduleRePinIfRestingPastEnd()
+            }
+        }
+    }
+
+    /// Re-checks the live scroll view once the geometry has had time to
+    /// settle (a bounce or a mid-animation frame reads past the end too) and
+    /// clamps the offset back to the bottom once two checks agree; a viewport
+    /// still bouncing or re-laying out is checked again after it settles,
+    /// since the past-end edge has already fired and will not fire twice.
+    /// Without a scroll view to clamp, the viewport is treated as scrolled
+    /// away so Go to End offers the way back. The end-row reading is gated on
+    /// the entry scroll, which realizes rows at the bottom only once it has run.
+    private func scheduleRePinIfRestingPastEnd(
+        confirming: ScrollViewMomentumProxy.RestingGeometry? = nil
+    ) {
+        scrollState.pastEndRePinTask?.cancel()
+        scrollState.pastEndRePinTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+            guard !Task.isCancelled else { return }
+            scrollState.pastEndRePinTask = nil
+            let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(
+                isEndRowRealized: scrollState.isEndRowRealized || !hasInitiallyScrolled,
+                lastKnownContentEnd: scrollState.lastKnownContentEnd,
+                confirming: confirming
+            )
+            switch outcome {
+            case .deferred(let geometry):
+                scheduleRePinIfRestingPastEnd(confirming: geometry)
+            case .unavailable:
+                userIsScrolledAway = true
+            case .rePinned, .notPastEnd:
+                break
+            }
         }
     }
 
@@ -219,8 +280,26 @@ struct ConversationTranscriptView: View {
                 .id("thinking-indicator")
         }
 
+        // The end row doubles as the probe for #271: LazyVStack realizes it
+        // whenever the viewport is at the real bottom, and its position while
+        // realized is the last known end the re-pin can return to.
         Color.clear.frame(height: 8)
             .id("scroll-bottom")
+            .onGeometryChange(for: CGFloat.self) { geometry in
+                geometry.frame(in: .named(Self.contentCoordinateSpace)).maxY
+                    + Constants.Conversation.Transcript.contentBottomPadding
+            } action: { contentEnd in
+                scrollState.lastKnownContentEnd = contentEnd
+            }
+            .onAppear {
+                scrollState.isEndRowRealized = true
+            }
+            .onDisappear {
+                scrollState.isEndRowRealized = false
+                if !scrollState.liveIsScrolledAway {
+                    scheduleRePinIfRestingPastEnd()
+                }
+            }
     }
 
     private var goToEndButton: some View {

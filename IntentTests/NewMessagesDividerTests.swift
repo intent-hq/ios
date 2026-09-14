@@ -338,6 +338,123 @@ struct ConversationTranscriptScrollPolicyTests {
             contentHeight: 1_000, contentOffsetY: 360, containerHeight: 700) == -60)
     }
 
+    private typealias RePinDecision = ConversationTranscriptScrollPolicy.RePinDecision
+
+    /// Geometry of a 1 000 pt transcript in a 700 pt viewport; `offsetY` is
+    /// the resting offset (300 is the bottom) and the distance follows.
+    private func rePinDecision(
+        offsetY: CGFloat,
+        isInteracting: Bool = false,
+        contentHeight: CGFloat = 1_000,
+        containerHeight: CGFloat = 700,
+        topInset: CGFloat = 0,
+        bottomInset: CGFloat = 0,
+        isEndRowRealized: Bool = true,
+        lastKnownContentEnd: CGFloat? = nil
+    ) -> RePinDecision {
+        ConversationTranscriptScrollPolicy.rePinDecision(
+            contentOffsetY: offsetY,
+            distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: contentHeight,
+                contentOffsetY: offsetY,
+                containerHeight: containerHeight,
+                bottomInset: bottomInset
+            ),
+            isInteracting: isInteracting,
+            contentHeight: contentHeight,
+            containerHeight: containerHeight,
+            topInset: topInset,
+            bottomInset: bottomInset,
+            isEndRowRealized: isEndRowRealized,
+            lastKnownContentEnd: lastKnownContentEnd,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression (#271): on return to a conversation the viewport could rest
+    /// past the end of the content — a blank band under the last message —
+    /// while `isScrolledAway` read "at bottom" and hid Go to End.
+    @Test func restingPastEndIsClampedToBottom() {
+        #expect(rePinDecision(offsetY: 351) == .rePin(offsetY: 300))
+        #expect(rePinDecision(offsetY: 600) == .rePin(offsetY: 300))
+        #expect(rePinDecision(offsetY: 350) == .none)
+        #expect(rePinDecision(offsetY: 300) == .none)
+        #expect(rePinDecision(offsetY: 100) == .none)
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -300))
+    }
+
+    /// A bounce past the bottom reads the same negative distance; the
+    /// viewport is dragging or decelerating then and must settle on its own.
+    @Test func bouncingPastEndIsDeferred() {
+        #expect(rePinDecision(offsetY: 380, isInteracting: true) == .deferred)
+        #expect(rePinDecision(offsetY: 600, isInteracting: true) == .deferred)
+        #expect(rePinDecision(offsetY: 380, isInteracting: false) == .rePin(offsetY: 300))
+    }
+
+    /// Content shorter than the container rests at a negative distance by
+    /// construction; there is no end to be past.
+    @Test func shortContentIsNotPastEnd() {
+        #expect(rePinDecision(offsetY: 0, contentHeight: 400, containerHeight: 700) == .none)
+        #expect(rePinDecision(offsetY: 100, contentHeight: 700, containerHeight: 700) == .none)
+        // Insets shrink the room the content has: 650 pt of content fits a
+        // 780 pt container outright, but not once 150 pt of insets are taken.
+        #expect(rePinDecision(offsetY: 0, contentHeight: 650, containerHeight: 780) == .none)
+        #expect(rePinDecision(
+            offsetY: 0, contentHeight: 650, containerHeight: 780, topInset: 150
+        ) == .rePin(offsetY: -130))
+    }
+
+    /// Regression (#271, keyboard path): LazyVStack never shrinks below the
+    /// visible region, so a viewport that overshot the rows reads "at bottom"
+    /// by every geometry measure while the end row is not realized. The last
+    /// end measured while it was realized is where the viewport goes back to.
+    @Test func atBottomWithoutEndRowReturnsToLastKnownEnd() {
+        // Stack stretched to 1 800 under a 1 100 offset; rows really end at 1 000.
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 1_000
+        ) == .rePin(offsetY: 300))
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, bottomInset: 20,
+            isEndRowRealized: false, lastKnownContentEnd: 1_000
+        ) == .rePin(offsetY: 320))
+        #expect(rePinDecision(
+            offsetY: 1_100, isInteracting: true, contentHeight: 1_800,
+            isEndRowRealized: false, lastKnownContentEnd: 1_000
+        ) == .deferred)
+        // The end row on screen means the viewport really is at the bottom.
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: true, lastKnownContentEnd: 1_000
+        ) == .none)
+    }
+
+    /// Scrolled away (the end row legitimately off screen) is not the stuck
+    /// state; neither is a known end that would move the viewport down.
+    @Test func unrealizedEndRowOnlyRePinsUpFromAtBottom() {
+        #expect(rePinDecision(
+            offsetY: 0, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 1_000
+        ) == .none)
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 2_400
+        ) == .none)
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: nil
+        ) == .unrecoverable)
+        // A known end shorter than the viewport clamps at the top inset.
+        #expect(rePinDecision(
+            offsetY: 1_100, contentHeight: 1_800, topInset: 90,
+            isEndRowRealized: false, lastKnownContentEnd: 500
+        ) == .rePin(offsetY: -90))
+    }
+
+    @Test func pastEndGeometryIgnoresInteractionState() {
+        #expect(ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -80, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
+        #expect(!ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -80, contentHeight: 400, containerHeight: 700, atBottomThreshold: 50))
+        #expect(!ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -20, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
+    }
+
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
             hasInitiallyScrolled: false,
