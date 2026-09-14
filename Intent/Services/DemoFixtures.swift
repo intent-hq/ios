@@ -48,18 +48,44 @@ enum DemoFixtures {
     /// the composer; the row's own label is "Running hooks".
     static let longConversationHookName = "Wait for CI on flake fix"
 
-    /// `hook.list` for `longConversationWorkspaceId` answers only after this
-    /// delay, so the hooks row appears under an already-settled transcript —
-    /// the container-resize path of #272 under `--demo-data`
+    /// What `hook.list` for `longConversationWorkspaceId` waits on before
+    /// answering, so the hooks row appears under an already-settled
+    /// transcript — the container-resize path of #272 under `--demo-data`
     /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately. The default suits the screenshot flows; a UI test that
-    /// must observe the transcript before the row lands passes
-    /// `--demo-hook-list-delay-ms=<n>` to widen it.
-    static let longConversationHookListDelay = hookListDelay(from: ProcessInfo.processInfo.arguments)
+    /// immediately. The default delay suits the screenshot flows; a UI test
+    /// that must observe the transcript before the row lands passes
+    /// `--demo-hook-list-trigger-file=<path>` and creates that file when it
+    /// is ready — a clock cannot be made robust against the render time of a
+    /// loaded CI simulator.
+    static let longConversationHookListGate = hookListGate(from: ProcessInfo.processInfo.arguments)
 
     static let defaultHookListDelay: Duration = .seconds(4)
 
     static let hookListDelayArgumentPrefix = "--demo-hook-list-delay-ms="
+
+    static let hookListTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
+
+    /// Polling cadence for `ResponseGate.triggerFile`.
+    static let triggerFilePollInterval: Duration = .milliseconds(100)
+
+    /// Condition a fixture response waits on before it is served.
+    enum ResponseGate: Equatable {
+        case delay(Duration)
+        /// Served once the file exists; waits indefinitely otherwise.
+        case triggerFile(URL)
+    }
+
+    /// `.triggerFile` when the arguments carry a non-empty
+    /// `--demo-hook-list-trigger-file=<path>` (the last one wins);
+    /// otherwise `.delay` of `hookListDelay(from:)`.
+    static func hookListGate(from arguments: [String]) -> ResponseGate {
+        let path = arguments
+            .filter { $0.hasPrefix(hookListTriggerFileArgumentPrefix) }
+            .map { String($0.dropFirst(hookListTriggerFileArgumentPrefix.count)) }
+            .last { !$0.isEmpty }
+        if let path { return .triggerFile(URL(fileURLWithPath: path)) }
+        return .delay(hookListDelay(from: arguments))
+    }
 
     /// `defaultHookListDelay` unless the arguments carry a well-formed
     /// `--demo-hook-list-delay-ms=<milliseconds>`; the last one wins.
@@ -72,12 +98,24 @@ enum DemoFixtures {
         return .milliseconds(milliseconds)
     }
 
-    /// Delay to apply before serving `response(for:params:)`, or nil for an
+    /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
-    static func responseDelay(for method: String, params: [String: Any]) -> Duration? {
+    static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
         guard method == "hook.list",
               params["workspaceId"] as? String == longConversationWorkspaceId else { return nil }
-        return longConversationHookListDelay
+        return longConversationHookListGate
+    }
+
+    /// Suspends until `gate` opens; cancellation propagates from `Task.sleep`.
+    static func wait(for gate: ResponseGate) async throws {
+        switch gate {
+        case .delay(let duration):
+            try await Task.sleep(for: duration)
+        case .triggerFile(let url):
+            while !FileManager.default.fileExists(atPath: url.path) {
+                try await Task.sleep(for: triggerFilePollInterval)
+            }
+        }
     }
 
     /// Fixture response for a JSON-RPC method. Unknown methods return an

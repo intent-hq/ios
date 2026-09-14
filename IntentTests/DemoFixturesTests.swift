@@ -194,14 +194,69 @@ struct DemoFixturesTests {
             == .milliseconds(250))
     }
 
-    @Test func onlyTheLongConversationHookListIsDelayed() {
+    @Test func hookListGateIsATriggerFileWhenTheLaunchArgumentNamesOne() {
+        #expect(DemoFixtures.hookListGate(from: ["--demo-data"]) == .delay(DemoFixtures.defaultHookListDelay))
+        #expect(DemoFixtures.hookListGate(from: ["--demo-data", "--demo-hook-list-delay-ms=9000"])
+            == .delay(.milliseconds(9_000)))
+        #expect(DemoFixtures.hookListGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
+            == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
+        // The trigger file wins over a delay; the last non-empty path wins.
+        #expect(DemoFixtures.hookListGate(from: [
+            "--demo-hook-list-delay-ms=9000",
+            "--demo-hook-list-trigger-file=/tmp/a.trigger",
+            "--demo-hook-list-trigger-file=/tmp/b.trigger",
+            "--demo-hook-list-trigger-file=",
+        ]) == .triggerFile(URL(fileURLWithPath: "/tmp/b.trigger")))
+        #expect(DemoFixtures.hookListGate(from: ["--demo-hook-list-trigger-file="])
+            == .delay(DemoFixtures.defaultHookListDelay))
+    }
+
+    @Test func triggerFileGateOpensOnceTheFileExists() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("demo-fixtures-\(UUID().uuidString).trigger")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let opened = OpenedFlag()
+        let gate = Task {
+            try await DemoFixtures.wait(for: .triggerFile(url))
+            await opened.set()
+        }
+        // Several poll intervals without the file: still closed.
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(await opened.value == false)
+
+        try Data().write(to: url)
+        // Bounded: a gate that never opens must fail the test, not hang it.
+        let watchdog = Task {
+            try await Task.sleep(for: .seconds(5))
+            gate.cancel()
+        }
+        try await gate.value
+        watchdog.cancel()
+        #expect(await opened.value == true)
+    }
+
+    private actor OpenedFlag {
+        private(set) var value = false
+        func set() { value = true }
+    }
+
+    @Test func triggerFileGateWaitIsCancellable() async {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("demo-fixtures-\(UUID().uuidString).never")
+        let gate = Task { try await DemoFixtures.wait(for: .triggerFile(url)) }
+        gate.cancel()
+        await #expect(throws: CancellationError.self) { try await gate.value }
+    }
+
+    @Test func onlyTheLongConversationHookListIsGated() {
         let long = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
-        #expect(DemoFixtures.responseDelay(for: "hook.list", params: long)
-            == DemoFixtures.longConversationHookListDelay)
-        #expect(DemoFixtures.responseDelay(for: "hook.list", params: [:]) == nil)
-        #expect(DemoFixtures.responseDelay(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
-        #expect(DemoFixtures.responseDelay(for: "agent.getConversation", params: long) == nil)
-        #expect(DemoFixtures.responseDelay(for: "prMonitor.list", params: long) == nil)
+        #expect(DemoFixtures.responseGate(for: "hook.list", params: long)
+            == DemoFixtures.longConversationHookListGate)
+        #expect(DemoFixtures.responseGate(for: "hook.list", params: [:]) == nil)
+        #expect(DemoFixtures.responseGate(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
+        #expect(DemoFixtures.responseGate(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.responseGate(for: "prMonitor.list", params: long) == nil)
     }
 
     @Test func taskListFixtureParses() throws {

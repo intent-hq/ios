@@ -10,9 +10,9 @@ import XCTest
 /// The transcript is the 32-message `DemoFixtures.longConversationMessages`
 /// served for the "Deflake payment integration tests" workspace, whose single
 /// agent opens straight into the transcript from the workspace row. That
-/// workspace's `hook.list` fixture answers after
-/// `DemoFixtures.longConversationHookListDelay`, so its hooks row lands a few
-/// seconds after the conversation opens.
+/// workspace's `hook.list` fixture waits on `DemoFixtures.longConversationHookListGate`
+/// — a delay by default, or a trigger file the test creates — so its hooks
+/// row lands only after the transcript has been observed settled.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     private enum Fixture {
@@ -29,13 +29,13 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // BackgroundHooksRow's fixed label, and DemoFixtures.longConversationHookName.
         static let hooksRowLabel = "Running hooks"
         static let hookName = "Wait for CI on flake fix"
-        // The footer test widens DemoFixtures.longConversationHookListDelay
-        // (4 s by default) through this launch argument so the transcript is
-        // reliably observed settled before the row lands; the timeout is that
-        // delay plus margin.
-        static let hooksRowDelayMilliseconds = 10_000
-        static let hooksRowDelayArgument = "--demo-hook-list-delay-ms=\(hooksRowDelayMilliseconds)"
-        static let hooksRowTimeout: TimeInterval = TimeInterval(hooksRowDelayMilliseconds) / 1_000 + 15
+        // The footer test holds the hooks row back until it has recorded a
+        // steady baseline: the fixture waits for this file to exist (polled
+        // every 100 ms) and the test creates it. The runner and the app share
+        // the simulator filesystem, so a temporary-directory path works. A
+        // clock-based delay raced the CI simulator's render time (#285).
+        static let hooksRowTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
+        static let hooksRowTimeout: TimeInterval = 15
         // Slack for the last message to sit at the same distance from the
         // transcript's bottom edge after the re-pin as before the row (an
         // unpinned transcript is off by the row's full height, ~36 pt).
@@ -119,34 +119,43 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// the shrunk transcript, still passes a midpoint visibility check.
     @MainActor
     func testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden() throws {
-        let app = launchDemoApp(extraArguments: [Fixture.hooksRowDelayArgument])
+        let triggerFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
+        try? FileManager.default.removeItem(at: triggerFile)
+        defer { try? FileManager.default.removeItem(at: triggerFile) }
+
+        let app = launchDemoApp(extraArguments: [Fixture.hooksRowTriggerFileArgumentPrefix + triggerFile.path])
         let opened = openLongConversation(in: app)
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
 
-        // 1. Settle at the bottom before the delayed hooks row arrives. The
-        //    baseline gap is taken only once two consecutive polls agree, so
-        //    a sample during a still-animating follow (or its landing retry)
-        //    cannot become a stale baseline.
+        // 1. Settle at the bottom while the hooks row is held back by the
+        //    trigger file. The baseline gap is taken only once two consecutive
+        //    polls agree, so a sample during a still-animating follow (or its
+        //    landing retry) cannot become a stale baseline.
         XCTAssertTrue(
             waitUntilVisible(lastMessage, in: transcript, timeout: 10),
             "transcript did not settle on the last message after opening")
         let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
         XCTAssertFalse(
             hooksRow.exists,
-            "hooks row was already present when the transcript settled; the fixture delay did not hold")
+            "hooks row was already present when the transcript settled; the fixture trigger file did not hold it back")
         let bottomBeforeRow = transcript.frame.maxY
         guard let gapBeforeRow = waitUntilSteady(timeout: 5, tolerance: Fixture.rePinTolerance, {
             transcript.frame.maxY - lastMessage.frame.maxY
         }) else {
             return XCTFail("transcript kept moving after the last message became visible; no steady baseline gap")
         }
+        XCTAssertFalse(
+            hooksRow.exists,
+            "hooks row was already present when the baseline gap was recorded; the fixture trigger file did not hold it back")
 
-        // 2. The hooks row appears and shrinks the transcript from below.
+        // 2. Release the hooks row; it appears and shrinks the transcript from below.
+        try Data().write(to: triggerFile)
         XCTAssertTrue(
             hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
-            "hooks row never appeared under the transcript")
+            "hooks row never appeared under the transcript after the trigger file was created")
         let hookChip = app.descendants(matching: .any)
             .containing(NSPredicate(format: "label CONTAINS %@", Fixture.hookName))
             .firstMatch
