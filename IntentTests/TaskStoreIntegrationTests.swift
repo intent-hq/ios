@@ -184,17 +184,18 @@ struct TaskStoreIntegrationTests {
 
         fake.clearRequestLog()
 
-        // Deliver legacy event (should be suppressed)
-        fake.deliverEvent(method: "task.updated", params: [
+        // Deliver an allowlisted legacy event: only the live guard can suppress
+        // it, so the test proves live-mode suppression rather than the allowlist.
+        fake.deliverEvent(method: "events.event", params: [
             "event": [
-                "type": "task:updated",
+                "type": "task:status-changed",
                 "workspaceId": "ws-1",
-                "taskId": "task-1"
+                "noteId": "task-1"
             ]
         ])
         try await Task.sleep(nanoseconds: 100_000_000)
 
-        // Verify no refetch (legacy event suppressed)
+        // Verify no refetch (live guard suppressed the allowlisted event)
         #expect(!fake.didCallMethod("task.list"))
     }
 
