@@ -21,12 +21,21 @@
 #   test-ios                build-for-testing then test-without-building
 #   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 #
+# iOS builds (build-ios, build-for-testing, test-ios) link the prebuilt,
+# gitignored TailcatKit/build/TailcatKit.xcframework. Those subcommands
+# preflight it: when missing, it is built via TailcatKit/build_xcframework.sh
+# if a Go toolchain is on PATH, otherwise the script exits naming that
+# command. build-visionos skips the preflight (the framework is linked with
+# platformFilter = ios only).
+#
 # Environment knobs (all optional; local runs need none):
-#   SIM_UDID          Simulator UDID for test destinations; when unset the
-#                     newest available iPhone simulator is picked automatically.
-#   SPM_CLONE_DIR     Passed as -clonedSourcePackagesDirPath (CI caches it).
-#   RESULT_BUNDLE     Passed as -resultBundlePath to test-without-building;
-#                     an existing bundle at that path is removed first.
+#   SIM_UDID              Simulator UDID for test destinations; when unset the
+#                         newest available iPhone simulator is picked automatically.
+#   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
+#   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
+#                         an existing bundle at that path is removed first.
+#   TAILCATKIT_AUTOBUILD  Set to 0 to never run TailcatKit/build_xcframework.sh
+#                         from the preflight; a missing xcframework then fails fast.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -51,7 +60,8 @@ Usage: scripts/xcodebuild.sh <subcommand>
   test-ios                build-for-testing then test-without-building
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
-Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE (see script header).
+Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, TAILCATKIT_AUTOBUILD
+(see script header).
 EOF
   exit 2
 }
@@ -91,6 +101,29 @@ Refusing to build: without the platform, xcodebuild would silently fall back to 
   fi
 }
 
+# The Xcode project links the prebuilt (gitignored) TailcatKit.xcframework
+# for iOS. A fresh checkout has none, and xcodebuild only reports the gap deep
+# into the build. Build it here when Go is available, else fail fast naming
+# the fix. Silent no-op when the artifact is present.
+TAILCATKIT_XCFRAMEWORK=TailcatKit/build/TailcatKit.xcframework
+ensure_tailcatkit() {
+  if [ -d "$TAILCATKIT_XCFRAMEWORK" ]; then
+    return
+  fi
+  if [ "${TAILCATKIT_AUTOBUILD:-1}" != "0" ] && command -v go >/dev/null; then
+    echo "notice: $TAILCATKIT_XCFRAMEWORK is missing; building it with TailcatKit/build_xcframework.sh" >&2
+    TailcatKit/build_xcframework.sh
+    return
+  fi
+  local reason="TAILCATKIT_AUTOBUILD=0 disables the automatic build."
+  if [ "${TAILCATKIT_AUTOBUILD:-1}" != "0" ]; then
+    reason="the automatic build requires a Go toolchain on PATH (none found)."
+  fi
+  die "$TAILCATKIT_XCFRAMEWORK is missing (it is gitignored; iOS builds link it).
+Build it with: TailcatKit/build_xcframework.sh
+Not building it automatically: $reason"
+}
+
 # Shared optional args appended to every xcodebuild invocation.
 common_args() {
   if [ -n "${SPM_CLONE_DIR:-}" ]; then
@@ -112,6 +145,7 @@ cmd_resolve() {
 }
 
 cmd_build_ios() {
+  ensure_tailcatkit
   run_xcodebuild build "${PROJECT_ARGS[@]}" \
     -destination 'generic/platform=iOS Simulator' "${SIGNING_ARGS[@]}"
 }
@@ -124,6 +158,7 @@ cmd_build_visionos() {
 
 cmd_build_for_testing() {
   local udid
+  ensure_tailcatkit
   udid=$(pick_simulator)
   run_xcodebuild build-for-testing "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" "${SIGNING_ARGS[@]}"
