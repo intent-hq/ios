@@ -406,6 +406,21 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(rePinDecision(offsetY: 320, bottomInset: 20) == .none)
     }
 
+    /// The two confirming reads must agree on the insets the clamp is
+    /// computed from: a keyboard or safe-area change between them with the
+    /// offset, content and bounds unchanged is not a settled layout.
+    @Test func restingGeometryConfirmationIncludesAdjustedInsets() {
+        typealias Geometry = ScrollViewMomentumProxy.RestingGeometry
+        let first = Geometry(
+            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 34)
+        #expect(first == Geometry(
+            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 34))
+        #expect(first != Geometry(
+            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 59, bottomInset: 336))
+        #expect(first != Geometry(
+            contentOffsetY: 400, contentHeight: 1_000, boundsHeight: 700, topInset: 0, bottomInset: 34))
+    }
+
     @Test func pastEndGeometryIgnoresInteractionState() {
         #expect(ConversationTranscriptScrollPolicy.isPastEnd(
             distanceToBottom: -80, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))

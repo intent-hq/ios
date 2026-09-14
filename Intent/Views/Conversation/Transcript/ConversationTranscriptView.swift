@@ -556,7 +556,7 @@ struct ConversationTranscriptView: View {
                     guard ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
                         forced: forced,
                         distanceToBottom: scrollMomentumProxy.distanceToBottom,
-                        isInteracting: scrollMomentumProxy.isDragging,
+                        isInteracting: scrollMomentumProxy.isInteracting,
                         retriesLeft: retriesLeft
                     ) else { break }
                     retriesLeft -= 1
