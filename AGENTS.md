@@ -24,6 +24,7 @@ refuses `-sdk`.
 ## Where to look
 
 - Thread-hopping ObjC callback APIs (registry + `@Sendable` guard): `IntentTests/ObjCCallbackIsolationTests.swift` — closures passed to these are inferred MainActor-isolated and crash on device when invoked off-main unless explicitly `@Sendable`.
+- Transcript scroll / "Go to End" visibility changes: `IntentUITests/ConversationTranscriptScrollUITests.swift` — the XCUITest that runs under `test-ios` against the `--demo-data` long transcript; the fastlane `AppStoreScreenshotTests` stays skipped in the `Intent` scheme.
 
 ## Filing issues
 
