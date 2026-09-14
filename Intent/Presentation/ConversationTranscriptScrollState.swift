@@ -7,11 +7,6 @@ final class ConversationTranscriptScrollState {
     var debounceTask: Task<Void, Never>?
     /// Pending re-check of a viewport that read past the end of the content.
     @ObservationIgnored var pastEndRePinTask: Task<Void, Never>?
-    /// Whether LazyVStack currently has the end-of-transcript row realized.
-    @ObservationIgnored var isEndRowRealized = false
-    /// Content-space end of the transcript as last measured while the end
-    /// row was realized; the position a past-end re-pin returns to.
-    @ObservationIgnored var lastKnownContentEnd: CGFloat?
     var userIsScrolledAway = false
     /// Latest geometry-derived scrolled-away edge, recorded even while the
     /// edge is gated so it can be applied once the gate opens; nil until the

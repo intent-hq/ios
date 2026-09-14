@@ -52,8 +52,6 @@ enum Constants {
             /// content and the re-check that re-pins the viewport, so a bounce
             /// or a mid-animation frame has settled first.
             static let pastEndSettleMilliseconds = 150
-            /// Padding under the last row; part of the content's measured end.
-            static let contentBottomPadding: CGFloat = 12
         }
 
         enum QuestionWizard {}

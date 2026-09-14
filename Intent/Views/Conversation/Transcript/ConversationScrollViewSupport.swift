@@ -36,13 +36,9 @@ class ScrollViewMomentumProxy {
     /// the end in some passes and not others, so a re-pin is only applied
     /// once the same resting geometry has been read twice — pass the
     /// geometry a `.deferred` outcome carries back on the next check.
-    /// `.unavailable` when the scroll view has not been found or the policy
-    /// has no position to return to, so the caller can fall back.
-    func rePinIfRestingPastEnd(
-        isEndRowRealized: Bool,
-        lastKnownContentEnd: CGFloat?,
-        confirming: RestingGeometry?
-    ) -> RePinOutcome {
+    /// `.unavailable` when the scroll view has not been found, so the caller
+    /// can fall back.
+    func rePinIfRestingPastEnd(confirming: RestingGeometry?) -> RePinOutcome {
         guard let scrollView else { return .unavailable }
         let insets = scrollView.adjustedContentInset
         let decision = ConversationTranscriptScrollPolicy.rePinDecision(
@@ -56,18 +52,13 @@ class ScrollViewMomentumProxy {
             isInteracting: scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
             contentHeight: scrollView.contentSize.height,
             containerHeight: scrollView.bounds.height,
-            topInset: insets.top,
-            bottomInset: insets.bottom,
-            isEndRowRealized: isEndRowRealized,
-            lastKnownContentEnd: lastKnownContentEnd
+            verticalInsets: insets.top + insets.bottom
         )
         switch decision {
         case .none:
             return .notPastEnd
         case .deferred:
             return .deferred(nil)
-        case .unrecoverable:
-            return .unavailable
         case .rePin(let offsetY):
             let geometry = RestingGeometry(
                 contentOffsetY: scrollView.contentOffset.y,

@@ -8,9 +8,6 @@ struct ConversationTranscriptView: View {
 
     @Environment(\.colorScheme) private var colorScheme
 
-    /// The scroll content's own space: frames in it are content offsets.
-    private static let contentCoordinateSpace = "conversation-transcript-content"
-
     private var scrollMomentumProxy: ScrollViewMomentumProxy {
         scrollState.momentumProxy
     }
@@ -134,8 +131,7 @@ struct ConversationTranscriptView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
-            .padding(.bottom, Constants.Conversation.Transcript.contentBottomPadding)
-            .coordinateSpace(.named(Self.contentCoordinateSpace))
+            .padding(.bottom, 12)
             // Hosted on the stack itself, not a lazily realized row, so the
             // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
@@ -160,11 +156,6 @@ struct ConversationTranscriptView: View {
         } action: { _, isScrolledAway in
             scrollState.liveIsScrolledAway = isScrolledAway
             syncScrolledAwayFromGeometry()
-            // "At bottom" without the end row on screen is the lazy stack
-            // stretched under an overshot viewport (#271); see the policy.
-            if !isScrolledAway && !scrollState.isEndRowRealized {
-                scheduleRePinIfRestingPastEnd()
-            }
         }
         // A viewport resting past the end of content taller than the container
         // (blank band under the last message) reads "at bottom" above, so it
@@ -194,8 +185,7 @@ struct ConversationTranscriptView: View {
     /// still bouncing or re-laying out is checked again after it settles,
     /// since the past-end edge has already fired and will not fire twice.
     /// Without a scroll view to clamp, the viewport is treated as scrolled
-    /// away so Go to End offers the way back. The end-row reading is gated on
-    /// the entry scroll, which realizes rows at the bottom only once it has run.
+    /// away so Go to End offers the way back.
     private func scheduleRePinIfRestingPastEnd(
         confirming: ScrollViewMomentumProxy.RestingGeometry? = nil
     ) {
@@ -204,11 +194,7 @@ struct ConversationTranscriptView: View {
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
             guard !Task.isCancelled else { return }
             scrollState.pastEndRePinTask = nil
-            let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(
-                isEndRowRealized: scrollState.isEndRowRealized || !hasInitiallyScrolled,
-                lastKnownContentEnd: scrollState.lastKnownContentEnd,
-                confirming: confirming
-            )
+            let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: confirming)
             switch outcome {
             case .deferred(let geometry):
                 scheduleRePinIfRestingPastEnd(confirming: geometry)
@@ -280,26 +266,8 @@ struct ConversationTranscriptView: View {
                 .id("thinking-indicator")
         }
 
-        // The end row doubles as the probe for #271: LazyVStack realizes it
-        // whenever the viewport is at the real bottom, and its position while
-        // realized is the last known end the re-pin can return to.
         Color.clear.frame(height: 8)
             .id("scroll-bottom")
-            .onGeometryChange(for: CGFloat.self) { geometry in
-                geometry.frame(in: .named(Self.contentCoordinateSpace)).maxY
-                    + Constants.Conversation.Transcript.contentBottomPadding
-            } action: { contentEnd in
-                scrollState.lastKnownContentEnd = contentEnd
-            }
-            .onAppear {
-                scrollState.isEndRowRealized = true
-            }
-            .onDisappear {
-                scrollState.isEndRowRealized = false
-                if !scrollState.liveIsScrolledAway {
-                    scheduleRePinIfRestingPastEnd()
-                }
-            }
     }
 
     private var goToEndButton: some View {

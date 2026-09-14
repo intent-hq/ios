@@ -348,9 +348,7 @@ struct ConversationTranscriptScrollPolicyTests {
         contentHeight: CGFloat = 1_000,
         containerHeight: CGFloat = 700,
         topInset: CGFloat = 0,
-        bottomInset: CGFloat = 0,
-        isEndRowRealized: Bool = true,
-        lastKnownContentEnd: CGFloat? = nil
+        bottomInset: CGFloat = 0
     ) -> RePinDecision {
         ConversationTranscriptScrollPolicy.rePinDecision(
             contentOffsetY: offsetY,
@@ -363,10 +361,7 @@ struct ConversationTranscriptScrollPolicyTests {
             isInteracting: isInteracting,
             contentHeight: contentHeight,
             containerHeight: containerHeight,
-            topInset: topInset,
-            bottomInset: bottomInset,
-            isEndRowRealized: isEndRowRealized,
-            lastKnownContentEnd: lastKnownContentEnd,
+            verticalInsets: topInset + bottomInset,
             atBottomThreshold: 50
         )
     }
@@ -404,46 +399,11 @@ struct ConversationTranscriptScrollPolicyTests {
         ) == .rePin(offsetY: -130))
     }
 
-    /// Regression (#271, keyboard path): LazyVStack never shrinks below the
-    /// visible region, so a viewport that overshot the rows reads "at bottom"
-    /// by every geometry measure while the end row is not realized. The last
-    /// end measured while it was realized is where the viewport goes back to.
-    @Test func atBottomWithoutEndRowReturnsToLastKnownEnd() {
-        // Stack stretched to 1 800 under a 1 100 offset; rows really end at 1 000.
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 1_000
-        ) == .rePin(offsetY: 300))
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, bottomInset: 20,
-            isEndRowRealized: false, lastKnownContentEnd: 1_000
-        ) == .rePin(offsetY: 320))
-        #expect(rePinDecision(
-            offsetY: 1_100, isInteracting: true, contentHeight: 1_800,
-            isEndRowRealized: false, lastKnownContentEnd: 1_000
-        ) == .deferred)
-        // The end row on screen means the viewport really is at the bottom.
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: true, lastKnownContentEnd: 1_000
-        ) == .none)
-    }
-
-    /// Scrolled away (the end row legitimately off screen) is not the stuck
-    /// state; neither is a known end that would move the viewport down.
-    @Test func unrealizedEndRowOnlyRePinsUpFromAtBottom() {
-        #expect(rePinDecision(
-            offsetY: 0, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 1_000
-        ) == .none)
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: 2_400
-        ) == .none)
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, isEndRowRealized: false, lastKnownContentEnd: nil
-        ) == .unrecoverable)
-        // A known end shorter than the viewport clamps at the top inset.
-        #expect(rePinDecision(
-            offsetY: 1_100, contentHeight: 1_800, topInset: 90,
-            isEndRowRealized: false, lastKnownContentEnd: 500
-        ) == .rePin(offsetY: -90))
+    /// A bottom inset (keyboard, composer) is part of the bottom the
+    /// viewport is clamped to.
+    @Test func pastEndClampAccountsForBottomInset() {
+        #expect(rePinDecision(offsetY: 400, bottomInset: 20) == .rePin(offsetY: 320))
+        #expect(rePinDecision(offsetY: 320, bottomInset: 20) == .none)
     }
 
     @Test func pastEndGeometryIgnoresInteractionState() {

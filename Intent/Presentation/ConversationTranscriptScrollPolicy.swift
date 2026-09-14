@@ -65,58 +65,31 @@ enum ConversationTranscriptScrollPolicy {
         /// Past the end but still dragging or decelerating; check again later.
         case deferred
         case rePin(offsetY: CGFloat)
-        /// Past the end with no position to return to; only Go to End can help.
-        case unrecoverable
     }
 
     /// Whether, and where, a resting viewport must be re-pinned to the bottom
-    /// (#271). Two readings of "past the end":
-    ///
-    /// - By the scroll view's own content size (`isPastEnd`): the offset is
-    ///   stale for content that shrank; the viewport is clamped by the distance.
-    /// - By the end row not being realized while the geometry reads "at
-    ///   bottom": at the real bottom the end row is always on screen, so the
-    ///   two together mean the lazy stack has stretched its height to cover a
-    ///   viewport that overshot the rows (it never shrinks below the visible
-    ///   region) and no geometry read exposes the blank band. The last end
-    ///   measured while the row was realized is the only known good position;
-    ///   the viewport is only ever moved up, so a stale end can never push it
-    ///   past newer content.
-    ///
-    /// A bounce past the bottom reads the same geometry, so a viewport the
-    /// user is still dragging, or that is decelerating (which includes the
-    /// bounce back), is left to settle on its own.
+    /// (#271): past the end (`isPastEnd`) the offset is stale for content that
+    /// shrank, and the distance is exactly the correction. A bounce past the
+    /// bottom reads the same geometry, so a viewport the user is still
+    /// dragging, or that is decelerating (which includes the bounce back), is
+    /// left to settle on its own.
     static func rePinDecision(
         contentOffsetY: CGFloat,
         distanceToBottom: CGFloat,
         isInteracting: Bool,
         contentHeight: CGFloat,
         containerHeight: CGFloat,
-        topInset: CGFloat = 0,
-        bottomInset: CGFloat = 0,
-        isEndRowRealized: Bool = true,
-        lastKnownContentEnd: CGFloat? = nil,
+        verticalInsets: CGFloat = 0,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> RePinDecision {
-        let targetY: CGFloat
-        if isPastEnd(
+        guard isPastEnd(
             distanceToBottom: distanceToBottom,
             contentHeight: contentHeight,
             containerHeight: containerHeight,
-            verticalInsets: topInset + bottomInset,
+            verticalInsets: verticalInsets,
             atBottomThreshold: atBottomThreshold
-        ) {
-            targetY = contentOffsetY + distanceToBottom
-        } else if !isEndRowRealized,
-                  !isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold) {
-            guard let lastKnownContentEnd else { return .unrecoverable }
-            let knownEndOffsetY = max(lastKnownContentEnd + bottomInset - containerHeight, -topInset)
-            guard knownEndOffsetY < contentOffsetY else { return .none }
-            targetY = knownEndOffsetY
-        } else {
-            return .none
-        }
-        return isInteracting ? .deferred : .rePin(offsetY: targetY)
+        ) else { return .none }
+        return isInteracting ? .deferred : .rePin(offsetY: contentOffsetY + distanceToBottom)
     }
 
     /// The scrolled-away flag driving "Go to End" and follow-to-bottom.
