@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Intent
 
 /// Ports of the desktop cases in new-messages-divider.test.ts.
@@ -114,7 +115,137 @@ struct NewMessagesDividerEntryScrollTests {
     }
 }
 
+/// Regression coverage for intent-hq/ios#270: the finder must resolve the
+/// transcript UIScrollView once attached to a window, not from an eager
+/// one-shot walk that runs before the hierarchy exists.
+@MainActor
+struct ScrollViewFinderTests {
+    @Test func firstScrollViewAncestorFindsNearestScrollView() {
+        let outer = UIScrollView()
+        let inner = UIScrollView()
+        let host = UIView()
+        let leaf = UIView()
+        outer.addSubview(inner)
+        inner.addSubview(host)
+        host.addSubview(leaf)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: leaf) === inner)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: inner) === outer)
+    }
+
+    @Test func firstScrollViewAncestorIsNilWithoutScrollViewAbove() {
+        let root = UIView()
+        let leaf = UIView()
+        root.addSubview(leaf)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: leaf) == nil)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: UIScrollView()) == nil)
+    }
+
+    @Test func finderResolvesProxyOnWindowAttachAndInstallsTapOnce() {
+        let proxy = ScrollViewMomentumProxy()
+        let finder = ScrollViewFinder.FinderView()
+        finder.proxy = proxy
+        let scrollView = UIScrollView()
+        let host = UIView()
+        scrollView.addSubview(host)
+        host.addSubview(finder)
+        // Detached hierarchy: nothing resolves yet (mirrors makeUIView time).
+        #expect(proxy.scrollView == nil)
+        #expect(!proxy.hasResolvedScrollView)
+        #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+        #expect(proxy.scrollView === scrollView)
+        #expect(proxy.hasResolvedScrollView)
+        #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+        let tapCount = { scrollView.gestureRecognizers?.count ?? 0 }
+        let installed = tapCount()
+
+        // Re-attaching re-runs the walk without duplicating the gesture.
+        scrollView.removeFromSuperview()
+        window.addSubview(scrollView)
+        #expect(proxy.scrollView === scrollView)
+        #expect(tapCount() == installed)
+    }
+
+    @Test func finderWithoutProxyAttachesWithoutInstallingAnything() {
+        let finder = ScrollViewFinder.FinderView()
+        let scrollView = UIScrollView()
+        scrollView.addSubview(finder)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+        #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+    }
+
+    /// The `updateUIView` path: a proxy handed to an already-hosted finder
+    /// resolves at once rather than on the next window move.
+    @Test func finderResolvesProxyAssignedAfterWindowAttach() {
+        let finder = ScrollViewFinder.FinderView()
+        let scrollView = UIScrollView()
+        scrollView.addSubview(finder)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+
+        let proxy = ScrollViewMomentumProxy()
+        finder.proxy = proxy
+        #expect(proxy.scrollView === scrollView)
+        #expect(proxy.hasResolvedScrollView)
+        #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+        let installed = scrollView.gestureRecognizers?.count ?? 0
+
+        // Re-assigning the same proxy is a no-op.
+        finder.proxy = proxy
+        #expect(scrollView.gestureRecognizers?.count == installed)
+    }
+}
+
 struct ConversationTranscriptScrollPolicyTests {
+    private typealias Step = ConversationTranscriptScrollPolicy.InitialScrollStep
+
+    private func initialStep(
+        alreadyPerformed: Bool = false,
+        scrollViewResolved: Bool = false,
+        scrollViewWaitElapsed: Bool = false
+    ) -> Step {
+        ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: alreadyPerformed,
+            scrollViewResolved: scrollViewResolved,
+            scrollViewWaitElapsed: scrollViewWaitElapsed)
+    }
+
+    /// Regression: with an instant load the 0.1 s entry timer elapsed during
+    /// the push transition, `scrollTo("new-messages-divider")` ran before the
+    /// UIScrollView was hosted and was lost, so the viewport stayed at the
+    /// bottom instead of on the divider. The timer firing first must wait for
+    /// the finder's edge rather than scroll.
+    @Test func entryScrollWaitsForFinderWhenTimerBeatsHosting() {
+        #expect(initialStep(scrollViewResolved: false) == .waitForScrollView)
+        #expect(initialStep(scrollViewResolved: true) == .perform)
+    }
+
+    /// A finder that never resolves may not leave the transcript unscrolled.
+    @Test func entryScrollFallsBackAfterBoundedWait() {
+        #expect(initialStep(scrollViewResolved: false, scrollViewWaitElapsed: true) == .perform)
+    }
+
+    /// The finder edge and the bounded-wait fallback can both fire; only the
+    /// first performs.
+    @Test func entryScrollPerformsAtMostOnce() {
+        #expect(initialStep(alreadyPerformed: true, scrollViewResolved: true) == .skip)
+        #expect(initialStep(alreadyPerformed: true, scrollViewWaitElapsed: true) == .skip)
+        #expect(initialStep(alreadyPerformed: true) == .skip)
+    }
+
+    /// The hosting wait must outlast the entry timer it replaces, and the
+    /// divider probe must run before `hasInitiallyScrolled` flips so no
+    /// automatic follow can be queued ahead of its decision.
+    @Test func entryScrollDelaysAreOrdered() {
+        #expect(Constants.Conversation.Transcript.initialScrollHostingTimeout
+            > Constants.Conversation.Transcript.initialScrollDelay)
+        #expect(Constants.Conversation.Transcript.dividerProbeDelay
+            < Constants.Conversation.Transcript.initialScrollSettleDelay)
+    }
+
     @Test func tracksAwayStateAcrossBottomThreshold() {
         #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -20))
         #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 50))
@@ -149,7 +280,7 @@ struct ConversationTranscriptScrollPolicyTests {
     }
 
     private func resolved(
-        live: Bool, current: Bool,
+        live: Bool?, current: Bool,
         hasInitiallyScrolled: Bool = true, isScrollingToBottom: Bool = false
     ) -> Bool {
         ConversationTranscriptScrollPolicy.resolvedScrolledAway(
@@ -184,6 +315,20 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(!resolved(live: true, current: false, isScrollingToBottom: true))
         #expect(resolved(live: true, current: false, isScrollingToBottom: false))
         #expect(!resolved(live: false, current: false, isScrollingToBottom: false))
+    }
+
+    /// Regression: with `live` defaulting to `false`, the gate-open sync after
+    /// the divider probe set "scrolled away" would flip it back and force-follow
+    /// off the "New messages" divider whenever the entry scroll's geometry edge
+    /// had not been delivered yet. An unobserved edge must keep `current`.
+    @Test func unobservedGeometryEdgeKeepsCurrentFlag() {
+        #expect(resolved(live: nil, current: true))
+        #expect(!resolved(live: nil, current: false))
+        #expect(resolved(live: nil, current: true, hasInitiallyScrolled: false))
+        #expect(!resolved(live: nil, current: false, isScrollingToBottom: true))
+        // Divider scenario: the probe marks scrolled away, the gate opens, and
+        // the geometry has emitted nothing yet.
+        #expect(resolved(live: nil, current: true, hasInitiallyScrolled: true, isScrollingToBottom: false))
     }
 
     @Test func distanceToBottomIsNegativeForShortContentAndOverscroll() {

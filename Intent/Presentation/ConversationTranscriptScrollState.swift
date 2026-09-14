@@ -7,10 +7,14 @@ final class ConversationTranscriptScrollState {
     var debounceTask: Task<Void, Never>?
     var userIsScrolledAway = false
     /// Latest geometry-derived scrolled-away edge, recorded even while the
-    /// edge is gated so it can be applied once the gate opens.
-    @ObservationIgnored var liveIsScrolledAway = false
+    /// edge is gated so it can be applied once the gate opens; nil until the
+    /// first edge is observed.
+    @ObservationIgnored var liveIsScrolledAway: Bool?
     var hasInitiallyScrolled = false
     var initialScrollScheduled = false
+    /// True while the scheduled entry scroll waits for the finder to resolve.
+    var initialScrollAwaitingScrollView = false
+    var initialScrollPerformed = false
     var isScrollingToBottom = false
     /// Uptime of the last follow-to-bottom request; rate-limits streaming follows.
     var lastFollowToBottomAt: TimeInterval?

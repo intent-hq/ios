@@ -2,6 +2,27 @@ import CoreGraphics
 import Foundation
 
 enum ConversationTranscriptScrollPolicy {
+    enum InitialScrollStep: Equatable {
+        case perform
+        case waitForScrollView
+        case skip
+    }
+
+    /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
+    /// before the transcript's UIScrollView is hosted is lost, so the scroll
+    /// waits for the finder to resolve; once the bounded wait elapses it runs
+    /// regardless, so a finder that never resolves cannot leave the transcript
+    /// unscrolled. It performs at most once, whichever path gets there first.
+    static func initialScrollStep(
+        alreadyPerformed: Bool,
+        scrollViewResolved: Bool,
+        scrollViewWaitElapsed: Bool
+    ) -> InitialScrollStep {
+        if alreadyPerformed { return .skip }
+        if scrollViewResolved || scrollViewWaitElapsed { return .perform }
+        return .waitForScrollView
+    }
+
     /// Points between the viewport's bottom edge and the end of the content:
     /// 0 at rest at the bottom, negative while bouncing past it or when the
     /// content is shorter than the container.
@@ -27,13 +48,16 @@ enum ConversationTranscriptScrollPolicy {
     /// that lands while gated would otherwise be lost for good, because the
     /// geometry emits no new edge until the threshold is crossed again. The
     /// live value is therefore kept and re-applied whenever the gate opens.
+    /// A nil `live` means no edge has been observed yet, so `current` stands
+    /// (e.g. the divider probe's flag before the entry scroll's edge lands).
     static func resolvedScrolledAway(
-        live: Bool,
+        live: Bool?,
         current: Bool,
         hasInitiallyScrolled: Bool,
         isScrollingToBottom: Bool
     ) -> Bool {
-        hasInitiallyScrolled && !isScrollingToBottom ? live : current
+        guard let live, hasInitiallyScrolled, !isScrollingToBottom else { return current }
+        return live
     }
 
     /// Discrete, user-visible transitions (a message appended, "Go to End",

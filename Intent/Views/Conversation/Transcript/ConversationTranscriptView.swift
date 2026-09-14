@@ -103,6 +103,11 @@ struct ConversationTranscriptView: View {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
+            .onChange(of: scrollMomentumProxy.hasResolvedScrollView) { _, resolved in
+                if resolved {
+                    handleScrollViewResolved(proxy: proxy)
+                }
+            }
             .onChange(of: userIsScrolledAway) { _, scrolledAway in
                 if scrolledAway {
                     cancelPendingAutomaticFollow()
@@ -316,6 +321,51 @@ struct ConversationTranscriptView: View {
         guard !initialScrollScheduled else { return }
         initialScrollScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+        }
+    }
+
+    /// The finder resolving is the signal the transcript is hosted; an entry
+    /// scroll issued while waiting for it is picked up here. Hosting precedes
+    /// LazyVStack's first layout pass, so the resolved path gets the same
+    /// `initialScrollDelay` the loading triggers get before it scrolls.
+    private func handleScrollViewResolved(proxy: ScrollViewProxy) {
+        guard scrollState.initialScrollAwaitingScrollView else {
+            // Defensive: onAppear / isLoading already schedule the entry
+            // scroll, so this only matters if the edge ever precedes both.
+            if !viewModel.isLoading {
+                runInitialScrollIfNeeded(proxy: proxy)
+            }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+        }
+    }
+
+    /// A `scrollTo` issued before the UIScrollView is hosted is lost and the
+    /// bottom anchor wins, so when the entry timer beats hosting (instant load
+    /// during the push transition) the scroll waits for the finder's edge —
+    /// bounded by `initialScrollHostingTimeout` so a finder that never
+    /// resolves still scrolls. Performs at most once across all paths.
+    private func performInitialScrollWhenReady(proxy: ScrollViewProxy, scrollViewWaitElapsed: Bool) {
+        switch ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: scrollState.initialScrollPerformed,
+            scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
+            scrollViewWaitElapsed: scrollViewWaitElapsed
+        ) {
+        case .skip:
+            return
+        case .waitForScrollView:
+            scrollState.initialScrollAwaitingScrollView = true
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Constants.Conversation.Transcript.initialScrollHostingTimeout
+            ) {
+                performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: true)
+            }
+        case .perform:
+            scrollState.initialScrollPerformed = true
+            scrollState.initialScrollAwaitingScrollView = false
             performInitialScroll(proxy: proxy)
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
@@ -327,6 +377,10 @@ struct ConversationTranscriptView: View {
     }
 
     private func performInitialScroll(proxy: ScrollViewProxy) {
+        // A geometry edge recorded before this scroll (the initial layout at
+        // the bottom) describes the pre-scroll viewport; dropping it keeps
+        // the gate-open sync from overwriting the divider probe's flag.
+        scrollState.liveIsScrolledAway = nil
         guard viewModel.newMessagesDividerAnchorId != nil else {
             scrollToBottom(proxy: proxy, animated: false, forced: true)
             return

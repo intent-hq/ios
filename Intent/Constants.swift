@@ -33,6 +33,9 @@ enum Constants {
         enum Transcript {
             static let atBottomThreshold: CGFloat = 50
             static let initialScrollDelay: Double = 0.1
+            /// Longest the entry scroll waits for the transcript UIScrollView
+            /// to be found before scrolling anyway.
+            static let initialScrollHostingTimeout: Double = 1.0
             static let initialScrollSettleDelay: Double = 0.2
             static let dividerProbeDelay: Double = 0.15
             static let scrollDebounceMilliseconds = 100
