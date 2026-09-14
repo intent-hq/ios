@@ -46,12 +46,12 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
 
         // 1. At rest at the bottom the button must stay hidden. Wait for the
-        //    initial scroll to land (last message hittable), then require the
+        //    initial scroll to land (last message on screen), then require the
         //    button not to appear over a window that outlasts the scroll
         //    settle delays — waitForNonExistence would pass immediately
         //    before the transcript had measured anything.
         XCTAssertTrue(
-            waitUntilHittable(lastMessage, timeout: 10),
+            waitUntilVisible(lastMessage, in: transcript, timeout: 10),
             "transcript did not settle on the last message after opening")
         XCTAssertFalse(
             goToEnd.waitForExistence(timeout: 2),
@@ -69,7 +69,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             goToEnd.waitForNonExistence(timeout: 5),
             "Go to End stayed visible after tapping it")
         XCTAssertTrue(
-            waitUntilHittable(lastMessage, timeout: 5),
+            waitUntilVisible(lastMessage, in: transcript, timeout: 5),
             "last transcript message is not visible after Go to End")
 
         // 4. Scroll up again, then scroll back down by hand: the button must
@@ -79,7 +79,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             goToEnd.waitForExistence(timeout: 5),
             "Go to End did not reappear after scrolling up a second time")
         //    The last message is several lines tall, so its centre can be
-        //    hittable while the viewport is still beyond atBottomThreshold;
+        //    on screen while the viewport is still beyond atBottomThreshold;
         //    keep swiping (bounded) until the button reports the bottom.
         var swipesLeft = 12
         while swipesLeft > 0, !goToEnd.waitForNonExistence(timeout: 1) {
@@ -90,7 +90,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             goToEnd.waitForNonExistence(timeout: 5),
             "Go to End stayed visible after scrolling back to the bottom")
         XCTAssertTrue(
-            waitUntilHittable(lastMessage, timeout: 5),
+            waitUntilVisible(lastMessage, in: transcript, timeout: 5),
             "last transcript message is not visible after scrolling back to the bottom")
     }
 
@@ -101,11 +101,25 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             .firstMatch
     }
 
+    /// True once the element's centre lies inside the container's frame.
+    /// `isHittable` is not used: the transcript's selectable text is backed
+    /// by a text-view accessibility element overlapping the paragraphs, and
+    /// whether a hit test at a paragraph's centre resolves to the paragraph or
+    /// to that overlay varies between runs while the paragraph is on screen.
     @MainActor
-    private func waitUntilHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
-        let hittable = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == true AND isHittable == true"),
-            object: element)
-        return XCTWaiter().wait(for: [hittable], timeout: timeout) == .completed
+    private func waitUntilVisible(
+        _ element: XCUIElement, in container: XCUIElement, timeout: TimeInterval
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            if element.exists {
+                let frame = element.frame
+                if !frame.isEmpty, container.frame.contains(CGPoint(x: frame.midX, y: frame.midY)) {
+                    return true
+                }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        } while Date() < deadline
+        return false
     }
 }

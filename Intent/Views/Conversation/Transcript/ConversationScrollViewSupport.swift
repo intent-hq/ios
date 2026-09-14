@@ -28,6 +28,75 @@ class ScrollViewMomentumProxy {
         )
     }
 
+    /// Re-pins a viewport resting past the end of the content to the bottom
+    /// (#271). Reads the live UIScrollView rather than the geometry edge that
+    /// scheduled it: a bounce or a mid-animation frame reads past the end too
+    /// and must settle on its own (`.deferred`). The lazy stack also re-lays
+    /// out several times per frame while the keyboard animates, reading past
+    /// the end in some passes and not others, so a re-pin is only applied
+    /// once the same resting geometry has been read twice — pass the
+    /// geometry a `.deferred` outcome carries back on the next check. A
+    /// programmatic follow (`isFollowing`) animates through the same geometry
+    /// and is deferred like a gesture, so the clamp cannot land mid-animation.
+    /// `.unavailable` when the scroll view has not been found, so the caller
+    /// can fall back.
+    func rePinIfRestingPastEnd(confirming: RestingGeometry?, isFollowing: Bool = false) -> RePinOutcome {
+        guard let scrollView else { return .unavailable }
+        let insets = scrollView.adjustedContentInset
+        let decision = ConversationTranscriptScrollPolicy.rePinDecision(
+            contentOffsetY: scrollView.contentOffset.y,
+            distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: scrollView.contentSize.height,
+                contentOffsetY: scrollView.contentOffset.y,
+                containerHeight: scrollView.bounds.height,
+                bottomInset: insets.bottom
+            ),
+            isInteracting: isFollowing
+                || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
+            contentHeight: scrollView.contentSize.height,
+            containerHeight: scrollView.bounds.height,
+            verticalInsets: insets.top + insets.bottom
+        )
+        switch decision {
+        case .none:
+            return .notPastEnd
+        case .deferred:
+            return .deferred(nil)
+        case .rePin(let offsetY):
+            let geometry = RestingGeometry(
+                contentOffsetY: scrollView.contentOffset.y,
+                contentHeight: scrollView.contentSize.height,
+                boundsHeight: scrollView.bounds.height
+            )
+            guard geometry == confirming else { return .deferred(geometry) }
+            AppLog.ui.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
+            scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
+            return .rePinned
+        }
+    }
+
+    /// True while the user's finger is on the scroll view (not while it is
+    /// only decelerating); false before the scroll view has been found.
+    var isDragging: Bool {
+        guard let scrollView else { return false }
+        return scrollView.isTracking || scrollView.isDragging
+    }
+
+    struct RestingGeometry: Equatable {
+        let contentOffsetY: CGFloat
+        let contentHeight: CGFloat
+        let boundsHeight: CGFloat
+    }
+
+    enum RePinOutcome {
+        case rePinned
+        case notPastEnd
+        /// Past the end but still dragging, decelerating or following (nil),
+        /// or read past the end for the first time; check again later.
+        case deferred(RestingGeometry?)
+        case unavailable
+    }
+
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
         AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")

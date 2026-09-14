@@ -5,6 +5,8 @@ import Observation
 final class ConversationTranscriptScrollState {
     let momentumProxy = ScrollViewMomentumProxy()
     var debounceTask: Task<Void, Never>?
+    /// Pending re-check of a viewport that read past the end of the content.
+    @ObservationIgnored var pastEndRePinTask: Task<Void, Never>?
     var userIsScrolledAway = false
     /// Latest geometry-derived scrolled-away edge, recorded even while the
     /// edge is gated so it can be applied once the gate opens; nil until the

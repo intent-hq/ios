@@ -42,6 +42,94 @@ enum ConversationTranscriptScrollPolicy {
         distanceToBottom > atBottomThreshold
     }
 
+    /// `onScrollGeometryChange` compares successive transformed values and
+    /// runs its action on a change, but a value flipping twice inside one
+    /// layout pass (a lazily realized row re-measuring mid-drag read 52, 46,
+    /// then 172 points from the bottom within 8 ms) had only the first flip
+    /// delivered while the observer recorded the second, so the scrolled-away
+    /// flag stayed frozen for the rest of that scroll (#280). Observing the
+    /// distance in bands of `atBottomThreshold` next to the flag makes the
+    /// next band crossing deliver the current flag again, bounding the loss
+    /// to one band of travel.
+    static func distanceBand(
+        distanceToBottom: CGFloat,
+        bandHeight: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Int {
+        Int((distanceToBottom / bandHeight).rounded(.down))
+    }
+
+    /// The viewport sits past the end of content that is taller than its
+    /// container: the last rows are hidden above a blank band, yet
+    /// `isScrolledAway` reads "at bottom". Content shorter than the container
+    /// rests at a negative distance by construction and is never past the end.
+    /// `verticalInsets` is the container's top + bottom content inset, which
+    /// `containerHeight` (the full bounds) includes but the content does not.
+    static func isPastEnd(
+        distanceToBottom: CGFloat,
+        contentHeight: CGFloat,
+        containerHeight: CGFloat,
+        verticalInsets: CGFloat = 0,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Bool {
+        contentHeight > containerHeight - verticalInsets
+            && distanceToBottom < -atBottomThreshold
+    }
+
+    enum RePinDecision: Equatable {
+        /// The viewport rests within the content.
+        case none
+        /// Past the end but still dragging or decelerating; check again later.
+        case deferred
+        case rePin(offsetY: CGFloat)
+    }
+
+    /// Whether, and where, a resting viewport must be re-pinned to the bottom
+    /// (#271): past the end (`isPastEnd`) the offset is stale for content that
+    /// shrank, and the distance is exactly the correction. A bounce past the
+    /// bottom reads the same geometry, so a viewport the user is still
+    /// dragging, or that is decelerating (which includes the bounce back), is
+    /// left to settle on its own.
+    static func rePinDecision(
+        contentOffsetY: CGFloat,
+        distanceToBottom: CGFloat,
+        isInteracting: Bool,
+        contentHeight: CGFloat,
+        containerHeight: CGFloat,
+        verticalInsets: CGFloat = 0,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> RePinDecision {
+        guard isPastEnd(
+            distanceToBottom: distanceToBottom,
+            contentHeight: contentHeight,
+            containerHeight: containerHeight,
+            verticalInsets: verticalInsets,
+            atBottomThreshold: atBottomThreshold
+        ) else { return .none }
+        return isInteracting ? .deferred : .rePin(offsetY: contentOffsetY + distanceToBottom)
+    }
+
+    /// A footer row appearing or disappearing under the transcript resizes
+    /// its container while `contentOffset` stays where it was (#272). At rest
+    /// at the bottom that slides the last rows under the new row and the
+    /// geometry reads scrolled away, so a following viewport is re-pinned to
+    /// the bottom. Scrolled away, the container resizes at its bottom edge and
+    /// the content under the reader does not move, so nothing is adjusted;
+    /// before the entry scroll the viewport is not following yet. A viewport
+    /// under the user's finger is left alone too: the pan would fight the
+    /// re-pin, and the edge then shows Go to End as usual.
+    static func shouldRePinOnContainerHeightChange(
+        oldContainerHeight: CGFloat,
+        newContainerHeight: CGFloat,
+        isDragging: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool
+    ) -> Bool {
+        oldContainerHeight != newContainerHeight && !isDragging && shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
     /// The scrolled-away flag driving "Go to End" and follow-to-bottom.
     /// `onScrollGeometryChange` is edge-triggered and its edges are ignored
     /// while the entry scroll or a programmatic follow is in flight; an edge
@@ -82,6 +170,19 @@ enum ConversationTranscriptScrollPolicy {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
+    }
+
+    /// `userIsScrolledAway` clearing is a follow only when Go to End cleared
+    /// it: the button sits outside the `ScrollViewReader`, so it raises
+    /// `isScrollingToBottom` and clears the flag for the `onChange` to scroll.
+    /// A geometry edge clearing the flag means the viewport already rests
+    /// within `atBottomThreshold` and nothing is to be scrolled. Such an edge
+    /// can also be a transient mid-drag reading (a lazily realized row
+    /// re-measuring), and a forced scroll then fights the user's pan: the
+    /// interrupted animation left the geometry observer silent, so the next
+    /// swipes reached far up the transcript without Go to End (#280).
+    static func shouldFollowOnScrolledAwayCleared(isScrollingToBottom: Bool) -> Bool {
+        isScrollingToBottom
     }
 
     /// The band an automatic follow may re-pin from: drifted past
@@ -152,5 +253,27 @@ enum ConversationTranscriptScrollPolicy {
             driftTolerance: driftTolerance,
             atBottomThreshold: atBottomThreshold
         )
+    }
+
+    /// `scrollTo` targets the bottom as laid out when the animation starts, and
+    /// rows the lazy stack realizes during it grow the content underneath, so
+    /// a forced follow can come to rest above the real bottom (Go to End on
+    /// the 32-row demo transcript landed 379 points short). The follow used to
+    /// be re-issued by the geometry edge clearing the flag, which #280 stopped
+    /// so it would not fight the user's pan; the follow itself now re-scrolls
+    /// while its landing still reads scrolled away, a bounded number of times.
+    /// Automatic follows are not retried (the bottom anchor keeps a pinned
+    /// viewport pinned and the next delta re-pins a drifted one), nor is any
+    /// follow once the user has taken over the scroll view, and an unknown
+    /// distance proves nothing.
+    static func shouldRetryFollowLanding(
+        forced: Bool,
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool,
+        retriesLeft: Int,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> Bool {
+        guard forced, retriesLeft > 0, !isInteracting, let distanceToBottom else { return false }
+        return isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold)
     }
 }

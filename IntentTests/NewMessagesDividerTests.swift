@@ -338,6 +338,145 @@ struct ConversationTranscriptScrollPolicyTests {
             contentHeight: 1_000, contentOffsetY: 360, containerHeight: 700) == -60)
     }
 
+    private typealias RePinDecision = ConversationTranscriptScrollPolicy.RePinDecision
+
+    /// Geometry of a 1 000 pt transcript in a 700 pt viewport; `offsetY` is
+    /// the resting offset (300 is the bottom) and the distance follows.
+    private func rePinDecision(
+        offsetY: CGFloat,
+        isInteracting: Bool = false,
+        contentHeight: CGFloat = 1_000,
+        containerHeight: CGFloat = 700,
+        topInset: CGFloat = 0,
+        bottomInset: CGFloat = 0
+    ) -> RePinDecision {
+        ConversationTranscriptScrollPolicy.rePinDecision(
+            contentOffsetY: offsetY,
+            distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: contentHeight,
+                contentOffsetY: offsetY,
+                containerHeight: containerHeight,
+                bottomInset: bottomInset
+            ),
+            isInteracting: isInteracting,
+            contentHeight: contentHeight,
+            containerHeight: containerHeight,
+            verticalInsets: topInset + bottomInset,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression (#271): on return to a conversation the viewport could rest
+    /// past the end of the content — a blank band under the last message —
+    /// while `isScrolledAway` read "at bottom" and hid Go to End.
+    @Test func restingPastEndIsClampedToBottom() {
+        #expect(rePinDecision(offsetY: 351) == .rePin(offsetY: 300))
+        #expect(rePinDecision(offsetY: 600) == .rePin(offsetY: 300))
+        #expect(rePinDecision(offsetY: 350) == .none)
+        #expect(rePinDecision(offsetY: 300) == .none)
+        #expect(rePinDecision(offsetY: 100) == .none)
+        #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -300))
+    }
+
+    /// A bounce past the bottom reads the same negative distance; the
+    /// viewport is dragging or decelerating then and must settle on its own.
+    @Test func bouncingPastEndIsDeferred() {
+        #expect(rePinDecision(offsetY: 380, isInteracting: true) == .deferred)
+        #expect(rePinDecision(offsetY: 600, isInteracting: true) == .deferred)
+        #expect(rePinDecision(offsetY: 380, isInteracting: false) == .rePin(offsetY: 300))
+    }
+
+    /// Content shorter than the container rests at a negative distance by
+    /// construction; there is no end to be past.
+    @Test func shortContentIsNotPastEnd() {
+        #expect(rePinDecision(offsetY: 0, contentHeight: 400, containerHeight: 700) == .none)
+        #expect(rePinDecision(offsetY: 100, contentHeight: 700, containerHeight: 700) == .none)
+        // Insets shrink the room the content has: 650 pt of content fits a
+        // 780 pt container outright, but not once 150 pt of insets are taken.
+        #expect(rePinDecision(offsetY: 0, contentHeight: 650, containerHeight: 780) == .none)
+        #expect(rePinDecision(
+            offsetY: 0, contentHeight: 650, containerHeight: 780, topInset: 150
+        ) == .rePin(offsetY: -130))
+    }
+
+    /// A bottom inset (keyboard, composer) is part of the bottom the
+    /// viewport is clamped to.
+    @Test func pastEndClampAccountsForBottomInset() {
+        #expect(rePinDecision(offsetY: 400, bottomInset: 20) == .rePin(offsetY: 320))
+        #expect(rePinDecision(offsetY: 320, bottomInset: 20) == .none)
+    }
+
+    @Test func pastEndGeometryIgnoresInteractionState() {
+        #expect(ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -80, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
+        #expect(!ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -80, contentHeight: 400, containerHeight: 700, atBottomThreshold: 50))
+        #expect(!ConversationTranscriptScrollPolicy.isPastEnd(
+            distanceToBottom: -20, contentHeight: 1_000, containerHeight: 700, atBottomThreshold: 50))
+    }
+
+    private func rePinOnContainerChange(
+        from oldHeight: CGFloat, to newHeight: CGFloat,
+        isDragging: Bool = false,
+        hasInitiallyScrolled: Bool = true, userIsScrolledAway: Bool = false
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldRePinOnContainerHeightChange(
+            oldContainerHeight: oldHeight,
+            newContainerHeight: newHeight,
+            isDragging: isDragging,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    /// Regression (#272): a footer row appearing under the transcript shrank
+    /// the container (simulator: 757.7 → 677.3 for an 80 pt row) while
+    /// `contentOffset` stayed put, so the geometry read 80 pt from the bottom
+    /// and Go to End appeared instead of the transcript staying at the end.
+    @Test func containerShrinkWhilePinnedRePinsToBottom() {
+        #expect(ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 780) == 0)
+        let shrunk = ConversationTranscriptScrollPolicy.distanceToBottom(
+            contentHeight: 1_968, contentOffsetY: 1_188, containerHeight: 700)
+        #expect(shrunk == 80)
+        #expect(ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: shrunk))
+        #expect(rePinOnContainerChange(from: 780, to: 700))
+    }
+
+    /// The row disappearing grows the container back; a pinned viewport is
+    /// re-pinned the other way rather than left past the end.
+    @Test func containerGrowthWhilePinnedRePinsToBottom() {
+        #expect(rePinOnContainerChange(from: 700, to: 780))
+    }
+
+    /// The pan would fight a re-pin under the user's finger; the edge then
+    /// shows Go to End as usual.
+    @Test func containerChangeUnderFingerIsLeftAlone() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, isDragging: true))
+        #expect(rePinOnContainerChange(from: 780, to: 700, isDragging: false))
+    }
+
+    /// Scrolled away, the container resizes at its bottom edge and the content
+    /// under the reader does not move (observed in the simulator: the anchored
+    /// row kept its frame across both edges), so nothing is adjusted.
+    @Test func containerChangeWhileScrolledAwayLeavesContentInPlace() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, userIsScrolledAway: true))
+        #expect(!rePinOnContainerChange(from: 700, to: 780, userIsScrolledAway: true))
+    }
+
+    @Test func unchangedContainerNeverRePins() {
+        #expect(!rePinOnContainerChange(from: 780, to: 780))
+        #expect(!rePinOnContainerChange(from: 780, to: 780, userIsScrolledAway: true))
+    }
+
+    /// Before the entry scroll the viewport is not following yet; the entry
+    /// scroll decides where it lands.
+    @Test func containerChangeBeforeEntryScrollIsIgnored() {
+        #expect(!rePinOnContainerChange(from: 780, to: 700, hasInitiallyScrolled: false))
+        #expect(!rePinOnContainerChange(
+            from: 780, to: 700, hasInitiallyScrolled: false, userIsScrolledAway: true))
+    }
+
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
             hasInitiallyScrolled: false,
@@ -351,6 +490,32 @@ struct ConversationTranscriptScrollPolicyTests {
             hasInitiallyScrolled: true,
             userIsScrolledAway: true
         ))
+    }
+
+    /// #280: the observed geometry changes at every band crossing so a flag
+    /// edge the observer drops is re-delivered within one band of travel;
+    /// the band is sized to the at-bottom threshold.
+    @Test func distanceBandStepsAtEveryThreshold() {
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 0, bandHeight: 50) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 46.7, bandHeight: 50) == 0)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 52.7, bandHeight: 50) == 1)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 172.7, bandHeight: 50) == 3)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 210, bandHeight: 50) == 4)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: -10, bandHeight: 50) == -1)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 120)
+            == ConversationTranscriptScrollPolicy.distanceBand(
+                distanceToBottom: 120,
+                bandHeight: Constants.Conversation.Transcript.atBottomThreshold))
+    }
+
+    /// #280: a geometry edge clearing the flag (the viewport already at the
+    /// bottom, or a transient mid-drag reading) must not start a forced scroll;
+    /// only the Go to End tap, which raises `isScrollingToBottom` first, does.
+    @Test func scrolledAwayClearedFollowsOnlyFromGoToEnd() {
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            isScrollingToBottom: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            isScrollingToBottom: false))
     }
 
     @Test func streamingStartScrollsOnlyWhileFollowing() {
@@ -466,6 +631,41 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
         #expect(executeFollow(forced: true, distanceToBottom: 0))
         #expect(executeFollow(forced: true, distanceToBottom: nil))
+    }
+
+    private func retryLanding(
+        forced: Bool = true,
+        distanceToBottom: CGFloat? = 379,
+        isInteracting: Bool = false,
+        retriesLeft: Int = 2
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
+            forced: forced,
+            distanceToBottom: distanceToBottom,
+            isInteracting: isInteracting,
+            retriesLeft: retriesLeft,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression: Go to End's scroll came to rest 379 points above the
+    /// bottom because rows realized during the animation grew the content,
+    /// and the button came straight back once the gate reopened.
+    @Test func forcedFollowLandingShortIsScrolledAgain() {
+        #expect(retryLanding(distanceToBottom: 379))
+        #expect(retryLanding(distanceToBottom: 51))
+        #expect(!retryLanding(distanceToBottom: 50))
+        #expect(!retryLanding(distanceToBottom: 0))
+        #expect(!retryLanding(distanceToBottom: -30))
+    }
+
+    @Test func followLandingRetryIsBoundedForcedOnlyAndYieldsToTheUser() {
+        #expect(!retryLanding(forced: false))
+        #expect(!retryLanding(retriesLeft: 0))
+        #expect(retryLanding(retriesLeft: 1))
+        #expect(!retryLanding(isInteracting: true))
+        #expect(!retryLanding(distanceToBottom: nil))
+        #expect(Constants.Conversation.Transcript.followLandingRetries > 0)
     }
 
     /// An unknown distance never releases a scrolled-away state: every

@@ -40,6 +40,10 @@ enum Constants {
             static let dividerProbeDelay: Double = 0.15
             static let scrollDebounceMilliseconds = 100
             static let scrollCompletionMilliseconds = 300
+            /// How many times a forced follow that came to rest short of the
+            /// bottom (content grew under the animation) scrolls again before
+            /// the scrolled-away gate reopens on whatever geometry it reached.
+            static let followLandingRetries = 2
             /// Minimum spacing between follow-to-bottom scrolls issued for
             /// streaming deltas. The bottom-anchored ScrollView keeps a pinned
             /// viewport on the bottom as content grows, so deltas only re-pin a
@@ -48,6 +52,10 @@ enum Constants {
             /// Distance from the bottom (points) at or under which the viewport
             /// counts as pinned and a streaming delta issues no scroll at all.
             static let streamingFollowDriftTolerance: CGFloat = 1
+            /// Delay between a geometry edge reading past the end of the
+            /// content and the re-check that re-pins the viewport, so a bounce
+            /// or a mid-animation frame has settled first.
+            static let pastEndSettleMilliseconds = 150
         }
 
         enum QuestionWizard {}
