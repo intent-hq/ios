@@ -799,7 +799,9 @@ final class AppCoordinatorTests {
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
 
         // Cold start: the URL arrives while currentScreen is still .loading.
+        // Two invites before load coalesce into a single notice.
         coordinator.handleIncomingURL(URL(string: "intent://invite?inviteId=inv-1&secret=s")!)
+        coordinator.handleIncomingURL(URL(string: "intent://invite?inviteId=inv-2&secret=s")!)
         #expect(!coordinator.isInviteNoticePresented)
 
         coordinator.onLoadComplete()
@@ -810,6 +812,13 @@ final class AppCoordinatorTests {
         } else {
             Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
         }
+
+        // The stash is consumed once: after the user dismisses the alert a
+        // later load completion must not replay the notice.
+        coordinator.isInviteNoticePresented = false
+        coordinator.onLoadComplete()
+        #expect(!coordinator.isInviteNoticePresented,
+            "A stashed invite notice must not replay after dismissal")
     }
 
     @Test @MainActor func handleIncomingURL_pairURL_presentsConfirmation() {
