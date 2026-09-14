@@ -35,10 +35,12 @@ class ScrollViewMomentumProxy {
     /// out several times per frame while the keyboard animates, reading past
     /// the end in some passes and not others, so a re-pin is only applied
     /// once the same resting geometry has been read twice — pass the
-    /// geometry a `.deferred` outcome carries back on the next check.
+    /// geometry a `.deferred` outcome carries back on the next check. A
+    /// programmatic follow (`isFollowing`) animates through the same geometry
+    /// and is deferred like a gesture, so the clamp cannot land mid-animation.
     /// `.unavailable` when the scroll view has not been found, so the caller
     /// can fall back.
-    func rePinIfRestingPastEnd(confirming: RestingGeometry?) -> RePinOutcome {
+    func rePinIfRestingPastEnd(confirming: RestingGeometry?, isFollowing: Bool = false) -> RePinOutcome {
         guard let scrollView else { return .unavailable }
         let insets = scrollView.adjustedContentInset
         let decision = ConversationTranscriptScrollPolicy.rePinDecision(
@@ -49,7 +51,8 @@ class ScrollViewMomentumProxy {
                 containerHeight: scrollView.bounds.height,
                 bottomInset: insets.bottom
             ),
-            isInteracting: scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
+            isInteracting: isFollowing
+                || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
             contentHeight: scrollView.contentSize.height,
             containerHeight: scrollView.bounds.height,
             verticalInsets: insets.top + insets.bottom
@@ -88,8 +91,8 @@ class ScrollViewMomentumProxy {
     enum RePinOutcome {
         case rePinned
         case notPastEnd
-        /// Past the end but still dragging or decelerating (nil), or read
-        /// past the end for the first time; check again later.
+        /// Past the end but still dragging, decelerating or following (nil),
+        /// or read past the end for the first time; check again later.
         case deferred(RestingGeometry?)
         case unavailable
     }

@@ -183,15 +183,18 @@ struct ConversationTranscriptView: View {
                 scheduleRePinIfRestingPastEnd()
             }
         }
+        .onDisappear(perform: cancelPastEndRePin)
     }
 
     /// Re-checks the live scroll view once the geometry has had time to
     /// settle (a bounce or a mid-animation frame reads past the end too) and
     /// clamps the offset back to the bottom once two checks agree; a viewport
     /// still bouncing or re-laying out is checked again after it settles,
-    /// since the past-end edge has already fired and will not fire twice.
-    /// Without a scroll view to clamp, the viewport is treated as scrolled
-    /// away so Go to End offers the way back.
+    /// since the past-end edge has already fired and will not fire twice. A
+    /// programmatic follow in flight is deferred the same way so the clamp
+    /// cannot land mid-animation. Without a scroll view to clamp, the viewport
+    /// is recorded as scrolled away through the usual gate so Go to End
+    /// offers the way back once the gate is open.
     private func scheduleRePinIfRestingPastEnd(
         confirming: ScrollViewMomentumProxy.RestingGeometry? = nil
     ) {
@@ -200,16 +203,25 @@ struct ConversationTranscriptView: View {
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
             guard !Task.isCancelled else { return }
             scrollState.pastEndRePinTask = nil
-            let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: confirming)
+            let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(
+                confirming: confirming,
+                isFollowing: scrollDebounceTask != nil || isScrollingToBottom
+            )
             switch outcome {
             case .deferred(let geometry):
                 scheduleRePinIfRestingPastEnd(confirming: geometry)
             case .unavailable:
-                userIsScrolledAway = true
+                scrollState.liveIsScrolledAway = true
+                syncScrolledAwayFromGeometry()
             case .rePinned, .notPastEnd:
                 break
             }
         }
+    }
+
+    private func cancelPastEndRePin() {
+        scrollState.pastEndRePinTask?.cancel()
+        scrollState.pastEndRePinTask = nil
     }
 
     /// A footer row appearing or disappearing under the transcript resizes its
@@ -532,6 +544,7 @@ struct ConversationTranscriptView: View {
             }
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
+            scrollDebounceTask = nil
             syncScrolledAwayFromGeometry()
         }
     }
