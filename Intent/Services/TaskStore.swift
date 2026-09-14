@@ -164,16 +164,23 @@ import Observation
 
         // Explicit allowlist (mirrors AgentStore / WorkspaceStore): only events
         // that can change a field a `WorkspaceTask` row renders (id, title,
-        // status, updatedAt) refetch `task.list`. `task:created` changes list
-        // membership; `task:status-changed` changes status/updatedAt.
+        // status, updatedAt) or list membership refetch `task.list`.
+        // `task:created` changes membership; `task:status-changed` changes
+        // status/updatedAt.
         //
-        // Deliberately excluded: `task:ready-tasks-changed` — readiness is not
-        // rendered, and its status-change emissions always pair with a
-        // `task:status-changed` that already refetches (its relation-change /
-        // note-deleted emissions carry no rendered field); `task:agent-linked`
-        // / `task:agent-unlinked` — the assignee is not part of the row. Task
-        // body/title edits ride `note:updated`, not `task:*`, so they never
-        // reached this store either way.
+        // `task:ready-tasks-changed` is excluded in general — readiness is not
+        // rendered, its status-change emissions always pair with a
+        // `task:status-changed` that already refetches, and its
+        // `relations-changed` emissions carry no rendered field — except when
+        // `data.triggeredBy.reason == "note-deleted"`: intentd's `delete_note`
+        // emits no other `task:*` type (only `note:deleted`, which this store
+        // does not receive), so that emission is the only `task:*` signal that
+        // a row left the list.
+        //
+        // Also excluded: `task:agent-linked` / `task:agent-unlinked` — the
+        // assignee is not part of the row. Task body/title edits ride
+        // `note:updated`, not `task:*`, so they never reached this store
+        // either way.
         //
         // The refetch runs only in the non-live fallback (no `task.subscribe`
         // snapshot yet, or after a subscription loss); while live, deltas
@@ -181,6 +188,11 @@ import Observation
         switch eventType {
         case "task:created", "task:status-changed":
             if !tasksLive {
+                Task { await fetchAll() }
+            }
+        case "task:ready-tasks-changed":
+            let triggeredBy = (event["data"] as? [String: Any])?["triggeredBy"] as? [String: Any]
+            if triggeredBy?["reason"] as? String == "note-deleted", !tasksLive {
                 Task { await fetchAll() }
             }
         default:

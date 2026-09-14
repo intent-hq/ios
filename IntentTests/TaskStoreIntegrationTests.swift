@@ -285,6 +285,47 @@ struct TaskStoreIntegrationTests {
         #expect(!fake.didCallMethod("task.list"))
     }
 
+    /// intentd's `delete_note` emits `task:ready-tasks-changed` with
+    /// `data.triggeredBy.reason == "note-deleted"` and no other `task:*` type,
+    /// so that emission is the only signal that a task row left the list.
+    private func readyTasksChangedEvent(triggeredBy: [String: Any]) -> [String: Any] {
+        ["event": [
+            "type": "task:ready-tasks-changed",
+            "workspaceId": "ws-1",
+            "data": [
+                "readyTaskIds": ["task-2"],
+                "triggeredBy": triggeredBy,
+                "computedAt": "2026-03-01T10:00:00Z"
+            ] as [String: Any]
+        ] as [String: Any]]
+    }
+
+    @Test func readyTasksChangedForDeletedNoteRefetchesWhenNotLive() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": []]
+
+        store.handleEvent("events.event", params: readyTasksChangedEvent(
+            triggeredBy: ["noteId": "task-1", "reason": "note-deleted"]))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.didCallMethod("task.list"))
+    }
+
+    @Test func readyTasksChangedForOtherReasonsDoesNotRefetch() async throws {
+        let fake = FakeConnectionManager()
+        let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
+        fake.responseMap["task.list"] = ["tasks": []]
+
+        store.handleEvent("events.event", params: readyTasksChangedEvent(
+            triggeredBy: ["noteId": "task-1", "reason": "relations-changed"]))
+        store.handleEvent("events.event", params: readyTasksChangedEvent(
+            triggeredBy: ["noteId": "task-1", "previousStatus": "not_started", "newStatus": "complete"]))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!fake.didCallMethod("task.list"))
+    }
+
     @Test func allowlistedTaskEventForOtherWorkspaceDoesNotRefetch() async throws {
         let fake = FakeConnectionManager()
         let store = TaskStore(workspaceId: "ws-1", connectionManager: fake)
