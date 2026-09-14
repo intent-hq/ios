@@ -475,6 +475,84 @@ struct ConversationStoreLiveStateTests {
         #expect(store.messages[1].isStreaming == true)
     }
 
+    /// Agent A's page (truncated, with an in-flight assistant message) that
+    /// must never land once the transcript is bound to agent B.
+    private var stalePageForAgentA: [String: Any] {
+        [
+            "messages": [
+                [
+                    "id": "msg-a1", "role": "assistant",
+                    "contentBlocks": [["type": "text", "id": "msg-a1:0", "text": "Stale A"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z",
+                    "isStreaming": true
+                ]
+            ],
+            "truncated": true,
+            "totalMessages": 42
+        ]
+    }
+
+    /// Rebind the store to agent B (`chat.subscribe` → `liveTranscript.subscribe`
+    /// binds synchronously) and seed B's transcript from its live snapshot.
+    private func rebindToAgentB(_ store: ConversationStore, _ fake: FakeConnectionManager) async {
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-chat-123"]
+        await store.subscribeLiveChat(agentId: "agent-b")
+        store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
+            [
+                "id": "msg-b1", "role": "user",
+                "contentBlocks": [["type": "text", "id": "msg-b1:0", "text": "Hello B"]],
+                "timestamp": "2026-06-27T02:00:00.000Z"
+            ]
+        ]))
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+        #expect(store.isStreaming == false)
+    }
+
+    private func expectAgentBTranscriptIntact(_ store: ConversationStore) {
+        #expect(store.messages.map(\.id) == ["msg-b1"])
+        #expect(store.messages.first?.contentBlocks?.first?.resolvedText == "Hello B")
+        #expect(store.isStreaming == false)
+        #expect(store.isTruncated == false)
+        #expect(store.totalMessageCount == 1)
+    }
+
+    @Test func staleFetchResolvedAfterRebindDoesNotOverwriteNewAgent() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchTask = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while !fake.didCallMethod("agent.getConversation") {
+            await Task.yield()
+        }
+
+        // Rebind while A's request is still in flight, then let A's page arrive.
+        await rebindToAgentB(store, fake)
+        fake.resolvePending("agent.getConversation", with: stalePageForAgentA)
+        await fetchTask.value
+
+        expectAgentBTranscriptIntact(store)
+    }
+
+    @Test func staleFetchRebindDuringDecodeDoesNotOverwriteNewAgent() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchTask = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while !fake.didCallMethod("agent.getConversation") {
+            await Task.yield()
+        }
+
+        // A's response arrives while A is still bound; the fetch resumes on
+        // MainActor and hops off for the @concurrent decode. Rebinding to B in
+        // that post-response window must still drop A's page.
+        fake.resolvePending("agent.getConversation", with: stalePageForAgentA)
+        await Task.yield()
+        await rebindToAgentB(store, fake)
+        await fetchTask.value
+
+        expectAgentBTranscriptIntact(store)
+    }
+
     // MARK: - Firehose gating while chat channel is live
 
     @Test func firehoseActivityIgnoredWhenChatLive() async throws {

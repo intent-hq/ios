@@ -71,7 +71,13 @@ final class ConversationLiveTranscript {
                 "agent.getConversation",
                 params: params
             )
-            if let page = await Self.decodeConversationPage(InboundJSONValue(value: result)) {
+            // Both awaits (RPC and off-main decode) yield MainActor; a rebind
+            // to another agent in either window makes this page stale, so it
+            // must not touch the new agent's transcript or streaming state.
+            guard self.agentId == agentId else { return }
+            let page = await Self.decodeConversationPage(InboundJSONValue(value: result))
+            guard self.agentId == agentId else { return }
+            if let page {
                 isTruncated = page.truncated
                 totalMessageCount = page.totalMessages ?? page.messages.count
                 mergeFetchedMessages(page.messages)
