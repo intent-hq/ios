@@ -1,7 +1,20 @@
 import Foundation
 
+/// Decodes daemon JSON dictionaries (already parsed by `JSONSerialization`)
+/// into wire models through one shared `JSONDecoder` instead of allocating a
+/// decoder per value. Nonisolated so the off-main inbound frame parse can run
+/// it; `JSONDecoder` is `Sendable` and reentrant.
+nonisolated enum WireDictionaryDecoder {
+    private static let decoder = JSONDecoder()
+
+    static func decode<T: Decodable>(_ type: T.Type, from dictionary: [String: Any]) -> T? {
+        guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
+        return try? decoder.decode(type, from: data)
+    }
+}
+
 /// The role of a message sender.
-enum MessageRole: String, Codable {
+nonisolated enum MessageRole: String, Codable {
     case user
     case assistant
     case system
@@ -15,7 +28,7 @@ enum MessageRole: String, Codable {
 }
 
 /// A tool call within a conversation message.
-struct ToolCall: Identifiable, Codable, Equatable {
+nonisolated struct ToolCall: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     var arguments: AnyCodable?
@@ -71,7 +84,7 @@ struct ToolCall: Identifiable, Codable, Equatable {
 }
 
 /// A tool result within a conversation message.
-struct ToolResult: Codable, Equatable {
+nonisolated struct ToolResult: Codable, Equatable {
     let toolCallId: String
     var content: AnyCodable?
     var isError: Bool?
@@ -130,7 +143,11 @@ struct QueuedMessage: Identifiable, Codable {
 /// `Equatable` is synthesized over every stored field so transcript rows can
 /// be compared by value and skip re-rendering when a streaming delta did not
 /// touch them (see `MessageRowContent`).
-struct ConversationMessage: Identifiable, Codable, Equatable {
+///
+/// Nonisolated so chat snapshots can be built off MainActor in the inbound
+/// frame parse and `Sendable` is checked structurally over the stored
+/// value-type fields.
+nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
     let role: MessageRole
     var contentBlocks: [ContentBlock]?
@@ -197,35 +214,17 @@ struct ConversationMessage: Identifiable, Codable, Equatable {
 
         var contentBlocks: [ContentBlock]?
         if let blocksArray = dict["contentBlocks"] as? [[String: Any]] {
-            contentBlocks = blocksArray.compactMap { blockDict -> ContentBlock? in
-                guard let data = try? JSONSerialization.data(withJSONObject: blockDict),
-                      let block = try? JSONDecoder().decode(ContentBlock.self, from: data) else {
-                    return nil
-                }
-                return block
-            }
+            contentBlocks = blocksArray.compactMap { ContentBlock.decode($0) }
         }
 
         var toolCalls: [ToolCall]?
         if let callsArray = dict["toolCalls"] as? [[String: Any]] {
-            toolCalls = callsArray.compactMap { callDict -> ToolCall? in
-                guard let data = try? JSONSerialization.data(withJSONObject: callDict),
-                      let call = try? JSONDecoder().decode(ToolCall.self, from: data) else {
-                    return nil
-                }
-                return call
-            }
+            toolCalls = callsArray.compactMap { WireDictionaryDecoder.decode(ToolCall.self, from: $0) }
         }
 
         var toolResults: [ToolResult]?
         if let resultsArray = dict["toolResults"] as? [[String: Any]] {
-            toolResults = resultsArray.compactMap { resultDict -> ToolResult? in
-                guard let data = try? JSONSerialization.data(withJSONObject: resultDict),
-                      let result = try? JSONDecoder().decode(ToolResult.self, from: data) else {
-                    return nil
-                }
-                return result
-            }
+            toolResults = resultsArray.compactMap { WireDictionaryDecoder.decode(ToolResult.self, from: $0) }
         }
 
         var metadata: [String: AnyCodable]?

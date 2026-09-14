@@ -1,7 +1,7 @@
 import Foundation
 
 /// The type of a content block in a conversation message.
-enum ContentBlockType: String, Codable {
+nonisolated enum ContentBlockType: String, Codable {
     case text
     case code
     case toolUse = "tool_use"
@@ -21,7 +21,7 @@ enum ContentBlockType: String, Codable {
 /// Nested contents of a standalone `resource` content block (PROTOCOL §7.1):
 /// `{ type: "resource", resource: { uri?, mimeType, text } }`. Decoded leniently —
 /// consumers validate the fields they need (e.g. question parsing is MIME-gated).
-struct ResourceContents: Codable, Equatable {
+nonisolated struct ResourceContents: Codable, Equatable {
     var uri: String?
     var mimeType: String?
     var text: String?
@@ -34,7 +34,10 @@ struct ResourceContents: Codable, Equatable {
 /// `Equatable` is synthesized over every stored field (legacy aliases
 /// included) so a `ConversationMessage` compares by value; `AnyCodable`
 /// fields compare via their JSON encoding.
-struct ContentBlock: Identifiable, Codable, Equatable {
+///
+/// Nonisolated so chat snapshots and block deltas can be decoded off
+/// MainActor (`SubscriptionPush.parse` runs in the inbound frame parse).
+nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
     /// Auto-generated if not present in JSON
     let id: String
     let type: ContentBlockType
@@ -148,6 +151,13 @@ struct ContentBlock: Identifiable, Codable, Equatable {
         dataTruncated = try? container.decode(Bool.self, forKey: .dataTruncated)
         dataIsThumbnail = try? container.decode(Bool.self, forKey: .dataIsThumbnail)
         dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
+    }
+
+    /// Decodes a wire block dictionary (already parsed by `JSONSerialization`)
+    /// through the shared `WireDictionaryDecoder`; nil when it is not a valid
+    /// block.
+    static func decode(_ dictionary: [String: Any]) -> ContentBlock? {
+        WireDictionaryDecoder.decode(ContentBlock.self, from: dictionary)
     }
 
     /// Resolved text content, falling back to legacy `content` field.

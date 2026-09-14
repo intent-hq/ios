@@ -100,9 +100,12 @@ enum Constants {
     }
 
     enum Connection {
-        static let logPreviewCharacterLimit = 100
+        nonisolated static let logPreviewCharacterLimit = 100
         static let reconnectBackoffExponentCap = 5
         static let reconnectBackoffMaximum: Double = 30
+        /// An inbound frame whose off-main parse or MainActor dispatch takes
+        /// longer than this (one 60 Hz frame) is logged as a slow frame.
+        nonisolated static let slowFrameLogThreshold: TimeInterval = 0.016
     }
 
     enum WebSocket {

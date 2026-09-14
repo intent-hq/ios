@@ -1,7 +1,11 @@
 import Foundation
 
 /// A type-erased Codable wrapper for arbitrary JSON values.
-struct AnyCodable: Codable, Equatable {
+///
+/// Nonisolated so wire models can be decoded off MainActor. `@unchecked
+/// Sendable`: `value` is an immutable JSON container that is never mutated
+/// after construction.
+nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     let value: Any
 
     init(_ value: Any) {

@@ -312,4 +312,46 @@ struct AgentStoreTests {
         #expect(!fake.didCallMethod("agent.list"))
         #expect(store.hasLoaded == false)
     }
+
+    // MARK: - Event allowlist (streaming firehose must not refetch the list)
+
+    private func deliverAgentEvent(_ fake: FakeConnectionManager, type: String) {
+        fake.deliverEvent(method: "events.event", params: [
+            "subscriptionId": "sub-agents",
+            "event": [
+                "type": type,
+                "workspaceId": "ws-1",
+                "data": ["agentId": "agent-1"]
+            ]
+        ] as [String: Any])
+    }
+
+    /// Delivers `type` to a loaded, observing store and returns the number of
+    /// `agent.list` requests it issued once the debounce window has elapsed.
+    private func agentListRequests(after type: String) async throws -> Int {
+        let (fake, store) = await makeLoadedStore()
+        store.startObservingEvents()
+        fake.clearRequestLog()
+
+        deliverAgentEvent(fake, type: type)
+        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+
+        return fake.paramsForMethod("agent.list").count
+    }
+
+    @Test func streamActivityDoesNotRefetchAgents() async throws {
+        #expect(try await agentListRequests(after: "agent:stream:activity") == 0)
+    }
+
+    @Test func toolCallDoesNotRefetchAgents() async throws {
+        #expect(try await agentListRequests(after: "agent:tool:call") == 0)
+    }
+
+    @Test func statusChangedRefetchesAgents() async throws {
+        #expect(try await agentListRequests(after: "agent:status-changed") == 1)
+    }
+
+    @Test func updatedRefetchesAgents() async throws {
+        #expect(try await agentListRequests(after: "agent:updated") == 1)
+    }
 }

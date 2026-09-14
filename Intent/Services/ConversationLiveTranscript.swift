@@ -33,7 +33,6 @@ final class ConversationLiveTranscript {
     private var chatSeeded = false
     private var chatExpectedSeq = 0
     private var resnapshotInProgress = false
-    private let blockDecoder = JSONDecoder()
     private let timestampFormatter = ISO8601DateFormatter()
     @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
     @ObservationIgnored private var hydratedBlockOrder: [String] = []
@@ -72,12 +71,16 @@ final class ConversationLiveTranscript {
                 "agent.getConversation",
                 params: params
             )
-            if let response = result as? [String: Any],
-               let items = response["messages"] as? [[String: Any]] {
-                let fetched = items.compactMap { ConversationMessage.parseMessage($0) }
-                isTruncated = response["truncated"] as? Bool ?? false
-                totalMessageCount = response["totalMessages"] as? Int ?? fetched.count
-                mergeFetchedMessages(fetched)
+            // Both awaits (RPC and off-main decode) yield MainActor; a rebind
+            // to another agent in either window makes this page stale, so it
+            // must not touch the new agent's transcript or streaming state.
+            guard self.agentId == agentId else { return }
+            let page = await Self.decodeConversationPage(InboundJSONValue(value: result))
+            guard self.agentId == agentId else { return }
+            if let page {
+                isTruncated = page.truncated
+                totalMessageCount = page.totalMessages ?? page.messages.count
+                mergeFetchedMessages(page.messages)
                 remergeHydratedBlocks()
 
                 if let last = messages.last,
@@ -96,6 +99,34 @@ final class ConversationLiveTranscript {
             onInitialLoadCompleted?()
             isLoading = false
         }
+    }
+
+    /// Decoded `agent.getConversation` response.
+    private nonisolated struct ConversationPage: Sendable {
+        let messages: [ConversationMessage]
+        let truncated: Bool
+        let totalMessages: Int?
+    }
+
+    // MARK: - Off-main decoding (`@concurrent`: the dict→Data→JSONDecoder
+    // round-trip per message/block stays off MainActor; only the merge hops)
+
+    @concurrent
+    private nonisolated static func decodeConversationPage(_ result: InboundJSONValue) async -> ConversationPage? {
+        guard let response = result.value as? [String: Any],
+              let items = response["messages"] as? [[String: Any]] else { return nil }
+        return ConversationPage(
+            messages: items.compactMap { ConversationMessage.parseMessage($0) },
+            truncated: response["truncated"] as? Bool ?? false,
+            totalMessages: response["totalMessages"] as? Int
+        )
+    }
+
+    @concurrent
+    private nonisolated static func decodeMessageBlock(_ result: InboundJSONValue) async -> ContentBlock? {
+        guard let response = result.value as? [String: Any],
+              let blockDictionary = response["block"] as? [String: Any] else { return nil }
+        return ContentBlock.decode(blockDictionary)
     }
 
     private func mergeFetchedMessages(_ fetched: [ConversationMessage]) {
@@ -155,12 +186,9 @@ final class ConversationLiveTranscript {
                     "blockId": blockId,
                 ]
             )
+            let block = await Self.decodeMessageBlock(InboundJSONValue(value: result))
             guard self.agentId == agentId else { return }
-            guard let response = result as? [String: Any],
-                  let blockDictionary = response["block"] as? [String: Any],
-                  let data = try? JSONSerialization.data(withJSONObject: blockDictionary),
-                  let block = try? blockDecoder.decode(ContentBlock.self, from: data)
-            else {
+            guard let block else {
                 AppLog.conversation.error(
                     "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
                 return
@@ -287,7 +315,9 @@ final class ConversationLiveTranscript {
         chatLive = true
         chatSeeded = true
         chatExpectedSeq = push.seq + 1
-        messages = items.compactMap { ConversationMessage.parseMessage($0) }
+        // `parse` pre-decodes off MainActor; the fallback covers pushes built
+        // directly from raw dictionaries (tests).
+        messages = push.snapshotMessages ?? items.compactMap { ConversationMessage.parseMessage($0) }
         remergeHydratedBlocks()
 
         isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
@@ -304,7 +334,9 @@ final class ConversationLiveTranscript {
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
         var sawTerminal = false
         var sawUpsert = false
-        for entity in delta.added + delta.updated {
+        let entities = delta.chatBlocks
+            ?? (delta.added + delta.updated).compactMap { SubscriptionPush.ChatBlockEntity(entity: $0) }
+        for entity in entities {
             let result = upsertBlock(entity)
             sawUpsert = sawUpsert || result.applied
             sawTerminal = sawTerminal || result.terminal
@@ -332,33 +364,26 @@ final class ConversationLiveTranscript {
         onTranscriptReplaced?()
     }
 
-    private func upsertBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
-        guard let messageId = entity["messageId"] as? String,
-              let blockDictionary = entity["block"] as? [String: Any],
-              let data = try? JSONSerialization.data(withJSONObject: blockDictionary),
-              let block = try? blockDecoder.decode(ContentBlock.self, from: data)
-        else {
-            return (false, false)
-        }
-        let streamingComplete = entity["streamingComplete"] as? Bool ?? false
+    private func upsertBlock(_ entity: SubscriptionPush.ChatBlockEntity) -> (applied: Bool, terminal: Bool) {
+        let messageId = entity.messageId
+        let block = entity.block
+        let streamingComplete = entity.streamingComplete
 
         let messageIndex: Int
         if let existing = messages.firstIndex(where: { $0.id == messageId }) {
             messageIndex = existing
         } else {
-            let role = MessageRole(rawValue: entity["role"] as? String ?? "assistant") ?? .system
             messages.append(ConversationMessage(
                 id: messageId,
-                role: role,
+                role: entity.role,
                 contentBlocks: [],
-                timestamp: entity["timestamp"] as? String
-                    ?? timestampFormatter.string(from: Date()),
+                timestamp: entity.timestamp ?? timestampFormatter.string(from: Date()),
                 isStreaming: !streamingComplete
             ))
             messageIndex = messages.count - 1
         }
 
-        if let timestamp = entity["timestamp"] as? String, !timestamp.isEmpty {
+        if let timestamp = entity.timestamp, !timestamp.isEmpty {
             messages[messageIndex].timestamp = timestamp
         }
         var blocks = messages[messageIndex].contentBlocks ?? []
