@@ -339,7 +339,30 @@ extension SpecialistInfo {
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
         switch eventType {
-        case let t where t.hasPrefix("agent:"):
+        // Explicit allowlist (mirrors WorkspaceStore): only events that can
+        // change a field an `AgentSession` row renders refetch `agent.list`.
+        // Lifecycle events cover status and the streaming/processing/
+        // responding flags at turn boundaries; `agent:updated` carries
+        // name/model/effort, the pending-questions markers, digest and
+        // attention-cleared; `agent:retired`/`agent:restored` change list
+        // membership; `agent:last-message` fires once per persisted
+        // transcript row and feeds lastAgentResponse/lastUserMessage/
+        // lastMessageRole; `agent:attention-requested` feeds the pending
+        // attention request.
+        //
+        // Deliberately excluded (no rendered field depends on them, and
+        // several fire per token or per tool call mid-turn): `agent:stream:*`
+        // — including `agent:stream:end`, since the turn's persisted row
+        // arrives as `agent:last-message` and the flag flip as
+        // `agent:idle`/`agent:status-changed` — `agent:tool:call`,
+        // `agent:message` (lean echo; `agent:last-message` is the
+        // content-bearing companion), `agent:permission:*`, `agent:process:*`,
+        // `agent:queue:*` and `agent:subscriptions-*` (isWaitingForOtherAgents
+        // is picked up at the adjacent idle/status-changed boundary).
+        case "agent:started", "agent:completed", "agent:failed", "agent:created",
+             "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed",
+             "agent:updated", "agent:retired", "agent:restored",
+             "agent:last-message", "agent:attention-requested":
             guard let workspaceId = workspaceId else { return }
             Task { await fetchAgents(workspaceId: workspaceId) }
         default:
