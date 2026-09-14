@@ -150,11 +150,13 @@ struct ScrollViewFinderTests {
         host.addSubview(finder)
         // Detached hierarchy: nothing resolves yet (mirrors makeUIView time).
         #expect(proxy.scrollView == nil)
+        #expect(!proxy.hasResolvedScrollView)
         #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
 
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
         window.addSubview(scrollView)
         #expect(proxy.scrollView === scrollView)
+        #expect(proxy.hasResolvedScrollView)
         #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
         let tapCount = { scrollView.gestureRecognizers?.count ?? 0 }
         let installed = tapCount()
@@ -168,6 +170,47 @@ struct ScrollViewFinderTests {
 }
 
 struct ConversationTranscriptScrollPolicyTests {
+    private typealias Step = ConversationTranscriptScrollPolicy.InitialScrollStep
+
+    private func initialStep(
+        alreadyPerformed: Bool = false,
+        scrollViewResolved: Bool = false,
+        scrollViewWaitElapsed: Bool = false
+    ) -> Step {
+        ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: alreadyPerformed,
+            scrollViewResolved: scrollViewResolved,
+            scrollViewWaitElapsed: scrollViewWaitElapsed)
+    }
+
+    /// Regression: with an instant load the 0.1 s entry timer elapsed during
+    /// the push transition, `scrollTo("new-messages-divider")` ran before the
+    /// UIScrollView was hosted and was lost, so the viewport stayed at the
+    /// bottom instead of on the divider. The timer firing first must wait for
+    /// the finder's edge rather than scroll.
+    @Test func entryScrollWaitsForFinderWhenTimerBeatsHosting() {
+        #expect(initialStep(scrollViewResolved: false) == .waitForScrollView)
+        #expect(initialStep(scrollViewResolved: true) == .perform)
+    }
+
+    /// A finder that never resolves may not leave the transcript unscrolled.
+    @Test func entryScrollFallsBackAfterBoundedWait() {
+        #expect(initialStep(scrollViewResolved: false, scrollViewWaitElapsed: true) == .perform)
+    }
+
+    /// The finder edge and the bounded-wait fallback can both fire; only the
+    /// first performs.
+    @Test func entryScrollPerformsAtMostOnce() {
+        #expect(initialStep(alreadyPerformed: true, scrollViewResolved: true) == .skip)
+        #expect(initialStep(alreadyPerformed: true, scrollViewWaitElapsed: true) == .skip)
+        #expect(initialStep(alreadyPerformed: true) == .skip)
+    }
+
+    @Test func entryScrollScrollViewTimeoutOutlastsEntryDelay() {
+        #expect(Constants.Conversation.Transcript.initialScrollScrollViewTimeout
+            > Constants.Conversation.Transcript.initialScrollDelay)
+    }
+
     @Test func tracksAwayStateAcrossBottomThreshold() {
         #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: -20))
         #expect(!ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: 50))

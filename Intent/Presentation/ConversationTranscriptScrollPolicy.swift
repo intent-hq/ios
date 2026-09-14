@@ -2,6 +2,27 @@ import CoreGraphics
 import Foundation
 
 enum ConversationTranscriptScrollPolicy {
+    enum InitialScrollStep: Equatable {
+        case perform
+        case waitForScrollView
+        case skip
+    }
+
+    /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
+    /// before the transcript's UIScrollView is hosted is lost, so the scroll
+    /// waits for the finder to resolve; once the bounded wait elapses it runs
+    /// regardless, so a finder that never resolves cannot leave the transcript
+    /// unscrolled. It performs at most once, whichever path gets there first.
+    static func initialScrollStep(
+        alreadyPerformed: Bool,
+        scrollViewResolved: Bool,
+        scrollViewWaitElapsed: Bool
+    ) -> InitialScrollStep {
+        if alreadyPerformed { return .skip }
+        if scrollViewResolved || scrollViewWaitElapsed { return .perform }
+        return .waitForScrollView
+    }
+
     /// Points between the viewport's bottom edge and the end of the content:
     /// 0 at rest at the bottom, negative while bouncing past it or when the
     /// content is shorter than the container.

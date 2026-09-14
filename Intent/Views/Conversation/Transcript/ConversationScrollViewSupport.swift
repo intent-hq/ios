@@ -5,7 +5,13 @@ import UIKit
 /// Stores a weak reference to the underlying UIScrollView so we can stop inertial scrolling.
 @Observable
 class ScrollViewMomentumProxy {
-    @ObservationIgnored weak var scrollView: UIScrollView?
+    @ObservationIgnored weak var scrollView: UIScrollView? {
+        didSet { hasResolvedScrollView = scrollView != nil }
+    }
+
+    /// Observable edge for "the transcript is hosted": flips when the finder
+    /// resolves, so the entry scroll can wait for it instead of a fixed timer.
+    private(set) var hasResolvedScrollView = false
 
     /// Gap between the viewport's bottom edge and the end of the content, or
     /// nil before the scroll view has been found.

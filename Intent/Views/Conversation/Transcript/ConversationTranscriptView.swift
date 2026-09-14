@@ -103,6 +103,11 @@ struct ConversationTranscriptView: View {
                     runInitialScrollIfNeeded(proxy: proxy)
                 }
             }
+            .onChange(of: scrollMomentumProxy.hasResolvedScrollView) { _, resolved in
+                if resolved {
+                    handleScrollViewResolved(proxy: proxy)
+                }
+            }
             .onChange(of: userIsScrolledAway) { _, scrolledAway in
                 if scrolledAway {
                     cancelPendingAutomaticFollow()
@@ -315,6 +320,47 @@ struct ConversationTranscriptView: View {
         guard !initialScrollScheduled else { return }
         initialScrollScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+        }
+    }
+
+    /// The finder resolving is the signal the transcript is hosted; an entry
+    /// scroll issued while waiting for it is picked up here.
+    private func handleScrollViewResolved(proxy: ScrollViewProxy) {
+        guard scrollState.initialScrollAwaitingScrollView else {
+            if !viewModel.isLoading {
+                runInitialScrollIfNeeded(proxy: proxy)
+            }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
+            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+        }
+    }
+
+    /// A `scrollTo` issued before the UIScrollView is hosted is lost and the
+    /// bottom anchor wins, so when the entry timer beats hosting (instant load
+    /// during the push transition) the scroll waits for the finder's edge —
+    /// bounded by `initialScrollScrollViewTimeout` so a finder that never
+    /// resolves still scrolls. Performs at most once across all paths.
+    private func performInitialScrollWhenReady(proxy: ScrollViewProxy, scrollViewWaitElapsed: Bool) {
+        switch ConversationTranscriptScrollPolicy.initialScrollStep(
+            alreadyPerformed: scrollState.initialScrollPerformed,
+            scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
+            scrollViewWaitElapsed: scrollViewWaitElapsed
+        ) {
+        case .skip:
+            return
+        case .waitForScrollView:
+            scrollState.initialScrollAwaitingScrollView = true
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + Constants.Conversation.Transcript.initialScrollScrollViewTimeout
+            ) {
+                performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: true)
+            }
+        case .perform:
+            scrollState.initialScrollPerformed = true
+            scrollState.initialScrollAwaitingScrollView = false
             performInitialScroll(proxy: proxy)
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay

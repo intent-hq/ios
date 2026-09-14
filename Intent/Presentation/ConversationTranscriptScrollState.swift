@@ -12,6 +12,9 @@ final class ConversationTranscriptScrollState {
     @ObservationIgnored var liveIsScrolledAway: Bool?
     var hasInitiallyScrolled = false
     var initialScrollScheduled = false
+    /// True while the scheduled entry scroll waits for the finder to resolve.
+    var initialScrollAwaitingScrollView = false
+    var initialScrollPerformed = false
     var isScrollingToBottom = false
     /// Uptime of the last follow-to-bottom request; rate-limits streaming follows.
     var lastFollowToBottomAt: TimeInterval?
