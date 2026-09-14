@@ -216,10 +216,13 @@ import Observation
 
             // Explicit allowlist: only events that can change a field a
             // `Workspace` row renders (title/branch/status/activity/
-            // displayStatus/attention/lastActivity/repo+PR/taskStats/
+            // displayStatus/attention/lastActivity/repo/taskStats/
             // agentSummary) or list membership refetch `workspace.list`.
             // `workspace:created` is included because a workspace created on
             // another client otherwise never appears in the non-live fallback.
+            // PR link changes ride `pr:linked` / `pr:unlinked`, which this
+            // store has never handled, so the PR badge is not kept fresh by
+            // this path (pre-existing gap, unchanged here).
             //
             // Deliberately excluded (no rendered field, or already patched in
             // place above): `workspace:waiting-changed`, the debounced

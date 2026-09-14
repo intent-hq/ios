@@ -536,6 +536,23 @@ struct WorkspaceStoreEventAllowlistTests {
         #expect(fake.didCallMethod("workspace.list"))
     }
 
+    /// A delta that carries `lastActivity` alongside another rendered field
+    /// must still refetch: only the `lastActivity`-only case is patch-complete.
+    @Test func workspaceUpdatedWithLastActivityAndTitleRefetches() async throws {
+        let fake = FakeConnectionManager()
+        let store = WorkspaceStore(connectionManager: fake)
+        fake.responseMap["workspace.list"] = ["workspaces": []]
+        store.workspaces = [makeWorkspace(id: "ws-1", lastActivity: "2026-03-01T10:00:00Z")]
+
+        store.handleEvent("events.event", params: workspaceEvent("workspace:updated", data: [
+            "workspaceId": "ws-1",
+            "changes": ["lastActivity": "2026-03-01T12:00:00Z", "title": "Renamed"]
+        ]))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(fake.didCallMethod("workspace.list"), "a mixed delta must refetch for the title")
+    }
+
     @Test func lastActivityOnlyUpdatePatchesInPlaceWithoutRefetch() async throws {
         let fake = FakeConnectionManager()
         let store = WorkspaceStore(connectionManager: fake)
@@ -570,6 +587,32 @@ struct WorkspaceStoreEventAllowlistTests {
 
         #expect(!fake.didCallMethod("workspace.list"))
         #expect(store.workspaces[0].waiting, "waiting-changed still patches the row in place")
+    }
+
+    /// Mirrors the Note/Task suites: once the `workspace.subscribe` snapshot
+    /// makes the store live, an allowlisted event must not refetch — the
+    /// `guard !workspaceLive` sits between the in-place patches and the
+    /// allowlist switch.
+    @Test func allowlistedWorkspaceEventSuppressedWhileLive() async throws {
+        let fake = FakeConnectionManager()
+        let store = WorkspaceStore(connectionManager: fake)
+        fake.responseMap["workspace.list"] = ["workspaces": []]
+        fake.responseMap["workspace.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.simulateConnect()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+
+        fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
+            ["id": "ws-1", "title": "Live"]
+        ], delta: nil))
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.workspaces.map(\.id) == ["ws-1"])
+
+        fake.clearRequestLog()
+        store.handleEvent("events.event", params: workspaceEvent("workspace:created"))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(!fake.didCallMethod("workspace.list"))
     }
 }
 
