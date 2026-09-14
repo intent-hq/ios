@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Intent
 
 /// Ports of the desktop cases in new-messages-divider.test.ts.
@@ -111,6 +112,58 @@ struct NewMessagesDividerEntryScrollTests {
             distanceToBottom: 30, atBottomThreshold: 10))
         #expect(!NewMessagesDivider.followDisabledAfterEntryScroll(
             distanceToBottom: 30, atBottomThreshold: 100))
+    }
+}
+
+/// Regression coverage for intent-hq/ios#270: the finder must resolve the
+/// transcript UIScrollView once attached to a window, not from an eager
+/// one-shot walk that runs before the hierarchy exists.
+@MainActor
+struct ScrollViewFinderTests {
+    @Test func firstScrollViewAncestorFindsNearestScrollView() {
+        let outer = UIScrollView()
+        let inner = UIScrollView()
+        let host = UIView()
+        let leaf = UIView()
+        outer.addSubview(inner)
+        inner.addSubview(host)
+        host.addSubview(leaf)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: leaf) === inner)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: inner) === outer)
+    }
+
+    @Test func firstScrollViewAncestorIsNilWithoutScrollViewAbove() {
+        let root = UIView()
+        let leaf = UIView()
+        root.addSubview(leaf)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: leaf) == nil)
+        #expect(ScrollViewFinder.firstScrollViewAncestor(of: UIScrollView()) == nil)
+    }
+
+    @Test func finderResolvesProxyOnWindowAttachAndInstallsTapOnce() {
+        let proxy = ScrollViewMomentumProxy()
+        let finder = ScrollViewFinder.FinderView()
+        finder.proxy = proxy
+        let scrollView = UIScrollView()
+        let host = UIView()
+        scrollView.addSubview(host)
+        host.addSubview(finder)
+        // Detached hierarchy: nothing resolves yet (mirrors makeUIView time).
+        #expect(proxy.scrollView == nil)
+        #expect(!ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        window.addSubview(scrollView)
+        #expect(proxy.scrollView === scrollView)
+        #expect(ScrollViewFinder.hasKeyboardDismissTap(scrollView))
+        let tapCount = { scrollView.gestureRecognizers?.count ?? 0 }
+        let installed = tapCount()
+
+        // Re-attaching re-runs the walk without duplicating the gesture.
+        scrollView.removeFromSuperview()
+        window.addSubview(scrollView)
+        #expect(proxy.scrollView === scrollView)
+        #expect(tapCount() == installed)
     }
 }
 

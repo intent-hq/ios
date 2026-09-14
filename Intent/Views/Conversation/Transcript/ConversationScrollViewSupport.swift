@@ -32,26 +32,50 @@ class ScrollViewMomentumProxy {
 }
 
 /// A zero-size UIView that walks up the view hierarchy to find the enclosing UIScrollView.
+///
+/// The walk runs from `didMoveToWindow`, not from `makeUIView`: when the
+/// representable is created its only ancestor is SwiftUI's platform-view
+/// host and it has no window yet, so an eager walk stops one hop up and
+/// never reaches the scroll view. Attaching to a window guarantees the full
+/// ancestor chain exists, and re-attaching (e.g. after a hosting change)
+/// re-runs the walk idempotently.
 struct ScrollViewFinder: UIViewRepresentable {
     let proxy: ScrollViewMomentumProxy
 
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+    func makeUIView(context: Context) -> FinderView {
+        let view = FinderView()
         view.isUserInteractionEnabled = false
         view.frame = .zero
-        DispatchQueue.main.async {
-            if let scrollView = Self.findScrollView(from: view) {
-                proxy.scrollView = scrollView
-                Self.installKeyboardDismissTap(on: scrollView)
-                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
-            } else {
-                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
-            }
-        }
+        view.proxy = proxy
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: FinderView, context: Context) {
+        uiView.proxy = proxy
+    }
+
+    final class FinderView: UIView {
+        var proxy: ScrollViewMomentumProxy?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            guard window != nil else { return }
+            resolveScrollView()
+        }
+
+        private func resolveScrollView() {
+            guard let proxy else { return }
+            guard let scrollView = ScrollViewFinder.firstScrollViewAncestor(of: self) else {
+                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
+                return
+            }
+            if proxy.scrollView !== scrollView {
+                proxy.scrollView = scrollView
+                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
+            }
+            ScrollViewFinder.installKeyboardDismissTap(on: scrollView)
+        }
+    }
 
     /// Installed directly on the transcript scroll view so SwiftUI's hosting
     /// recognizer does not starve UIKit link-tap recognizers in message content.
@@ -79,14 +103,17 @@ struct ScrollViewFinder: UIViewRepresentable {
     }
 
     private static func installKeyboardDismissTap(on scrollView: UIScrollView) {
-        let installed = scrollView.gestureRecognizers?.contains {
-            $0 is KeyboardDismissTapGesture
-        }
-        guard installed != true else { return }
+        guard !hasKeyboardDismissTap(scrollView) else { return }
         scrollView.addGestureRecognizer(KeyboardDismissTapGesture())
     }
 
-    private static func findScrollView(from view: UIView) -> UIScrollView? {
+    static func hasKeyboardDismissTap(_ scrollView: UIScrollView) -> Bool {
+        scrollView.gestureRecognizers?.contains { $0 is KeyboardDismissTapGesture } == true
+    }
+
+    /// The nearest `UIScrollView` strictly above `view` in the superview
+    /// chain, or nil when the chain ends without one.
+    static func firstScrollViewAncestor(of view: UIView) -> UIScrollView? {
         var current: UIView? = view
         while let parent = current?.superview {
             if let scrollView = parent as? UIScrollView {
