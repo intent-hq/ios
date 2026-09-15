@@ -426,6 +426,13 @@ struct CreationOptionsStoreTests {
         #expect(store.loadGeneration == 1)
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)
+
+        // The consumer's next ask runs cold and repopulates the catalog.
+        fake.responseMap["models.list"] = ["models": [modelDict(id: "fresh")]]
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        #expect(store.models(for: "auggie")?.map(\.id) == ["fresh"])
+        #expect(fake.paramsForMethod("models.list").count == 1)
+        #expect(fake.didCallMethod("specialist.list") == false)
     }
 
     @Test func reconnectWithoutCacheDoesNotFetch() async throws {
