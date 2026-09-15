@@ -650,6 +650,54 @@ struct ConversationStoreLiveStateTests {
         expectAgentBTranscriptIntact(store)
     }
 
+    /// A definitive not-found for agent A that lands after the transcript was
+    /// rebound to agent B says nothing about B: it must not reach
+    /// `onFetchError` and flag the new binding as deleted (intent-hq/ios#283).
+    @Test func staleNotFoundForPreviousAgentDoesNotFlagNewBinding() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchTask = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while !fake.didCallMethod("agent.getConversation") {
+            await Task.yield()
+        }
+
+        await rebindToAgentB(store, fake)
+        fake.failPending("agent.getConversation", with: definitiveNotFound(agentId: "agent-a"))
+        await fetchTask.value
+
+        #expect(!store.agentNotFound,
+                "a not-found for the previous agent must not mark the current one deleted")
+        expectAgentBTranscriptIntact(store)
+        #expect(store.isLoading == false)
+    }
+
+    /// Counterpart: the same in-flight failure for the agent that is *still*
+    /// bound keeps raising `agentNotFound`.
+    @Test func notFoundForStillBoundAgentRaisesAgentNotFound() async throws {
+        let (store, fake) = makeStore()
+        fake.pendingMethods = ["agent.getConversation"]
+
+        let fetchTask = Task { await store.fetchConversation(agentId: "agent-a", workspaceId: "ws-1") }
+        while !fake.didCallMethod("agent.getConversation") {
+            await Task.yield()
+        }
+
+        fake.failPending("agent.getConversation", with: definitiveNotFound(agentId: "agent-a"))
+        await fetchTask.value
+
+        #expect(store.agentNotFound, "a definitive not-found for the bound agent must raise agentNotFound")
+        #expect(store.isLoading == false)
+    }
+
+    /// `-32602` with `data.code == "not-found"` (docs/PROTOCOL.md §3.3/§9).
+    private func definitiveNotFound(agentId: String) -> NSError {
+        NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "unknown agent id: \(agentId)",
+                       NSError.intentErrorDataCodeKey: "not-found"])
+    }
+
     // MARK: - Structural binding guard (`whileBound`)
 
     /// A `whileBound` body that suspends while the transcript is rebound to a
