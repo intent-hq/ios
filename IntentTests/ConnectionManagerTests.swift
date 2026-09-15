@@ -1690,6 +1690,14 @@ struct ConnectionManagerTests {
     /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
     /// on the listener queue and must not inherit MainActor isolation.
     private nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
+        /// How the server answers websocket pings. `.automatic` lets the
+        /// framework reply; `.replied` and `.withheld` deliver pings to the
+        /// server loop (counted in `pingsReceived`), which pongs back or
+        /// stays silent respectively — the heartbeat tests' seam.
+        enum PongPolicy {
+            case automatic, replied, withheld
+        }
+
         private struct State {
             var accepted: [NWConnection] = []
             // Connections held back by a gated server: accepted but not
@@ -1699,32 +1707,38 @@ struct ConnectionManagerTests {
             var pendingStart: [NWConnection] = []
             var isOpen: Bool
             var acceptedTotal = 0
+            var pingsReceived = 0
         }
 
         private let listener: NWListener
         private let queue = DispatchQueue(label: "ConnectionManagerTests.ws-server")
+        private let pongs: PongPolicy
         // Retain accepted connections for the listener's lifetime (an
         // unreferenced NWConnection deallocates and drops the socket).
         private let state: OSAllocatedUnfairLock<State>
 
         var port: Int { Int(listener.port?.rawValue ?? 0) }
+        var pingsReceived: Int { state.withLock { $0.pingsReceived } }
 
         /// Sockets the listener has accepted so far (including ones cancelled
         /// since): non-zero proves a client reached this plaintext server.
         var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
 
-        private init(listener: NWListener, gated: Bool) {
+        private init(listener: NWListener, gated: Bool, pongs: PongPolicy) {
             self.listener = listener
+            self.pongs = pongs
             self.state = OSAllocatedUnfairLock(initialState: State(isOpen: !gated))
         }
 
-        static func start(gated: Bool = false) async throws -> LoopbackWebSocketServer {
+        static func start(
+            gated: Bool = false, pongs: PongPolicy = .automatic
+        ) async throws -> LoopbackWebSocketServer {
             let parameters = NWParameters.tcp
             let wsOptions = NWProtocolWebSocket.Options()
-            wsOptions.autoReplyPing = true
+            wsOptions.autoReplyPing = pongs == .automatic
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
             let server = LoopbackWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any), gated: gated)
+                listener: try NWListener(using: parameters, on: .any), gated: gated, pongs: pongs)
             server.listener.newConnectionHandler = { [weak server] connection in
                 guard let server else { return }
                 let startNow = server.state.withLock { state in
@@ -1783,9 +1797,21 @@ struct ConnectionManagerTests {
         }
 
         private func receiveNext(on connection: NWConnection) {
-            connection.receiveMessage { [weak self] data, _, _, error in
+            connection.receiveMessage { [weak self] data, context, _, error in
                 guard let self, error == nil else { return }
-                if let data,
+                let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
+                    as? NWProtocolWebSocket.Metadata
+                if metadata?.opcode == .ping {
+                    self.state.withLock { $0.pingsReceived += 1 }
+                    if self.pongs == .replied {
+                        let pong = NWProtocolWebSocket.Metadata(opcode: .pong)
+                        let pongContext = NWConnection.ContentContext(
+                            identifier: "pong", metadata: [pong])
+                        connection.send(
+                            content: data, contentContext: pongContext,
+                            isComplete: true, completion: .idempotent)
+                    }
+                } else if let data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
                     let response: [String: Any] = [
@@ -2119,6 +2145,282 @@ struct ConnectionManagerTests {
         }
         #expect(manager.port == livePort)
         #expect(manager.token == "live-token")
+    }
+
+    // MARK: - Heartbeat (ios#253)
+
+    /// Manual `HeartbeatClock`: sleepers park until `advance(by:)` moves the
+    /// clock past their deadline; cancellation removes them. Tests observe
+    /// what is parked via `pendingDurations`.
+    private nonisolated final class ManualHeartbeatClock: HeartbeatClock, @unchecked Sendable {
+        private struct Sleeper {
+            let id: Int
+            let duration: Duration
+            let deadline: Duration
+            let continuation: CheckedContinuation<Void, any Error>
+        }
+        private struct State {
+            var now: Duration = .zero
+            var nextID = 0
+            var sleepers: [Sleeper] = []
+        }
+
+        private let lock = OSAllocatedUnfairLock(initialState: State())
+
+        /// Requested durations of the parked sleepers, in registration order.
+        var pendingDurations: [Duration] { lock.withLock { $0.sleepers.map(\.duration) } }
+
+        func sleep(for duration: Duration) async throws {
+            let id = lock.withLock { state in
+                state.nextID += 1
+                return state.nextID
+            }
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, any Error>) in
+                    let parked = lock.withLock { state in
+                        guard !Task.isCancelled else { return false }
+                        state.sleepers.append(Sleeper(
+                            id: id, duration: duration, deadline: state.now + duration,
+                            continuation: continuation))
+                        return true
+                    }
+                    if !parked { continuation.resume(throwing: CancellationError()) }
+                }
+            } onCancel: {
+                let cancelled = lock.withLock { state -> Sleeper? in
+                    guard let index = state.sleepers.firstIndex(where: { $0.id == id }) else {
+                        return nil
+                    }
+                    return state.sleepers.remove(at: index)
+                }
+                cancelled?.continuation.resume(throwing: CancellationError())
+            }
+        }
+
+        func advance(by duration: Duration) {
+            let fired = lock.withLock { state in
+                state.now += duration
+                let now = state.now
+                let due = state.sleepers.filter { $0.deadline <= now }
+                state.sleepers.removeAll { $0.deadline <= now }
+                return due
+            }
+            for sleeper in fired { sleeper.continuation.resume() }
+        }
+    }
+
+    /// Counts connection teardowns — entries into `.reconnecting` from any
+    /// other state — for the duration of a test.
+    @MainActor private final class DisconnectCounter {
+        private(set) var count = 0
+        private var wasReconnecting: Bool
+        private var cancellable: AnyCancellable?
+
+        init(_ manager: ConnectionManager) {
+            if case .reconnecting = manager.connectionState {
+                wasReconnecting = true
+            } else {
+                wasReconnecting = false
+            }
+            cancellable = manager.connectionStatePublisher.sink { [weak self] state in
+                guard let self else { return }
+                let isReconnecting: Bool
+                if case .reconnecting = state { isReconnecting = true } else { isReconnecting = false }
+                if isReconnecting, !self.wasReconnecting { self.count += 1 }
+                self.wasReconnecting = isReconnecting
+            }
+        }
+    }
+
+    /// Polls `condition` (real time) until it holds or `timeout` elapses;
+    /// the caller asserts afterwards so a miss reports the actual values.
+    @MainActor private static func settle(
+        timeout: Duration = .seconds(3), until condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    /// ios#253: after the app was suspended in the background the heartbeat
+    /// wakes with a gap far beyond the pong timeout. That must trigger a
+    /// probe, not a disconnect: the socket is alive, the pong arrives, and
+    /// the connection keeps serving.
+    @Test @MainActor func heartbeatGapBeyondTimeoutProbesInsteadOfDisconnecting() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // Suspended for two minutes: the cadence sleep resumes long after
+        // the probe timeout would have elapsed since the last pong.
+        clock.advance(by: .seconds(120))
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        let result = try await manager.request("system.status")
+        #expect(result is [String: Any])
+    }
+
+    /// A probe the daemon never answers is the only thing that may tear the
+    /// connection down: once the probe deadline passes, exactly one
+    /// disconnect follows (and the reconnect loop takes over).
+    @Test @MainActor func unansweredProbeDisconnectsOnce() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout])
+        // Probe in flight, deadline not reached: still connected.
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        // The reconnect loop re-establishes against the same server and
+        // arms a fresh heartbeat; no second teardown follows.
+        try await Self.settle(timeout: .seconds(5)) {
+            manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+    }
+
+    /// A probe in flight when its connection is retired (pairing a new
+    /// daemon over the live connection advances the generation) belongs to
+    /// the old generation: its outcome neither tears down nor vouches for
+    /// the replacement, whose own heartbeat runs undisturbed.
+    @Test @MainActor func probeOfRetiredGenerationIsIgnored() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let serverA = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let serverB = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverA.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(serverA.pingsReceived == 1)
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        // The retired probe is gone; only the replacement's cadence is armed.
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+
+        // Passing the retired probe's deadline changes nothing for the
+        // replacement: its own probe goes out and is answered.
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        try await Self.settle {
+            serverB.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(serverA.pingsReceived == 1)
+        #expect(serverB.pingsReceived == 1)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+    }
+
+    /// Normal operation: one answered probe per interval, none early.
+    @Test @MainActor func heartbeatProbesOncePerInterval() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        for expected in 1...2 {
+            clock.advance(by: ConnectionManager.heartbeatInterval)
+            try await Self.settle {
+                server.pingsReceived == expected
+                    && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+            }
+            #expect(server.pingsReceived == expected)
+        }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval - .seconds(1))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(server.pingsReceived == 2)
+
+        clock.advance(by: .seconds(1))
+        try await Self.settle {
+            server.pingsReceived == 3
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 3)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
     }
 }
 
