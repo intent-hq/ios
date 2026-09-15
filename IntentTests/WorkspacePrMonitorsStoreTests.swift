@@ -31,10 +31,9 @@ struct WorkspacePrMonitorsStoreTests {
     private func makeEventData(
         monitorId: String = "prm-1",
         workspaceId: String = "ws-abc",
-        state: String = "active",
-        changes: [String]? = nil
+        state: String = "active"
     ) -> [String: Any] {
-        var data: [String: Any] = [
+        [
             "workspaceId": workspaceId,
             "agentId": "agent-1",
             "monitorId": monitorId,
@@ -42,8 +41,6 @@ struct WorkspacePrMonitorsStoreTests {
             "prNumber": 12,
             "state": state
         ]
-        if let changes { data["changes"] = changes }
-        return data
     }
 
     private func makeSeededStore(

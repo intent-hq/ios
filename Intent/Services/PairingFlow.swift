@@ -9,13 +9,13 @@ import Foundation
 enum PairingFlow {
     /// How to pin the connection for a parsed pairing payload.
     enum FingerprintResolution: Equatable {
-        /// The payload carried a fingerprint — connect pinned immediately.
-        case pinned(String)
+        /// No payload fingerprint and the probe found no certificate — abort.
+        case failed(message: String)
         /// The payload carried no fingerprint: the server certificate was
         /// probed; the user must confirm trust before connecting pinned.
         case needsUserConfirmation(String)
-        /// No payload fingerprint and the probe found no certificate — abort.
-        case failed(message: String)
+        /// The payload carried a fingerprint — connect pinned immediately.
+        case pinned(String)
     }
 
     /// Resolve the certificate fingerprint to pin for a payload. `probe` is

@@ -21,7 +21,10 @@ struct CreateWorkspaceParamsTests {
         ModelInfo(id: id, name: "\(id) (balanced)", provider: provider)
     }
 
-    private func makeProvider(id: String = "auggie", authenticated: Bool? = true) -> ProviderInfo {
+    private func makeProvider(
+        id: String = "auggie",
+        authenticated: ProviderAuthentication = .signedIn
+    ) -> ProviderInfo {
         ProviderInfo(id: id, authenticated: authenticated)
     }
 
@@ -36,10 +39,12 @@ struct CreateWorkspaceParamsTests {
             githubUrl: "https://github.com/intent-hq/intentd",
             baseRef: baseRef,
             idempotencyKey: "key-123",
-            specialist: specialist,
-            provider: provider,
-            model: model,
-            message: message
+            initialAgent: CreateWorkspaceView.InitialAgentInput(
+                specialist: specialist,
+                model: model,
+                message: message,
+                provider: provider
+            )
         )
     }
 
@@ -265,7 +270,9 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["provider"] == nil)
         #expect(initialAgent["model"] as? String == "sonnet4.5")
     }
+}
 
+extension CreateWorkspaceParamsTests {
     // MARK: - modelFetchOutcome (stale-response guard)
 
     @Test func modelFetchOutcomeDropsStaleProviderResults() {
@@ -294,9 +301,9 @@ struct CreateWorkspaceParamsTests {
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     private func isCreateDisabled(
+        providers: [ProviderInfo],
         isCreating: Bool = false,
-        isLoadingProviders: Bool = false,
-        providers: [ProviderInfo]
+        isLoadingProviders: Bool = false
     ) -> Bool {
         CreateWorkspaceView.isCreateDisabled(
             isCreating: isCreating,
@@ -316,7 +323,7 @@ struct CreateWorkspaceParamsTests {
     @Test func createEnabledWhenAProviderIsSelectable() {
         #expect(!isCreateDisabled(providers: [makeProvider()]))
         // nil (unknown) stays selectable since probes can fail transiently
-        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: nil)]))
+        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: .unknown)]))
     }
 
     @Test func createEnabledWhenProviderListEmptyAfterLoad() {
@@ -325,9 +332,9 @@ struct CreateWorkspaceParamsTests {
     }
 
     @Test func createDisabledWhileCreatingOrLoadingProviders() {
-        #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+        #expect(isCreateDisabled(providers: [makeProvider()], isCreating: true))
         // An empty in-flight list can't be told apart from a seat with no providers
-        #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
+        #expect(isCreateDisabled(providers: [], isLoadingProviders: true))
     }
 
     // MARK: - preselectedBranch

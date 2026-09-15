@@ -2,9 +2,9 @@ import Combine
 import Foundation
 
 enum ConnectionState: Equatable {
-    case disconnected
-    case connecting
     case connected
+    case connecting
+    case disconnected
     case reconnecting(attempt: Int)
 }
 

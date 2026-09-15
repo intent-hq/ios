@@ -43,7 +43,7 @@ struct NoteStoreLiveStateTests {
         )
 
         if let push = SubscriptionPush.parse(method: "subscription.push", params: params),
-           let snapshot = push.snapshot {
+           case let .collectionSnapshot(snapshot) = push.payload {
             reconciler.applySnapshot(seq: push.seq, rawItems: snapshot)
             let notes = reconciler.values()
 

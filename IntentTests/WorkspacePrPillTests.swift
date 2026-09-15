@@ -41,7 +41,7 @@ struct WorkspacePrPillTests {
             isDraft: isDraft,
             hasConflicts: false,
             isBehind: false,
-            mergeable: nil,
+            mergeability: .computing,
             mergeBlockedReason: nil,
             checks: .init(total: 0, passed: 0, failed: 0, pending: 0),
             approvals: .init(decision: "none", have: 0, needed: nil, changesRequested: 0),
@@ -223,7 +223,9 @@ struct WorkspacePrPillTests {
         #expect(WorkspacePrPill.monitorDisplayStatus(makeMonitor(state: .completed)) == .closed)
         #expect(WorkspacePrPill.monitorDisplayStatus(makeMonitor(state: .active)) == .open)
     }
+}
 
+extension WorkspacePrPillTests {
     // MARK: - countOtherMonitors
 
     @Test func monitorMatchingPrimaryIsExcludedFromCount() {

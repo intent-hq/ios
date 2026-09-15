@@ -26,6 +26,25 @@ struct QuestionWizardHeaderRow: View {
 
     var body: some View {
         HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
+            title
+            if multiStep {
+                progress
+            }
+            if isMulti {
+                multiSelectBadge
+            }
+            Spacer(minLength: Self.minimumContentSpacing)
+            ignoreButton
+            if showsDismiss {
+                QuestionWizardDismissButton(dismissed: dismissed, action: onDismiss)
+            }
+        }
+        .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
+        .padding(.top, Self.topPadding)
+    }
+
+    private var title: some View {
+        Group {
             Image(systemName: "questionmark.circle")
                 .font(.caption)
                 .foregroundStyle(Theme.primary(for: colorScheme))
@@ -33,48 +52,47 @@ struct QuestionWizardHeaderRow: View {
             Text("Questions")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(Theme.foreground(for: colorScheme))
-            if multiStep {
-                Text("\(index + 1) of \(questionCount)")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                HStack(spacing: Self.progressSegmentSpacing) {
-                    ForEach(0..<questionCount, id: \.self) { i in
-                        RoundedRectangle(
-                            cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius
-                        )
-                        .fill(segmentColor(i))
+        }
+    }
+
+    private var progress: some View {
+        Group {
+            Text("\(index + 1) of \(questionCount)")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            HStack(spacing: Self.progressSegmentSpacing) {
+                ForEach(0..<questionCount, id: \.self) { segment in
+                    RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.progressSegmentCornerRadius)
+                        .fill(segmentColor(segment))
                         .frame(
                             width: Constants.Conversation.QuestionWizard.progressSegmentWidth,
                             height: Constants.Conversation.QuestionWizard.progressSegmentHeight
                         )
-                    }
                 }
             }
-            if isMulti {
-                Text("Select all that apply")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .padding(.horizontal, Self.multiSelectHorizontalPadding)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(Self.multiSelectFillOpacity)))
-            }
-            Spacer(minLength: Self.minimumContentSpacing)
-            Button(action: onIgnore) {
-                Text("Ignore")
-                    .font(.caption)
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .frame(
-                        minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget
-                    )
-            }
-            .buttonStyle(.plain)
-            if showsDismiss {
-                QuestionWizardDismissButton(dismissed: dismissed, action: onDismiss)
-            }
         }
-        .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-        .padding(.top, Self.topPadding)
+    }
+
+    private var multiSelectBadge: some View {
+        Text("Select all that apply")
+            .font(.caption)
+            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .padding(.horizontal, Self.multiSelectHorizontalPadding)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(Theme.muted(for: colorScheme).opacity(Self.multiSelectFillOpacity)))
+    }
+
+    private var ignoreButton: some View {
+        Button(action: onIgnore) {
+            Text("Ignore")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private func segmentColor(_ segment: Int) -> Color {

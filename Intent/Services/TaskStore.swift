@@ -180,17 +180,15 @@ import Observation
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.kind {
-        case .snapshot:
-            guard let rawItems = push.snapshot else { return }
+        switch push.payload {
+        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
             tasksLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             tasks = reconciler.values()
             lastUpdated = Date()
             AppLog.tasks.debug("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
 
-        case .delta:
-            guard let delta = push.delta else { return }
+        case let .delta(delta):
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 tasks = reconciler.values()
                 lastUpdated = Date()

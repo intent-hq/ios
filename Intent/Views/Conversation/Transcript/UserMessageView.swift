@@ -26,71 +26,20 @@ struct UserMessageView: View {
         static let fileChipCornerRadius: CGFloat = 8
     }
 
-    private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
+    private var blocks: [ContentBlock] { message.contentBlocks }
+    private var hookWake: HookWakeAttribution? { message.hookWakeAttribution }
+    private var prWake: PrMonitorWakeAttribution? {
+        hookWake == nil ? message.prMonitorWakeAttribution : nil
+    }
+    private var agentMessage: AgentMessageAttribution? {
+        hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
+    }
 
     var body: some View {
-        let hookWake = message.hookWakeAttribution
-        let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
-        let agentMessage = hookWake == nil && prWake == nil ? message.agentMessageAttribution : nil
-
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-            if let hookWake {
-                HookWakeAttributionView(attribution: hookWake)
-            } else if let prWake {
-                PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
-            } else if let agentMessage {
-                AgentMessageAttributionView(
-                    attribution: agentMessage,
-                    preview: MessageBlockPartitioning.agentMessagePreview(from: blocks),
-                    isExpanded: $isAgentMessageExpanded,
-                    onOpenAgent: onNavigateToAgent.map { navigate in
-                        { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
-                    }
-                )
-            } else {
-                Text("You")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            }
-
+            attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
-                let partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
-
-                ForEach(partitioned.text) { block in
-                    if let text = block.resolvedText {
-                        userTextBlock(text, hookWake: hookWake, prWake: prWake)
-                    }
-                }
-
-                if !partitioned.images.isEmpty {
-                    LazyVGrid(
-                        columns: [
-                            GridItem(
-                                .adaptive(
-                                    minimum: ImageAttachmentThumbnail.side,
-                                    maximum: ImageAttachmentThumbnail.side
-                                ),
-                                spacing: Layout.attachmentGridSpacing
-                            )
-                        ],
-                        alignment: .leading,
-                        spacing: Layout.attachmentGridSpacing
-                    ) {
-                        ForEach(partitioned.images) { block in
-                            ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
-                        }
-                    }
-                    .padding(.top, Layout.attachmentSectionTopPadding)
-                }
-
-                if !partitioned.files.isEmpty {
-                    VStack(alignment: .leading, spacing: Layout.fileAttachmentListSpacing) {
-                        ForEach(partitioned.files) { block in
-                            fileAttachmentChip(block)
-                        }
-                    }
-                    .padding(.top, Layout.attachmentSectionTopPadding)
-                }
+                messageContents
             }
         }
         .padding(Layout.containerPadding)
@@ -106,6 +55,74 @@ struct UserMessageView: View {
             userStyled: true,
             isStreaming: false
         ))
+    }
+
+    @ViewBuilder
+    private var attributionHeader: some View {
+        if let hookWake {
+            HookWakeAttributionView(attribution: hookWake)
+        } else if let prWake {
+            PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+        } else if let agentMessage {
+            AgentMessageAttributionView(
+                attribution: agentMessage,
+                preview: MessageBlockPartitioning.agentMessagePreview(from: blocks),
+                isExpanded: $isAgentMessageExpanded,
+                onOpenAgent: onNavigateToAgent.map { navigate in
+                    { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
+                }
+            )
+        } else {
+            Text("You")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+    }
+
+    @ViewBuilder
+    private var messageContents: some View {
+        let partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
+        ForEach(partitioned.text) { block in
+            if let text = block.resolvedText {
+                userTextBlock(text, hookWake: hookWake, prWake: prWake)
+            }
+        }
+        if !partitioned.images.isEmpty {
+            imageAttachments(partitioned.images)
+        }
+        if !partitioned.files.isEmpty {
+            fileAttachments(partitioned.files)
+        }
+    }
+
+    private func imageAttachments(_ images: [ContentBlock]) -> some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(
+                        minimum: ImageAttachmentThumbnail.side,
+                        maximum: ImageAttachmentThumbnail.side
+                    ),
+                    spacing: Layout.attachmentGridSpacing
+                )
+            ],
+            alignment: .leading,
+            spacing: Layout.attachmentGridSpacing
+        ) {
+            ForEach(images) { block in
+                ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
+            }
+        }
+        .padding(.top, Layout.attachmentSectionTopPadding)
+    }
+
+    private func fileAttachments(_ files: [ContentBlock]) -> some View {
+        VStack(alignment: .leading, spacing: Layout.fileAttachmentListSpacing) {
+            ForEach(files) { block in
+                fileAttachmentChip(block)
+            }
+        }
+        .padding(.top, Layout.attachmentSectionTopPadding)
     }
 
     @ViewBuilder

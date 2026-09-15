@@ -6,8 +6,8 @@ import Foundation
 /// or appended by intentd when a turn ends in a terminal failure
 /// (`turn-failure`).
 enum AttentionNoticeKind: String {
-    case discussionRequest = "discussion-request"
     case blockerReport = "blocker-report"
+    case discussionRequest = "discussion-request"
     case turnFailure = "turn-failure"
 }
 
@@ -28,7 +28,7 @@ extension ConversationMessage {
     /// fall back to the generic system banner (FE parity: attention-notice.ts).
     var attentionNotice: AttentionNotice? {
         guard role == .system,
-              let kindValue = contentBlocks?.first?.resolvedMetadata?["kind"]?.value as? String,
+              let kindValue = contentBlocks.first?.resolvedMetadata["kind"]?.value as? String,
               let kind = AttentionNoticeKind(rawValue: kindValue) else {
             return nil
         }
@@ -39,7 +39,7 @@ extension ConversationMessage {
     /// `extractAllContent`). Used for notice reasons and the generic
     /// system-row fallback banner.
     var joinedTextContent: String {
-        (contentBlocks ?? [])
+        contentBlocks
             .filter { $0.type == .text }
             .compactMap { $0.resolvedText }
             .joined(separator: "\n")

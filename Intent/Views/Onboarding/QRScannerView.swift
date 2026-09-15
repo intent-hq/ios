@@ -51,104 +51,109 @@ struct QRScannerView: View {
     @State private var errorAutoClearID: UUID?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Group {
-                    switch scannerAvailability {
-                    case .checking:
-                        Color.black
-                            .overlay { ProgressView().tint(.white) }
-                    case .available:
-                        QRCameraPreview(
-                            onCodeScanned: { code in
-                                handleScannedCode(code)
-                            },
-                            onUnavailable: {
-                                scannerAvailability = .unavailable
-                            }
-                        )
-                    case .unavailable:
-                        Color.black
-                            .overlay {
-                                Text("Camera scanning isn't available — use manual token entry instead")
-                                    .foregroundStyle(.white)
-                                    .multilineTextAlignment(.center)
-                                    .padding(Constants.QRScanner.unavailableMessagePadding)
-                            }
-                    }
-                }
-                .ignoresSafeArea()
+        NavigationStack { scannerView }
+    }
 
-                // Overlay
-                VStack {
-                    Spacer()
-
-                    VStack(spacing: Constants.QRScanner.statusSpacing) {
-                        if isValidating {
-                            ProgressView()
-                                .tint(.white)
-                            Text("Connecting...")
-                                .foregroundStyle(.white)
-                                .font(.subheadline)
-                        } else if let error = errorMessage {
-                            Image(systemName: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
-                                .accessibilityHidden(true)
-                            Text(error)
-                                .foregroundStyle(.white)
-                                .font(.subheadline)
-                                .multilineTextAlignment(.center)
-                        } else {
-                            Text("Point at the QR code in Intent Settings")
-                                .foregroundStyle(.white)
-                                .font(.subheadline)
-                        }
-                    }
-                    .padding(Constants.QRScanner.statusPadding)
-                    .background(.black.opacity(Constants.QRScanner.statusBackgroundOpacity))
-                    .clipShape(.rect(cornerRadius: Constants.QRScanner.statusCornerRadius))
-                    .padding(.bottom, Constants.QRScanner.statusBottomPadding)
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
-                Button("Cancel", role: .cancel) {
-                    pendingPayload = nil
-                    isValidating = false
-                }
-                Button("Trust & Connect") {
-                    if let payload = pendingPayload, let fingerprint = probedFingerprint {
-                        pendingPayload = nil
-                        connect(payload: payload, certFingerprint: fingerprint)
-                    } else {
-                        // Unreachable today (the alert is only presented after
-                        // both values are set), but keep the scanner recoverable
-                        // instead of stuck behind `isValidating` forever.
-                        pendingPayload = nil
-                        isValidating = false
-                    }
-                }
-            } message: {
-                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
-            }
-            .task {
-                await prepareScanner()
-            }
-            .task(id: errorAutoClearID) {
-                guard errorAutoClearID != nil else { return }
-                do {
-                    try await Task.sleep(for: Constants.QRScanner.errorDisplayDuration)
-                } catch {
-                    return
-                }
-                errorMessage = nil
-                errorAutoClearID = nil
+    private var scannerView: some View {
+        ZStack {
+            scannerLayer
+            scannerStatusOverlay
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
             }
         }
+        .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
+            Button("Cancel", role: .cancel) {
+                pendingPayload = nil
+                isValidating = false
+            }
+            Button("Trust & Connect") { trustPendingFingerprint() }
+        } message: {
+            Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+        }
+        .task { await prepareScanner() }
+        .task(id: errorAutoClearID) { await clearErrorAfterDelay() }
+    }
+
+    private var scannerLayer: some View {
+        Group {
+            switch scannerAvailability {
+            case .checking:
+                Color.black
+                    .overlay { ProgressView().tint(.white) }
+            case .available:
+                QRCameraPreview(onCodeScanned: handleScannedCode) {
+                    scannerAvailability = .unavailable
+                }
+            case .unavailable:
+                Color.black
+                    .overlay {
+                        Text("Camera scanning isn't available — use manual token entry instead")
+                            .foregroundStyle(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(Constants.QRScanner.unavailableMessagePadding)
+                    }
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var scannerStatusOverlay: some View {
+        VStack {
+            Spacer()
+            scannerStatus
+                .padding(Constants.QRScanner.statusPadding)
+                .background(.black.opacity(Constants.QRScanner.statusBackgroundOpacity))
+                .clipShape(.rect(cornerRadius: Constants.QRScanner.statusCornerRadius))
+                .padding(.bottom, Constants.QRScanner.statusBottomPadding)
+        }
+    }
+
+    @ViewBuilder
+    private var scannerStatus: some View {
+        VStack(spacing: Constants.QRScanner.statusSpacing) {
+            if isValidating {
+                ProgressView().tint(.white)
+                Text("Connecting...")
+                    .foregroundStyle(.white)
+                    .font(.subheadline)
+            } else if let error = errorMessage {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
+                Text(error)
+                    .foregroundStyle(.white)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+            } else {
+                Text("Point at the QR code in Intent Settings")
+                    .foregroundStyle(.white)
+                    .font(.subheadline)
+            }
+        }
+    }
+
+    private func trustPendingFingerprint() {
+        if let payload = pendingPayload, let fingerprint = probedFingerprint {
+            pendingPayload = nil
+            connect(payload: payload, certFingerprint: fingerprint)
+        } else {
+            pendingPayload = nil
+            isValidating = false
+        }
+    }
+
+    private func clearErrorAfterDelay() async {
+        guard errorAutoClearID != nil else { return }
+        do {
+            try await Task.sleep(for: Constants.QRScanner.errorDisplayDuration)
+        } catch {
+            return
+        }
+        errorMessage = nil
+        errorAutoClearID = nil
     }
 
     private func prepareScanner() async {
@@ -236,8 +241,8 @@ struct QRScannerView: View {
 }
 
 private enum ScannerAvailability {
-    case checking
     case available
+    case checking
     case unavailable
 }
 

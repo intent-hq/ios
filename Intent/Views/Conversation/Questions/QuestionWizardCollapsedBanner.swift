@@ -18,44 +18,48 @@ struct QuestionWizardCollapsedBanner: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Button(action: onExpand) {
-                HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
-                    Image(systemName: "questionmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                    Text("Questions")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text("\(questionCount)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .padding(.horizontal, Self.countBadgeHorizontalPadding)
-                        .padding(.vertical, 1)
-                        .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(Self.badgeFillOpacity)))
-                        .overlay(
-                            Capsule().strokeBorder(
-                                Theme.primary(for: colorScheme).opacity(Self.countBadgeBorderOpacity),
-                                lineWidth: 1
-                            )
-                        )
-                    Spacer(minLength: Self.minimumContentSpacing)
-                    Text("Tap to expand")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-                .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
-                .padding(.vertical, Self.verticalPadding)
-                .frame(minHeight: Constants.Accessibility.minimumTapTarget)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Expand questions")
-            .accessibilityValue("\(questionCount) questions")
+            expandButton
             if showsDismiss {
                 QuestionWizardDismissButton(dismissed: dismissed, action: onDismiss)
                     .padding(.trailing, Self.dismissButtonTrailingPadding)
             }
         }
+    }
+
+    private var expandButton: some View {
+        Button(action: onExpand) {
+            HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
+                Image(systemName: "questionmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(Theme.primary(for: colorScheme))
+                Text("Questions")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Text("\(questionCount)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .padding(.horizontal, Self.countBadgeHorizontalPadding)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Theme.primary(for: colorScheme).opacity(Self.badgeFillOpacity)))
+                    .overlay(
+                        Capsule().strokeBorder(
+                            Theme.primary(for: colorScheme).opacity(Self.countBadgeBorderOpacity),
+                            lineWidth: 1
+                        )
+                    )
+                Spacer(minLength: Self.minimumContentSpacing)
+                Text("Tap to expand")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .padding(.horizontal, Constants.Conversation.QuestionWizard.contentHorizontalPadding)
+            .padding(.vertical, Self.verticalPadding)
+            .frame(minHeight: Constants.Accessibility.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Expand questions")
+        .accessibilityValue("\(questionCount) questions")
     }
 }
 

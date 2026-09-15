@@ -36,8 +36,7 @@ struct WorkspaceStoreAgentLifecycleTests {
             taskStatsTotal: nil,
             taskStatsCompleted: nil,
             taskStatsInProgress: nil,
-            agentSummaryCount: nil,
-            agentSummaryAgents: nil
+            agentSummaryCount: nil
         )
     }
 

@@ -13,9 +13,16 @@ import Foundation
 struct ModelChangeNotice: Equatable {
     /// Spawn-resolved model id; nil = provider default model.
     let from: String?
-    let to: String?
+    let destination: String?
     let fromProvider: String?
     let toProvider: String?
+
+    init(from: String?, to destination: String?, fromProvider: String?, toProvider: String?) {
+        self.from = from
+        self.destination = destination
+        self.fromProvider = fromProvider
+        self.toProvider = toProvider
+    }
 
     /// Last-resort label when the metadata fields and the row text are both
     /// empty (FE parity: chat_modelChangeNotice_fallback_label).
@@ -30,7 +37,7 @@ struct ModelChangeNotice: Equatable {
     /// catalog to resolve pretty names from.
     func label(fallbackText: String) -> String {
         guard let fromLabel = Self.describeSide(providerId: fromProvider, model: from),
-              let toLabel = Self.describeSide(providerId: toProvider, model: to) else {
+              let toLabel = Self.describeSide(providerId: toProvider, model: destination) else {
             let trimmed = fallbackText.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? Self.fallbackLabel : trimmed
         }
@@ -61,8 +68,7 @@ extension ConversationMessage {
     /// by contract); absent or malformed metadata returns nil, so those rows
     /// keep the generic system banner (FE parity: getModelChangeNotice).
     var modelChangeNotice: ModelChangeNotice? {
-        guard let metadata,
-              metadata["type"]?.value as? String == "model_changed" else {
+        guard metadata["type"]?.value as? String == "model_changed" else {
             return nil
         }
         func asString(_ key: String) -> String? {

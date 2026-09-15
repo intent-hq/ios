@@ -10,7 +10,8 @@ struct SpecialistInfo: Identifiable {
     var resolvedProvider: String?  // Provider context the preview was resolved for
     var hidden: Bool = false  // Excluded from picker surfaces (PROTOCOL §5.11)
     var role: String?        // Picker metadata: "orchestrator" | "internal" (PROTOCOL §5.11)
-    var teamAgents: [String]?  // Orchestrator's advisory team roster (render-only, PROTOCOL §5.11)
+    var teamAgents: [String] = []  // Orchestrator's advisory team roster (render-only, PROTOCOL §5.11)
+    var hasReportedTeamAgents = false
     var icon: String?        // Built-in avatar design name; unknown/absent falls back (PROTOCOL §5.11)
 }
 
@@ -67,7 +68,8 @@ extension SpecialistInfo {
             resolvedProvider: item["resolvedProvider"] as? String,
             hidden: item["hidden"] as? Bool ?? false,
             role: item["role"] as? String,
-            teamAgents: item["teamAgents"] as? [String],
+            teamAgents: item["teamAgents"] as? [String] ?? [],
+            hasReportedTeamAgents: item["teamAgents"] is [String],
             icon: item["icon"] as? String
         )
     }
@@ -222,7 +224,13 @@ extension SpecialistInfo {
                let items = dict["providers"] as? [[String: Any]] {
                 return items.compactMap { item in
                     guard let id = item["id"] as? String else { return nil }
-                    return ProviderInfo(id: id, authenticated: item["authenticated"] as? Bool)
+                    let authentication: ProviderAuthentication
+                    if let authenticated = item["authenticated"] as? Bool {
+                        authentication = authenticated ? .signedIn : .signedOut
+                    } else {
+                        authentication = .unknown
+                    }
+                    return ProviderInfo(id: id, authenticated: authentication)
                 }
             }
         } catch {

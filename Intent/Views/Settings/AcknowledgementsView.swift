@@ -63,44 +63,44 @@ struct AcknowledgementsView: View {
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
             ScrollView {
                 VStack(alignment: .leading, spacing: Layout.pageSpacing) {
-                    ForEach(Self.entries) { entry in
-                        VStack(alignment: .leading, spacing: Layout.entrySpacing) {
-                            Text(entry.name)
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                .textCase(.uppercase)
-
-                            VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
-                                Text(entry.licenseTitle)
-                                    .font(.body.weight(.medium))
-                                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                                Text(entry.url)
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                Text(entry.licenseText)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                    .textSelection(.enabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(Layout.cardPadding)
-                            .background(Theme.card(for: colorScheme))
-                            .clipShape(.rect(cornerRadius: Layout.cardCornerRadius))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Layout.cardCornerRadius)
-                                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
-                            )
-                        }
-                    }
+                    ForEach(Self.entries) { acknowledgementCard($0) }
                 }
                 .padding(Layout.pageSpacing)
             }
         }
         .navigationTitle("Acknowledgements")
         .toolbarTitleDisplayMode(.inline)
+    }
+
+    private func acknowledgementCard(_ entry: Entry) -> some View {
+        VStack(alignment: .leading, spacing: Layout.entrySpacing) {
+            Text(entry.name)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .textCase(.uppercase)
+            VStack(alignment: .leading, spacing: Layout.licenseSpacing) {
+                Text(entry.licenseTitle)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Text(entry.url)
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Text(entry.licenseText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .textSelection(.enabled)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(Layout.cardPadding)
+            .background(Theme.card(for: colorScheme))
+            .clipShape(.rect(cornerRadius: Layout.cardCornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: Layout.cardCornerRadius)
+                    .stroke(Theme.border(for: colorScheme), lineWidth: 1)
+            )
+        }
     }
 }
 

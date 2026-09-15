@@ -13,7 +13,8 @@ struct WorkspaceRowPrIndicatorTests {
         repositoryName: String? = "repo",
         prStatus: String? = nil,
         prNumber: Int? = nil,
-        pullRequests: [WorkspacePullRequest]? = nil,
+        pullRequests: [WorkspacePullRequest] = [],
+        pullRequestsWereReported: Bool = false,
         activePullRequest: WorkspacePullRequest? = nil
     ) -> Workspace {
         Workspace(
@@ -35,8 +36,8 @@ struct WorkspaceRowPrIndicatorTests {
             taskStatsCompleted: nil,
             taskStatsInProgress: nil,
             agentSummaryCount: nil,
-            agentSummaryAgents: nil,
             pullRequests: pullRequests,
+            pullRequestsWereReported: pullRequestsWereReported,
             activePullRequest: activePullRequest
         )
     }
@@ -139,6 +140,7 @@ struct WorkspaceRowPrIndicatorTests {
         // `workspacePRs.length > 0` guard.
         let workspace = makeWorkspace(
             pullRequests: [],
+            pullRequestsWereReported: true,
             activePullRequest: makePr(12, "Open", createdAt: "2026-08-01T00:00:00Z")
         )
 
@@ -178,7 +180,6 @@ struct WorkspaceRowPrIndicatorTests {
         let workspace = makeWorkspace(
             prStatus: "Merged",
             prNumber: 42,
-            pullRequests: nil,
             activePullRequest: nil
         )
 
@@ -263,7 +264,7 @@ struct WorkspaceRowPrIndicatorTests {
             isDraft: false,
             hasConflicts: false,
             isBehind: false,
-            mergeable: nil,
+            mergeability: .computing,
             mergeBlockedReason: nil,
             checks: .init(total: 0, passed: 0, failed: 0, pending: 0),
             approvals: .init(decision: "none", have: 0, needed: nil, changesRequested: 0),

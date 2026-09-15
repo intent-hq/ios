@@ -1,5 +1,20 @@
 import Foundation
 
+enum AnyCodableBooleanMatch: Equatable {
+    case typeMismatch
+    case value(Bool)
+}
+
+enum AnyCodableArrayMatch {
+    case typeMismatch
+    case value([Any])
+}
+
+enum AnyCodableDictionaryMatch {
+    case typeMismatch
+    case value([String: Any])
+}
+
 /// A type-erased Codable wrapper for arbitrary JSON values.
 struct AnyCodable: Codable, Equatable {
     let value: Any
@@ -65,8 +80,19 @@ struct AnyCodable: Codable, Equatable {
     var stringValue: String? { value as? String }
     var intValue: Int? { value as? Int }
     var doubleValue: Double? { value as? Double }
-    var boolValue: Bool? { value as? Bool }
-    var arrayValue: [Any]? { value as? [Any] }
-    var dictValue: [String: Any]? { value as? [String: Any] }
+    var boolValue: AnyCodableBooleanMatch {
+        guard let value = value as? Bool else { return .typeMismatch }
+        return .value(value)
+    }
+
+    var arrayValue: AnyCodableArrayMatch {
+        guard let value = value as? [Any] else { return .typeMismatch }
+        return .value(value)
+    }
+
+    var dictValue: AnyCodableDictionaryMatch {
+        guard let value = value as? [String: Any] else { return .typeMismatch }
+        return .value(value)
+    }
     var isNull: Bool { value is NSNull }
 }

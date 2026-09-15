@@ -288,7 +288,7 @@ private struct ConversationViewContent: View {
                 dismiss()
             } catch {
                 selfInitiatedDelete = false
-                AppLog.ui.error("[ConversationView] Failed to delete agent: \(error)")
+                AppLog.userInterface.error("[ConversationView] Failed to delete agent: \(error)")
             }
         }
     }
@@ -301,7 +301,7 @@ private struct ConversationViewContent: View {
             do {
                 try await viewModel.renameAgent(newName)
             } catch {
-                AppLog.ui.error("[ConversationView] Failed to rename agent: \(error)")
+                AppLog.userInterface.error("[ConversationView] Failed to rename agent: \(error)")
             }
         }
     }

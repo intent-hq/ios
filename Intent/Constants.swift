@@ -2,87 +2,116 @@ import Foundation
 import SwiftUI
 import UIKit
 
+enum ConversationConstants {
+    enum Attribution {}
+
+    enum AgentWaiting {
+        static let fallbackAgentIdMaximumLength = 12
+        static let activityRefreshThrottle: TimeInterval = 3
+    }
+
+    enum Message {
+        static let contextPreviewLineLimit = 25
+    }
+
+    enum Composer {
+        static let maximumImageSelectionCount = 5
+        static let draftSaveDebounceMilliseconds = 500
+        static let imageCompressionQuality: CGFloat = 0.8
+        static let refocusDelay: Double = 0.05
+    }
+
+    enum Column {}
+
+    enum Sending {}
+
+    enum Transcript {
+        static let atBottomThreshold: CGFloat = 50
+        static let initialScrollDelay: Double = 0.1
+        static let initialScrollSettleDelay: Double = 0.2
+        static let dividerProbeDelay: Double = 0.15
+        static let scrollDebounceMilliseconds = 100
+        static let scrollCompletionMilliseconds = 300
+    }
+
+    enum QuestionWizard {}
+
+    enum ResponseGroup {}
+
+    enum ToolCall {
+        static let outputCharacterLimit = 2000
+    }
+
+    enum ToolClassifier {
+        static let titleMaximumLength = 80
+        static let commandMaximumLength = 80
+        static let standardSubjectMaximumLength = 60
+        static let compactSubjectMaximumLength = 50
+        static let agentNameMaximumLength = 30
+        static let taskMaximumLength = 40
+        static let noteTitleMaximumLength = 25
+        static let commitMessageMaximumLength = 40
+        static let fallbackTitleMaximumLength = 120
+        static let proseMinimumWordCount = 3
+    }
+
+    enum ContextMention {
+        static let titleMaximumLength = 30
+    }
+
+    enum AttentionRequest {
+        static let reasonLineLimit = 6
+    }
+
+    enum CodeBlock {
+        static let copyConfirmationDuration: Double = 2
+    }
+
+    enum ImageLightbox {}
+
+    enum CopyContextMenu {
+        static let minimumInteractiveAlpha: CGFloat = 0.01
+        static let minimumInvertibleDeterminant: CGFloat = 1e-6
+    }
+
+    enum EventWake {
+        static let countLabelRange = 2..<5
+    }
+}
+
+enum AgentAvatarConstants {
+    enum FallbackSelection {
+        static let hashShift = 5
+        static let multiplier: Double = 1_103_515_245
+        static let increment: Double = 12_345
+        static let modulus: Double = 4_294_967_296
+        static let mask: UInt32 = 0x7FFF_FFFF
+        static let normalizationDivisor: UInt32 = 0x8000_0000
+    }
+}
+
+enum NotesConstants {
+    enum Content {
+        static let maximumIndentColumns = 12
+    }
+
+    enum Detail {}
+
+    enum List {
+        static let maximumTagCount = 3
+    }
+
+    enum Metadata {
+        static let fallbackIdMaximumLength = 14
+    }
+}
+
 enum Constants {
     enum Accessibility {
         static let minimumTapTarget: CGFloat = 44
     }
 
-    enum Conversation {
-        enum Attribution {}
-
-        enum AgentWaiting {
-            static let fallbackAgentIdMaximumLength = 12
-            static let activityRefreshThrottle: TimeInterval = 3
-        }
-
-        enum Message {
-            static let contextPreviewLineLimit = 25
-        }
-
-        enum Composer {
-            static let maximumImageSelectionCount = 5
-            static let draftSaveDebounceMilliseconds = 500
-            static let imageCompressionQuality: CGFloat = 0.8
-            static let refocusDelay: Double = 0.05
-        }
-
-        enum Column {}
-
-        enum Sending {}
-
-        enum Transcript {
-            static let atBottomThreshold: CGFloat = 50
-            static let initialScrollDelay: Double = 0.1
-            static let initialScrollSettleDelay: Double = 0.2
-            static let dividerProbeDelay: Double = 0.15
-            static let scrollDebounceMilliseconds = 100
-            static let scrollCompletionMilliseconds = 300
-        }
-
-        enum QuestionWizard {}
-
-        enum ResponseGroup {}
-
-        enum ToolCall {
-            static let outputCharacterLimit = 2000
-        }
-
-        enum ToolClassifier {
-            static let titleMaximumLength = 80
-            static let commandMaximumLength = 80
-            static let standardSubjectMaximumLength = 60
-            static let compactSubjectMaximumLength = 50
-            static let agentNameMaximumLength = 30
-            static let taskMaximumLength = 40
-            static let noteTitleMaximumLength = 25
-            static let commitMessageMaximumLength = 40
-            static let fallbackTitleMaximumLength = 120
-            static let proseMinimumWordCount = 3
-        }
-
-        enum ContextMention {
-            static let titleMaximumLength = 30
-        }
-
-        enum AttentionRequest {
-            static let reasonLineLimit = 6
-        }
-
-        enum CodeBlock {
-            static let copyConfirmationDuration: Double = 2
-        }
-
-        enum ImageLightbox {}
-
-        enum CopyContextMenu {
-            static let minimumInteractiveAlpha: CGFloat = 0.01
-            static let minimumInvertibleDeterminant: CGFloat = 1e-6
-        }
-
-        enum EventWake {
-            static let countLabelRange = 2..<5
-        }
-    }
+    typealias Conversation = ConversationConstants
 
     enum AppCoordination {
         private static let reconnectOverlayTimeoutSeconds = 5
@@ -129,16 +158,7 @@ enum Constants {
         static let retryBackoffMaximum: Double = 30
     }
 
-    enum AgentAvatar {
-        enum FallbackSelection {
-            static let hashShift = 5
-            static let multiplier: Double = 1_103_515_245
-            static let increment: Double = 12_345
-            static let modulus: Double = 4_294_967_296
-            static let mask: UInt32 = 0x7FFF_FFFF
-            static let normalizationDivisor: UInt32 = 0x8000_0000
-        }
-    }
+    typealias AgentAvatar = AgentAvatarConstants
 
     enum AgentRow {
         static let maximumHeaderAvatars = 5
@@ -188,21 +208,7 @@ enum Constants {
 
     enum Connections {}
 
-    enum Notes {
-        enum Content {
-            static let maximumIndentColumns = 12
-        }
-
-        enum Detail {}
-
-        enum List {
-            static let maximumTagCount = 3
-        }
-
-        enum Metadata {
-            static let fallbackIdMaximumLength = 14
-        }
-    }
+    typealias Notes = NotesConstants
 
     enum Toast {
         static let dismissalDragThreshold: CGFloat = -40

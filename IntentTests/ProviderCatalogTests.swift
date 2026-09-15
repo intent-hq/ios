@@ -26,8 +26,8 @@ struct ProviderCatalogTests {
         #expect(providers.count == 4)
         #expect(providers[0] == ProviderInfo(id: "auggie", authenticated: true))
         #expect(providers[1] == ProviderInfo(id: "claude-code", authenticated: false))
-        #expect(providers[2] == ProviderInfo(id: "grok", authenticated: nil))
-        #expect(providers[3] == ProviderInfo(id: "pi", authenticated: nil))
+        #expect(providers[2] == ProviderInfo(id: "grok", authenticated: .unknown))
+        #expect(providers[3] == ProviderInfo(id: "pi", authenticated: .unknown))
         #expect(fake.didCallMethod("host.providerAuthStatus"))
     }
 
@@ -55,7 +55,7 @@ struct ProviderCatalogTests {
         #expect(ProviderInfo.displayName(for: "grok") == "Grok")
         #expect(ProviderInfo.displayName(for: "pi") == "Pi")
         #expect(ProviderInfo.displayName(for: "gemini") == "Gemini")
-        #expect(ProviderInfo(id: "grok", authenticated: nil).displayName == "Grok")
+        #expect(ProviderInfo(id: "grok", authenticated: .unknown).displayName == "Grok")
     }
 
     // MARK: - fetchModels (models.list)

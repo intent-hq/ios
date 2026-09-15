@@ -91,58 +91,123 @@ struct RootView: View {
     }
     #endif
 
-    var body: some View {
-        @Bindable var coordinator = coordinator
+    @ViewBuilder private var rootContent: some View {
         Group {
             if isWorkspaceFlow {
-                if sizeClass == .compact {
-                    // iPhone: standard NavigationStack with push/pop
-                    compactNavigationView
-                } else {
-                    // iPad: NavigationSplitView with sidebar selection
-                    NavigationSplitView {
-                        WorkspaceListSidebar(workspaceStore: session.workspaceStore)
-                            .navigationSplitViewColumnWidth(
-                                min: Constants.Root.sidebarMinimumWidth,
-                                ideal: Constants.Root.sidebarIdealWidth,
-                                max: Constants.Root.sidebarMaximumWidth
-                            )
-                    } detail: {
-                        detailContent
-                    }
-                    .navigationSplitViewStyle(.automatic)
-                }
+                workspaceFlowContent
             } else {
-                ZStack {
-                    // One SplashArtView spans loading and connecting. Keeping
-                    // it in this stable position preserves GIF playback across
-                    // the phase transition; the phase views render on top.
-                    if isLaunchSplash {
-                        SplashArtView()
-                    }
-                    switch coordinator.currentScreen {
-                    case .loading:
-                        LoadingView()
-                    case .pairing:
-                        PairingView()
-                    case .connecting:
-                        ConnectingView()
-                    case .connectionFailed(let error):
-                        ConnectionFailureView(
-                            errorMessage: error,
-                            isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
-                            retryPolicy: coordinator.connectionFailureRetryPolicy
-                        )
-                    case .settings:
-                        SettingsView()
-                    case .disconnected:
-                        DisconnectedView()
-                    default:
-                        EmptyView()
-                    }
-                }
+                launchContent
             }
         }
+    }
+
+    @ViewBuilder private var workspaceFlowContent: some View {
+        if sizeClass == .compact {
+            // iPhone: standard NavigationStack with push/pop
+            compactNavigationView
+        } else {
+            // iPad: NavigationSplitView with sidebar selection
+            NavigationSplitView {
+                WorkspaceListSidebar(workspaceStore: session.workspaceStore)
+                    .navigationSplitViewColumnWidth(
+                        min: Constants.Root.sidebarMinimumWidth,
+                        ideal: Constants.Root.sidebarIdealWidth,
+                        max: Constants.Root.sidebarMaximumWidth
+                    )
+            } detail: {
+                detailContent
+            }
+            .navigationSplitViewStyle(.automatic)
+        }
+    }
+
+    private var launchContent: some View {
+        ZStack {
+            // One SplashArtView spans loading and connecting. Keeping
+            // it in this stable position preserves GIF playback across
+            // the phase transition; the phase views render on top.
+            if isLaunchSplash {
+                SplashArtView()
+            }
+            switch coordinator.currentScreen {
+            case .loading:
+                LoadingView()
+            case .pairing:
+                PairingView()
+            case .connecting:
+                ConnectingView()
+            case .connectionFailed(let error):
+                ConnectionFailureView(
+                    errorMessage: error,
+                    isCertMismatch: ConnectionFailureView.isCertificateMismatchMessage(error),
+                    retryPolicy: coordinator.connectionFailureRetryPolicy
+                )
+            case .settings:
+                SettingsView()
+            case .disconnected:
+                DisconnectedView()
+            default:
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder private var reconnectOverlay: some View {
+        if coordinator.isDisconnected {
+            ZStack {
+                // Light tinted backdrop — lets blurred content show through
+                Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
+                    .ignoresSafeArea()
+                    .background(.ultraThinMaterial)
+                reconnectPanel
+            }
+            .transition(.opacity)
+            .animation(
+                .easeInOut(duration: Constants.Root.screenAnimationDuration),
+                value: coordinator.isDisconnected
+            )
+        }
+    }
+
+    private var reconnectPanel: some View {
+        VStack(spacing: Constants.Root.reconnectPanelSpacing) {
+            ProgressView()
+                .scaleEffect(Constants.Root.reconnectProgressScale)
+                .tint(.primary)
+
+            Text("Reconnecting...")
+                .font(.headline)
+                .foregroundStyle(.primary)
+
+            Text("Connection to desktop app was lost")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            // Passive per-host cert-mismatch list: hosts that
+            // presented a wrong certificate during the reconnect
+            // race, while retries continue on the remaining hosts.
+            if !session.connection.certMismatches.isEmpty {
+                CertMismatchListView(mismatches: session.connection.certMismatches)
+                    .frame(maxWidth: Self.reconnectPanelMaximumWidth)
+            }
+
+            Button("Log Off") {
+                coordinator.onLogOff()
+            }
+            .buttonStyle(.bordered)
+            .tint(.primary)
+            .padding(.top, Constants.Root.reconnectButtonTopPadding)
+        }
+        .padding(Constants.Root.reconnectPanelPadding)
+        .background(.regularMaterial, in: RoundedRectangle(
+            cornerRadius: Constants.Root.reconnectPanelCornerRadius
+        ))
+    }
+
+    var body: some View {
+        @Bindable var coordinator = coordinator
+        rootContent
         .animation(
             .easeInOut(duration: Constants.Root.screenAnimationDuration),
             value: String(describing: coordinator.currentScreen)
@@ -186,55 +251,7 @@ struct RootView: View {
             windowFeedbackEmitter
         }
         .overlay {
-            if coordinator.isDisconnected {
-                ZStack {
-                    // Light tinted backdrop — lets blurred content show through
-                    Color.black.opacity(Constants.Root.reconnectBackdropOpacity)
-                        .ignoresSafeArea()
-                        .background(.ultraThinMaterial)
-
-                    VStack(spacing: Constants.Root.reconnectPanelSpacing) {
-                        ProgressView()
-                            .scaleEffect(Constants.Root.reconnectProgressScale)
-                            .tint(.primary)
-
-                        Text("Reconnecting...")
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-
-                        Text("Connection to desktop app was lost")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-
-                        // Passive per-host cert-mismatch list: hosts that
-                        // presented a wrong certificate during the reconnect
-                        // race, while retries continue on the remaining hosts.
-                        if !session.connection.certMismatches.isEmpty {
-                            CertMismatchListView(
-                                mismatches: session.connection.certMismatches
-                            )
-                                .frame(maxWidth: Self.reconnectPanelMaximumWidth)
-                        }
-
-                        Button("Log Off") {
-                            coordinator.onLogOff()
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.primary)
-                        .padding(.top, Constants.Root.reconnectButtonTopPadding)
-                    }
-                    .padding(Constants.Root.reconnectPanelPadding)
-                    .background(.regularMaterial, in: RoundedRectangle(
-                        cornerRadius: Constants.Root.reconnectPanelCornerRadius
-                    ))
-                }
-                .transition(.opacity)
-                .animation(
-                    .easeInOut(duration: Constants.Root.screenAnimationDuration),
-                    value: coordinator.isDisconnected
-                )
-            }
+            reconnectOverlay
         }
         // intent://pair deep-link confirmation — presented over whichever
         // screen is current (first-run pairing or an existing connection).
@@ -253,7 +270,7 @@ struct RootView: View {
             guard let backendID = session.backendID else { return }
             selectionHandlerToken = notificationManager.registerAgentSelectionHandler(
                 for: backendID
-            ) { [weak coordinator] agentId, workspaceId, agentName, connectionId in
+            ) { [weak coordinator = coordinator] agentId, workspaceId, agentName, connectionId in
                 if supportsMultipleWindows {
                     // Raise this backend's window before navigating it.
                     openWindow(value: backendID)

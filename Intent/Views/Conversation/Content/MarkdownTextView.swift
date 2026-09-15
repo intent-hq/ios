@@ -94,44 +94,45 @@ struct MarkdownTextView: View {
         guard text.contains("[") else { return text }
         var fenceMarker: Character?
         var inList = false
-        return text.components(separatedBy: "\n")
-            .map { line -> String in
-                let indent = leadingIndentWidth(of: line)
-                let trimmed = line.trimmingCharacters(in: .whitespaces)
+        func replaceMarker(in line: String) -> String {
+            let indent = leadingIndentWidth(of: line)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-                if let marker = fenceMarker {
-                    if indent <= Self.maximumBlockIndent,
-                       trimmed.count >= Self.minimumFenceLength,
-                       trimmed.allSatisfy({ $0 == marker }) {
-                        fenceMarker = nil
-                    }
-                    return line
-                }
-                if indent <= Self.maximumBlockIndent || inList {
-                    if trimmed.hasPrefix("```") {
-                        fenceMarker = "`"
-                        return line
-                    }
-                    if trimmed.hasPrefix("~~~") {
-                        fenceMarker = "~"
-                        return line
-                    }
-                }
-                if trimmed.isEmpty { return line }
-                if indent >= Self.indentedCodeWidth, !inList { return line }
-
-                if let match = line.prefixMatch(of: taskListMarker) {
-                    inList = true
-                    let box = match.output.2.lowercased() == "x" ? "☑" : "☐"
-                    return "\(match.output.1)\(box) \(line[match.range.upperBound...])"
-                }
-                if line.prefixMatch(of: listItemMarker) != nil {
-                    inList = true
-                } else if indent < Self.listContinuationIndent {
-                    inList = false
+            if let marker = fenceMarker {
+                if indent <= Self.maximumBlockIndent,
+                   trimmed.count >= Self.minimumFenceLength,
+                   trimmed.allSatisfy({ $0 == marker }) {
+                    fenceMarker = nil
                 }
                 return line
             }
+            if indent <= Self.maximumBlockIndent || inList {
+                if trimmed.hasPrefix("```") {
+                    fenceMarker = "`"
+                    return line
+                }
+                if trimmed.hasPrefix("~~~") {
+                    fenceMarker = "~"
+                    return line
+                }
+            }
+            if trimmed.isEmpty { return line }
+            if indent >= Self.indentedCodeWidth, !inList { return line }
+
+            if let match = line.prefixMatch(of: taskListMarker) {
+                inList = true
+                let box = match.output.2.lowercased() == "x" ? "☑" : "☐"
+                return "\(match.output.1)\(box) \(line[match.range.upperBound...])"
+            }
+            if line.prefixMatch(of: listItemMarker) != nil {
+                inList = true
+            } else if indent < Self.listContinuationIndent {
+                inList = false
+            }
+            return line
+        }
+        return text.components(separatedBy: "\n")
+            .map(replaceMarker)
             .joined(separator: "\n")
     }
 

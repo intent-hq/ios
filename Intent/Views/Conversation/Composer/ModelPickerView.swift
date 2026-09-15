@@ -7,36 +7,7 @@ struct ModelPickerView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                let grouped = Dictionary(grouping: viewModel.availableModels, by: \.provider)
-                let sortedProviders = grouped.keys.sorted()
-
-                ForEach(sortedProviders, id: \.self) { provider in
-                    Section(header: Text(provider)) {
-                        if let models = grouped[provider] {
-                            ForEach(models) { model in
-                                Button {
-                                    Task {
-                                        await viewModel.setModel(model.id)
-                                        dismiss()
-                                    }
-                                } label: {
-                                    HStack {
-                                        Text(model.name)
-                                            .foregroundStyle(Theme.foreground(for: colorScheme))
-                                        Spacer()
-                                        if viewModel.currentModelId == model.id {
-                                            Image(systemName: "checkmark")
-                                                .foregroundStyle(Theme.primary(for: colorScheme))
-                                                .accessibilityLabel("Selected model")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            modelList
             .navigationTitle("Select Model")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -46,6 +17,42 @@ struct ModelPickerView: View {
             }
             .task {
                 await viewModel.fetchModels()
+            }
+        }
+    }
+
+    private var modelList: some View {
+        let grouped = Dictionary(grouping: viewModel.availableModels, by: \.provider)
+        let sortedProviders = grouped.keys.sorted()
+        return List {
+            ForEach(sortedProviders, id: \.self) { provider in
+                Section(header: Text(provider)) {
+                    if let models = grouped[provider] {
+                        ForEach(models) { model in
+                            modelButton(model)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func modelButton(_ model: ModelInfo) -> some View {
+        Button {
+            Task {
+                await viewModel.setModel(model.id)
+                dismiss()
+            }
+        } label: {
+            HStack {
+                Text(model.name)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Spacer()
+                if viewModel.currentModelId == model.id {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(Theme.primary(for: colorScheme))
+                        .accessibilityLabel("Selected model")
+                }
             }
         }
     }

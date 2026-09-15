@@ -18,56 +18,47 @@ struct MessageView: View {
     private var isUser: Bool { message.role == .user }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Dismissal notification rows render as a compact divider chip
-            // regardless of the persisted role (PROTOCOL §5.5
-            // `questions_dismissed`; FE parity: ChatMessage.svelte).
-            if let dismissedNotice = message.questionsDismissedNotice {
-                QuestionsDismissedNoticeView(notice: dismissedNotice)
-            } else if let modelChange = message.modelChangeNotice {
-                // Model-change rows (`metadata.type = "model_changed"`) are
-                // informational and render as a centered divider chip
-                // regardless of the persisted role (PROTOCOL §5.5
-                // `agent.setModel`; FE parity: ChatMessage.svelte checks
-                // getModelChangeNotice before any role branching).
-                ModelChangeNoticeView(
-                    notice: modelChange,
-                    fallbackText: message.joinedTextContent
-                )
-            } else if isUser, let eventWake = message.eventWakeAttribution {
-                // Event-notification wake rows render as a compact banner —
-                // the whole body is machine text, so the banner replaces the
-                // bubble (display-only; FE parity: EventWakeupBanner).
-                EventWakeBannerView(attribution: eventWake)
-            } else if isUser {
-                UserMessageView(
-                    message: message,
-                    workspaceId: workspaceId,
-                    onNavigateToAgent: onNavigateToAgent,
-                    isAgentMessageExpanded: $isAgentMessageExpanded
-                )
-            } else if message.role == .assistant {
-                AssistantMessageView(
-                    message: message,
-                    workspaceId: workspaceId,
-                    onNavigateToNote: onNavigateToNote,
-                    hydratingBlockIds: hydratingBlockIds,
-                    onHydrateBlock: onHydrateBlock
-                )
-            } else if message.role == .error {
-                ErrorMessageView(message: message)
-            } else if message.role == .system {
-                // Attention-request / turn-failure rows get a kind-flavored
-                // card; every other system row (e.g. `meta.kind =
-                // "interruption"`) falls back to a generic muted banner
-                // instead of rendering nothing (FE parity:
-                // ChatMessage.svelte system branch).
-                if let notice = message.attentionNotice {
-                    AttentionNoticeView(notice: notice)
-                } else {
-                    SystemNoticeBannerView(message: message.joinedTextContent)
-                }
-            }
+            messageContent
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var messageContent: some View {
+        if let dismissedNotice = message.questionsDismissedNotice {
+            QuestionsDismissedNoticeView(notice: dismissedNotice)
+        } else if let modelChange = message.modelChangeNotice {
+            ModelChangeNoticeView(notice: modelChange, fallbackText: message.joinedTextContent)
+        } else if isUser, let eventWake = message.eventWakeAttribution {
+            EventWakeBannerView(attribution: eventWake)
+        } else if isUser {
+            UserMessageView(
+                message: message,
+                workspaceId: workspaceId,
+                onNavigateToAgent: onNavigateToAgent,
+                isAgentMessageExpanded: $isAgentMessageExpanded
+            )
+        } else if message.role == .assistant {
+            AssistantMessageView(
+                message: message,
+                workspaceId: workspaceId,
+                onNavigateToNote: onNavigateToNote,
+                hydratingBlockIds: hydratingBlockIds,
+                onHydrateBlock: onHydrateBlock
+            )
+        } else if message.role == .error {
+            ErrorMessageView(message: message)
+        } else if message.role == .system {
+            systemMessage
+        }
+    }
+
+    @ViewBuilder
+    private var systemMessage: some View {
+        if let notice = message.attentionNotice {
+            AttentionNoticeView(notice: notice)
+        } else {
+            SystemNoticeBannerView(message: message.joinedTextContent)
+        }
     }
 }

@@ -45,7 +45,7 @@ struct DemoFixturesTests {
         #expect(workspaces.count == 4)
         #expect(workspaces.allSatisfy { !$0.title.isEmpty })
         // At least one workspace carries an agent summary for the detail screen
-        #expect(workspaces.contains { ($0.agentSummaryAgents?.count ?? 0) > 0 })
+        #expect(workspaces.contains { !$0.agentSummaryAgents.isEmpty })
     }
 
     @Test func noteListFixtureParses() throws {
@@ -78,7 +78,7 @@ struct DemoFixturesTests {
         #expect(messages.contains { $0.role == .assistant })
         // Every message renders at least one text block
         #expect(messages.allSatisfy { message in
-            message.contentBlocks?.contains { $0.resolvedText?.isEmpty == false } == true
+            message.contentBlocks.contains { $0.resolvedText?.isEmpty == false }
         })
     }
 

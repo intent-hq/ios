@@ -7,10 +7,10 @@ import Foundation
 nonisolated enum WorkspacePrPill {
     /// FE `PRDisplayStatus` — the four pill buckets.
     enum Status: String, Equatable {
-        case open
-        case merged
         case closed
         case draft
+        case merged
+        case open
     }
 
     /// Pill-relevant subset of an FE `PRInfo` row.

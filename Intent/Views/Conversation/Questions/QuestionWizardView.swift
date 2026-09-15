@@ -57,57 +57,7 @@ struct QuestionWizardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if questions.isEmpty {
-                EmptyView()
-            } else if collapsed {
-                QuestionWizardCollapsedBanner(
-                    questionCount: questions.count,
-                    showsDismiss: onDismiss != nil,
-                    dismissed: dismissed,
-                    onExpand: { collapsed = false },
-                    onDismiss: { confirmingDismiss = true }
-                )
-            } else {
-                QuestionWizardHeaderRow(
-                    questionCount: questions.count,
-                    index: idx,
-                    isMulti: isMulti,
-                    showsDismiss: onDismiss != nil,
-                    dismissed: dismissed,
-                    onIgnore: { collapsed = true },
-                    onDismiss: { confirmingDismiss = true }
-                )
-                QuestionStepView(
-                    step: idx,
-                    question: current,
-                    selectedIndices: $drafts[idx].sel,
-                    freeText: $drafts[idx].text,
-                    isMulti: isMulti,
-                    contentHeight: stepContentHeights[idx],
-                    maximumHeight: stepBodyMaxHeight,
-                    onContentHeight: { step, height in
-                        stepContentHeights[step] = height
-                    },
-                    onSelect: selectOption,
-                    onSubmit: handleNext,
-                    onTextChange: markCurrentDraftUnskipped
-                )
-                    .id(idx)
-                    .transition(.opacity)
-                QuestionWizardFooterRow(
-                    index: idx,
-                    multiStep: multiStep,
-                    isMulti: isMulti,
-                    isLast: isLast,
-                    showNext: showNext,
-                    nextDisabled: nextDisabled,
-                    submitted: submitted,
-                    dismissed: dismissed,
-                    onBack: handleBack,
-                    onSkip: handleSkip,
-                    onNext: handleNext
-                )
-            }
+            wizardContent
         }
         .background(Theme.muted(for: colorScheme).opacity(
             colorSchemeContrast == .increased ? Self.backgroundIncreasedOpacity : Self.backgroundOpacity
@@ -141,6 +91,61 @@ struct QuestionWizardView: View {
                 "The agent's questions will be dismissed completely without "
                     + "answering. This is permanent — they won't come back, "
                     + "even after a reload."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var wizardContent: some View {
+        if questions.isEmpty {
+            EmptyView()
+        } else if collapsed {
+            QuestionWizardCollapsedBanner(
+                questionCount: questions.count,
+                showsDismiss: onDismiss != nil,
+                dismissed: dismissed,
+                onExpand: { collapsed = false },
+                onDismiss: { confirmingDismiss = true }
+            )
+        } else {
+            QuestionWizardHeaderRow(
+                questionCount: questions.count,
+                index: idx,
+                isMulti: isMulti,
+                showsDismiss: onDismiss != nil,
+                dismissed: dismissed,
+                onIgnore: { collapsed = true },
+                onDismiss: { confirmingDismiss = true }
+            )
+            QuestionStepView(
+                step: idx,
+                question: current,
+                selectedIndices: $drafts[idx].sel,
+                freeText: $drafts[idx].text,
+                isMulti: isMulti,
+                contentHeight: stepContentHeights[idx],
+                maximumHeight: stepBodyMaxHeight,
+                onContentHeight: { step, height in
+                    stepContentHeights[step] = height
+                },
+                onSelect: selectOption,
+                onSubmit: handleNext,
+                onTextChange: markCurrentDraftUnskipped
+            )
+                .id(idx)
+                .transition(.opacity)
+            QuestionWizardFooterRow(
+                index: idx,
+                multiStep: multiStep,
+                isMulti: isMulti,
+                isLast: isLast,
+                showNext: showNext,
+                nextDisabled: nextDisabled,
+                submitted: submitted,
+                dismissed: dismissed,
+                onBack: handleBack,
+                onSkip: handleSkip,
+                onNext: handleNext
             )
         }
     }

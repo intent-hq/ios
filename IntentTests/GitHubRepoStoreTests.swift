@@ -193,7 +193,11 @@ struct GitHubRepoStoreTests {
         let params = fake.paramsForMethod("github.repos.search")
         #expect(params.count == 1)
         #expect(params[0]["query"] as? String == "intentd user:intent-hq")
-        #expect(results?.count == 1)
+        if case let .results(repos) = results {
+            #expect(repos.count == 1)
+        } else {
+            Issue.record("Expected search results")
+        }
     }
 
     @Test func searchReposSendsBareQueryVerbatim() async {
@@ -202,14 +206,22 @@ struct GitHubRepoStoreTests {
         fake.responseMap["github.repos.search"] = ["repos": []]
         let results = await store.searchRepos(query: "intentd")
         #expect(fake.paramsForMethod("github.repos.search")[0]["query"] as? String == "intentd")
-        #expect(results?.isEmpty == true)
+        if case let .results(repos) = results {
+            #expect(repos.isEmpty)
+        } else {
+            Issue.record("Expected search results")
+        }
     }
 
     @Test func searchReposEmptyQueryReturnsEmptyWithoutRequest() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         let results = await store.searchRepos(query: "   ")
-        #expect(results?.isEmpty == true)
+        if case let .results(repos) = results {
+            #expect(repos.isEmpty)
+        } else {
+            Issue.record("Expected empty search results")
+        }
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
@@ -235,7 +247,7 @@ struct GitHubRepoStoreTests {
             userInfo: [NSLocalizedDescriptionKey: "search down"]
         )
         let results = await store.searchRepos(query: "intentd")
-        #expect(results == nil)
+        if case .failed = results {} else { Issue.record("Expected failed search") }
         #expect(store.lastError == "search down")
         #expect(store.isLoading == false)
     }

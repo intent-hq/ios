@@ -190,7 +190,7 @@ struct GitHubRepoPickerView: View {
             // task is still the latest — an out-of-order older response can't
             // overwrite a newer one's results.
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
-            if let results {
+            if case let .results(results) = results {
                 store.searchResults = results
                 completedSearchQuery = query
             }

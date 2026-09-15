@@ -37,7 +37,7 @@ struct MonitoredPrsRowTests {
     }
 
     private func makeSnapshot(
-        mergeable: Bool? = nil,
+        mergeability: MergeabilityState = .computing,
         mergeBlockedReason: String? = nil,
         checks: MonitoredPr.Snapshot.Checks = .init(total: 0, passed: 0, failed: 0, pending: 0),
         approvals: MonitoredPr.Snapshot.Approvals = .init(decision: "none", have: 0, needed: nil, changesRequested: 0),
@@ -48,7 +48,7 @@ struct MonitoredPrsRowTests {
             isDraft: false,
             hasConflicts: false,
             isBehind: false,
-            mergeable: mergeable,
+            mergeability: mergeability,
             mergeBlockedReason: mergeBlockedReason,
             checks: checks,
             approvals: approvals,
@@ -184,20 +184,20 @@ struct MonitoredPrsRowTests {
         let unknown = makeMonitor(snapshot: makeSnapshot())
         #expect(MonitoredPrsRow.mergeSummary(unknown) == nil)
         let blocked = makeMonitor(snapshot: makeSnapshot(
-            mergeable: true,
+            mergeability: .mergeable,
             mergeBlockedReason: "2 failing checks"
         ))
         #expect(MonitoredPrsRow.mergeSummary(blocked) == "Merge blocked: 2 failing checks")
-        let mergeable = makeMonitor(snapshot: makeSnapshot(mergeable: true))
+        let mergeable = makeMonitor(snapshot: makeSnapshot(mergeability: .mergeable))
         #expect(MonitoredPrsRow.mergeSummary(mergeable) == "Mergeable")
-        let notMergeable = makeMonitor(snapshot: makeSnapshot(mergeable: false))
+        let notMergeable = makeMonitor(snapshot: makeSnapshot(mergeability: .notMergeable))
         #expect(MonitoredPrsRow.mergeSummary(notMergeable) == "Not mergeable")
     }
 
     @Test func detailLinesIncludeMergeAndLastChangeLines() throws {
         let monitor = makeMonitor(
             lastChangeAt: "2026-07-31T10:00:00Z",
-            snapshot: makeSnapshot(mergeable: false)
+            snapshot: makeSnapshot(mergeability: .notMergeable)
         )
         let now = try #require(ISO8601DateFormatter.lenientDate(from: "2026-07-31T10:05:30Z"))
         #expect(MonitoredPrsRow.detailLines(monitor, now: now) == [

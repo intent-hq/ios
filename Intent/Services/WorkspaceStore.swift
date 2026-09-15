@@ -111,7 +111,9 @@ import Observation
         }
         workspaceReconciler?.seed(id: workspace.id, value: workspace)
     }
+}
 
+extension WorkspaceStore {
     // MARK: - Event subscription
 
     private func subscribeToEvents() async {
@@ -244,16 +246,14 @@ import Observation
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.kind {
-        case .snapshot:
-            guard let rawItems = push.snapshot else { return }
+        switch push.payload {
+        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
             workspaceLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             publishFetchedWorkspaces(reconciler.values())
             AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
 
-        case .delta:
-            guard let delta = push.delta else { return }
+        case let .delta(delta):
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 publishFetchedWorkspaces(reconciler.values())
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
@@ -325,6 +325,8 @@ import Observation
             agentSummaryCount: workspace.agentSummaryCount,
             agentSummaryAgents: workspace.agentSummaryAgents,
             pullRequests: workspace.pullRequests,
+            agentSummaryWasReported: workspace.agentSummaryWasReported,
+            pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
@@ -362,6 +364,8 @@ import Observation
             agentSummaryCount: workspace.agentSummaryCount,
             agentSummaryAgents: workspace.agentSummaryAgents,
             pullRequests: workspace.pullRequests,
+            agentSummaryWasReported: workspace.agentSummaryWasReported,
+            pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
@@ -400,95 +404,11 @@ import Observation
             agentSummaryCount: workspace.agentSummaryCount,
             agentSummaryAgents: workspace.agentSummaryAgents,
             pullRequests: workspace.pullRequests,
+            agentSummaryWasReported: workspace.agentSummaryWasReported,
+            pullRequestsWereReported: workspace.pullRequestsWereReported,
             activePullRequest: workspace.activePullRequest
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
-    }
-
-    // MARK: - Parsing
-
-    static func parseWorkspaces(from result: Any) -> [Workspace] {
-        guard let dict = result as? [String: Any],
-              let items = dict["workspaces"] as? [[String: Any]] else {
-            guard let items = result as? [[String: Any]] else { return [] }
-            return items.compactMap { parseWorkspace($0) }
-        }
-        return items.compactMap { parseWorkspace($0) }
-    }
-
-    static func parseWorkspace(_ dict: [String: Any]) -> Workspace? {
-        guard let id = dict["id"] as? String,
-              let title = dict["title"] as? String else { return nil }
-
-        let diffSummary = dict["diffSummary"] as? [String: Any]
-        let taskStats = dict["taskStats"] as? [String: Any]
-        let agentSummary = dict["agentSummary"] as? [String: Any]
-
-        // DEBUG: Log agent summary data
-        AppLog.workspace.debug(
-        "[WorkspaceStore] Parsing workspace '\(title)': agentSummary=\(agentSummary != nil ? "present" : "nil"), count=\(agentSummary?["count"] ?? "nil"), agents=\((agentSummary?["agents"] as? [[String: Any]])?.count ?? 0)"
-        )
-        if let agents = agentSummary?["agents"] as? [[String: Any]] {
-            for agent in agents {
-                AppLog.workspace.debug("[WorkspaceStore]   Agent: id=\(agent["id"] ?? "?"), name=\(agent["name"] ?? "?"), status=\(agent["status"] ?? "?")")
-            }
-        }
-        // END DEBUG
-
-        var pullRequests: [WorkspacePullRequest]?
-        if let rawPrs = dict["pullRequests"] as? [[String: Any]] {
-            pullRequests = rawPrs.compactMap { WorkspacePullRequest(wire: $0) }
-        }
-
-        var activePullRequest: WorkspacePullRequest?
-        if let rawActivePr = dict["activePullRequest"] as? [String: Any] {
-            activePullRequest = WorkspacePullRequest(wire: rawActivePr)
-        }
-
-        var agentInfos: [WorkspaceAgentInfo]?
-        if let agents = agentSummary?["agents"] as? [[String: Any]] {
-            agentInfos = agents.compactMap { agentDict -> WorkspaceAgentInfo? in
-                guard let agentId = agentDict["id"] as? String,
-                      let name = agentDict["name"] as? String,
-                      let status = agentDict["status"] as? String else { return nil }
-                return WorkspaceAgentInfo(
-                    id: agentId,
-                    name: name,
-                    status: status,
-                    specialist: agentDict["specialist"] as? String,
-                    lastActivity: agentDict["lastActivity"] as? String,
-                    isStreaming: agentDict["isStreaming"] as? Bool ?? false,
-                    isResponding: agentDict["isResponding"] as? Bool ?? false
-                )
-            }
-        }
-
-        return Workspace(
-            id: id,
-            title: title,
-            branch: dict["branch"] as? String,
-            baseRef: dict["baseRef"] as? String,
-            status: dict["status"] as? String,
-            activity: dict["activity"] as? String,
-            displayStatus: dict["displayStatus"] as? String,
-            attention: dict["attention"] as? String,
-            waiting: dict["waiting"] as? Bool ?? false,
-            lastActivity: dict["lastActivity"] as? String,
-            createdAt: dict["createdAt"] as? String,
-            updatedAt: dict["updatedAt"] as? String,
-            repositoryOwner: dict["repositoryOwner"] as? String,
-            repositoryName: dict["repositoryName"] as? String ?? dict["repo"] as? String,
-            prStatus: dict["prStatus"] as? String,
-            prNumber: dict["prNumber"] as? Int,
-            diffSummaryTotalFiles: diffSummary?["totalFiles"] as? Int,
-            taskStatsTotal: taskStats?["total"] as? Int,
-            taskStatsCompleted: taskStats?["completed"] as? Int,
-            taskStatsInProgress: taskStats?["inProgress"] as? Int,
-            agentSummaryCount: agentSummary?["count"] as? Int,
-            agentSummaryAgents: agentInfos,
-            pullRequests: pullRequests,
-            activePullRequest: activePullRequest
-        )
     }
 }

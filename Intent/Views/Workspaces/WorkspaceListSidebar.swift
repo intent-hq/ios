@@ -94,77 +94,74 @@ struct WorkspaceListSidebar: View {
         )
     }
 
-    @ViewBuilder
     private var workspaceList: some View {
-        List(selection: Binding(
+        List(selection: workspaceSelection) { workspaceSections }
+            .listStyle(.sidebar)
+            #if !os(visionOS)
+            .scrollDismissesKeyboard(.immediately)
+            #endif
+            .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+    }
+
+    private var workspaceSelection: Binding<String?> {
+        Binding(
             get: { coordinator.selectedWorkspaceId },
-            set: { newId in
-                searchFocused = false
-                if let id = newId {
-                    coordinator.onSelectWorkspace(id)
-                } else {
-                    coordinator.selectedWorkspaceId = nil
-                }
+            set: selectWorkspace
+        )
+    }
+
+    private func selectWorkspace(_ newId: String?) {
+        searchFocused = false
+        if let id = newId {
+            coordinator.onSelectWorkspace(id)
+        } else {
+            coordinator.selectedWorkspaceId = nil
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceSections: some View {
+        switch viewModel.viewMode {
+        case .recent:
+            ForEach(viewModel.filteredWorkspaces) { workspace in
+                workspaceRow(workspace)
             }
-        )) {
-            switch viewModel.viewMode {
-            case .recent:
-                ForEach(viewModel.filteredWorkspaces) { workspace in
-                    WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                        .tag(workspace.id)
-                        .listRowInsets(EdgeInsets(
-                            top: Constants.WorkspaceList.sidebarRowInset,
-                            leading: Constants.WorkspaceList.sidebarRowInset,
-                            bottom: Constants.WorkspaceList.sidebarRowInset,
-                            trailing: Constants.WorkspaceList.sidebarRowInset
-                        ))
-                        .listRowSeparator(.hidden)
-                }
-            case .repo:
-                ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                    Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+        case .repo:
+            ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
+                Section {
+                    ForEach(workspaces) { workspace in
+                        workspaceRow(workspace, showRepo: false)
+                    }
+                } header: {
+                    HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                         RepoOwnerAvatarView(
                             owner: workspaces.first?.repositoryOwner,
                             size: Constants.WorkspaceList.sidebarSectionAvatarSize
                         )
                         Text(repoName)
-                    }) {
-                        ForEach(workspaces) { workspace in
-                            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: false)
-                                .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(
-                                    top: Constants.WorkspaceList.sidebarRowInset,
-                                    leading: Constants.WorkspaceList.sidebarRowInset,
-                                    bottom: Constants.WorkspaceList.sidebarRowInset,
-                                    trailing: Constants.WorkspaceList.sidebarRowInset
-                                ))
-                                .listRowSeparator(.hidden)
-                        }
                     }
                 }
-            case .status:
-                ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                    Section(header: Text(statusLabel)) {
-                        ForEach(workspaces) { workspace in
-                            WorkspaceRowView(workspace: workspace, colorScheme: colorScheme)
-                                .tag(workspace.id)
-                                .listRowInsets(EdgeInsets(
-                                    top: Constants.WorkspaceList.sidebarRowInset,
-                                    leading: Constants.WorkspaceList.sidebarRowInset,
-                                    bottom: Constants.WorkspaceList.sidebarRowInset,
-                                    trailing: Constants.WorkspaceList.sidebarRowInset
-                                ))
-                                .listRowSeparator(.hidden)
-                        }
+            }
+        case .status:
+            ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
+                Section(header: Text(statusLabel)) {
+                    ForEach(workspaces) { workspace in
+                        workspaceRow(workspace)
                     }
                 }
             }
         }
-        .listStyle(.sidebar)
-        #if !os(visionOS)
-        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
-        .scrollDismissesKeyboard(.immediately)
-        #endif
-        .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
+    }
+
+    private func workspaceRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
+        WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
+            .tag(workspace.id)
+            .listRowInsets(EdgeInsets(
+                top: Constants.WorkspaceList.sidebarRowInset,
+                leading: Constants.WorkspaceList.sidebarRowInset,
+                bottom: Constants.WorkspaceList.sidebarRowInset,
+                trailing: Constants.WorkspaceList.sidebarRowInset
+            ))
+            .listRowSeparator(.hidden)
     }
 }

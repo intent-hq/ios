@@ -233,7 +233,8 @@ struct DictationTranscriptTests {
         }
 
         var state = DictationStartState()
-        let token = try #require(state.requestStart())
+        let tokenResult = state.requestStart()
+        let token = try #require(tokenResult)
         // Stop lands while authorization is pending.
         state.stopped()
         // The awaited start may not proceed and cannot reach recording.
@@ -247,12 +248,14 @@ struct DictationTranscriptTests {
     /// token stays stale even after a fresh start begins.
     @Test func startWindowTokensAreGenerationScoped() throws {
         var state = DictationStartState()
-        let first = try #require(state.requestStart())
+        let firstResult = state.requestStart()
+        let first = try #require(firstResult)
         let reentrant = state.requestStart()
         #expect(reentrant == nil)
 
         state.stopped()
-        let second = try #require(state.requestStart())
+        let secondResult = state.requestStart()
+        let second = try #require(secondResult)
         // The older attempt stays cancelled; the fresh one proceeds.
         #expect(!state.canProceed(first))
         #expect(state.canProceed(second))
@@ -267,13 +270,15 @@ struct DictationTranscriptTests {
     /// An uncancelled start completes; a failed one returns to idle.
     @Test func startWindowCompletesOrAborts() throws {
         var state = DictationStartState()
-        let token = try #require(state.requestStart())
+        let tokenResult = state.requestStart()
+        let token = try #require(tokenResult)
         let reachedRecording = state.started(token)
         #expect(reachedRecording)
         #expect(state.phase == .recording)
 
         var failing = DictationStartState()
-        let failToken = try #require(failing.requestStart())
+        let failTokenResult = failing.requestStart()
+        let failToken = try #require(failTokenResult)
         failing.abort(failToken)
         #expect(failing.phase == .idle)
         // Idle again: a new start is allowed.

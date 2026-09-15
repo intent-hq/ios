@@ -72,6 +72,6 @@ nonisolated enum AppLog {
     static let hooks = Category("hooks")
     static let agents = Category("agents")
     static let notifications = Category("notifications")
-    static let ui = Category("ui")
+    static let userInterface = Category("ui")
     static let app = Category("app")
 }

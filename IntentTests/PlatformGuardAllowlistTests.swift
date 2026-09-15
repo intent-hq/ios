@@ -11,10 +11,6 @@ import Testing
 /// cannot bypass the scan; the patterns' escaped spelling also keeps this
 /// file from matching its own scan.)
 struct PlatformGuardAllowlistTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
-
     private static let visionOSGuard = #"os\s*\(\s*visionOS\s*\)"#
     private static let tailcatKitGuard = #"canImport\s*\(\s*TailcatKit\s*\)"#
 
@@ -52,36 +48,16 @@ struct PlatformGuardAllowlistTests {
     /// whose contents match the regex `pattern`.
     private func filesContaining(_ pattern: String) throws -> Set<String> {
         var matches: Set<String> = []
-        let rootPrefix = Self.repoRoot.standardizedFileURL.path + "/"
+        let inputs = try TestBundleInputs.current()
         for directory in ["Intent", "IntentTests"] {
-            let root = Self.repoRoot.appendingPathComponent(directory)
-            var isDirectory: ObjCBool = false
-            try #require(
-                FileManager.default.fileExists(
-                    atPath: root.path,
-                    isDirectory: &isDirectory
-                )
-                    && isDirectory.boolValue,
-                "scan root \(directory)/ is missing or not a directory at \(root.path)"
-            )
-            let enumerator = try #require(
-                FileManager.default.enumerator(
-                    at: root,
-                    includingPropertiesForKeys: [.isRegularFileKey]
-                ),
-                "failed to enumerate \(directory)/"
-            )
-            for case let url as URL in enumerator {
-                guard url.pathExtension == "swift" else { continue }
+            let files = try inputs.swiftFiles(under: directory)
+            try #require(!files.isEmpty, "scan root \(directory)/ contains no Swift inputs")
+            for file in files {
+                let url = file.url
                 let contents = try String(contentsOf: url, encoding: .utf8)
                 guard contents.range(of: pattern, options: .regularExpression) != nil
                 else { continue }
-                let absolute = url.standardizedFileURL.path
-                try #require(
-                    absolute.hasPrefix(rootPrefix),
-                    "scanned file \(absolute) is not under repo root \(rootPrefix)"
-                )
-                matches.insert(String(absolute.dropFirst(rootPrefix.count)))
+                matches.insert(file.path)
             }
         }
         return matches

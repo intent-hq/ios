@@ -5,6 +5,16 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+enum ComposerImageRecovery {
+    case preserveCurrentSelection
+    case restore([UIImage])
+
+    func apply(to pendingImages: inout [UIImage]) {
+        guard pendingImages.isEmpty, case let .restore(images) = self else { return }
+        pendingImages = images
+    }
+}
+
 /// Main-actor-owned composer attachment state and send-time placement logic.
 /// Security-scoped access begins when a file is added and remains held until
 /// removal, clear after a successful send/queue, or deinitialization.
@@ -132,8 +142,8 @@ import UniformTypeIdentifiers
     }
 
     func buildImageBlocks(from images: [UIImage], workspaceId: String) async throws
-        -> [[String: Any]]? {
-        guard !images.isEmpty else { return nil }
+        -> OutgoingImagePayload {
+        guard !images.isEmpty else { return .none }
         var payloads: [Data] = []
         for (index, image) in images.enumerated() {
             guard let data = image.jpegData(
@@ -169,12 +179,12 @@ import UniformTypeIdentifiers
                 "mimeType": placed.mimeType ?? "image/jpeg"
             ])
         }
-        return blocks
+        return .attachments(blocks)
     }
 
     func buildFileBlocks(from files: [PendingFile], workspaceId: String) async throws
-        -> [[String: Any]]? {
-        guard !files.isEmpty else { return nil }
+        -> OutgoingFilePayload {
+        guard !files.isEmpty else { return .none }
         for file in files { fileUploadProgress[file.id] = 0 }
         defer { fileUploadProgress.removeAll() }
 
@@ -211,7 +221,7 @@ import UniformTypeIdentifiers
             if let mimeType = placed.mimeType { block["mimeType"] = mimeType }
             blocks.append(block)
         }
-        return blocks
+        return .attachments(blocks)
     }
 
     static func mimeType(for url: URL) -> String? {
@@ -221,22 +231,22 @@ import UniformTypeIdentifiers
     func surfaceImagePlacementFailure(
         _ error: Error,
         content: String,
-        images: [UIImage]?,
+        imageRecovery: ComposerImageRecovery,
         messageText: inout String
     ) {
         imagePlacementError = error.localizedDescription
         if messageText.isEmpty { messageText = content }
-        if let images, pendingImages.isEmpty { pendingImages = images }
+        imageRecovery.apply(to: &pendingImages)
     }
 
     func surfaceFilePlacementFailure(
         _ error: Error,
         content: String,
-        images: [UIImage]?,
+        imageRecovery: ComposerImageRecovery,
         messageText: inout String
     ) {
         filePlacementError = error.localizedDescription
         if messageText.isEmpty { messageText = content }
-        if let images, pendingImages.isEmpty { pendingImages = images }
+        imageRecovery.apply(to: &pendingImages)
     }
 }

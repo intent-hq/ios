@@ -19,9 +19,9 @@ struct WorkspaceRowPresentationTests {
 
     @Test func denseMetadataFixturePreservesLongFieldsAndConcurrentCues() {
         let workspace = makeWorkspace(
+            displayStatus: "in_progress",
             title: "Refine the workspace list hierarchy without losing important metadata",
             repositoryName: "intent-hq/a-very-long-repository-name-for-layout-regressions",
-            displayStatus: "in_progress",
             activity: "agent_running",
             attention: "unread",
             lastActivity: "2026-09-09T15:42:17Z",
@@ -44,7 +44,7 @@ struct WorkspaceRowPresentationTests {
         #expect(workspace.title.hasSuffix("important metadata"))
         #expect(workspace.repositoryName?.hasSuffix("layout-regressions") == true)
         #expect(workspace.lastActivity == "2026-09-09T15:42:17Z")
-        #expect(workspace.pullRequests?.count == 2)
+        #expect(workspace.pullRequests.count == 2)
         #expect(indicator.pill?.number == 123_456_789)
         #expect(WorkspaceStatusIconView.accessibilitySummary(for: workspace)
             == "In Progress, Active agent, Unread attention")
@@ -158,6 +158,17 @@ struct WorkspaceRowPresentationTests {
         ])
     }
 
+    @Test func accessibilityTraversalPrefersPropertyElementsOverEmptyIndexLookup() {
+        let container = ConflictingAccessibilityContainer()
+        let element = UIAccessibilityElement(accessibilityContainer: container)
+        element.accessibilityLabel = "Property container element"
+        container.accessibilityElements = [element]
+
+        #expect(accessibilityElements(in: container).map(\.accessibilityLabel) == [
+            "Property container element"
+        ])
+    }
+
     @Test func accessibilityGraphDiagnosticsRedactContentAndTraverseNonViewContainers() {
         let container = NonViewAccessibilityContainer()
         container.dynamicElement.accessibilityLabel = "Expected label"
@@ -236,18 +247,20 @@ struct WorkspaceRowPresentationTests {
         #expect(WorkspaceStatusIconView.accessibilitySummary(for: running)
             == "Idle, Active agent")
     }
+}
 
+extension WorkspaceRowPresentationTests {
     private func makeWorkspace(
+        displayStatus: String?,
         title: String = "Workspace",
         repositoryName: String? = nil,
-        displayStatus: String?,
         activity: String? = nil,
         attention: String? = nil,
         waiting: Bool = false,
         lastActivity: String? = nil,
         prStatus: String? = nil,
         prNumber: Int? = nil,
-        pullRequests: [WorkspacePullRequest]? = nil
+        pullRequests: [WorkspacePullRequest] = []
     ) -> Workspace {
         Workspace(
             id: "ws-1",
@@ -270,7 +283,6 @@ struct WorkspaceRowPresentationTests {
             taskStatsCompleted: nil,
             taskStatsInProgress: nil,
             agentSummaryCount: nil,
-            agentSummaryAgents: nil,
             pullRequests: pullRequests
         )
     }
@@ -297,63 +309,64 @@ struct WorkspaceRowPresentationTests {
         )
     }
 
+    private enum RenderingMetrics {
+        static let pullRequestNumber = 123_456_789
+        static let hostHeight: CGFloat = 300
+        static let maximumClassNameLength = 80
+    }
+
     private struct RenderedBadges {
         let hostFrame: CGRect
         let badges: [(label: String, frame: CGRect)]
     }
-
     private func renderBadges(width: CGFloat) throws -> RenderedBadges {
         try autoreleasepool {
-            let indicator = WorkspaceRowView.PrIndicatorModel(
-                pill: .init(status: .merged, number: 123_456_789),
-                otherMonitorCount: 100
-            )
-            let height: CGFloat = 300
-            let rootView = WorkspaceRowView.PullRequestBadges(
-                indicator: indicator,
-                colorScheme: .light,
-                colorSchemeContrast: .standard,
-                expanded: true
-            )
-                .environment(\.dynamicTypeSize, .accessibility3)
-                .frame(width: width, height: height, alignment: .topLeading)
-            let controller = UIHostingController(rootView: rootView)
-            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: width, height: height))
-            controller.view.frame = window.bounds
-            // This synthetic container owns attachment, so it must forward a matched lifecycle.
-            controller.beginAppearanceTransition(true, animated: false)
-            window.addSubview(controller.view)
-            window.isHidden = false
-            controller.endAppearanceTransition()
-            defer {
-                controller.beginAppearanceTransition(false, animated: false)
-                controller.view.removeFromSuperview()
-                window.isHidden = true
-                controller.endAppearanceTransition()
-            }
-            controller.view.layoutIfNeeded()
-
-            let labels = ["Merged pull request #123456789", "100 additional pull requests"]
-            let elements = accessibilityElements(in: controller.view)
-            let initialBadges = initialBadgeFrames(labels: labels, elements: elements)
-            if initialBadges.contains(where: { $0?.label == nil }) {
-                let immediate = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
-                _ = RunLoop.current.run(
-                    mode: .default,
-                    before: Date(timeIntervalSinceNow: 0.01)
-                )
-                let observed = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
-                print("SYNTHETIC PR badge accessibility graph immediate:\n\(immediate)")
-                print("SYNTHETIC PR badge accessibility graph after run-loop observation:\n\(observed)")
-            }
-            let badges = try initialBadges.map { initialBadge in
-                try #require(initialBadge)
-            }
-            let hostFrame = controller.view.convert(controller.view.bounds, to: nil)
-            return RenderedBadges(hostFrame: hostFrame, badges: badges)
+            try renderBadgesInCurrentAutoreleasePool(width: width)
         }
     }
+    private func renderBadgesInCurrentAutoreleasePool(width: CGFloat) throws -> RenderedBadges {
+        let indicator = WorkspaceRowView.PrIndicatorModel(
+            pill: .init(status: .merged, number: RenderingMetrics.pullRequestNumber),
+            otherMonitorCount: 100
+        )
+        let rootView = WorkspaceRowView.PullRequestBadges(
+            indicator: indicator,
+            colorScheme: .light,
+            colorSchemeContrast: .standard,
+            expanded: true
+        )
+            .environment(\.accessibilityEnabled, true)
+            .environment(\.dynamicTypeSize, .accessibility3)
+            .frame(width: width, height: RenderingMetrics.hostHeight, alignment: .topLeading)
+        let window = UIWindow(frame: CGRect(
+            x: 0,
+            y: 0,
+            width: width,
+            height: RenderingMetrics.hostHeight
+        ))
+        let controller = UIHostingController(rootView: rootView)
+        window.rootViewController = controller
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        window.layoutIfNeeded()
+        controller.view.layoutIfNeeded()
 
+        let labels = ["Merged pull request #123456789", "100 additional pull requests"]
+        let elements = accessibilityElements(in: controller.view)
+        let initialBadges = initialBadgeFrames(labels: labels, elements: elements)
+        if initialBadges.contains(where: { $0?.label == nil }) {
+            let immediate = accessibilityGraphSnapshot(root: window, expectedLabels: labels)
+            print("SYNTHETIC PR badge accessibility graph immediate:\n\(immediate)")
+        }
+        let badges = try initialBadges.map { initialBadge in
+            try #require(initialBadge)
+        }
+        let hostFrame = controller.view.convert(controller.view.bounds, to: nil)
+        return RenderedBadges(hostFrame: hostFrame, badges: badges)
+    }
     private func initialBadgeFrames(
         labels: [String],
         elements: [NSObject]
@@ -364,18 +377,27 @@ struct WorkspaceRowPresentationTests {
             }
         }
     }
-
     private func accessibilityElements(in view: UIView) -> [NSObject] {
+        let property = (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
         let elementCount = view.accessibilityElementCount()
-        let direct = elementCount == NSNotFound
-            ? (view.accessibilityElements ?? []).compactMap { $0 as? NSObject }
-            : (0..<elementCount).compactMap { index in
+        let direct: [NSObject]
+        if !property.isEmpty {
+            direct = property
+        } else if elementCount == NSNotFound {
+            direct = []
+        } else {
+            direct = (0..<elementCount).compactMap { index in
                 view.accessibilityElement(at: index) as? NSObject
             }
-        return (view.isAccessibilityElement ? [view] : direct)
-            + view.subviews.flatMap(accessibilityElements(in:))
+        }
+        let ownElements: [NSObject]
+        if view.isAccessibilityElement {
+            ownElements = [view]
+        } else {
+            ownElements = direct
+        }
+        return ownElements + view.subviews.flatMap(accessibilityElements(in:))
     }
-
     private func accessibilityGraphSnapshot(
         root: NSObject,
         expectedLabels: [String],
@@ -387,8 +409,8 @@ struct WorkspaceRowPresentationTests {
         var lines: [String] = []
 
         func visit(_ object: NSObject, path: String, depth: Int) {
-            guard depth <= maxDepth, visited.count < maxNodes else { return }
-            guard visited.insert(ObjectIdentifier(object)).inserted else { return }
+            guard depth <= maxDepth, visited.count < maxNodes,
+                  visited.insert(ObjectIdentifier(object)).inserted else { return }
 
             let propertyChildren = (object.accessibilityElements ?? [])
                 .prefix(maxNodes)
@@ -405,25 +427,16 @@ struct WorkspaceRowPresentationTests {
             let subviews = (object as? UIView).map { view in
                 Array(view.subviews.prefix(maxNodes))
             } ?? []
-            let label = object.accessibilityLabel
-            let labelMatches = expectedLabels.map { label == $0 }
-                .map { String($0) }
-                .joined(separator: ",")
-            let countDescription = elementCount == NSNotFound ? "NSNotFound" : "\(elementCount)"
-            let className = String(String(describing: type(of: object)).prefix(80))
-            let viewFacts: String
-            if let view = object as? UIView {
-                viewFacts = "attached=\(view.window != nil) hidden=\(view.isHidden) bounds=\(view.bounds)"
-            } else {
-                viewFacts = "attached=na hidden=na bounds=na"
-            }
-            lines.append(
-                "depth=\(depth) path=\(path) class=\(className) \(viewFacts) "
-                    + "frame=\(object.accessibilityFrame) elementCount=\(countDescription) "
-                    + "children=[property:\(propertyChildren.count),dynamic:\(dynamicChildren.count),"
-                    + "subviews:\(subviews.count)] labelPresent=\(label != nil) "
-                    + "labelMatches=[\(labelMatches)]"
-            )
+            lines.append(accessibilityGraphLine(.init(
+                object: object,
+                path: path,
+                depth: depth,
+                expectedLabels: expectedLabels,
+                propertyChildCount: propertyChildren.count,
+                dynamicChildCount: dynamicChildren.count,
+                subviewCount: subviews.count,
+                elementCount: elementCount
+            )))
 
             guard depth < maxDepth else { return }
             for (index, child) in propertyChildren.enumerated() {
@@ -439,6 +452,29 @@ struct WorkspaceRowPresentationTests {
 
         visit(root, path: "root", depth: 0)
         return String(lines.joined(separator: "\n").prefix(maxOutputCharacters))
+    }
+    private struct AccessibilityGraphFacts {
+        let object: NSObject
+        let path: String
+        let depth: Int
+        let expectedLabels: [String]
+        let propertyChildCount: Int
+        let dynamicChildCount: Int
+        let subviewCount: Int
+        let elementCount: Int
+    }
+    private func accessibilityGraphLine(_ facts: AccessibilityGraphFacts) -> String {
+        let label = facts.object.accessibilityLabel
+        let labelMatches = facts.expectedLabels.map { label == $0 }.map(String.init).joined(separator: ",")
+        let countDescription = facts.elementCount == NSNotFound ? "NSNotFound" : "\(facts.elementCount)"
+        let className = String(String(describing: type(of: facts.object)).prefix(RenderingMetrics.maximumClassNameLength))
+        let viewFacts = (facts.object as? UIView).map { view in
+            "attached=\(view.window != nil) hidden=\(view.isHidden) bounds=\(view.bounds)"
+        } ?? "attached=na hidden=na bounds=na"
+        return "depth=\(facts.depth) path=\(facts.path) class=\(className) \(viewFacts) "
+            + "frame=\(facts.object.accessibilityFrame) elementCount=\(countDescription) "
+            + "children=[property:\(facts.propertyChildCount),dynamic:\(facts.dynamicChildCount),"
+            + "subviews:\(facts.subviewCount)] labelPresent=\(label != nil) labelMatches=[\(labelMatches)]"
     }
 
     private final class DynamicAccessibilityContainer: UIView {
@@ -457,6 +493,12 @@ struct WorkspaceRowPresentationTests {
         override func index(ofAccessibilityElement element: Any) -> Int {
             element as AnyObject === dynamicElement ? 0 : NSNotFound
         }
+    }
+
+    private final class ConflictingAccessibilityContainer: UIView {
+        override func accessibilityElementCount() -> Int { 1 }
+
+        override func accessibilityElement(at _: Int) -> Any? { nil }
     }
 
     private final class NonViewAccessibilityContainer: NSObject {

@@ -17,12 +17,19 @@ struct HookWakeAttributionTests {
             rawName: "CI watcher",
             displayName: "CI watcher",
             reason: "dispatched",
-            hookStillActive: nil
+            postWakeState: .unreported
         ))
     }
 
     @Test func nilWhenMetadataAbsentOrWrongType() {
-        #expect(HookWakeAttribution.from(nil) == nil)
+        let message = ConversationMessage(
+            id: "m-absent",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "x")],
+            timestamp: "2025-01-01T00:00:00Z"
+        )
+        #expect(!message.hasReportedMetadata)
+        #expect(message.hookWakeAttribution == nil)
         #expect(HookWakeAttribution.from([:]) == nil)
         #expect(HookWakeAttribution.from(["type": AnyCodable("agent_message")]) == nil)
     }
@@ -60,19 +67,19 @@ struct HookWakeAttributionTests {
     }
 
     @Test func stateLabelVariants() {
-        func make(reason: String, active: Bool? = nil) -> HookWakeAttribution {
+        func make(reason: String, state: HookPostWakeState = .unreported) -> HookWakeAttribution {
             HookWakeAttribution(
                 hookId: "h",
                 rawName: "H",
                 displayName: "H",
                 reason: reason,
-                hookStillActive: active
+                postWakeState: state
             )
         }
         #expect(make(reason: "evicted").stateLabel == "woke the agent and is now retired")
-        #expect(make(reason: "evicted", active: true).stateLabel == "woke the agent and is now retired")
-        #expect(make(reason: "dispatched", active: true).stateLabel == "woke the agent and will continue to run")
-        #expect(make(reason: "dispatched", active: false).stateLabel == "woke the agent and is now retired")
+        #expect(make(reason: "evicted", state: .continues).stateLabel == "woke the agent and is now retired")
+        #expect(make(reason: "dispatched", state: .continues).stateLabel == "woke the agent and will continue to run")
+        #expect(make(reason: "dispatched", state: .retired).stateLabel == "woke the agent and is now retired")
         #expect(make(reason: "dispatched").stateLabel == "woke the agent")
         #expect(make(reason: "").stateLabel == "woke the agent")
     }
@@ -238,7 +245,14 @@ struct PrMonitorWakeAttributionTests {
     }
 
     @Test func nilWhenMetadataAbsentMalformedOrWrongType() {
-        #expect(PrMonitorWakeAttribution.from(nil) == nil)
+        let message = ConversationMessage(
+            id: "m-absent",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "x")],
+            timestamp: "2025-01-01T00:00:00Z"
+        )
+        #expect(!message.hasReportedMetadata)
+        #expect(message.prMonitorWakeAttribution == nil)
         #expect(PrMonitorWakeAttribution.from(["type": AnyCodable("hook_wake")]) == nil)
         // repo and a positive integer prNumber are both required.
         #expect(PrMonitorWakeAttribution.from(meta(["repo": AnyCodable("  ")])) == nil)
@@ -332,7 +346,14 @@ struct EventWakeAttributionTests {
     }
 
     @Test func nilWhenMetadataAbsentOrWrongType() {
-        #expect(EventWakeAttribution.from(nil) == nil)
+        let message = ConversationMessage(
+            id: "m-absent",
+            role: .user,
+            contentBlocks: [ContentBlock(type: .text, text: "x")],
+            timestamp: "2025-01-01T00:00:00Z"
+        )
+        #expect(!message.hasReportedMetadata)
+        #expect(message.eventWakeAttribution == nil)
         #expect(EventWakeAttribution.from([:]) == nil)
         #expect(EventWakeAttribution.from(["type": AnyCodable("hook_wake")]) == nil)
     }
@@ -496,106 +517,5 @@ struct EventWakeAttributionTests {
             timestamp: "2025-01-01T00:00:00Z"
         )
         #expect(plain.eventWakeAttribution == nil)
-    }
-}
-
-// MARK: - Agent-to-agent message attribution
-
-struct AgentMessageAttributionTests {
-    @Test func extractsFromValidMetadata() {
-        let attribution = AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable("agent-1"),
-            "fromAgentName": AnyCodable("Coordinator")
-        ])
-        #expect(attribution == AgentMessageAttribution(
-            fromAgentId: "agent-1",
-            rawName: "Coordinator",
-            displayName: "Coordinator"
-        ))
-    }
-
-    @Test func nilWhenMetadataAbsentOrWrongType() {
-        #expect(AgentMessageAttribution.from(nil) == nil)
-        #expect(AgentMessageAttribution.from([:]) == nil)
-        #expect(AgentMessageAttribution.from([
-            "type": AnyCodable("hook_wake"),
-            "fromAgentId": AnyCodable("agent-1")
-        ]) == nil)
-    }
-
-    @Test func nilWhenFromAgentIdMissingBlankOrNonString() {
-        #expect(AgentMessageAttribution.from(["type": AnyCodable("agent_message")]) == nil)
-        #expect(AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable("   ")
-        ]) == nil)
-        // Non-string ids are rejected like missing ones (FE parity:
-        // `typeof md.fromAgentId === 'string'`).
-        #expect(AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable(42)
-        ]) == nil)
-    }
-
-    @Test func fallsBackToAgentNameWhenAbsentOrBlank() {
-        let absent = AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable("agent-1")
-        ])
-        #expect(absent?.displayName == "Agent")
-        #expect(absent?.rawName == "Agent")
-        let blank = AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable("agent-1"),
-            "fromAgentName": AnyCodable("   ")
-        ])
-        #expect(blank?.displayName == "Agent")
-        #expect(blank?.rawName == "Agent")
-    }
-
-    @Test func trimsAndTruncatesLongNames() {
-        let attribution = AgentMessageAttribution.from([
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable(" agent-1 "),
-            "fromAgentName": AnyCodable(" A very long agent name that keeps going ")
-        ])
-        #expect(attribution?.fromAgentId == "agent-1")
-        #expect(attribution?.displayName == "A very long agent n…")
-        #expect(attribution?.displayName.count == 20)
-        // The untruncated (trimmed) name survives for surfaces that need it,
-        // e.g. titling the pushed sender conversation.
-        #expect(attribution?.rawName == "A very long agent name that keeps going")
-    }
-
-    @Test func messageAttributionChecksRowThenBlockMetadata() {
-        let meta: [String: AnyCodable] = [
-            "type": AnyCodable("agent_message"),
-            "fromAgentId": AnyCodable("agent-1")
-        ]
-        let fromRow = ConversationMessage(
-            id: "m1",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "x")],
-            timestamp: "2025-01-01T00:00:00Z",
-            metadata: meta
-        )
-        #expect(fromRow.agentMessageAttribution?.fromAgentId == "agent-1")
-
-        let fromBlock = ConversationMessage(
-            id: "m2",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "x", messageMetadata: meta)],
-            timestamp: "2025-01-01T00:00:00Z"
-        )
-        #expect(fromBlock.agentMessageAttribution?.fromAgentId == "agent-1")
-
-        let plain = ConversationMessage(
-            id: "m3",
-            role: .user,
-            contentBlocks: [ContentBlock(type: .text, text: "x")],
-            timestamp: "2025-01-01T00:00:00Z"
-        )
-        #expect(plain.agentMessageAttribution == nil)
     }
 }

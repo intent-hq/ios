@@ -154,10 +154,10 @@ struct WorkspaceDetailViewTests {
             session: makePinnedSession(connection: fake)
         )
 
-        #expect(view.agentStore.connectionManager === fake)
-        #expect(view.noteStore.connectionManager === fake)
-        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
-        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 
     /// Same contract for the note detail: its note/agent stores are bound
@@ -172,9 +172,9 @@ struct WorkspaceDetailViewTests {
             session: makePinnedSession(connection: fake)
         )
 
-        #expect(view.noteStore.connectionManager === fake)
-        #expect(view.agentStore.connectionManager === fake)
-        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
-        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 }

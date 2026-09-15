@@ -1,11 +1,21 @@
 import Foundation
 
+enum MessageStreamingState: Equatable {
+    case complete
+    case streaming
+    case unreported
+
+    init(reportedStreaming: Bool) {
+        self = reportedStreaming ? .streaming : .complete
+    }
+}
+
 /// The role of a message sender.
 enum MessageRole: String, Codable {
-    case user
     case assistant
-    case system
     case error
+    case system
+    case user
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -80,8 +90,38 @@ struct ToolCall: Identifiable, Codable {
 struct ToolResult: Codable {
     let toolCallId: String
     var content: AnyCodable?
-    var isError: Bool?
+    var errorOutcome: ToolExecutionOutcome
     var timestamp: String?
+
+    private enum CodingKeys: String, CodingKey { case toolCallId, content, isError, timestamp }
+
+    init(toolCallId: String, content: AnyCodable? = nil, errorOutcome: ToolExecutionOutcome = .unreported, timestamp: String? = nil) {
+        self.toolCallId = toolCallId
+        self.content = content
+        self.errorOutcome = errorOutcome
+        self.timestamp = timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        toolCallId = try container.decode(String.self, forKey: .toolCallId)
+        content = try? container.decode(AnyCodable.self, forKey: .content)
+        errorOutcome = (try? container.decode(Bool.self, forKey: .isError))
+            .map(ToolExecutionOutcome.init(reportedIsError:)) ?? .unreported
+        timestamp = try? container.decode(String.self, forKey: .timestamp)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(toolCallId, forKey: .toolCallId)
+        try container.encodeIfPresent(content, forKey: .content)
+        switch errorOutcome {
+        case .failed: try container.encode(true, forKey: .isError)
+        case .succeeded: try container.encode(false, forKey: .isError)
+        case .unreported: break
+        }
+        try container.encodeIfPresent(timestamp, forKey: .timestamp)
+    }
 }
 
 /// An image block for queued messages. Either arm as accepted by the daemon
@@ -108,8 +148,71 @@ struct QueuedMessage: Identifiable, Codable {
     var content: String
     let queuedAt: String
     var position: Int
-    var imageBlocks: [ImageBlock]?
-    var messageMetadata: [String: AnyCodable]?
+    var imageBlocks: [ImageBlock] {
+        didSet { imageBlocksWereProvided = true }
+    }
+    var messageMetadata: [String: AnyCodable] {
+        didSet { messageMetadataWasProvided = true }
+    }
+    private var imageBlocksWereProvided: Bool
+    private var messageMetadataWasProvided: Bool
+
+    private enum CodingKeys: String, CodingKey { case id, content, queuedAt, position, imageBlocks, messageMetadata }
+
+    init(
+        id: String,
+        content: String,
+        queuedAt: String,
+        position: Int,
+        imageBlocks: [ImageBlock] = [],
+        messageMetadata: [String: AnyCodable] = [:],
+        imageBlocksWereProvided: Bool = false,
+        messageMetadataWasProvided: Bool = false
+    ) {
+        self.id = id
+        self.content = content
+        self.queuedAt = queuedAt
+        self.position = position
+        self.imageBlocks = imageBlocks
+        self.messageMetadata = messageMetadata
+        self.imageBlocksWereProvided = imageBlocksWereProvided || !imageBlocks.isEmpty
+        self.messageMetadataWasProvided = messageMetadataWasProvided || !messageMetadata.isEmpty
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        content = try container.decode(String.self, forKey: .content)
+        queuedAt = try container.decode(String.self, forKey: .queuedAt)
+        position = try container.decode(Int.self, forKey: .position)
+        if let decodedImageBlocks = try? container.decode([ImageBlock].self, forKey: .imageBlocks) {
+            imageBlocks = decodedImageBlocks
+            imageBlocksWereProvided = true
+        } else {
+            imageBlocks = []
+            imageBlocksWereProvided = false
+        }
+        if let decodedMetadata = try? container.decode([String: AnyCodable].self, forKey: .messageMetadata) {
+            messageMetadata = decodedMetadata
+            messageMetadataWasProvided = true
+        } else {
+            messageMetadata = [:]
+            messageMetadataWasProvided = false
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(content, forKey: .content)
+        try container.encode(queuedAt, forKey: .queuedAt)
+        try container.encode(position, forKey: .position)
+        if imageBlocksWereProvided { try container.encode(imageBlocks, forKey: .imageBlocks) }
+        if messageMetadataWasProvided { try container.encode(messageMetadata, forKey: .messageMetadata) }
+    }
+
+    var hasReportedImageBlocks: Bool { imageBlocksWereProvided }
+    var hasReportedMessageMetadata: Bool { messageMetadataWasProvided }
 
     /// Whether this entry was authored by the user. Non-user entries carry
     /// `messageMetadata` with a string `type` (except the user-authored
@@ -117,7 +220,7 @@ struct QueuedMessage: Identifiable, Codable {
     /// `source == "system"` (PROTOCOL §5.5); absent/malformed metadata fails
     /// open (treated as user-authored).
     var isUserMessage: Bool {
-        guard let metadata = messageMetadata else { return true }
+        let metadata = messageMetadata
         // The Q&A wizard's answer message is USER-authored despite its tag
         // (`{ type: "question_answers", answeredQuestionsMessageId }`): it
         // travels through the ordinary send path and can be auto-queued
@@ -135,14 +238,36 @@ struct QueuedMessage: Identifiable, Codable {
 struct ConversationMessage: Identifiable, Codable {
     let id: String
     let role: MessageRole
-    var contentBlocks: [ContentBlock]?
+    var contentBlocks: [ContentBlock] {
+        didSet { contentBlocksWereProvided = true }
+    }
     var timestamp: String  // ISO 8601 string from server
     var turnNumber: Int?
-    var toolCalls: [ToolCall]?
-    var toolResults: [ToolResult]?
+    var toolCalls: [ToolCall] {
+        didSet { toolCallsWereProvided = true }
+    }
+    var toolResults: [ToolResult] {
+        didSet { toolResultsWereProvided = true }
+    }
     var error: String?
-    var isStreaming: Bool?
-    var metadata: [String: AnyCodable]?
+    var streamingState: MessageStreamingState
+    var metadata: [String: AnyCodable] {
+        didSet { metadataWasProvided = true }
+    }
+    private var contentBlocksWereProvided: Bool
+    private var toolCallsWereProvided: Bool
+    private var toolResultsWereProvided: Bool
+    private var metadataWasProvided: Bool
+
+    var isStreaming: Bool {
+        get { streamingState == .streaming }
+        set { streamingState = newValue ? .streaming : .complete }
+    }
+
+    var hasReportedContentBlocks: Bool { contentBlocksWereProvided }
+    var hasReportedToolCalls: Bool { toolCallsWereProvided }
+    var hasReportedToolResults: Bool { toolResultsWereProvided }
+    var hasReportedMetadata: Bool { metadataWasProvided }
 
     enum CodingKeys: String, CodingKey {
         case id, role, contentBlocks, timestamp, turnNumber
@@ -153,14 +278,39 @@ struct ConversationMessage: Identifiable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
         role = (try? container.decode(MessageRole.self, forKey: .role)) ?? .system
-        contentBlocks = try? container.decode([ContentBlock].self, forKey: .contentBlocks)
+        if let decodedContentBlocks = try? container.decode([ContentBlock].self, forKey: .contentBlocks) {
+            contentBlocks = decodedContentBlocks
+            contentBlocksWereProvided = true
+        } else {
+            contentBlocks = []
+            contentBlocksWereProvided = false
+        }
         timestamp = (try? container.decode(String.self, forKey: .timestamp)) ?? ""
         turnNumber = try? container.decode(Int.self, forKey: .turnNumber)
-        toolCalls = try? container.decode([ToolCall].self, forKey: .toolCalls)
-        toolResults = try? container.decode([ToolResult].self, forKey: .toolResults)
+        if let decodedToolCalls = try? container.decode([ToolCall].self, forKey: .toolCalls) {
+            toolCalls = decodedToolCalls
+            toolCallsWereProvided = true
+        } else {
+            toolCalls = []
+            toolCallsWereProvided = false
+        }
+        if let decodedToolResults = try? container.decode([ToolResult].self, forKey: .toolResults) {
+            toolResults = decodedToolResults
+            toolResultsWereProvided = true
+        } else {
+            toolResults = []
+            toolResultsWereProvided = false
+        }
         error = try? container.decode(String.self, forKey: .error)
-        isStreaming = try? container.decode(Bool.self, forKey: .isStreaming)
-        metadata = try? container.decode([String: AnyCodable].self, forKey: .metadata)
+        streamingState = (try? container.decode(Bool.self, forKey: .isStreaming))
+            .map(MessageStreamingState.init(reportedStreaming:)) ?? .unreported
+        if let decodedMetadata = try? container.decode([String: AnyCodable].self, forKey: .metadata) {
+            metadata = decodedMetadata
+            metadataWasProvided = true
+        } else {
+            metadata = [:]
+            metadataWasProvided = false
+        }
     }
 
     // MARK: - Convenience initializer
@@ -168,28 +318,47 @@ struct ConversationMessage: Identifiable, Codable {
     init(
         id: String,
         role: MessageRole,
-        contentBlocks: [ContentBlock]? = nil,
+        contentBlocks: [ContentBlock] = [],
         timestamp: String = ISO8601DateFormatter().string(from: Date()),
         turnNumber: Int? = nil,
-        toolCalls: [ToolCall]? = nil,
-        toolResults: [ToolResult]? = nil,
+        toolCalls: [ToolCall] = [],
+        toolResults: [ToolResult] = [],
         error: String? = nil,
-        isStreaming: Bool? = nil,
-        metadata: [String: AnyCodable]? = nil
+        streamingState: MessageStreamingState = .unreported,
+        metadata: [String: AnyCodable] = [:],
+        contentBlocksWereProvided: Bool = false,
+        toolCallsWereProvided: Bool = false,
+        toolResultsWereProvided: Bool = false,
+        metadataWasProvided: Bool = false
     ) {
         self.id = id
         self.role = role
         self.contentBlocks = contentBlocks
+        self.contentBlocksWereProvided = contentBlocksWereProvided || !contentBlocks.isEmpty
         self.timestamp = timestamp
         self.turnNumber = turnNumber
         self.toolCalls = toolCalls
+        self.toolCallsWereProvided = toolCallsWereProvided || !toolCalls.isEmpty
         self.toolResults = toolResults
+        self.toolResultsWereProvided = toolResultsWereProvided || !toolResults.isEmpty
         self.error = error
-        self.isStreaming = isStreaming
+        self.streamingState = streamingState
         self.metadata = metadata
+        self.metadataWasProvided = metadataWasProvided || !metadata.isEmpty
     }
 
     // MARK: - Parsing from dictionary (JSON-RPC response)
+
+    private static func decodeItems<Element: Decodable>(
+        _ value: Any?,
+        as type: Element.Type
+    ) -> [Element] {
+        guard let dictionaries = value as? [[String: Any]] else { return [] }
+        return dictionaries.compactMap { dictionary in
+            guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
+            return try? JSONDecoder().decode(type, from: data)
+        }
+    }
 
     static func parseMessage(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String else { return nil }
@@ -197,45 +366,16 @@ struct ConversationMessage: Identifiable, Codable {
         let roleStr = dict["role"] as? String ?? "system"
         let role = MessageRole(rawValue: roleStr) ?? .system
 
-        var contentBlocks: [ContentBlock]?
-        if let blocksArray = dict["contentBlocks"] as? [[String: Any]] {
-            contentBlocks = blocksArray.compactMap { blockDict -> ContentBlock? in
-                guard let data = try? JSONSerialization.data(withJSONObject: blockDict),
-                      let block = try? JSONDecoder().decode(ContentBlock.self, from: data) else {
-                    return nil
-                }
-                return block
-            }
-        }
+        let contentBlocks = Self.decodeItems(dict["contentBlocks"], as: ContentBlock.self)
+        let toolCalls = Self.decodeItems(dict["toolCalls"], as: ToolCall.self)
+        let toolResults = Self.decodeItems(dict["toolResults"], as: ToolResult.self)
 
-        var toolCalls: [ToolCall]?
-        if let callsArray = dict["toolCalls"] as? [[String: Any]] {
-            toolCalls = callsArray.compactMap { callDict -> ToolCall? in
-                guard let data = try? JSONSerialization.data(withJSONObject: callDict),
-                      let call = try? JSONDecoder().decode(ToolCall.self, from: data) else {
-                    return nil
-                }
-                return call
-            }
-        }
-
-        var toolResults: [ToolResult]?
-        if let resultsArray = dict["toolResults"] as? [[String: Any]] {
-            toolResults = resultsArray.compactMap { resultDict -> ToolResult? in
-                guard let data = try? JSONSerialization.data(withJSONObject: resultDict),
-                      let result = try? JSONDecoder().decode(ToolResult.self, from: data) else {
-                    return nil
-                }
-                return result
-            }
-        }
-
-        var metadata: [String: AnyCodable]?
+        var metadata: [String: AnyCodable] = [:]
         if let metaDict = dict["metadata"] as? [String: Any] {
             metadata = metaDict.mapValues { AnyCodable($0) }
         }
 
-        return Self(
+        var message = Self(
             id: id,
             role: role,
             contentBlocks: contentBlocks,
@@ -244,8 +384,32 @@ struct ConversationMessage: Identifiable, Codable {
             toolCalls: toolCalls,
             toolResults: toolResults,
             error: dict["error"] as? String,
-            isStreaming: dict["isStreaming"] as? Bool,
+            streamingState: (dict["isStreaming"] as? Bool)
+                .map(MessageStreamingState.init(reportedStreaming:)) ?? .unreported,
             metadata: metadata
         )
+        message.contentBlocksWereProvided = dict["contentBlocks"] is [[String: Any]]
+        message.toolCallsWereProvided = dict["toolCalls"] is [[String: Any]]
+        message.toolResultsWereProvided = dict["toolResults"] is [[String: Any]]
+        message.metadataWasProvided = dict["metadata"] is [String: Any]
+        return message
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(role, forKey: .role)
+        if contentBlocksWereProvided { try container.encode(contentBlocks, forKey: .contentBlocks) }
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encodeIfPresent(turnNumber, forKey: .turnNumber)
+        if toolCallsWereProvided { try container.encode(toolCalls, forKey: .toolCalls) }
+        if toolResultsWereProvided { try container.encode(toolResults, forKey: .toolResults) }
+        try container.encodeIfPresent(error, forKey: .error)
+        switch streamingState {
+        case .complete: try container.encode(false, forKey: .isStreaming)
+        case .streaming: try container.encode(true, forKey: .isStreaming)
+        case .unreported: break
+        }
+        if metadataWasProvided { try container.encode(metadata, forKey: .metadata) }
     }
 }

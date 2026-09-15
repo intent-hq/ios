@@ -3,19 +3,21 @@ import Foundation
 /// Parsed subscription.push envelope from the daemon.
 struct SubscriptionPush {
     let subscriptionId: String
-    let kind: Kind
     let seq: Int
-    let snapshot: [[String: Any]]?
-    let delta: DeltaPayload?
+    let payload: Payload
     /// Snapshot-level metadata for object-shaped snapshots (chat channel):
     /// agentId, truncated, totalMessages, nextToken, plus activity flags like
     /// isResponding, isWaitingOnTool, turnInFlight, lastStreamActivityAt.
-    /// Nil for array-shaped snapshots (collection channels).
-    let snapshotMeta: [String: Any]?
 
     enum Kind {
-        case snapshot
         case delta
+        case snapshot
+    }
+
+    enum Payload {
+        case collectionSnapshot([[String: Any]])
+        case conversationSnapshot(rows: [[String: Any]], metadata: [String: Any])
+        case delta(DeltaPayload)
     }
 
     struct DeltaPayload {
@@ -26,18 +28,40 @@ struct SubscriptionPush {
 
     init(
         subscriptionId: String,
-        kind: Kind,
         seq: Int,
-        snapshot: [[String: Any]]?,
-        delta: DeltaPayload?,
-        snapshotMeta: [String: Any]? = nil
+        snapshot: [[String: Any]]
     ) {
         self.subscriptionId = subscriptionId
-        self.kind = kind
         self.seq = seq
-        self.snapshot = snapshot
-        self.delta = delta
-        self.snapshotMeta = snapshotMeta
+        payload = .collectionSnapshot(snapshot)
+    }
+
+    init(
+        subscriptionId: String,
+        seq: Int,
+        conversationSnapshot: [[String: Any]],
+        metadata: [String: Any]
+    ) {
+        self.subscriptionId = subscriptionId
+        self.seq = seq
+        payload = .conversationSnapshot(rows: conversationSnapshot, metadata: metadata)
+    }
+
+    init(
+        subscriptionId: String,
+        seq: Int,
+        delta: DeltaPayload
+    ) {
+        self.subscriptionId = subscriptionId
+        self.seq = seq
+        payload = .delta(delta)
+    }
+
+    var kind: Kind {
+        switch payload {
+        case .collectionSnapshot, .conversationSnapshot: .snapshot
+        case .delta: .delta
+        }
     }
 
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.
@@ -54,10 +78,8 @@ struct SubscriptionPush {
             if let snapshot = dict["snapshot"] as? [[String: Any]] {
                 return Self(
                     subscriptionId: subscriptionId,
-                    kind: .snapshot,
                     seq: seq,
-                    snapshot: snapshot,
-                    delta: nil
+                    snapshot: snapshot
                 )
             }
             // Chat channel: snapshot is an object with a "messages" array plus
@@ -68,11 +90,9 @@ struct SubscriptionPush {
                 meta.removeValue(forKey: "messages")
                 return Self(
                     subscriptionId: subscriptionId,
-                    kind: .snapshot,
                     seq: seq,
-                    snapshot: messages,
-                    delta: nil,
-                    snapshotMeta: meta
+                    conversationSnapshot: messages,
+                    metadata: meta
                 )
             }
             return nil // Malformed: no snapshot array and no snapshot.messages
@@ -87,9 +107,7 @@ struct SubscriptionPush {
             let delta = DeltaPayload(added: added, updated: updated, removedIds: removedIds)
             return Self(
                 subscriptionId: subscriptionId,
-                kind: .delta,
                 seq: seq,
-                snapshot: nil,
                 delta: delta
             )
         }

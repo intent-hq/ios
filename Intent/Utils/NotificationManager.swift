@@ -48,6 +48,24 @@ struct ToastInfo: Equatable {
         let sourceBackendID: BackendID
     }
 
+    private struct PendingAgentSelection {
+        let agentId: String
+        let workspaceId: String
+        let agentName: String
+        let connectionId: UUID
+    }
+
+    private struct IdleEventDictionary {
+        let event: [String: Any]
+    }
+
+    private struct IdleEventContext {
+        let agentId: String
+        let workspaceId: String
+        let agentName: String
+        let connectionId: UUID
+    }
+
     /// The latest feedback request for a window to emit; observed by window
     /// roots (`WindowFeedbackSoundEmitter` via RootView). Never set on
     /// platforms that play global feedback.
@@ -97,8 +115,7 @@ struct ToastInfo: Equatable {
 
     /// A tapped alert held until its source backend's window registers a
     /// handler (cold start, or a just-opened window still binding).
-    @ObservationIgnored private var pendingAgentSelection:
-        (agentId: String, workspaceId: String, agentName: String, connectionId: UUID)?
+    @ObservationIgnored private var pendingAgentSelection: PendingAgentSelection?
 
     /// Pinned sessions currently observed for cross-window alert aggregation,
     /// with the event-handler id registered on each session's connection.
@@ -138,7 +155,9 @@ struct ToastInfo: Equatable {
         localNotificationService.requestAuthorizationIfNeeded()
         if registerEvents { registerEventHandler() }
     }
+}
 
+extension NotificationManager {
     // MARK: - Window visibility (connection-scoped)
 
     /// A conversation became visible in some window: suppress its toasts
@@ -264,10 +283,20 @@ struct ToastInfo: Equatable {
                 connectionId
             )
         case .openSourceWindow:
-            pendingAgentSelection = (agentId, workspaceId, agentName, connectionId)
+            pendingAgentSelection = PendingAgentSelection(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                connectionId: connectionId
+            )
             openBackendWindow?(source)
         case .holdForFirstWindow:
-            pendingAgentSelection = (agentId, workspaceId, agentName, connectionId)
+            pendingAgentSelection = PendingAgentSelection(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                connectionId: connectionId
+            )
         case .drop:
             pendingAgentSelection = nil
         }
@@ -354,6 +383,7 @@ struct ToastInfo: Equatable {
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName,
+            workspaceName: nil,
             connectionId: connectionId
         )
     }
@@ -366,7 +396,9 @@ struct ToastInfo: Equatable {
             }
         }
     }
+}
 
+extension NotificationManager {
     // MARK: - Cross-session aggregation
 
     /// Observe a backend session's connection so its agents alert too.
@@ -392,86 +424,103 @@ struct ToastInfo: Equatable {
     }
 
     private func handleEvent(_ params: Any, from sourceBackendID: BackendID?) {
-        // Debug: log raw params type and keys
-        AppLog.notifications.debug("[NotificationManager] handleEvent called, params type=\(type(of: params))")
-        guard let dict = params as? [String: Any] else {
-            AppLog.notifications.warning("[NotificationManager] ⚠️ params is not [String: Any], skipping")
-            return
-        }
-        AppLog.notifications.debug("[NotificationManager] dict keys: \(dict.keys.sorted())")
-
-        // Unwrap event from subscription wrapper
-        let event: [String: Any]
-        if let innerEvent = dict["event"] as? [String: Any] {
-            event = innerEvent
-            AppLog.notifications.debug("[NotificationManager] Unwrapped inner event, keys: \(event.keys.sorted())")
-        } else {
-            event = dict
-            AppLog.notifications.debug("[NotificationManager] No inner event wrapper, using dict directly")
-        }
-
-        let eventType = event["type"] as? String
-        AppLog.notifications.debug("[NotificationManager] Event type: \(eventType ?? "nil")")
-
-        guard eventType == "agent:idle" else { return }
-
-        guard let data = event["data"] as? [String: Any] else {
-            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'data' dict. Event keys: \(event.keys.sorted())")
-            return
-        }
-        guard let agentId = data["agentId"] as? String else {
-            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle data missing 'agentId'. Data keys: \(data.keys.sorted())")
-            return
-        }
-        guard let workspaceId = event["workspaceId"] as? String else {
-            AppLog.notifications.warning("[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())")
-            return
-        }
-        // Resolve the connection identity of the event's source session
-        // (window model v2: every backend session is observed directly —
-        // there is no default handler to deduplicate against). The nil
-        // source (legacy init-registered handler) maps to the last-used
-        // pointer.
-        let connectionId: UUID
-        if let sourceBackendID {
-            connectionId = sourceBackendID.connectionID
-        } else {
-            guard let active = activeConnectionId() else { return }
-            connectionId = active
-        }
-
-        // Emit-time fast paths: background agents and agents the payload
-        // already marks as waiting on sub-agents never alert.
-        AppLog.notifications.debug("[NotificationManager] agent:idle — agentId=\(agentId)")
-        if Self.shouldSkipIdleEventFastPath(data) { return }
-
-        let agentName = data["agentName"] as? String
-            ?? event["actor"].flatMap { ($0 as? [String: Any])?["name"] as? String }
-            ?? "Agent"
+        guard let context = idleEventContext(params, sourceBackendID: sourceBackendID) else { return }
 
         // Fresh agent.list read (desktop parity): suppress when the idle agent
         // is still waiting on delegated sub-agents, another agent is active, or
         // the idle agent is background per metadata. Fail-open on read failure.
         Task { @MainActor [weak self] in
-            let agents = await self?.fetchWorkspaceAgents(
-                workspaceId: workspaceId,
+            guard let self else { return }
+            let agents = await fetchWorkspaceAgents(
+                workspaceId: context.workspaceId,
                 from: sourceBackendID
             )
-            guard let self,
-                  sourceStillCurrent(sourceBackendID, connectionId: connectionId)
+            guard sourceStillCurrent(sourceBackendID, connectionId: context.connectionId)
             else { return }
-            if Self.shouldSuppressIdleAlert(idleAgentId: agentId, agents: agents) {
-                AppLog.notifications.debug("[NotificationManager] Suppressing idle alert — workspace still active or awaited")
+            if Self.shouldSuppressIdleAlert(idleAgentId: context.agentId, agentList: agents) {
+                AppLog.notifications.debug(
+                    "[NotificationManager] Suppressing idle alert — workspace still active or awaited"
+                )
                 return
             }
             presentIdleAlert(
-                agentId: agentId,
-                workspaceId: workspaceId,
-                agentName: agentName,
-                connectionId: connectionId,
+                agentId: context.agentId,
+                workspaceId: context.workspaceId,
+                agentName: context.agentName,
+                connectionId: context.connectionId,
                 sourceBackendID: sourceBackendID
             )
         }
+    }
+
+    private func idleEventContext(
+        _ params: Any,
+        sourceBackendID: BackendID?
+    ) -> IdleEventContext? {
+        AppLog.notifications.debug(
+            "[NotificationManager] handleEvent called, params type=\(type(of: params))"
+        )
+        guard let event = idleEventDictionary(params)?.event else { return nil }
+        guard let data = event["data"] as? [String: Any] else {
+            AppLog.notifications.warning(
+                "[NotificationManager] ⚠️ agent:idle missing 'data' dict. Event keys: \(event.keys.sorted())"
+            )
+            return nil
+        }
+        guard let agentId = data["agentId"] as? String else {
+            AppLog.notifications.warning(
+                "[NotificationManager] ⚠️ agent:idle data missing 'agentId'. Data keys: \(data.keys.sorted())"
+            )
+            return nil
+        }
+        guard let workspaceId = event["workspaceId"] as? String else {
+            AppLog.notifications.warning(
+                "[NotificationManager] ⚠️ agent:idle missing 'workspaceId'. Event keys: \(event.keys.sorted())"
+            )
+            return nil
+        }
+        let connectionId: UUID
+        if let sourceBackendID {
+            connectionId = sourceBackendID.connectionID
+        } else {
+            guard let active = activeConnectionId() else { return nil }
+            connectionId = active
+        }
+        AppLog.notifications.debug("[NotificationManager] agent:idle — agentId=\(agentId)")
+        if Self.shouldSkipIdleEventFastPath(data) { return nil }
+        let agentName = data["agentName"] as? String
+            ?? event["actor"].flatMap { ($0 as? [String: Any])?["name"] as? String }
+            ?? "Agent"
+        return IdleEventContext(
+            agentId: agentId,
+            workspaceId: workspaceId,
+            agentName: agentName,
+            connectionId: connectionId
+        )
+    }
+
+    private func idleEventDictionary(_ params: Any) -> IdleEventDictionary? {
+        AppLog.notifications.debug(
+            "[NotificationManager] handleEvent called, params type=\(type(of: params))"
+        )
+        guard let dict = params as? [String: Any] else {
+            AppLog.notifications.warning("[NotificationManager] ⚠️ params is not [String: Any], skipping")
+            return nil
+        }
+        AppLog.notifications.debug("[NotificationManager] dict keys: \(dict.keys.sorted())")
+        let event: [String: Any]
+        if let innerEvent = dict["event"] as? [String: Any] {
+            event = innerEvent
+            AppLog.notifications.debug(
+                "[NotificationManager] Unwrapped inner event, keys: \(event.keys.sorted())"
+            )
+        } else {
+            event = dict
+            AppLog.notifications.debug("[NotificationManager] No inner event wrapper, using dict directly")
+        }
+        let eventType = event["type"] as? String
+        AppLog.notifications.debug("[NotificationManager] Event type: \(eventType ?? "nil")")
+        return eventType == "agent:idle" ? IdleEventDictionary(event: event) : nil
     }
 
     /// Whether the event's source is still live: the default session must
@@ -511,8 +560,12 @@ struct ToastInfo: Equatable {
     ///
     /// The other-agents gate uses the canonical `AgentSession.isActive`
     /// predicate so status-only active agents suppress premature completion alerts.
-    static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]?) -> Bool {
-        guard let agents else { return false }
+    static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]) -> Bool {
+        shouldSuppressIdleAlert(idleAgentId: idleAgentId, agentList: .sessions(agents))
+    }
+
+    static func shouldSuppressIdleAlert(idleAgentId: String, agentList: AgentListFetchResult) -> Bool {
+        guard case let .sessions(agents) = agentList else { return false }
         if let idleAgent = agents.first(where: { $0.id == idleAgentId }) {
             if idleAgent.isBackground { return true }
             if idleAgent.isWaitingForOtherAgents || !idleAgent.waitingForAgentIds.isEmpty { return true }
@@ -528,10 +581,10 @@ struct ToastInfo: Equatable {
     private func fetchWorkspaceAgents(
         workspaceId: String,
         from sourceBackendID: BackendID?
-    ) async -> [AgentSession]? {
+    ) async -> AgentListFetchResult {
         let sourceConnection: ConnectionManagerRouting
         if let sourceBackendID {
-            guard let observed = observedSessions[sourceBackendID] else { return nil }
+            guard let observed = observedSessions[sourceBackendID] else { return .unavailable }
             sourceConnection = observed.session.connection
         } else {
             sourceConnection = connection
@@ -543,15 +596,17 @@ struct ToastInfo: Equatable {
             )
             if let dict = result as? [String: Any],
                let items = dict["agents"] as? [[String: Any]] {
-                return items.compactMap { AgentSession.parseAgent($0) }
+                return .sessions(items.compactMap { AgentSession.parseAgent($0) })
             }
-            return nil
+            return .unavailable
         } catch {
             AppLog.notifications.warning("[NotificationManager] agent.list failed, falling back to alert: \(error)")
-            return nil
+            return .unavailable
         }
     }
+}
 
+extension NotificationManager {
     func presentIdleAlert(agentId: String, workspaceId: String, agentName: String) {
         guard let connectionId = activeConnectionId() else { return }
         presentIdleAlert(
@@ -608,7 +663,7 @@ struct ToastInfo: Equatable {
         agentId: String,
         workspaceId: String,
         agentName: String,
-        workspaceName: String? = nil,
+        workspaceName: String?,
         connectionId: UUID
     ) {
         let sourceBackendID = BackendID(connectionId)

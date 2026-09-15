@@ -9,13 +9,13 @@ class ScrollViewMomentumProxy {
 
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
-        AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
+        AppLog.userInterface.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
         guard let scrollView else {
-            AppLog.ui.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
+            AppLog.userInterface.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
             return
         }
         scrollView.setContentOffset(scrollView.contentOffset, animated: false)
-        AppLog.ui.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
+        AppLog.userInterface.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
     }
 }
 
@@ -31,9 +31,9 @@ struct ScrollViewFinder: UIViewRepresentable {
             if let scrollView = Self.findScrollView(from: view) {
                 proxy.scrollView = scrollView
                 Self.installKeyboardDismissTap(on: scrollView)
-                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
+                AppLog.userInterface.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             } else {
-                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
+                AppLog.userInterface.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
             }
         }
         return view

@@ -249,7 +249,9 @@ final class BackendSessionRegistryTests {
             "Teardown callback must run before the connection is dropped"
         )
     }
+}
 
+extension BackendSessionRegistryTests {
     // MARK: - Per-window coordinators (spec decision 1b)
 
     @Test func coordinatorsOverOneSessionNavigateIndependently() {

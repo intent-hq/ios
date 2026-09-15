@@ -54,55 +54,62 @@ struct CreateWorkspaceView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            CreateWorkspaceRepoStepView(
-                store: githubStore,
-                selectedRepo: $selectedRepo,
-                onClose: { dismiss() },
-                onNext: { navigationPath.append(.branches) },
-                onRepoChanged: resetRepositoryState
+            repositoryStep
+                .navigationDestination(for: Route.self) { destination(for: $0) }
+        }
+    }
+
+    private var repositoryStep: some View {
+        CreateWorkspaceRepoStepView(
+            store: githubStore,
+            selectedRepo: $selectedRepo,
+            onClose: { dismiss() },
+            onNext: { navigationPath.append(.branches) },
+            onRepoChanged: resetRepositoryState
+        )
+    }
+
+    @ViewBuilder
+    private func destination(for route: Route) -> some View {
+        switch route {
+        case .branches:
+            CreateWorkspaceBranchStepView(
+                repositoryFullName: selectedRepo?.fullName ?? "",
+                displayedBranches: displayedBranches,
+                defaultBranch: defaultBranch,
+                isLoading: isLoadingBranches,
+                loadError: branchLoadError,
+                selectedBranch: $selectedBranch,
+                searchText: $branchSearchText,
+                colorScheme: colorScheme,
+                onRetry: { Task { await fetchBranches() } },
+                onNext: { navigationPath.append(.create) },
+                onLoad: { await fetchBranches() },
+                onBranchChanged: { idempotencyKey = UUID().uuidString },
+                onSearchTextChanged: scheduleBranchSearch
             )
-                .navigationDestination(for: Route.self) { route in
-                    switch route {
-                    case .branches:
-                        CreateWorkspaceBranchStepView(
-                            repositoryFullName: selectedRepo?.fullName ?? "",
-                            displayedBranches: displayedBranches,
-                            defaultBranch: defaultBranch,
-                            isLoading: isLoadingBranches,
-                            loadError: branchLoadError,
-                            selectedBranch: $selectedBranch,
-                            searchText: $branchSearchText,
-                            colorScheme: colorScheme,
-                            onRetry: { Task { await fetchBranches() } },
-                            onNext: { navigationPath.append(.create) },
-                            onLoad: { await fetchBranches() },
-                            onBranchChanged: { idempotencyKey = UUID().uuidString },
-                            onSearchTextChanged: scheduleBranchSearch
-                        )
-                    case .create:
-                        CreateWorkspaceSpecialistStepView(
-                            repositoryFullName: selectedRepo?.fullName ?? "",
-                            branch: selectedBranch ?? "",
-                            specialists: specialists,
-                            isLoadingSpecialists: isLoadingSpecialists,
-                            selectedSpecialist: $selectedSpecialist,
-                            providers: providers,
-                            isLoadingProviders: isLoadingProviders,
-                            selectedProvider: $selectedProvider,
-                            models: models,
-                            selectedModel: $selectedModel,
-                            messageText: $messageText,
-                            isCreating: isCreating,
-                            errorMessage: errorMessage,
-                            showError: $showError,
-                            colorScheme: colorScheme,
-                            onSelectProvider: selectProvider,
-                            onCreate: createWorkspace
-                        ) {
-                            await fetchCreationOptions()
-                        }
-                    }
-                }
+        case .create:
+            CreateWorkspaceSpecialistStepView(
+                repositoryFullName: selectedRepo?.fullName ?? "",
+                branch: selectedBranch ?? "",
+                specialists: specialists,
+                isLoadingSpecialists: isLoadingSpecialists,
+                selectedSpecialist: $selectedSpecialist,
+                providers: providers,
+                isLoadingProviders: isLoadingProviders,
+                selectedProvider: $selectedProvider,
+                models: models,
+                selectedModel: $selectedModel,
+                messageText: $messageText,
+                isCreating: isCreating,
+                errorMessage: errorMessage,
+                showError: $showError,
+                colorScheme: colorScheme,
+                onSelectProvider: selectProvider,
+                onCreate: createWorkspace
+            ) {
+                await fetchCreationOptions()
+            }
         }
     }
 
@@ -261,41 +268,43 @@ struct CreateWorkspaceView: View {
         guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
-        Task {
-            do {
-                let params = Self.buildCreateWorkspaceParams(
-                    githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
-                    baseRef: branch,
-                    idempotencyKey: idempotencyKey,
+        Task { await performCreateWorkspace(repo: repo, branch: branch) }
+    }
+
+    private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+        do {
+            let params = Self.buildCreateWorkspaceParams(
+                githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
+                baseRef: branch,
+                idempotencyKey: idempotencyKey,
+                initialAgent: InitialAgentInput(
                     specialist: selectedSpecialist,
-                    provider: selectedProvider,
                     model: selectedModel,
-                    message: messageText
+                    message: messageText,
+                    provider: selectedProvider
                 )
-
-                let result = try await session.connection.request(
-                    "workspace.create",
-                    params: params,
-                    timeout: Self.createRequestTimeout
-                )
-
-                if let dict = result as? [String: Any],
-                   let wsDict = dict["workspace"] as? [String: Any],
-                   let workspace = WorkspaceStore.parseWorkspace(wsDict) {
-                    session.workspaceStore.addOrUpdate(workspace)
-                    HapticManager.notification(.success)
-                    idempotencyKey = UUID().uuidString
-                    dismiss()
-                    coordinator.onSelectWorkspace(workspace.id)
-                } else {
-                    errorMessage = "Failed to parse workspace response."
-                    showError = true
-                }
-            } catch {
-                errorMessage = error.localizedDescription
+            )
+            let result = try await session.connection.request(
+                "workspace.create",
+                params: params,
+                timeout: Self.createRequestTimeout
+            )
+            if let dict = result as? [String: Any],
+               let workspaceDictionary = dict["workspace"] as? [String: Any],
+               let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
+                session.workspaceStore.addOrUpdate(workspace)
+                HapticManager.notification(.success)
+                idempotencyKey = UUID().uuidString
+                dismiss()
+                coordinator.onSelectWorkspace(workspace.id)
+            } else {
+                errorMessage = "Failed to parse workspace response."
                 showError = true
             }
-            isCreating = false
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
         }
+        isCreating = false
     }
 }

@@ -2,6 +2,23 @@ import Combine
 import Foundation
 import Observation
 
+enum PrMonitorFlushMode {
+    case daemonDefault
+    case pendingOnly
+    case refreshFirst
+
+    func apply(to params: inout [String: Any]) {
+        switch self {
+        case .daemonDefault:
+            break
+        case .pendingOnly:
+            params["check"] = false
+        case .refreshFirst:
+            params["check"] = true
+        }
+    }
+}
+
 /// Live PR-monitor list for one workspace (PROTOCOL §5.42, §6.5).
 ///
 /// Monitors are agent-owned (registration is MCP-only); this store reads via
@@ -136,16 +153,14 @@ import Observation
     /// wake now; ack only, the outcome arrives as `prMonitor:*` events.
     /// `check: true` makes the daemon re-poll the PR first and flush anything
     /// that changed vs. the emit baseline (additive param, default `false`);
-    /// nil omits the key entirely so older daemons see the pre-check request.
-    func flush(monitorId: String, check: Bool? = nil) async {
+    /// daemonDefault omits the key so older daemons see the pre-check request.
+    func flush(monitorId: String, mode: PrMonitorFlushMode = .daemonDefault) async {
         guard let wsId = workspaceId else { return }
         var params: [String: Any] = [
             "workspaceId": wsId,
             "monitorId": monitorId
         ]
-        if let check {
-            params["check"] = check
-        }
+        mode.apply(to: &params)
         do {
             _ = try await connectionManager.request("prMonitor.flush", params: params)
         } catch {

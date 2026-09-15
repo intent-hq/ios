@@ -21,8 +21,8 @@ struct PrMonitorWakeAttribution: Equatable {
     /// Extracts PR-monitor wake attribution from an opaque metadata
     /// dictionary. Returns nil unless `metadata.type == "pr_monitor_wake"`
     /// with a usable `repo` + `prNumber` (both are required to build the PR link).
-    static func from(_ metadata: [String: AnyCodable]?) -> Self? {
-        guard let metadata, metadata["type"]?.stringValue == "pr_monitor_wake" else { return nil }
+    static func from(_ metadata: [String: AnyCodable]) -> Self? {
+        guard metadata["type"]?.stringValue == "pr_monitor_wake" else { return nil }
         let repo = (metadata["repo"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !repo.isEmpty,
@@ -82,7 +82,7 @@ extension ConversationMessage {
     /// (FE parity: ChatMessage.svelte).
     var prMonitorWakeAttribution: PrMonitorWakeAttribution? {
         if let attribution = PrMonitorWakeAttribution.from(metadata) { return attribution }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let attribution = PrMonitorWakeAttribution.from(block.messageMetadata) {
                 return attribution
             }

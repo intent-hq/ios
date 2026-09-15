@@ -44,45 +44,6 @@ import Observation
         }
     }
 
-    /// Sorted notes: spec (isDefault) first, then by createdAt ascending (oldest first). Archived notes excluded.
-    var sortedNotes: [Note] {
-        notes
-            .filter { !$0.isArchived }
-            .sorted { lhs, rhs in
-                if lhs.isDefault != rhs.isDefault {
-                    return lhs.isDefault
-                }
-                // Match Electron behavior: sort by createdAt ascending (oldest first, newest at bottom)
-                return lhs.createdAt < rhs.createdAt
-            }
-    }
-
-    /// Root notes (no parentId, or parentId not found in current notes). Archived excluded.
-    var rootNotes: [Note] {
-        let noteIds = Set(notes.map { $0.id })
-        return sortedNotes.filter { note in
-            guard let parentId = note.parentId else { return true }
-            return !noteIds.contains(parentId)
-        }
-    }
-
-    /// Get child notes for a given parent ID, sorted by createdAt ascending.
-    func childNotes(of parentId: String) -> [Note] {
-        notes
-            .filter { !$0.isArchived && $0.parentId == parentId }
-            .sorted { lhs, rhs in lhs.createdAt < rhs.createdAt }
-    }
-
-    /// Check if a note has children
-    func hasChildren(_ noteId: String) -> Bool {
-        notes.contains { !$0.isArchived && $0.parentId == noteId }
-    }
-
-    /// Find a note by ID
-    func note(byId id: String) -> Note? {
-        notes.first { $0.id == id }
-    }
-
     // MARK: - Connection observation
 
     private func observeConnection() {
@@ -293,7 +254,9 @@ import Observation
             return .transientError
         }
     }
+}
 
+extension NoteStore {
     // MARK: - Task status writes
 
     /// Restore one note's pre-request snapshot after a failed optimistic
@@ -472,16 +435,14 @@ import Observation
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.kind {
-        case .snapshot:
-            guard let rawItems = push.snapshot else { return }
+        switch push.payload {
+        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
             noteLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             notes = reconciler.values()
             AppLog.notes.debug("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
 
-        case .delta:
-            guard let delta = push.delta else { return }
+        case let .delta(delta):
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 notes = reconciler.values()
                 AppLog.notes.debug("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")

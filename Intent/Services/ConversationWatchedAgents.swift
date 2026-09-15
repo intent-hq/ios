@@ -152,10 +152,11 @@ final class ConversationWatchedAgents {
             return
         }
         do {
-            guard let agents = try await commands.listAgents(
+            let result = try await commands.listAgents(
                 workspaceId: workspaceId,
                 watchedAgentIds: watchedAgentIds
-            ) else { return }
+            )
+            guard case let .sessions(agents) = result else { return }
             AppLog.conversation.debug(
                 "[ConversationStore] Fetched \(agents.count) watched agents: "
                     + "\(agents.map { "\($0.name): \($0.displayMessage ?? "nil")" })"

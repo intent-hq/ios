@@ -80,7 +80,9 @@ struct ConversationTranscriptView: View {
             }
         }
     }
+}
 
+private extension ConversationTranscriptView {
     /// The follow handlers stay gated until the entry-scroll decision finishes,
     /// so stream updates cannot yank the viewport away from the unread divider.
     private func transcriptScrollView(
@@ -162,10 +164,10 @@ struct ConversationTranscriptView: View {
             let isScrolledAway = ConversationTranscriptScrollPolicy.isScrolledAway(
                 flippedContentOffsetY: geometry.contentOffset.y
             )
-            AppLog.ui.debug("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(!isScrolledAway)")
+            AppLog.userInterface.debug("[SCROLL] contentOffset.y=\(geometry.contentOffset.y), contentSize=\(geometry.contentSize.height), containerSize=\(geometry.containerSize.height), atBottom=\(!isScrolledAway)")
             return isScrolledAway
         } action: { _, isScrolledAway in
-            AppLog.ui.debug("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
+            AppLog.userInterface.debug("[SCROLL] isScrolledAway=\(isScrolledAway), hasInitiallyScrolled=\(hasInitiallyScrolled), isScrollingToBottom=\(isScrollingToBottom)")
             if hasInitiallyScrolled, !isScrollingToBottom {
                 userIsScrolledAway = isScrolledAway
             }
@@ -228,7 +230,9 @@ struct ConversationTranscriptView: View {
                 .id("truncation-banner")
         }
     }
+}
 
+private extension ConversationTranscriptView {
     private var goToEndButton: some View {
         Button {
             scrollMomentumProxy.stopMomentum()

@@ -184,8 +184,8 @@ struct TaskMetadataHeaderView: View {
 
 /// Relation chip variants, matching fe `TaskRelationLink.svelte`.
 enum ChipVariant {
-    case dependency
     case conflict
+    case dependency
 }
 
 /// Clickable chip linking to a related task note (fe `TaskRelationLink`):
@@ -208,34 +208,7 @@ private struct TaskRelationChip: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
-                if variant == .conflict {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Self.warning)
-                        .accessibilityHidden(true)
-                } else {
-                    TaskStatusIconView(
-                        status: relatedNote?.taskDisplayStatus ?? .unknown,
-                        size: Constants.Notes.Metadata.relationIconSize
-                    )
-                }
-                Text(title)
-                    .font(.footnote.weight(.medium))
-                    .italic(relatedNote == nil)
-                    .foregroundStyle(
-                        variant == .conflict
-                            ? Self.warning
-                            : Theme.mutedForeground(for: colorScheme)
-                    )
-                    .lineLimit(1)
-                if variant == .dependency, unmet {
-                    Image(systemName: "hourglass")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .accessibilityHidden(true)
-                }
-            }
+            chipLabel
             .padding(.horizontal, Constants.Notes.Metadata.chipHorizontalPadding)
             .padding(.vertical, Constants.Notes.Metadata.verticalPadding)
             .background(
@@ -259,5 +232,39 @@ private struct TaskRelationChip: View {
         .accessibilityValue(
             variant == .conflict ? "Conflict" : unmet ? "Unmet dependency" : "Dependency"
         )
+    }
+
+    private var chipLabel: some View {
+        HStack(spacing: Constants.Notes.Metadata.relationSpacing) {
+            relationIcon
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .italic(relatedNote == nil)
+                .foregroundStyle(
+                    variant == .conflict ? Self.warning : Theme.mutedForeground(for: colorScheme)
+                )
+                .lineLimit(1)
+            if variant == .dependency, unmet {
+                Image(systemName: "hourglass")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var relationIcon: some View {
+        if variant == .conflict {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Self.warning)
+                .accessibilityHidden(true)
+        } else {
+            TaskStatusIconView(
+                status: relatedNote?.taskDisplayStatus ?? .unknown,
+                size: Constants.Notes.Metadata.relationIconSize
+            )
+        }
     }
 }

@@ -3,16 +3,16 @@ import Observation
 import SwiftUI
 
 enum AppScreen {
-    case loading
-    case pairing
+    case agentConversation(agentId: String, workspaceId: String, agentName: String)
     case connecting
     case connectionFailed(error: String)
-    case workspaceList
-    case workspaceDetail(workspaceId: String)
-    case agentConversation(agentId: String, workspaceId: String, agentName: String)
-    case noteDetail(noteId: String, workspaceId: String, noteTitle: String)
-    case settings
     case disconnected
+    case loading
+    case noteDetail(noteId: String, workspaceId: String, noteTitle: String)
+    case pairing
+    case settings
+    case workspaceDetail(workspaceId: String)
+    case workspaceList
 }
 
 enum ConnectionFailureRetryPolicy: Equatable {
@@ -31,6 +31,18 @@ struct DeepLinkPairingRequest: Identifiable, Equatable {
 @MainActor
 @Observable
 class AppCoordinator {
+    private enum ScreenRestorationClaim {
+        case resolved(Bool)
+        case unclaimed
+    }
+
+    private struct PendingNotificationSelection {
+        let agentId: String
+        let workspaceId: String
+        let agentName: String
+        let connectionId: UUID
+    }
+
     private static let invalidParametersErrorCode = -32_602
 
     var currentScreen: AppScreen = .loading
@@ -55,12 +67,7 @@ class AppCoordinator {
     /// start); surfaced as pendingDeepLinkPairing once load finishes.
     @ObservationIgnored private var stashedDeepLinkPayload: PairingPayload?
     /// Notification selection awaiting completion of connection or retry routing.
-    @ObservationIgnored private var pendingNotificationSelection: (
-        agentId: String,
-        workspaceId: String,
-        agentName: String,
-        connectionId: UUID
-    )?
+    @ObservationIgnored private var pendingNotificationSelection: PendingNotificationSelection?
     /// Set to true to suppress didSet side effects on selectedWorkspaceId
     @ObservationIgnored private var suppressWorkspaceNavigation = false
     /// Workspace entered from the list whose agent list has not decided yet
@@ -101,7 +108,7 @@ class AppCoordinator {
     @ObservationIgnored private let syncedRegistry: SyncedBackendRegistry
     @ObservationIgnored private let backgroundTaskManager: BackgroundTaskManager
     @ObservationIgnored private let claimScreenRestoration: @MainActor () -> Bool
-    @ObservationIgnored private var claimedScreenRestoration: Bool?
+    @ObservationIgnored private var claimedScreenRestoration = ScreenRestorationClaim.unclaimed
     /// Rebinds this coordinator's window to another backend, set by the
     /// window root (BackendWindowRoot). On single-window platforms it
     /// retargets the window in place; where multiple windows are supported
@@ -117,9 +124,9 @@ class AppCoordinator {
     /// The claim is consumed lazily on first use so coordinators built for
     /// discarded SwiftUI view constructions never spend it.
     private var restoresLastScreen: Bool {
-        if let claimed = claimedScreenRestoration { return claimed }
+        if case let .resolved(claimed) = claimedScreenRestoration { return claimed }
         let claimed = claimScreenRestoration()
-        claimedScreenRestoration = claimed
+        claimedScreenRestoration = .resolved(claimed)
         return claimed
     }
 
@@ -152,7 +159,9 @@ class AppCoordinator {
         reconnectOverlayTimeoutTask?.cancel()
         cancelReconnectLoadingObservation()
     }
+}
 
+extension AppCoordinator {
     private func startObservingConnection() {
         connectionObserver = connection.connectionStatePublisher
             .receive(on: DispatchQueue.main)
@@ -332,7 +341,9 @@ class AppCoordinator {
             pendingDeepLinkPairing = DeepLinkPairingRequest(payload: payload)
         }
     }
+}
 
+extension AppCoordinator {
     // MARK: - Deep links (intent:// URLs)
 
     /// Entry point for `intent://` URLs (IntentApp.onOpenURL). Only
@@ -437,7 +448,12 @@ class AppCoordinator {
         guard windowConnectionID == connectionId else { return }
         switch currentScreen {
         case .loading, .connecting, .pairing, .connectionFailed, .disconnected:
-            pendingNotificationSelection = (agentId, workspaceId, agentName, connectionId)
+            pendingNotificationSelection = PendingNotificationSelection(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName,
+                connectionId: connectionId
+            )
         default:
             onSelectAgent(agentId, workspaceId: workspaceId, agentName: agentName)
         }
@@ -501,78 +517,75 @@ class AppCoordinator {
     }
 
     func onConnectionSuccess() {
-        if let selection = pendingNotificationSelection {
-            pendingNotificationSelection = nil
-            if windowConnectionID == selection.connectionId {
-                onSelectAgent(
-                    selection.agentId,
-                    workspaceId: selection.workspaceId,
-                    agentName: selection.agentName
-                )
-                return
-            }
-        }
-
-        // Try to restore this backend's last viewed screen. Restoring into a
-        // workspace counts as viewing it, so it marks the workspace seen —
-        // mirroring the FE, where the workspace surface marks seen whenever
-        // it becomes active (including cold-start restore). Only the session's
-        // first window restores; other windows land on the workspace list.
-        if restoresLastScreen, let connectionID = windowConnectionID,
-           let saved = persistence.loadLastScreen(for: connectionID) {
-            switch saved.screen {
-            case "workspaceDetail":
-                if let workspaceId = saved.workspaceId {
-                    markWorkspaceSeen(workspaceId)
-                    suppressWorkspaceNavigation = true
-                    selectedWorkspaceId = workspaceId
-                    suppressWorkspaceNavigation = false
-                    currentScreen = .workspaceDetail(workspaceId: workspaceId)
-                    return
-                }
-            case "conversation":
-                if let agentId = saved.agentId,
-                   let workspaceId = saved.workspaceId,
-                   let agentName = saved.agentName {
-                    markWorkspaceSeen(workspaceId)
-                    suppressWorkspaceNavigation = true
-                    selectedWorkspaceId = workspaceId
-                    suppressWorkspaceNavigation = false
-                    currentScreen = .agentConversation(
-                        agentId: agentId,
-                        workspaceId: workspaceId,
-                        agentName: agentName
-                    )
-                    // Validate agent still exists asynchronously
-                    Task { @MainActor in
-                        await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
-                    }
-                    return
-                }
-            case "note":
-                if let noteId = saved.noteId,
-                   let workspaceId = saved.workspaceId,
-                   let noteTitle = saved.noteTitle {
-                    markWorkspaceSeen(workspaceId)
-                    suppressWorkspaceNavigation = true
-                    selectedWorkspaceId = workspaceId
-                    suppressWorkspaceNavigation = false
-                    currentScreen = .noteDetail(
-                        noteId: noteId,
-                        workspaceId: workspaceId,
-                        noteTitle: noteTitle
-                    )
-                    // Validate note still exists asynchronously
-                    Task { @MainActor in
-                        await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
-                    }
-                    return
-                }
-            default:
-                break
-            }
-        }
+        if routePendingNotificationSelection() { return }
+        if restoreLastScreenIfAvailable() { return }
         currentScreen = .workspaceList
+    }
+
+    private func routePendingNotificationSelection() -> Bool {
+        guard let selection = pendingNotificationSelection else { return false }
+        pendingNotificationSelection = nil
+        guard windowConnectionID == selection.connectionId else { return false }
+        onSelectAgent(
+            selection.agentId,
+            workspaceId: selection.workspaceId,
+            agentName: selection.agentName
+        )
+        return true
+    }
+
+    private func restoreLastScreenIfAvailable() -> Bool {
+        // Restoring into a workspace counts as viewing it, mirroring the FE.
+        // Only the session's first window restores; other windows show the list.
+        guard restoresLastScreen,
+              let connectionID = windowConnectionID,
+              let saved = persistence.loadLastScreen(for: connectionID) else { return false }
+        switch saved.screen {
+        case "workspaceDetail":
+            guard let workspaceId = saved.workspaceId else { return false }
+            markWorkspaceSeen(workspaceId)
+            suppressWorkspaceNavigation = true
+            selectedWorkspaceId = workspaceId
+            suppressWorkspaceNavigation = false
+            currentScreen = .workspaceDetail(workspaceId: workspaceId)
+            return true
+        case "conversation":
+            guard let agentId = saved.agentId,
+                  let workspaceId = saved.workspaceId,
+                  let agentName = saved.agentName else { return false }
+            markWorkspaceSeen(workspaceId)
+            suppressWorkspaceNavigation = true
+            selectedWorkspaceId = workspaceId
+            suppressWorkspaceNavigation = false
+            currentScreen = .agentConversation(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName
+            )
+            Task { @MainActor in
+                await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
+            }
+            return true
+        case "note":
+            guard let noteId = saved.noteId,
+                  let workspaceId = saved.workspaceId,
+                  let noteTitle = saved.noteTitle else { return false }
+            markWorkspaceSeen(workspaceId)
+            suppressWorkspaceNavigation = true
+            selectedWorkspaceId = workspaceId
+            suppressWorkspaceNavigation = false
+            currentScreen = .noteDetail(
+                noteId: noteId,
+                workspaceId: workspaceId,
+                noteTitle: noteTitle
+            )
+            Task { @MainActor in
+                await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
+            }
+            return true
+        default:
+            return false
+        }
     }
 
     func onConnectionFailed(error: String) {
@@ -712,7 +725,9 @@ class AppCoordinator {
             error: String(localized: "Could not forget this connection. Please try again.")
         )
     }
+}
 
+extension AppCoordinator {
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
         pendingAutoOpenWorkspaceId = nil

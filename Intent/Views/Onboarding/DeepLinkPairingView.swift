@@ -22,78 +22,78 @@ struct DeepLinkPairingView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Server") {
-                    ForEach(payload.hosts, id: \.self) { host in
-                        Label {
-                            Text(verbatim: "\(host):\(payload.port)")
-                        } icon: {
-                            Image(systemName: "desktopcomputer")
-                        }
-                    }
-                    if let tcAddress = payload.tcAddress {
-                        Label {
-                            Text(TcAddressDisplay.truncated(tcAddress))
-                                .lineLimit(1)
-                                .accessibilityLabel(tcAddress)
-                        } icon: {
-                            Image(systemName: "point.3.connected.trianglepath.dotted")
-                        }
+            pairingList
+                .navigationTitle("Pair with Intent?")
+                .toolbarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }
                     }
                 }
+                .onDisappear { pairingTask?.cancel() }
+                .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
+                    Button("Cancel", role: .cancel) { isValidating = false }
+                    Button("Trust & Connect", action: trustAndConnect)
+                } message: {
+                    Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
+                }
+        }
+    }
 
-                Section {
-                    Button {
-                        startPairing()
-                    } label: {
-                        if isValidating {
-                            HStack {
-                                ProgressView()
-                                Text("Connecting...")
-                            }
-                        } else {
-                            Text("Connect")
-                        }
-                    }
-                    .disabled(isValidating)
-                } footer: {
-                    Text("Only connect if you opened this link yourself, e.g. from your Intent desktop app.")
-                }
+    private var pairingList: some View {
+        List {
+            serverSection
+            connectSection
+            if let errorMessage {
+                Section { Text(errorMessage).foregroundStyle(.red) }
+            }
+        }
+    }
 
-                if let errorMessage {
-                    Section {
-                        Text(errorMessage)
-                            .foregroundStyle(.red)
+    private var serverSection: some View {
+        Section("Server") {
+            ForEach(payload.hosts, id: \.self) { host in
+                Label {
+                    Text(verbatim: "\(host):\(payload.port)")
+                } icon: {
+                    Image(systemName: "desktopcomputer")
+                }
+            }
+            if let tcAddress = payload.tcAddress {
+                Label {
+                    Text(TcAddressDisplay.truncated(tcAddress))
+                        .lineLimit(1)
+                        .accessibilityLabel(tcAddress)
+                } icon: {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                }
+            }
+        }
+    }
+
+    private var connectSection: some View {
+        Section {
+            Button(action: startPairing) {
+                if isValidating {
+                    HStack {
+                        ProgressView()
+                        Text("Connecting...")
                     }
+                } else {
+                    Text("Connect")
                 }
             }
-            .navigationTitle("Pair with Intent?")
-            .toolbarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { coordinator.pendingDeepLinkPairing = nil }
-                }
-            }
-            // Covers the toolbar Cancel and every other dismissal (swipe
-            // down): pairing must not complete after the sheet is gone.
-            .onDisappear { pairingTask?.cancel() }
-            .alert("Verify Server Identity", isPresented: $showFingerprintConfirmation) {
-                Button("Cancel", role: .cancel) {
-                    isValidating = false
-                }
-                Button("Trust & Connect") {
-                    if let fingerprint = probedFingerprint {
-                        connect(certFingerprint: fingerprint)
-                    } else {
-                        // Unreachable today (the alert is only presented after
-                        // the fingerprint is set), but keep the sheet
-                        // recoverable instead of stuck behind isValidating.
-                        isValidating = false
-                    }
-                }
-            } message: {
-                Text("The server's TLS certificate fingerprint is:\n\n\(probedFingerprint ?? "")\n\nDo you trust this server?")
-            }
+            .disabled(isValidating)
+        } footer: {
+            Text("Only connect if you opened this link yourself, e.g. from your Intent desktop app.")
+        }
+    }
+
+    private func trustAndConnect() {
+        if let fingerprint = probedFingerprint {
+            connect(certFingerprint: fingerprint)
+        } else {
+            isValidating = false
         }
     }
 

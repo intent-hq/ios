@@ -30,7 +30,7 @@ struct WorkspaceStatusIconView: View {
             // real status; cleared via workspace.markSeen on open.
             if hasUnreadAttention(workspace) {
                 statusDot(
-                    color: workspaceUnreadColor,
+                    color: kWorkspaceUnreadColor,
                     differentiatedSymbol: "exclamationmark.triangle.fill"
                 )
                     .offset(
@@ -263,7 +263,7 @@ struct WorkspaceStatusIconView: View {
     }
 }
 
-struct HalfCircle: Shape {
+nonisolated struct HalfCircle: Shape {
     private static let startAngle = Angle.radians(-.pi / 2)
     private static let endAngle = Angle.radians(.pi / 2)
 

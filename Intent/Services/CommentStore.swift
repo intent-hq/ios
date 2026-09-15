@@ -199,16 +199,14 @@ import Observation
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.kind {
-        case .snapshot:
-            guard let rawItems = push.snapshot else { return }
+        switch push.payload {
+        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
             commentLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             threads = reconciler.values()
             AppLog.comments.debug("[CommentStore] Applied snapshot with \(rawItems.count) threads, seq=\(push.seq)")
 
-        case .delta:
-            guard let delta = push.delta else { return }
+        case let .delta(delta):
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 threads = reconciler.values()
                 AppLog.comments.debug("[CommentStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")

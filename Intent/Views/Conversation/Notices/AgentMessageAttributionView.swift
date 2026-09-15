@@ -25,38 +25,39 @@ struct AgentMessageAttributionView: View {
             } else {
                 identity
             }
-
-            Button {
-                withAnimation(.easeInOut(duration: Constants.Conversation.Attribution.expansionAnimationDuration)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
-                    Text("sent a message")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .layoutPriority(1)
-                    if !preview.isEmpty {
-                        Text("— \(preview)")
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(preview.isEmpty
-                ? "sent a message"
-                : "sent a message: \(preview)")
-            .accessibilityValue(isExpanded ? "expanded" : "collapsed")
+            disclosureButton
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private var disclosureButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: Constants.Conversation.Attribution.expansionAnimationDuration)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: Constants.Conversation.Attribution.spacing) {
+                Text("sent a message")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .layoutPriority(1)
+                if !preview.isEmpty {
+                    Text("— \(preview)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(preview.isEmpty ? "sent a message" : "sent a message: \(preview)")
+        .accessibilityValue(isExpanded ? "expanded" : "collapsed")
     }
 
     /// Agent icon + truncated sender name (name is pre-truncated to ~20

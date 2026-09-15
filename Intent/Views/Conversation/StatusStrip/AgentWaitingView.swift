@@ -25,176 +25,105 @@ struct AgentWaitingView: View {
 
     var body: some View {
         if store.isWaitingForAgents {
-            VStack(spacing: 0) {
-                // Header
-                HStack(spacing: Self.headerSpacing) {
-                    ProgressView()
-                        .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
+            waitingContent
+        }
+    }
 
-                    Text(headerText)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
+    private var waitingContent: some View {
+        VStack(spacing: 0) {
+            waitingHeader
+            waitingList
+        }
+        .background(Theme.card(for: colorScheme))
+    }
 
-                    Spacer()
-                }
+    private var waitingHeader: some View {
+        HStack(spacing: Self.headerSpacing) {
+            ProgressView()
+                .scaleEffect(Constants.Conversation.AgentWaiting.progressScale)
+            Text(headerText)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Spacer()
+        }
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.headerVerticalPadding)
+    }
+
+    @ViewBuilder
+    private var waitingList: some View {
+        if !store.watchedAgents.isEmpty {
+            Divider()
                 .padding(.horizontal, Self.horizontalPadding)
-                .padding(.vertical, Self.headerVerticalPadding)
+            watchedAgentsList
+        } else if !store.watchedAgentIds.isEmpty {
+            watchedAgentIdsList
+        }
+    }
 
-                // Agent rows
-                if !store.watchedAgents.isEmpty {
-                    Divider()
-                        .padding(.horizontal, Self.horizontalPadding)
-
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(store.watchedAgents) { agent in
-                                if let onNavigateToAgent {
-                                    Button {
-                                        onNavigateToAgent(agent.id, viewModel.workspaceId, agent.name)
-                                    } label: {
-                                        agentRow(agent, showChevron: true)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .contextMenu {
-                                        agentContextMenu(agent)
-                                    }
-                                } else {
-                                    agentRow(agent)
-                                        .contextMenu {
-                                            agentContextMenu(agent)
-                                        }
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxHeight: min(
-                        CGFloat(store.watchedAgents.count) * Constants.Conversation.AgentWaiting.rowHeight,
-                        Constants.Conversation.AgentWaiting.maximumListHeight
-                    ))
-                } else if !store.watchedAgentIds.isEmpty {
-                    // Fallback: show agent IDs if details haven't loaded yet
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(store.watchedAgentIds, id: \.self) { agentId in
-                                HStack(spacing: Self.fallbackRowSpacing) {
-                                    ProgressView()
-                                        .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
-                                    Text(agentId.prefix(
-                                        Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength
-                                    ) + "...")
-                                        .font(.caption)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                    Spacer()
-                                }
-                                .padding(.horizontal, Self.horizontalPadding)
-                                .padding(.vertical, Self.rowVerticalPadding)
-                            }
-                        }
-                    }
-                    .frame(maxHeight: min(
-                        CGFloat(store.watchedAgentIds.count) * Constants.Conversation.AgentWaiting.fallbackRowHeight,
-                        Constants.Conversation.AgentWaiting.fallbackMaximumListHeight
-                    ))
+    private var watchedAgentsList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(store.watchedAgents) { agent in
+                    watchedAgentRow(agent)
                 }
             }
-            .background(Theme.card(for: colorScheme))
         }
+        .frame(maxHeight: min(
+            CGFloat(store.watchedAgents.count) * Constants.Conversation.AgentWaiting.rowHeight,
+            Constants.Conversation.AgentWaiting.maximumListHeight
+        ))
+    }
+
+    @ViewBuilder
+    private func watchedAgentRow(_ agent: AgentSession) -> some View {
+        if let onNavigateToAgent {
+            Button {
+                onNavigateToAgent(agent.id, viewModel.workspaceId, agent.name)
+            } label: {
+                agentRow(agent, showChevron: true)
+            }
+            .buttonStyle(.plain)
+            .contextMenu { agentContextMenu(agent) }
+        } else {
+            agentRow(agent)
+                .contextMenu { agentContextMenu(agent) }
+        }
+    }
+
+    private var watchedAgentIdsList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(store.watchedAgentIds, id: \.self) { agentId in
+                    fallbackRow(agentId)
+                }
+            }
+        }
+        .frame(maxHeight: min(
+            CGFloat(store.watchedAgentIds.count) * Constants.Conversation.AgentWaiting.fallbackRowHeight,
+            Constants.Conversation.AgentWaiting.fallbackMaximumListHeight
+        ))
+    }
+
+    private func fallbackRow(_ agentId: String) -> some View {
+        HStack(spacing: Self.fallbackRowSpacing) {
+            ProgressView()
+                .scaleEffect(Constants.Conversation.AgentWaiting.fallbackProgressScale)
+            Text(agentId.prefix(Constants.Conversation.AgentWaiting.fallbackAgentIdMaximumLength) + "...")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            Spacer()
+        }
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.rowVerticalPadding)
     }
 
     @ViewBuilder
     private func agentRow(_ agent: AgentSession, showChevron: Bool = false) -> some View {
         HStack(spacing: Self.agentRowSpacing) {
-            // Avatar with status indicator
-            ZStack(alignment: .topTrailing) {
-                AgentAvatarView(
-                    agentId: agent.id,
-                    size: Constants.Conversation.AgentWaiting.avatarSize,
-                    specialist: agent.specialist,
-                    isActive: agent.isActive
-                )
-
-                if agent.isErrored {
-                    // Red X for errored agents
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
-                        .foregroundStyle(.red)
-                        .accessibilityHidden(true)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
-                            width: Constants.Conversation.AgentWaiting.badgeSize,
-                            height: Constants.Conversation.AgentWaiting.badgeSize
-                        ))
-                        .offset(
-                            x: Constants.Conversation.AgentWaiting.badgeOffset,
-                            y: -Constants.Conversation.AgentWaiting.badgeOffset
-                        )
-                } else if let attention = agent.pendingAttentionRequest {
-                    // Kind-flavored badge for pending attention requests
-                    Image(systemName: attention.kind.systemImage)
-                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
-                        .foregroundStyle(attention.kind.color)
-                        .accessibilityHidden(true)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
-                            width: Constants.Conversation.AgentWaiting.badgeSize,
-                            height: Constants.Conversation.AgentWaiting.badgeSize
-                        ))
-                        .offset(
-                            x: Constants.Conversation.AgentWaiting.badgeOffset,
-                            y: -Constants.Conversation.AgentWaiting.badgeOffset
-                        )
-                } else if !agent.isActive, agent.digest != nil {
-                    // Green checkmark for completed agents with digest
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
-                        .foregroundStyle(.green)
-                        .accessibilityHidden(true)
-                        .background(Circle().fill(Theme.card(for: colorScheme)).frame(
-                            width: Constants.Conversation.AgentWaiting.badgeSize,
-                            height: Constants.Conversation.AgentWaiting.badgeSize
-                        ))
-                        .offset(
-                            x: Constants.Conversation.AgentWaiting.badgeOffset,
-                            y: -Constants.Conversation.AgentWaiting.badgeOffset
-                        )
-                } else if agent.isActive {
-                    // Green dot for active agents
-                    Circle()
-                        .fill(Color.green)
-                        .frame(
-                            width: Constants.Conversation.AgentWaiting.activeDotSize,
-                            height: Constants.Conversation.AgentWaiting.activeDotSize
-                        )
-                        .offset(
-                            x: Constants.Conversation.AgentWaiting.activeDotOffset,
-                            y: -Constants.Conversation.AgentWaiting.activeDotOffset
-                        )
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(agent.name)
-                    .font(.caption)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .lineLimit(1)
-
-                if let attention = agent.pendingAttentionRequest {
-                    Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
-                        .font(.caption2)
-                        .foregroundStyle(attention.kind.color)
-                        .lineLimit(1)
-                } else if let message = agent.displayMessage {
-                    Text(message)
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .lineLimit(1)
-                } else {
-                    Text(agent.isActive ? "Working..." : (agent.isErrored ? "Error" : "Idle"))
-                        .font(.caption2)
-                        .foregroundStyle(agent.isErrored ? .red : Theme.mutedForeground(for: colorScheme))
-                }
-            }
-
+            agentAvatar(agent)
+            agentDescription(agent)
             Spacer()
-
             if showChevron {
                 Image(systemName: "chevron.right")
                     .font(.caption2)
@@ -205,6 +134,83 @@ struct AgentWaitingView: View {
         .padding(.horizontal, Self.horizontalPadding)
         .padding(.vertical, Self.rowVerticalPadding)
         .contentShape(Rectangle())
+    }
+
+    private func agentAvatar(_ agent: AgentSession) -> some View {
+        ZStack(alignment: .topTrailing) {
+            AgentAvatarView(
+                agentId: agent.id,
+                size: Constants.Conversation.AgentWaiting.avatarSize,
+                specialist: agent.specialist,
+                isActive: agent.isActive
+            )
+            agentStatusBadge(agent)
+        }
+    }
+
+    @ViewBuilder
+    private func agentStatusBadge(_ agent: AgentSession) -> some View {
+        if agent.isErrored {
+            statusBadge(systemName: "xmark.circle.fill", color: .red)
+        } else if let attention = agent.pendingAttentionRequest {
+            statusBadge(systemName: attention.kind.systemImage, color: attention.kind.color)
+        } else if !agent.isActive, agent.digest != nil {
+            statusBadge(systemName: "checkmark.circle.fill", color: .green)
+        } else if agent.isActive {
+            activeStatusDot
+        }
+    }
+
+    private func statusBadge(systemName: String, color: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: Constants.Conversation.AgentWaiting.badgeFontSize))
+            .foregroundStyle(color)
+            .accessibilityHidden(true)
+            .background(Circle().fill(Theme.card(for: colorScheme)).frame(
+                width: Constants.Conversation.AgentWaiting.badgeSize,
+                height: Constants.Conversation.AgentWaiting.badgeSize
+            ))
+            .offset(
+                x: Constants.Conversation.AgentWaiting.badgeOffset,
+                y: -Constants.Conversation.AgentWaiting.badgeOffset
+            )
+    }
+
+    private var activeStatusDot: some View {
+        Circle()
+            .fill(Color.green)
+            .frame(
+                width: Constants.Conversation.AgentWaiting.activeDotSize,
+                height: Constants.Conversation.AgentWaiting.activeDotSize
+            )
+            .offset(
+                x: Constants.Conversation.AgentWaiting.activeDotOffset,
+                y: -Constants.Conversation.AgentWaiting.activeDotOffset
+            )
+    }
+
+    private func agentDescription(_ agent: AgentSession) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(agent.name)
+                .font(.caption)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .lineLimit(1)
+            if let attention = agent.pendingAttentionRequest {
+                Text(attention.reason.map { "\(attention.kind.label) — \($0)" } ?? attention.kind.label)
+                    .font(.caption2)
+                    .foregroundStyle(attention.kind.color)
+                    .lineLimit(1)
+            } else if let message = agent.displayMessage {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .lineLimit(1)
+            } else {
+                Text(agent.isActive ? "Working..." : (agent.isErrored ? "Error" : "Idle"))
+                    .font(.caption2)
+                    .foregroundStyle(agent.isErrored ? .red : Theme.mutedForeground(for: colorScheme))
+            }
+        }
     }
 
     @ViewBuilder

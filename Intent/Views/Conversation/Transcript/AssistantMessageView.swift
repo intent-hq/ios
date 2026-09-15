@@ -12,16 +12,17 @@ struct AssistantMessageView: View {
         static let verticalPadding: CGFloat = 4
     }
 
-    private var blocks: [ContentBlock] { message.contentBlocks ?? [] }
+    private var blocks: [ContentBlock] { message.contentBlocks }
+    private var renderBlocks: [RenderBlock] {
+        let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
+        return MessageBlockPartitioning.groupContentBlocks(
+            strippedBlocks,
+            isStreaming: message.isStreaming
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
-            let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
-            let renderBlocks = MessageBlockPartitioning.groupContentBlocks(
-                strippedBlocks,
-                isStreaming: message.isStreaming == true
-            )
-
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
@@ -34,13 +35,9 @@ struct AssistantMessageView: View {
                         onHydrateBlock: onHydrateBlock
                     )
                 case .group(let group):
-                    let isLastGroup = !renderBlocks.suffix(from: index + 1).contains { candidate in
-                        if case .group = candidate { return true }
-                        return false
-                    }
                     ResponseGroupView(
                         group: group,
-                        isLast: isLastGroup,
+                        isLast: isLastGroup(after: index),
                         workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         hydratingBlockIds: hydratingBlockIds,
@@ -53,8 +50,15 @@ struct AssistantMessageView: View {
         .modifier(MessageCopyContextMenu(
             text: MessageBlockPartitioning.assistantCopyText(from: blocks),
             userStyled: false,
-            isStreaming: message.isStreaming == true
+            isStreaming: message.isStreaming
         ))
+    }
+
+    private func isLastGroup(after index: Int) -> Bool {
+        !renderBlocks.suffix(from: index + 1).contains { candidate in
+            if case .group = candidate { return true }
+            return false
+        }
     }
 }
 

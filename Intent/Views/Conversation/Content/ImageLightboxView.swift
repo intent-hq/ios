@@ -31,50 +31,8 @@ struct ImageLightboxView: View {
 
     var body: some View {
         ZStack {
-            Button { dismiss() } label: {
-                Color.black
-                    .ignoresSafeArea()
-            }
-            .buttonStyle(.plain)
-            .accessibilityHidden(true)
-
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .scaleEffect(scale * gestureScale)
-                .offset(
-                    x: offset.width + dragTranslation.width,
-                    y: offset.height + dragTranslation.height
-                )
-                .accessibilityLabel("Image preview")
-                .accessibilityValue("\(Int(scale * Self.zoomPercentageMultiplier)) percent zoom")
-                .accessibilityAdjustableAction { direction in
-                    adjustZoom(direction, in: viewportSize)
-                }
-                .accessibilityActions {
-                    if scale > Self.minScale {
-                        Button("Pan left") {
-                            panImage(by: CGSize(width: -Self.accessibilityPanDistance, height: 0), in: viewportSize)
-                        }
-                        Button("Pan right") {
-                            panImage(by: CGSize(width: Self.accessibilityPanDistance, height: 0), in: viewportSize)
-                        }
-                        Button("Pan up") {
-                            panImage(by: CGSize(width: 0, height: -Self.accessibilityPanDistance), in: viewportSize)
-                        }
-                        Button("Pan down") {
-                            panImage(by: CGSize(width: 0, height: Self.accessibilityPanDistance), in: viewportSize)
-                        }
-                        Button("Reset zoom") {
-                            scale = Self.minScale
-                            gestureScale = 1
-                            offset = .zero
-                        }
-                    }
-                }
-                .gesture(doubleTapGesture)
-                .gesture(dragGesture(in: viewportSize))
-                .simultaneousGesture(magnifyGesture(in: viewportSize))
+            backdrop
+            imagePreview
         }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
@@ -89,6 +47,60 @@ struct ImageLightboxView: View {
                 closeButton
             }
             .padding(Self.actionContainerPadding)
+        }
+    }
+
+    private var backdrop: some View {
+        Button { dismiss() } label: {
+            Color.black
+                .ignoresSafeArea()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+    }
+
+    private var imagePreview: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFit()
+            .scaleEffect(scale * gestureScale)
+            .offset(
+                x: offset.width + dragTranslation.width,
+                y: offset.height + dragTranslation.height
+            )
+            .accessibilityLabel("Image preview")
+            .accessibilityValue("\(Int(scale * Self.zoomPercentageMultiplier)) percent zoom")
+            .accessibilityAdjustableAction { direction in
+                adjustZoom(direction, in: viewportSize)
+            }
+            .accessibilityActions {
+                imageAccessibilityActions
+            }
+            .gesture(doubleTapGesture)
+            .gesture(dragGesture(in: viewportSize))
+            .simultaneousGesture(magnifyGesture(in: viewportSize))
+    }
+
+    @ViewBuilder
+    private var imageAccessibilityActions: some View {
+        if scale > Self.minScale {
+            Button("Pan left") {
+                panImage(by: CGSize(width: -Self.accessibilityPanDistance, height: 0), in: viewportSize)
+            }
+            Button("Pan right") {
+                panImage(by: CGSize(width: Self.accessibilityPanDistance, height: 0), in: viewportSize)
+            }
+            Button("Pan up") {
+                panImage(by: CGSize(width: 0, height: -Self.accessibilityPanDistance), in: viewportSize)
+            }
+            Button("Pan down") {
+                panImage(by: CGSize(width: 0, height: Self.accessibilityPanDistance), in: viewportSize)
+            }
+            Button("Reset zoom") {
+                scale = Self.minScale
+                gestureScale = 1
+                offset = .zero
+            }
         }
     }
 

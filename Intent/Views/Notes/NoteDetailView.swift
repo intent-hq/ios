@@ -32,110 +32,18 @@ struct NoteDetailView: View {
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
     }
 
+    var agentStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(agentStore.connectionManager)
+    }
+
+    var noteStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(noteStore.connectionManager)
+    }
+
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if isLoading {
-                ProgressView("Loading note...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Constants.Notes.Detail.contentSpacing) {
-                        // Tags
-                        if !note.tags.isEmpty {
-                            HStack(spacing: Constants.Notes.Detail.tagSpacing) {
-                                ForEach(note.tags, id: \.self) { tag in
-                                    Text(tag)
-                                        .font(.caption)
-                                        .padding(.horizontal, Constants.Notes.Detail.tagHorizontalPadding)
-                                        .padding(.vertical, Constants.Notes.Detail.tagVerticalPadding)
-                                        .background(Theme.muted(for: colorScheme))
-                                        .clipShape(RoundedRectangle(
-                                            cornerRadius: Constants.Notes.Detail.tagCornerRadius
-                                        ))
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                }
-                            }
-                        }
-
-                        // Task-note metadata header (status, agents, relations),
-                        // matching fe NoteMetadataBar; never shown for the spec.
-                        if showsTaskHeader(note) {
-                            TaskMetadataHeaderView(
-                                note: note,
-                                notes: noteStore.notes,
-                                resolveAgentName: { id in
-                                    agentStore.agents.first { $0.id == id }?.name
-                                },
-                                resolveAgentCreatedAt: { id in
-                                    ISO8601DateFormatter.lenientDate(
-                                        from: agentStore.agents.first { $0.id == id }?.createdAt
-                                    )
-                                },
-                                onNavigateToNote: { navigateToNote($0) },
-                                onSetStatus: { status in
-                                    Task {
-                                        await noteStore.updateTaskNoteStatus(
-                                            noteId: noteId,
-                                            workspaceId: workspaceId,
-                                            status: status
-                                        )
-                                    }
-                                }
-                            )
-                        }
-
-                        // Content: markdown segments interleaved with native task rows
-                        if !note.content.isEmpty {
-                            NoteContentView(
-                                content: note.content,
-                                resolveNote: { noteStore.note(byId: $0) },
-                                onOpenURL: { url in
-                                    if let link = Self.parseIntentNoteLink(url) {
-                                        navigateToNote(link.id, in: link.workspaceId)
-                                        return .handled
-                                    }
-                                    return .systemAction
-                                },
-                                onOpenTaskNote: { targetId in
-                                    navigateToNote(targetId)
-                                },
-                                onSetLineStatus: { line, status in
-                                    Task {
-                                        await noteStore.updateTaskLineStatus(
-                                            noteId: noteId,
-                                            workspaceId: workspaceId,
-                                            line: line,
-                                            status: status
-                                        )
-                                    }
-                                },
-                                onSetTaskNoteStatus: { taskNoteId, status in
-                                    Task {
-                                        await noteStore.updateTaskNoteStatus(
-                                            noteId: taskNoteId,
-                                            workspaceId: workspaceId,
-                                            status: status
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    }
-                    .padding(Constants.Notes.Detail.contentPadding)
-                }
-            } else {
-                VStack(spacing: Constants.Notes.Detail.contentSpacing) {
-                    Image(systemName: "doc.text")
-                        .font(.largeTitle)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .accessibilityHidden(true)
-                    Text("Note content unavailable")
-                        .font(.headline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-            }
+            noteContentState
         }
         .navigationTitle(noteTitle)
         .toolbarTitleDisplayMode(.inline)
@@ -178,6 +86,115 @@ struct NoteDetailView: View {
                cached.updatedAt != full.updatedAt {
                 Task { await refreshNote() }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var noteContentState: some View {
+        if isLoading {
+            ProgressView("Loading note...")
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        } else if let note = displayNote, !note.content.isEmpty || showsTaskHeader(note) {
+            ScrollView { noteStack(note) }
+        } else {
+            VStack(spacing: Constants.Notes.Detail.contentSpacing) {
+                Image(systemName: "doc.text")
+                    .font(.largeTitle)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
+                Text("Note content unavailable")
+                    .font(.headline)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+            }
+        }
+    }
+
+    private func noteStack(_ note: Note) -> some View {
+        VStack(alignment: .leading, spacing: Constants.Notes.Detail.contentSpacing) {
+            noteTags(note)
+            taskHeader(note)
+            renderedContent(note)
+        }
+        .padding(Constants.Notes.Detail.contentPadding)
+    }
+
+    @ViewBuilder
+    private func noteTags(_ note: Note) -> some View {
+        if !note.tags.isEmpty {
+            HStack(spacing: Constants.Notes.Detail.tagSpacing) {
+                ForEach(note.tags, id: \.self) { tag in
+                    Text(tag)
+                        .font(.caption)
+                        .padding(.horizontal, Constants.Notes.Detail.tagHorizontalPadding)
+                        .padding(.vertical, Constants.Notes.Detail.tagVerticalPadding)
+                        .background(Theme.muted(for: colorScheme))
+                        .clipShape(RoundedRectangle(cornerRadius: Constants.Notes.Detail.tagCornerRadius))
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func taskHeader(_ note: Note) -> some View {
+        if showsTaskHeader(note) {
+            TaskMetadataHeaderView(
+                note: note,
+                notes: noteStore.notes,
+                resolveAgentName: { id in agentStore.agents.first { $0.id == id }?.name },
+                resolveAgentCreatedAt: { id in
+                    ISO8601DateFormatter.lenientDate(
+                        from: agentStore.agents.first { $0.id == id }?.createdAt
+                    )
+                },
+                onNavigateToNote: { navigateToNote($0) },
+                onSetStatus: { status in
+                    Task {
+                        await noteStore.updateTaskNoteStatus(
+                            noteId: noteId,
+                            workspaceId: workspaceId,
+                            status: status
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func renderedContent(_ note: Note) -> some View {
+        if !note.content.isEmpty {
+            NoteContentView(
+                content: note.content,
+                resolveNote: { noteStore.note(byId: $0) },
+                onOpenURL: { url in
+                    if let link = Self.parseIntentNoteLink(url) {
+                        navigateToNote(link.id, in: link.workspaceId)
+                        return .handled
+                    }
+                    return .systemAction
+                },
+                onOpenTaskNote: { navigateToNote($0) },
+                onSetLineStatus: { line, status in
+                    Task {
+                        await noteStore.updateTaskLineStatus(
+                            noteId: noteId,
+                            workspaceId: workspaceId,
+                            line: line,
+                            status: status
+                        )
+                    }
+                },
+                onSetTaskNoteStatus: { taskNoteId, status in
+                    Task {
+                        await noteStore.updateTaskNoteStatus(
+                            noteId: taskNoteId,
+                            workspaceId: workspaceId,
+                            status: status
+                        )
+                    }
+                }
+            )
         }
     }
 

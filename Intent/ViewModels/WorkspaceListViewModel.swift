@@ -23,20 +23,26 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
         static let unknown = 11
     }
 
-    case failed
     case blocked
-    case needsAttention
-    case idle
-    case notStarted
-    case inProgress
     case complete
-    case prReady
+    case failed
+    case idle
+    case inProgress
+    case needsAttention
+    case notStarted
+    case prMerged
     case prOpen
     case prQueued
-    case prMerged
+    case prReady
     /// A wire value this build does not know (a newer daemon's status) —
     /// rendered neutrally rather than being folded into another status.
     case unknown
+
+    /// Stable historical iteration order, independent of declaration order.
+    static let allCases: [Self] = [
+        .failed, .blocked, .needsAttention, .idle, .notStarted, .inProgress,
+        .complete, .prReady, .prOpen, .prQueued, .prMerged, .unknown
+    ]
 
     /// Maps the BE-owned wire value (snake_case) to a display status.
     /// Returns nil for unknown values.
@@ -122,7 +128,7 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
 
 /// The unread-dot blue (#3B82F6), shared by the row overlay and any other
 /// unread affordances.
-let workspaceUnreadColor = Constants.Colors.WorkspaceStatus.unread
+let kWorkspaceUnreadColor = Constants.Colors.WorkspaceStatus.unread
 
 /// True when the workspace carries the server-owned unread attention flag
 /// (the blue dot). `review_required` and `none` don't count — only `unread`

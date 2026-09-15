@@ -99,9 +99,9 @@ enum SyncedBackendPayload {
     static let version = 1
 
     enum Parsed: Equatable {
-        case record(SyncedBackendRecord)
-        case newerVersion
         case invalid
+        case newerVersion
+        case record(SyncedBackendRecord)
     }
 
     static func parse(_ payload: String) -> Parsed {
@@ -125,13 +125,16 @@ enum SyncedBackendPayload {
             port: port,
             fingerprint: fingerprint,
             hostname: object["hostname"] as? String,
-            detectHosts: bool(object["detectHosts"]) ?? true,
+            detectHosts: {
+                if case let .value(value) = bool(object["detectHosts"]) { return value }
+                return true
+            }(),
             token: object["token"] as? String ?? "",
             updatedAt: updatedAt,
             deleted: false,
             deletedAt: nil
         )
-        if bool(object["deleted"]) == true {
+        if case .value(true) = bool(object["deleted"]) {
             record.deleted = true
             record.deletedAt = number(object["deletedAt"])?.doubleValue ?? updatedAt
             record.token = ""
@@ -160,11 +163,11 @@ enum SyncedBackendPayload {
     }
 
     /// JSON bool (never a JSON number).
-    private static func bool(_ value: Any?) -> Bool? {
+    private static func bool(_ value: Any?) -> AnyCodableBooleanMatch {
         guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
               CFGetTypeID(value) == CFBooleanGetTypeID()
-        else { return nil }
-        return value.boolValue
+        else { return .typeMismatch }
+        return .value(value.boolValue)
     }
 }
 
@@ -174,9 +177,9 @@ enum SyncedBackendPayload {
 /// is a SUCCESSFUL empty read; every other failure means "keychain state
 /// unknown" and must never be treated as "no items".
 enum SyncedKeychainListOutcome {
-    case rows([[String: Any]])
-    case notFound
     case failure(OSStatus)
+    case notFound
+    case rows([[String: Any]])
 }
 
 /// Abstraction over `SecItemCopyMatching` list queries so tests can run

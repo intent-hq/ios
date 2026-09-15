@@ -68,7 +68,7 @@ struct MonitoredPrsRow: View {
                 Task {
                     await monitoredPrStore.flush(
                         monitorId: monitor.monitorId,
-                        check: true
+                        mode: .refreshFirst
                     )
                 }
             } label: {
@@ -182,10 +182,14 @@ struct MonitoredPrsRow: View {
         if let reason = snapshot.mergeBlockedReason, !reason.isEmpty {
             return "Merge blocked: \(reason)"
         }
-        if let mergeable = snapshot.mergeable {
-            return mergeable ? "Mergeable" : "Not mergeable"
+        switch snapshot.mergeability {
+        case .computing:
+            return nil
+        case .mergeable:
+            return "Mergeable"
+        case .notMergeable:
+            return "Not mergeable"
         }
-        return nil
     }
 
     /// Compact checks summary from the last snapshot, e.g. "3/4 passing".

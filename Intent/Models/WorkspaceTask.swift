@@ -38,15 +38,15 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
 /// attention-request states (`ws.agent.reportBlocker` / `requestDiscussion`)
 /// and get a distinct treatment rather than being lumped with unknown.
 enum TaskDisplayStatus: Equatable {
-    case notStarted
-    case waiting
-    case discussionNeeded
     case blocked
-    case inProgress
-    case reviewRequired
-    case complete
     case cancelled
+    case complete
+    case discussionNeeded
+    case inProgress
+    case notStarted
+    case reviewRequired
     case unknown
+    case waiting
 
     init(wire: String) {
         switch wire {

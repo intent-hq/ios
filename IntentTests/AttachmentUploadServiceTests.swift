@@ -174,7 +174,9 @@ struct AttachmentUploadServiceTests {
             )
         }
     }
+}
 
+extension AttachmentUploadServiceTests {
     // MARK: - Chunked path
 
     @Test func dataAboveSingleShotCapUsesChunkedSession() async throws {
@@ -227,11 +229,13 @@ struct AttachmentUploadServiceTests {
 
         _ = try await AttachmentUploadService.placeChunked(
             connection: fake,
-            workspaceId: "ws-1",
-            fileName: "tiny.bin",
-            mimeType: nil,
-            size: payload.count,
-            sha256: AttachmentUploadService.sha256Hex(of: payload),
+            metadata: AttachmentUploadService.ChunkedPlacementMetadata(
+                workspaceId: "ws-1",
+                fileName: "tiny.bin",
+                mimeType: nil,
+                size: payload.count,
+                sha256: AttachmentUploadService.sha256Hex(of: payload)
+            ),
             readChunk: { offset, length in
                 payload.subdata(in: offset..<min(offset + length, payload.count))
             },
@@ -288,11 +292,13 @@ struct AttachmentUploadServiceTests {
         await #expect(throws: (any Error).self) {
             _ = try await AttachmentUploadService.placeChunked(
                 connection: fake,
-                workspaceId: "ws-1",
-                fileName: "tiny.bin",
-                mimeType: nil,
-                size: payload.count,
-                sha256: AttachmentUploadService.sha256Hex(of: payload),
+                metadata: AttachmentUploadService.ChunkedPlacementMetadata(
+                    workspaceId: "ws-1",
+                    fileName: "tiny.bin",
+                    mimeType: nil,
+                    size: payload.count,
+                    sha256: AttachmentUploadService.sha256Hex(of: payload)
+                ),
                 readChunk: { offset, length in
                     payload.subdata(in: offset..<min(offset + length, payload.count))
                 },
@@ -318,11 +324,13 @@ struct AttachmentUploadServiceTests {
         await #expect(throws: NSError(domain: "test", code: -8)) {
             _ = try await AttachmentUploadService.placeChunked(
                 connection: fake,
-                workspaceId: "ws-1",
-                fileName: "tiny.bin",
-                mimeType: nil,
-                size: payload.count,
-                sha256: AttachmentUploadService.sha256Hex(of: payload),
+                metadata: AttachmentUploadService.ChunkedPlacementMetadata(
+                    workspaceId: "ws-1",
+                    fileName: "tiny.bin",
+                    mimeType: nil,
+                    size: payload.count,
+                    sha256: AttachmentUploadService.sha256Hex(of: payload)
+                ),
                 readChunk: { offset, length in
                     payload.subdata(in: offset..<min(offset + length, payload.count))
                 },
@@ -340,11 +348,13 @@ struct AttachmentUploadServiceTests {
         await #expect(throws: UploadError.malformedResponse(method: "file.attachmentUpload.begin")) {
             _ = try await AttachmentUploadService.placeChunked(
                 connection: fake,
-                workspaceId: "ws-1",
-                fileName: "tiny.bin",
-                mimeType: nil,
-                size: 4,
-                sha256: String(repeating: "a", count: 64),
+                metadata: AttachmentUploadService.ChunkedPlacementMetadata(
+                    workspaceId: "ws-1",
+                    fileName: "tiny.bin",
+                    mimeType: nil,
+                    size: 4,
+                    sha256: String(repeating: "a", count: 64)
+                ),
                 readChunk: { _, _ in Data() },
                 onProgress: nil
             )

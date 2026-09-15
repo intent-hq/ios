@@ -32,6 +32,18 @@ enum SuggestedPrompts {
         let body: [String]
     }
 
+    private struct CloserSearch {
+        let closerLine: Int?
+        let closerRemainder: String?
+        let resumeIndex: Int
+    }
+
+    private struct FenceMarker {
+        let character: Character
+        let length: Int
+        let info: String
+    }
+
     /// Prompts from the last well-formed block, capped and sanitized.
     static func parse(_ text: String) -> [String] {
         prompts(fromLastOf: blocks(in: text))
@@ -150,12 +162,12 @@ enum SuggestedPrompts {
             if let marker = fenceMarker(line) {
                 if let open = fence {
                     // Only a matching, at-least-as-long, bare marker closes.
-                    if marker.char == open.char, marker.length >= open.length,
+                    if marker.character == open.char, marker.length >= open.length,
                        marker.info.trimmingCharacters(in: .whitespaces).isEmpty {
                         fence = nil
                     }
                 } else {
-                    fence = (marker.char, marker.length)
+                    fence = (marker.character, marker.length)
                 }
                 index += 1
                 continue
@@ -169,40 +181,15 @@ enum SuggestedPrompts {
             // later line whose non-empty remainder becomes the final body line;
             // an embedded `-->` mid-line (Mermaid edge, prose arrow) never
             // closes a block. A second opener means this one was never closed.
-            var closerLine: Int?
-            var closerRemainder: String?
-            var scan = index + 1
-            while scan < lines.count {
-                let candidate = trimmingTrailingWhitespace(lines[scan])
-                if candidate.trimmingCharacters(in: .whitespaces) == "-->" {
-                    closerLine = scan
-                    break
-                }
-                if candidate.hasSuffix("-->") {
-                    let remainder = trimmingTrailingWhitespace(
-                        String(candidate.dropLast(Self.markdownMarkerLength))
-                    )
-                    // An opener-shaped remainder (`<!-- suggested-prompts -->`)
-                    // must not close the block: stripping is ungated, so it
-                    // would delete the body text under an unclosed opener.
-                    if !remainder.isEmpty,
-                       remainder.range(of: openerPattern, options: .regularExpression) == nil {
-                        closerLine = scan
-                        closerRemainder = remainder
-                        break
-                    }
-                }
-                if candidate.range(of: openerPattern, options: .regularExpression) != nil { break }
-                scan += 1
-            }
-            guard let closer = closerLine else {
+            let closerSearch = findCloser(in: lines, after: index)
+            guard let closer = closerSearch.closerLine else {
                 // Unclosed opener — resume from wherever the scan stopped so a
                 // later well-formed block is still found.
-                index = scan > index ? scan : index + 1
+                index = closerSearch.resumeIndex > index ? closerSearch.resumeIndex : index + 1
                 continue
             }
             var body = Array(lines[(index + 1)..<closer])
-            if let remainder = closerRemainder { body.append(remainder) }
+            if let remainder = closerSearch.closerRemainder { body.append(remainder) }
             result.append(Block(
                 openerLine: index,
                 closerLine: closer,
@@ -214,8 +201,41 @@ enum SuggestedPrompts {
         return result
     }
 
+    private static func findCloser(in lines: [String], after openerIndex: Int) -> CloserSearch {
+        var closerLine: Int?
+        var closerRemainder: String?
+        var scan = openerIndex + 1
+        while scan < lines.count {
+            let candidate = trimmingTrailingWhitespace(lines[scan])
+            if candidate.trimmingCharacters(in: .whitespaces) == "-->" {
+                closerLine = scan
+                break
+            }
+            if candidate.hasSuffix("-->") {
+                let remainder = trimmingTrailingWhitespace(
+                    String(candidate.dropLast(Self.markdownMarkerLength))
+                )
+                // An opener-shaped remainder must not close the block: stripping
+                // is ungated and would delete text under an unclosed opener.
+                if !remainder.isEmpty,
+                   remainder.range(of: openerPattern, options: .regularExpression) == nil {
+                    closerLine = scan
+                    closerRemainder = remainder
+                    break
+                }
+            }
+            if candidate.range(of: openerPattern, options: .regularExpression) != nil { break }
+            scan += 1
+        }
+        return CloserSearch(
+            closerLine: closerLine,
+            closerRemainder: closerRemainder,
+            resumeIndex: scan
+        )
+    }
+
     /// Opening/closing markdown fence (backtick or tilde), indented at most 3.
-    private static func fenceMarker(_ line: String) -> (char: Character, length: Int, info: String)? {
+    private static func fenceMarker(_ line: String) -> FenceMarker? {
         var index = line.startIndex
         var indent = 0
         while index < line.endIndex, line[index] == " " {
@@ -231,7 +251,7 @@ enum SuggestedPrompts {
             index = line.index(after: index)
         }
         guard length >= Self.markdownMarkerLength else { return nil }
-        return (char, length, String(line[index...]))
+        return FenceMarker(character: char, length: length, info: String(line[index...]))
     }
 
     private static func trimmingTrailingWhitespace(_ line: String) -> String {

@@ -36,7 +36,6 @@ struct CommentStoreIntegrationTests {
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -51,7 +50,6 @@ struct CommentStoreIntegrationTests {
                     "commentCount": 1
                 ]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -59,9 +57,7 @@ struct CommentStoreIntegrationTests {
         // Contiguous delta (seq 0 → 1)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .delta,
             seq: 1,
-            snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(
                 added: [
                     [
@@ -100,7 +96,6 @@ struct CommentStoreIntegrationTests {
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-A",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -115,7 +110,6 @@ struct CommentStoreIntegrationTests {
                     "commentCount": 1
                 ]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -126,9 +120,7 @@ struct CommentStoreIntegrationTests {
         // Gap delta (seq 0 → 10)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-A",
-            kind: .delta,
             seq: 10,
-            snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(
                 added: [],
                 updated: [],
@@ -158,7 +150,6 @@ struct CommentStoreIntegrationTests {
         // Snapshot baseline
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -173,7 +164,6 @@ struct CommentStoreIntegrationTests {
                     "commentCount": 1
                 ]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -206,7 +196,6 @@ struct CommentStoreIntegrationTests {
         // Snapshot establishes live state
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -221,7 +210,6 @@ struct CommentStoreIntegrationTests {
                     "commentCount": 1
                 ]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -262,7 +250,6 @@ struct CommentStoreIntegrationTests {
         // Snapshot for sub-A
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-A",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -277,7 +264,6 @@ struct CommentStoreIntegrationTests {
                     "commentCount": 1
                 ]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.threads.count == 1)
@@ -285,12 +271,10 @@ struct CommentStoreIntegrationTests {
         // Push for unregistered sub-B (should be ignored by store)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-B",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["threadId": "t99", "noteId": "note-99", "anchor": ["anchorText": "should not appear"], "comments": []]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 

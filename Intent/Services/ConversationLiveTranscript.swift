@@ -49,7 +49,9 @@ final class ConversationLiveTranscript {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
+}
 
+extension ConversationLiveTranscript {
     func fetchConversation(agentId: String, workspaceId: String? = nil) async {
         self.agentId = agentId
         if let workspaceId {
@@ -189,9 +191,8 @@ final class ConversationLiveTranscript {
     private func remergeHydratedBlocks() {
         guard !hydratedBlocks.isEmpty else { return }
         for messageIndex in messages.indices {
-            guard var blocks = messages[messageIndex].contentBlocks, !blocks.isEmpty else {
-                continue
-            }
+            var blocks = messages[messageIndex].contentBlocks
+            guard !blocks.isEmpty else { continue }
             var changed = false
             for blockIndex in blocks.indices {
                 let key = Self.hydratedBlockKey(
@@ -208,7 +209,9 @@ final class ConversationLiveTranscript {
             }
         }
     }
+}
 
+extension ConversationLiveTranscript {
     func subscribe(agentId: String, workspaceId: String? = nil) async {
         self.agentId = agentId
         if let workspaceId {
@@ -267,12 +270,14 @@ final class ConversationLiveTranscript {
             return
         }
 
-        switch push.kind {
-        case .snapshot:
+        switch push.payload {
+        case let .collectionSnapshot(rows):
             if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
-            applySnapshot(push)
-        case .delta:
-            guard let delta = push.delta else { return }
+            applySnapshot(rows, metadata: [:], seq: push.seq)
+        case let .conversationSnapshot(rows, metadata):
+            if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
+            applySnapshot(rows, metadata: metadata, seq: push.seq)
+        case let .delta(delta):
             if chatSeeded, push.seq == chatExpectedSeq {
                 applyDelta(delta)
                 chatExpectedSeq = push.seq + 1
@@ -288,22 +293,21 @@ final class ConversationLiveTranscript {
         }
     }
 
-    private func applySnapshot(_ push: SubscriptionPush) {
-        guard let items = push.snapshot else { return }
+    private func applySnapshot(_ rows: [[String: Any]], metadata: [String: Any], seq: Int) {
         chatLive = true
         chatSeeded = true
-        chatExpectedSeq = push.seq + 1
-        messages = items.compactMap { ConversationMessage.parseMessage($0) }
+        chatExpectedSeq = seq + 1
+        messages = rows.compactMap { ConversationMessage.parseMessage($0) }
         remergeHydratedBlocks()
 
-        isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
-        totalMessageCount = push.snapshotMeta?["totalMessages"] as? Int ?? messages.count
+        isTruncated = metadata["truncated"] as? Bool ?? false
+        totalMessageCount = metadata["totalMessages"] as? Int ?? messages.count
         let hasInFlightMessage = messages.contains { $0.isStreaming == true }
-        let isResponding = push.snapshotMeta?["isResponding"] as? Bool ?? false
-        let turnInFlight = push.snapshotMeta?["turnInFlight"] as? Bool ?? false
+        let isResponding = metadata["isResponding"] as? Bool ?? false
+        let turnInFlight = metadata["turnInFlight"] as? Bool ?? false
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
         AppLog.conversation.debug(
-            "[ConversationStore] Applied chat snapshot with \(items.count) messages, seq=\(push.seq), streaming=\(isStreaming)"
+            "[ConversationStore] Applied chat snapshot with \(rows.count) messages, seq=\(seq), streaming=\(isStreaming)"
         )
         onTranscriptReplaced?()
     }
@@ -320,7 +324,8 @@ final class ConversationLiveTranscript {
         if !delta.removedIds.isEmpty {
             let removedIds = Set(delta.removedIds)
             for index in messages.indices {
-                guard var blocks = messages[index].contentBlocks else { continue }
+                guard messages[index].hasReportedContentBlocks else { continue }
+                var blocks = messages[index].contentBlocks
                 blocks.removeAll { removedIds.contains($0.id) }
                 messages[index].contentBlocks = blocks
             }
@@ -361,7 +366,8 @@ final class ConversationLiveTranscript {
                 contentBlocks: [],
                 timestamp: entity["timestamp"] as? String
                     ?? timestampFormatter.string(from: Date()),
-                isStreaming: !streamingComplete
+                streamingState: streamingComplete ? .complete : .streaming,
+                contentBlocksWereProvided: true
             ))
             messageIndex = messages.count - 1
         }
@@ -369,7 +375,7 @@ final class ConversationLiveTranscript {
         if let timestamp = entity["timestamp"] as? String, !timestamp.isEmpty {
             messages[messageIndex].timestamp = timestamp
         }
-        var blocks = messages[messageIndex].contentBlocks ?? []
+        var blocks = messages[messageIndex].contentBlocks
         if let index = blocks.firstIndex(where: { $0.id == block.id }) {
             blocks[index] = mergedToolUseBlock(prior: blocks[index], incoming: block)
         } else {
@@ -396,15 +402,17 @@ final class ConversationLiveTranscript {
         }
         var merged = incoming
         merged.name = prior.resolvedName
-        merged.input = prior.input
-        var metadata = merged.metadata ?? [:]
-        if let toolKind = prior.metadata?["toolKind"] {
+        merged.inheritInput(from: prior)
+        var metadata = merged.metadata
+        if let toolKind = prior.metadata["toolKind"] {
             metadata["toolKind"] = toolKind
         }
         merged.metadata = metadata
         return merged
     }
+}
 
+extension ConversationLiveTranscript {
     private func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }

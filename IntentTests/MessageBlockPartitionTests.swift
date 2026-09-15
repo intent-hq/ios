@@ -113,7 +113,7 @@ struct MessagePlainTextContentTests {
             rawName: "CI watcher",
             displayName: "CI watcher",
             reason: "dispatched",
-            hookStillActive: false
+            postWakeState: .retired
         )
         let blocks = [
             ContentBlock(
@@ -158,7 +158,7 @@ struct MessagePlainTextContentTests {
             rawName: "CI watcher",
             displayName: "CI watcher",
             reason: "dispatched",
-            hookStillActive: nil
+            postWakeState: .unreported
         )
         let blocks = [ContentBlock(type: .text, text: "[Background hook \"CI watcher\"] Checks passed.")]
         #expect(MessageView.userCopyText(from: blocks, hookWake: attribution) == "Checks passed.")

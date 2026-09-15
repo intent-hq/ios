@@ -17,11 +17,13 @@ struct DeltaSubscriptionTests {
         ]
 
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.subscriptionId == "sub-123")
-        #expect(push?.seq == 0)
-        #expect(push?.snapshot?.count == 2)
-        #expect(push?.snapshotMeta == nil) // Array snapshots carry no metadata
+        guard let push, case let .collectionSnapshot(snapshot) = push.payload else {
+            Issue.record("Expected collection snapshot payload")
+            return
+        }
+        #expect(push.subscriptionId == "sub-123")
+        #expect(push.seq == 0)
+        #expect(snapshot.count == 2)
     }
 
     @Test func parseObjectSnapshotPush() async {
@@ -50,23 +52,24 @@ struct DeltaSubscriptionTests {
         ]
 
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.subscriptionId == "sub-chat")
-        #expect(push?.kind == .snapshot)
-        #expect(push?.seq == 0)
-        #expect(push?.snapshot?.count == 1)
-        #expect(push?.snapshot?.first?["id"] as? String == "0190a1b2-user")
+        guard let push, case let .conversationSnapshot(snapshot, meta) = push.payload else {
+            Issue.record("Expected conversation snapshot payload")
+            return
+        }
+        #expect(push.subscriptionId == "sub-chat")
+        #expect(push.kind == .snapshot)
+        #expect(push.seq == 0)
+        #expect(snapshot.count == 1)
+        #expect(snapshot.first?["id"] as? String == "0190a1b2-user")
 
-        let meta = push?.snapshotMeta
-        #expect(meta != nil)
-        #expect(meta?["agentId"] as? String == "agent-123")
-        #expect(meta?["truncated"] as? Bool == false)
-        #expect(meta?["totalMessages"] as? Int == 1)
-        #expect(meta?["isResponding"] as? Bool == true)
-        #expect(meta?["isWaitingOnTool"] as? Bool == false)
-        #expect(meta?["turnInFlight"] as? Bool == true)
-        #expect(meta?["lastStreamActivityAt"] as? String == "2026-06-27T01:00:05.000Z")
-        #expect(meta?["messages"] == nil) // messages are lifted into .snapshot, not duplicated in meta
+        #expect(meta["agentId"] as? String == "agent-123")
+        #expect(meta["truncated"] as? Bool == false)
+        #expect(meta["totalMessages"] as? Int == 1)
+        #expect(meta["isResponding"] as? Bool == true)
+        #expect(meta["isWaitingOnTool"] as? Bool == false)
+        #expect(meta["turnInFlight"] as? Bool == true)
+        #expect(meta["lastStreamActivityAt"] as? String == "2026-06-27T01:00:05.000Z")
+        #expect(meta["messages"] == nil) // messages are lifted into .snapshot, not duplicated in meta
     }
 
     @Test func parseObjectSnapshotWithEmptyMessages() async {
@@ -83,9 +86,12 @@ struct DeltaSubscriptionTests {
         ]
 
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.snapshot?.isEmpty == true)
-        #expect(push?.snapshotMeta?["agentId"] as? String == "agent-123")
+        guard let push, case let .conversationSnapshot(snapshot, metadata) = push.payload else {
+            Issue.record("Expected empty conversation snapshot payload")
+            return
+        }
+        #expect(snapshot.isEmpty)
+        #expect(metadata["agentId"] as? String == "agent-123")
     }
 
     @Test func parseDeltaPush() async {
@@ -101,12 +107,15 @@ struct DeltaSubscriptionTests {
         ]
 
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.subscriptionId == "sub-123")
-        #expect(push?.seq == 1)
-        #expect(push?.delta?.added.count == 1)
-        #expect(push?.delta?.updated.count == 1)
-        #expect(push?.delta?.removedIds.count == 1)
+        guard let push, case let .delta(delta) = push.payload else {
+            Issue.record("Expected delta payload")
+            return
+        }
+        #expect(push.subscriptionId == "sub-123")
+        #expect(push.seq == 1)
+        #expect(delta.added.count == 1)
+        #expect(delta.updated.count == 1)
+        #expect(delta.removedIds.count == 1)
     }
 
     @Test func parseNonPushMethodReturnsNil() async {
@@ -191,26 +200,29 @@ struct DeltaSubscriptionTests {
         ]
 
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.kind == .delta)
-        #expect(push?.seq == 6)
+        guard let push, case let .delta(delta) = push.payload else {
+            Issue.record("Expected block delta payload")
+            return
+        }
+        #expect(push.kind == .delta)
+        #expect(push.seq == 6)
 
         // Raw dictionaries pass through untouched so a block-level reducer can consume them
-        let added = push?.delta?.added.first
+        let added = delta.added.first
         #expect(added?["messageId"] as? String == "0190a200-asst")
         #expect(added?["role"] as? String == "assistant")
         let addedBlock = added?["block"] as? [String: Any]
         #expect(addedBlock?["id"] as? String == "0190a200-asst:1")
         #expect(addedBlock?["type"] as? String == "tool_use")
 
-        let updated = push?.delta?.updated.first
+        let updated = delta.updated.first
         #expect(updated?["messageSeq"] as? Int == 4)
         #expect(updated?["streamingComplete"] as? Bool == true)
         let updatedBlock = updated?["block"] as? [String: Any]
         #expect(updatedBlock?["id"] as? String == "0190a200-asst:0")
         #expect(updatedBlock?["text"] as? String == "Let me check the logs first.")
 
-        #expect(push?.delta?.removedIds == ["0190a200-asst:2"])
+        #expect(delta.removedIds == ["0190a200-asst:2"])
     }
 
     // MARK: - DeltaReconciler

@@ -16,107 +16,8 @@ struct ProviderModelStepView: View {
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
-            if isLoadingProviders {
-                ProgressView("Loading providers...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            } else if providers.noneSelectable {
-                // No selectable provider: replace the Provider picker (and the
-                // dependent Model section) with desktop-setup guidance instead
-                // of rendering a menu with no valid selection (monorepo#985).
-                List {
-                    Section("Provider") {
-                        noProvidersSignedInPlaceholder
-                            .listRowBackground(Theme.card(for: colorScheme))
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            } else {
-                List {
-                    Section("Provider") {
-                        if providers.isEmpty {
-                            Text("No providers found — the default provider will be used.")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                .listRowBackground(Theme.card(for: colorScheme))
-                        } else {
-                            Picker("Provider", selection: Binding(
-                                get: { selectedProvider?.id ?? "" },
-                                set: { newId in
-                                    // Unauthenticated providers can never become the
-                                    // selection; the parent refetches models on change.
-                                    guard let provider = providers.first(where: { $0.id == newId }),
-                                          SpecialistPickerView.isSelectable(provider) else { return }
-                                    selectedProvider = provider
-                                }
-                            )) {
-                                ForEach(providers) { provider in
-                                    Text(provider.authenticated == false
-                                        ? "\(provider.displayName) (not signed in)"
-                                        : provider.displayName)
-                                        .tag(provider.id)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .disabled(isCreating)
-                            .listRowBackground(Theme.card(for: colorScheme))
-                        }
-                    }
-
-                    Section("Model") {
-                        if isLoadingModels {
-                            HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
-                                ProgressView()
-                                    .controlSize(.small)
-                                Text("Loading models...")
-                                    .font(.subheadline)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            }
-                            .listRowBackground(Theme.card(for: colorScheme))
-                        } else if models.isEmpty {
-                            Text("The provider's default model will be used.")
-                                .font(.subheadline)
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                .listRowBackground(Theme.card(for: colorScheme))
-                        } else {
-                            // The daemon-default row (empty tag) keeps selectedModel
-                            // nil; a model is sent only on an explicit user pick.
-                            Picker("Model", selection: Binding(
-                                get: { selectedModel?.id ?? "" },
-                                set: { newId in
-                                    selectedModel = models.first { $0.id == newId }
-                                }
-                            )) {
-                                Text(SpecialistInfo.daemonDefaultLabel(
-                                    for: selectedSpecialist,
-                                    providerId: selectedProvider?.id
-                                )).tag("")
-                                ForEach(models) { model in
-                                    Text(model.name).tag(model.id)
-                                }
-                            }
-                            .pickerStyle(.menu)
-                            .listRowBackground(Theme.card(for: colorScheme))
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-            }
-
-            if isCreating {
-                Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
-                VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
-                    ProgressView()
-                    Text("Creating agent...")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                }
-                .padding(Constants.ModalPicker.loadingOverlayPadding)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
-            }
+            providerContent
+            creatingOverlay
         }
         .navigationTitle("Provider & Model")
         .toolbarTitleDisplayMode(.inline)
@@ -127,6 +28,134 @@ struct ProviderModelStepView: View {
                     .disabled(isCreateDisabled)
                     .fontWeight(.semibold)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var providerContent: some View {
+        if isLoadingProviders {
+            ProgressView("Loading providers...")
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        } else if providers.noneSelectable {
+            noSelectableProvidersList
+        } else {
+            providerAndModelList
+        }
+    }
+
+    private var noSelectableProvidersList: some View {
+        List {
+            Section("Provider") {
+                noProvidersSignedInPlaceholder
+                    .listRowBackground(Theme.card(for: colorScheme))
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    private var providerAndModelList: some View {
+        List {
+            providerSection
+            modelSection
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private var providerSection: some View {
+        Section("Provider") {
+            if providers.isEmpty {
+                Text("No providers found — the default provider will be used.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .listRowBackground(Theme.card(for: colorScheme))
+            } else {
+                providerPicker
+            }
+        }
+    }
+
+    private var providerPicker: some View {
+        Picker("Provider", selection: Binding(
+            get: { selectedProvider?.id ?? "" },
+            set: selectProvider
+        )) {
+            ForEach(providers) { provider in
+                Text(provider.authenticated == false
+                    ? "\(provider.displayName) (not signed in)"
+                    : provider.displayName)
+                    .tag(provider.id)
+            }
+        }
+        .pickerStyle(.menu)
+        .disabled(isCreating)
+        .listRowBackground(Theme.card(for: colorScheme))
+    }
+
+    private func selectProvider(_ newId: String) {
+        guard let provider = providers.first(where: { $0.id == newId }),
+              SpecialistPickerView.isSelectable(provider) else { return }
+        selectedProvider = provider
+    }
+
+    @ViewBuilder
+    private var modelSection: some View {
+        Section("Model") {
+            if isLoadingModels {
+                modelLoadingIndicator
+            } else if models.isEmpty {
+                Text("The provider's default model will be used.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .listRowBackground(Theme.card(for: colorScheme))
+            } else {
+                modelPicker
+            }
+        }
+    }
+
+    private var modelLoadingIndicator: some View {
+        HStack(spacing: Constants.ModalPicker.modelLoadingSpacing) {
+            ProgressView().controlSize(.small)
+            Text("Loading models...")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+        .listRowBackground(Theme.card(for: colorScheme))
+    }
+
+    private var modelPicker: some View {
+        Picker("Model", selection: Binding(
+            get: { selectedModel?.id ?? "" },
+            set: { newId in selectedModel = models.first { $0.id == newId } }
+        )) {
+            Text(SpecialistInfo.daemonDefaultLabel(
+                for: selectedSpecialist,
+                providerId: selectedProvider?.id
+            )).tag("")
+            ForEach(models) { model in
+                Text(model.name).tag(model.id)
+            }
+        }
+        .pickerStyle(.menu)
+        .listRowBackground(Theme.card(for: colorScheme))
+    }
+
+    @ViewBuilder
+    private var creatingOverlay: some View {
+        if isCreating {
+            Color.black.opacity(Constants.ModalPicker.loadingOverlayOpacity).ignoresSafeArea()
+            VStack(spacing: Constants.ModalPicker.loadingOverlaySpacing) {
+                ProgressView()
+                Text("Creating agent...")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+            }
+            .padding(Constants.ModalPicker.loadingOverlayPadding)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: Constants.ModalPicker.loadingOverlayCornerRadius))
         }
     }
 

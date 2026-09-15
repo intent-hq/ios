@@ -8,12 +8,8 @@ import Testing
 /// plist — so this test enforces the sync: every iOS key must be mirrored
 /// verbatim, and the visionOS extras must be exactly the dictation pair.
 struct InfoPlistSyncTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
-
     private func loadPlist(_ relativePath: String) throws -> [String: Any] {
-        let url = Self.repoRoot.appendingPathComponent(relativePath)
+        let url = try TestBundleInputs.current().url(for: relativePath)
         let data = try Data(contentsOf: url)
         let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
         return try #require(plist as? [String: Any], "\(relativePath) is not a dictionary plist")

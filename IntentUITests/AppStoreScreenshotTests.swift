@@ -12,8 +12,14 @@ import XCTest
 /// skips pairing and serves polished fixture data with no daemon, so every
 /// screen shows realistic marketing-safe content.
 nonisolated final class AppStoreScreenshotTests: XCTestCase {
-    override func setUpWithError() {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
         continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
     }
 
     @MainActor

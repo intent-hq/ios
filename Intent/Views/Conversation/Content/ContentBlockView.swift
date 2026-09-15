@@ -72,8 +72,8 @@ struct ContentBlockView: View {
                     {
                         // Hydrate whichever side of the row was truncated
                         // (input and output are separate persisted blocks).
-                        if block.inputTruncated == true { hydrate(block.id) }
-                        if let result, result.outputTruncated == true { hydrate(result.id) }
+                        if block.inputTruncation.isTruncated { hydrate(block.id) }
+                        if let result, result.outputTruncation.isTruncated { hydrate(result.id) }
                     }
                 }
             )
@@ -125,7 +125,7 @@ struct ContentBlockView: View {
     /// the lightbox opens once hydration swaps the full block in (the
     /// truncation flag then disappears from the merged block).
     private var imageNeedsHydration: Bool {
-        block.dataTruncated == true && onHydrateBlock != nil
+        block.dataTruncation.isTruncated && onHydrateBlock != nil
     }
 
     private var isHydratingImage: Bool {
@@ -134,7 +134,7 @@ struct ContentBlockView: View {
 
     @ViewBuilder
     private var imageView: some View {
-        if block.data == nil, block.dataTruncated != true, let attachmentId = block.attachmentId {
+        if block.data == nil, !block.dataTruncation.isTruncated, let attachmentId = block.attachmentId {
             // Attachment-reference block (PROTOCOL §5.5): no inline bytes —
             // resolve the registry row and fetch via file.readChunk.
             AttachmentReferenceImageView(
@@ -168,17 +168,17 @@ struct ContentBlockView: View {
                 // the full image (and the info rows would describe the
                 // preview). Suppress the menu; tapping hydrates the full
                 // block, whose lightbox ellipsis menu offers the actions.
-                if block.dataTruncated != true {
+                if !block.dataTruncation.isTruncated {
                     ImageActionMenuItems(image: uiImage, originalData: imageData)
                 }
             }
             .fullScreenCover(isPresented: $lightboxPresented) {
                 ImageLightboxView(image: uiImage, data: imageData)
             }
-            .onChange(of: block.dataTruncated) { _, truncated in
+            .onChange(of: block.dataTruncation) { _, truncation in
                 // Hydration merged the full block in (the truncation flag
                 // cleared): open the lightbox the tap asked for.
-                if truncated != true, lightboxPendingHydration {
+                if !truncation.isTruncated, lightboxPendingHydration {
                     lightboxPendingHydration = false
                     lightboxPresented = true
                 }
@@ -186,11 +186,11 @@ struct ContentBlockView: View {
             .onChange(of: isHydratingImage) { _, hydrating in
                 // Fetch settled without clearing the flag (failure): drop the
                 // pending open so a later unrelated merge can't surprise-open.
-                if !hydrating, block.dataTruncated == true {
+                if !hydrating, block.dataTruncation.isTruncated {
                     lightboxPendingHydration = false
                 }
             }
-        } else if block.dataTruncated == true {
+        } else if block.dataTruncation.isTruncated {
             // Slim row with no persisted thumbnail (legacy rows, failed
             // generation): placeholder chip with the same on-demand fetch.
             Button {

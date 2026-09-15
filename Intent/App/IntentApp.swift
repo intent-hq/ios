@@ -67,8 +67,8 @@ struct IntentApp: App {
 /// scene natively valued. Single-window platforms (iPhone; iPad without
 /// multi-window) rebind the one window in place.
 enum WindowRetargetRoute: Equatable {
-    case rebindInPlace
     case openTargetWindow
+    case rebindInPlace
     case replaceWindow
 
     static func route(

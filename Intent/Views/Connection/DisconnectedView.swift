@@ -15,73 +15,84 @@ struct DisconnectedView: View {
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
-            VStack(spacing: Constants.Disconnected.contentSpacing) {
-                Spacer()
-
-                // Pulsing dot animation
-                Circle()
-                    .fill(Color.orange)
-                    .frame(
-                        width: Constants.Disconnected.indicatorSize,
-                        height: Constants.Disconnected.indicatorSize
-                    )
-                    .scaleEffect(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorScale : 1.0)
-                    .opacity(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorOpacity : 1.0)
-                    .animation(
-                        .easeInOut(duration: Constants.Disconnected.indicatorAnimationDuration)
-                            .repeatForever(autoreverses: true),
-                        value: attemptNumber
-                    )
-
-                Text("Connection Lost")
-                    .font(.title2.bold())
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-
-                // Window-scoped: name this window's bound backend, never the
-                // global pairing record (another window's backend).
-                if let connection = coordinator.windowConnection {
-                    Text("Reconnecting to \(connection.server.name)...")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, Constants.Disconnected.horizontalPadding)
-                }
-
-                if attemptNumber > 1 {
-                    Text("Attempt \(attemptNumber)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-
-                // Passive per-host cert-mismatch list, for parity with the
-                // live reconnect surface (RootView's isDisconnected overlay).
-                // Note: no coordinator path currently routes to the
-                // .disconnected screen, so this renders only if that screen
-                // gets wired up.
-                if !session.connection.certMismatches.isEmpty {
-                    CertMismatchListView(mismatches: session.connection.certMismatches)
-                        .padding(.horizontal, Constants.Disconnected.horizontalPadding)
-                }
-
-                Spacer()
-
-                Button(action: {
-                    session.connection.disconnect()
-                    coordinator.onLogOff()
-                }, label: {
-                    Text("Log Off")
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
-                        .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
-                        .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
-                })
-                .padding(.horizontal, Constants.Disconnected.horizontalPadding)
-                .padding(.bottom, Constants.Disconnected.bottomPadding)
-            }
+            disconnectedContent
         }
+    }
+
+    private var disconnectedContent: some View {
+        VStack(spacing: Constants.Disconnected.contentSpacing) {
+            Spacer()
+            reconnectingIndicator
+            Text("Connection Lost")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            connectionDescription
+            attemptDescription
+            certificateMismatches
+            Spacer()
+            logOffButton
+        }
+    }
+
+    private var reconnectingIndicator: some View {
+        Circle()
+            .fill(Color.orange)
+            .frame(
+                width: Constants.Disconnected.indicatorSize,
+                height: Constants.Disconnected.indicatorSize
+            )
+            .scaleEffect(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorScale : 1.0)
+            .opacity(attemptNumber > 0 ? Constants.Disconnected.activeIndicatorOpacity : 1.0)
+            .animation(
+                .easeInOut(duration: Constants.Disconnected.indicatorAnimationDuration)
+                    .repeatForever(autoreverses: true),
+                value: attemptNumber
+            )
+    }
+
+    @ViewBuilder
+    private var connectionDescription: some View {
+        if let connection = coordinator.windowConnection {
+            Text("Reconnecting to \(connection.server.name)...")
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Constants.Disconnected.horizontalPadding)
+        }
+    }
+
+    @ViewBuilder
+    private var attemptDescription: some View {
+        if attemptNumber > 1 {
+            Text("Attempt \(attemptNumber)")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+    }
+
+    @ViewBuilder
+    private var certificateMismatches: some View {
+        if !session.connection.certMismatches.isEmpty {
+            CertMismatchListView(mismatches: session.connection.certMismatches)
+                .padding(.horizontal, Constants.Disconnected.horizontalPadding)
+        }
+    }
+
+    private var logOffButton: some View {
+        Button(action: {
+            session.connection.disconnect()
+            coordinator.onLogOff()
+        }, label: {
+            Text("Log Off")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Constants.Disconnected.buttonVerticalPadding)
+                .background(Color.red.opacity(Constants.Disconnected.buttonBackgroundOpacity))
+                .clipShape(RoundedRectangle(cornerRadius: Constants.Disconnected.buttonCornerRadius))
+        })
+        .padding(.horizontal, Constants.Disconnected.horizontalPadding)
+        .padding(.bottom, Constants.Disconnected.bottomPadding)
     }
 }

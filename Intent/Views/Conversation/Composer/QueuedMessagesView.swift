@@ -42,69 +42,84 @@ struct QueuedMessagesView: View {
     private func queuedMessageRow(_ message: QueuedMessage) -> some View {
         HStack(spacing: Self.rowSpacing) {
             if editingId == message.id {
-                // Inline editing
-                TextField("Edit message", text: $editText)
-                    .textFieldStyle(.plain)
-                    .font(.subheadline)
-                    .onSubmit { saveEdit(messageId: message.id) }
-
-                Button {
-                    saveEdit(messageId: message.id)
-                } label: {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.body)
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .frame(
-                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
-                            height: Constants.Conversation.QueuedMessage.actionButtonSide
-                        )
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Save queued message edit")
-
-                Button {
-                    editingId = nil
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.body)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .frame(
-                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
-                            height: Constants.Conversation.QueuedMessage.actionButtonSide
-                        )
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Cancel queued message edit")
+                editingRow(message)
             } else {
-                // Display mode
-                Text(message.content)
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                sendNowButton(message)
-
-                Button {
-                    editingId = message.id
-                    editText = message.content
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.body)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .frame(
-                            width: Constants.Conversation.QueuedMessage.actionButtonSide,
-                            height: Constants.Conversation.QueuedMessage.actionButtonSide
-                        )
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel("Edit queued message")
-
-                removeButton(message)
+                displayRow(message)
             }
         }
         .padding(.horizontal, Self.rowHorizontalPadding)
         .padding(.vertical, Self.rowVerticalPadding)
+    }
+
+    @ViewBuilder
+    private func editingRow(_ message: QueuedMessage) -> some View {
+        TextField("Edit message", text: $editText)
+            .textFieldStyle(.plain)
+            .font(.subheadline)
+            .onSubmit { saveEdit(messageId: message.id) }
+        saveEditButton(message)
+        cancelEditButton
+    }
+
+    @ViewBuilder
+    private func displayRow(_ message: QueuedMessage) -> some View {
+        Text(message.content)
+            .font(.subheadline)
+            .foregroundStyle(Theme.foreground(for: colorScheme))
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        sendNowButton(message)
+        editButton(message)
+        removeButton(message)
+    }
+
+    private func saveEditButton(_ message: QueuedMessage) -> some View {
+        Button {
+            saveEdit(messageId: message.id)
+        } label: {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.body)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .frame(
+                    width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                    height: Constants.Conversation.QueuedMessage.actionButtonSide
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Save queued message edit")
+    }
+
+    private var cancelEditButton: some View {
+        Button {
+            editingId = nil
+        } label: {
+            Image(systemName: "xmark.circle")
+                .font(.body)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(
+                    width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                    height: Constants.Conversation.QueuedMessage.actionButtonSide
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Cancel queued message edit")
+    }
+
+    private func editButton(_ message: QueuedMessage) -> some View {
+        Button {
+            editingId = message.id
+            editText = message.content
+        } label: {
+            Image(systemName: "pencil")
+                .font(.body)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(
+                    width: Constants.Conversation.QueuedMessage.actionButtonSide,
+                    height: Constants.Conversation.QueuedMessage.actionButtonSide
+                )
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Edit queued message")
     }
 
     private func sendNowButton(_ message: QueuedMessage) -> some View {

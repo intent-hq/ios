@@ -120,10 +120,8 @@ struct FakeConnectionManagerTests {
 
         let push = SubscriptionPush(
             subscriptionId: "sub-123",
-            kind: .snapshot,
             seq: 0,
             snapshot: [["id": "1"]],
-            delta: nil
         )
 
         fake.deliverSubscriptionPush(push)
@@ -145,8 +143,8 @@ struct FakeConnectionManagerTests {
             receivedB.append(push)
         }
 
-        let pushA = SubscriptionPush(subscriptionId: "sub-A", kind: .snapshot, seq: 0, snapshot: [], delta: nil)
-        let pushB = SubscriptionPush(subscriptionId: "sub-B", kind: .snapshot, seq: 0, snapshot: [], delta: nil)
+        let pushA = SubscriptionPush(subscriptionId: "sub-A", seq: 0, snapshot: [])
+        let pushB = SubscriptionPush(subscriptionId: "sub-B", seq: 0, snapshot: [])
 
         fake.deliverSubscriptionPush(pushA)
         #expect(receivedA.count == 1)

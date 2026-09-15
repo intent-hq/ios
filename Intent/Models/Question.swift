@@ -99,7 +99,7 @@ struct Question: Equatable, Identifiable, Decodable {
         attachmentId: String,
         header: String,
         question: String,
-        explanation: String? = nil,
+        explanation: String?,
         options: [QuestionOption],
         multiSelect: Bool = false
     ) {
@@ -131,7 +131,7 @@ struct Question: Equatable, Identifiable, Decodable {
         if let resource = block.resource {
             mimeType = resource.mimeType
             text = resource.text
-        } else if let dict = block.metadata?["resource"]?.dictValue {
+        } else if case let .value(dict) = block.metadata["resource"]?.dictValue {
             mimeType = dict["mimeType"] as? String
             text = dict["text"] as? String
         } else {
@@ -139,6 +139,25 @@ struct Question: Equatable, Identifiable, Decodable {
         }
         guard mimeType == resourceMimeType, let text else { return nil }
         return try? JSONDecoder().decode(Self.self, from: Data(text.utf8))
+    }
+}
+
+extension Question {
+    init(
+        attachmentId: String,
+        header: String,
+        question: String,
+        options: [QuestionOption],
+        multiSelect: Bool = false
+    ) {
+        self.init(
+            attachmentId: attachmentId,
+            header: header,
+            question: question,
+            explanation: nil,
+            options: options,
+            multiSelect: multiSelect
+        )
     }
 }
 
@@ -273,7 +292,7 @@ struct PendingQuestionSet: Equatable {
         }
         var seenAttachmentIds = Set<String>()
         var questions: [Question] = []
-        for block in message.contentBlocks ?? [] {
+        for block in message.contentBlocks {
             guard let question = Question.question(from: block) else { continue }
             if seenAttachmentIds.insert(question.attachmentId).inserted {
                 questions.append(question)
@@ -292,7 +311,7 @@ extension ConversationMessage {
     /// parity: `getAnsweredQuestionsMessageId`).
     var answeredQuestionsMessageId: String? {
         if let answered = questionAnswersTaggedMessageId(metadata) { return answered }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let answered = questionAnswersTaggedMessageId(block.messageMetadata) { return answered }
         }
         return nil
@@ -313,9 +332,8 @@ extension QueuedMessage {
 
 /// The `answeredQuestionsMessageId` of a `{ type: "question_answers",
 /// answeredQuestionsMessageId }` tag, or nil when `metadata` is not that tag.
-private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]?) -> String? {
-    guard let metadata,
-          metadata["type"]?.stringValue == "question_answers",
+private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]) -> String? {
+    guard metadata["type"]?.stringValue == "question_answers",
           let answered = metadata["answeredQuestionsMessageId"]?.stringValue,
           !answered.isEmpty else {
         return nil

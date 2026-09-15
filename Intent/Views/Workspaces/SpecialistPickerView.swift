@@ -33,63 +33,78 @@ struct SpecialistPickerView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            SpecialistStepView(
-                specialists: specialists,
-                isLoadingSpecialists: isLoadingSpecialists,
-                selectedSpecialist: selectedSpecialist,
-                agentName: $agentName,
-                colorScheme: colorScheme,
-                onSelect: selectSpecialist,
-                onDismiss: { dismiss() },
-                onNext: { navigationPath.append(.provider) }
-            )
-            .task { await fetchSpecialists() }
-            .navigationDestination(for: Route.self) { route in
-                switch route {
-                case .provider:
-                        ProviderModelStepView(
-                            providers: providers,
-                            isLoadingProviders: isLoadingProviders,
-                            selectedProvider: $selectedProvider,
-                            models: models,
-                            isLoadingModels: isLoadingModels,
-                            selectedModel: $selectedModel,
-                            selectedSpecialist: selectedSpecialist,
-                            isCreating: isCreating,
-                            isCreateDisabled: Self.isCreateDisabled(
-                                hasSpecialist: selectedSpecialist != nil,
-                                isCreating: isCreating,
-                                isLoadingProviders: isLoadingProviders,
-                                isLoadingModels: isLoadingModels,
-                                providers: providers
-                            ),
-                            colorScheme: colorScheme,
-                            onCreate: createSelectedAgent
-                        )
-                        .alert("Error", isPresented: $showError) {
-                            Button("OK", role: .cancel) {}
-                        } message: {
-                            Text(errorMessage ?? "An unknown error occurred.")
-                        }
-                        .task { await fetchProviders() }
-                        .onChange(of: selectedProvider?.id) { _, _ in
-                            if let provider = selectedProvider {
-                                Task { await fetchModels(for: provider) }
-                            } else {
-                                models = []
-                                selectedModel = nil
-                            }
-                        }
-                }
-            }
+            specialistStep
+                .navigationDestination(for: Route.self) { destination(for: $0) }
         }
         .interactiveDismissDisabled(isCreating)
-        .onChange(of: agentName) {
-            if isSettingNameFromSpecialist {
-                isSettingNameFromSpecialist = false
-            } else {
-                userEditedName = true
-            }
+        .onChange(of: agentName) { handleAgentNameChange() }
+    }
+
+    private var specialistStep: some View {
+        SpecialistStepView(
+            specialists: specialists,
+            isLoadingSpecialists: isLoadingSpecialists,
+            selectedSpecialist: selectedSpecialist,
+            agentName: $agentName,
+            colorScheme: colorScheme,
+            onSelect: selectSpecialist,
+            onDismiss: { dismiss() },
+            onNext: { navigationPath.append(.provider) }
+        )
+        .task { await fetchSpecialists() }
+    }
+
+    @ViewBuilder
+    private func destination(for route: Route) -> some View {
+        switch route {
+        case .provider:
+            providerModelStep
+        }
+    }
+
+    private var providerModelStep: some View {
+        ProviderModelStepView(
+            providers: providers,
+            isLoadingProviders: isLoadingProviders,
+            selectedProvider: $selectedProvider,
+            models: models,
+            isLoadingModels: isLoadingModels,
+            selectedModel: $selectedModel,
+            selectedSpecialist: selectedSpecialist,
+            isCreating: isCreating,
+            isCreateDisabled: Self.isCreateDisabled(
+                hasSpecialist: selectedSpecialist != nil,
+                isCreating: isCreating,
+                isLoadingProviders: isLoadingProviders,
+                isLoadingModels: isLoadingModels,
+                providers: providers
+            ),
+            colorScheme: colorScheme,
+            onCreate: createSelectedAgent
+        )
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred.")
+        }
+        .task { await fetchProviders() }
+        .onChange(of: selectedProvider?.id) { _, _ in handleProviderChange() }
+    }
+
+    private func handleAgentNameChange() {
+        if isSettingNameFromSpecialist {
+            isSettingNameFromSpecialist = false
+        } else {
+            userEditedName = true
+        }
+    }
+
+    private func handleProviderChange() {
+        if let provider = selectedProvider {
+            Task { await fetchModels(for: provider) }
+        } else {
+            models = []
+            selectedModel = nil
         }
     }
 

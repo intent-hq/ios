@@ -74,7 +74,9 @@ enum DemoFixtures {
             from: Date(timeIntervalSinceNow: -minutesAgo * secondsPerMinute)
         )
     }
+}
 
+extension DemoFixtures {
     // MARK: - Workspaces
 
     // Numeric values below are intentional fixture payload data. Keeping them
@@ -204,7 +206,9 @@ enum DemoFixtures {
             ]
         ]
     }
+}
 
+extension DemoFixtures {
     // MARK: - Notes
 
     static var notes: [[String: Any]] {
@@ -286,7 +290,9 @@ enum DemoFixtures {
             ]
         ]
     }
+}
 
+extension DemoFixtures {
     // MARK: - Agents
 
     static var agents: [[String: Any]] {
@@ -316,7 +322,9 @@ enum DemoFixtures {
             ]
         ]
     }
+}
 
+extension DemoFixtures {
     // MARK: - Conversation
 
     static var conversationMessages: [[String: Any]] {
@@ -388,7 +396,9 @@ enum DemoFixtures {
             ]
         ]
     }
+}
 
+extension DemoFixtures {
     // MARK: - Tasks
 
     static var tasks: [[String: Any]] {
@@ -407,7 +417,9 @@ enum DemoFixtures {
             ]
         ]
     }
+}
 
+extension DemoFixtures {
     // MARK: - Specialists
 
     static var specialists: [[String: Any]] {

@@ -73,89 +73,87 @@ struct ResponseGroupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Layout.groupSpacing) {
-            // Header button
-            Button {
-                withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                HStack(spacing: Layout.headerSpacing) {
-                    Image(systemName: "rectangle.stack")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
-                        .accessibilityHidden(true)
-
-                    Text(group.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-
-                    if group.toolCallCount > 0 {
-                        Text("\(group.toolCallCount)")
-                            .font(.caption2.weight(.bold))
-                            .foregroundStyle(Theme.background(for: colorScheme))
-                            .padding(.horizontal, Layout.countHorizontalPadding)
-                            .padding(.vertical, Layout.countVerticalPadding)
-                            .background(Theme.mutedForeground(for: colorScheme))
-                            .clipShape(Capsule())
-                    }
-
-                    Spacer()
-
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
-                        .accessibilityHidden(true)
-                }
-                .padding(.vertical, Layout.headerVerticalPadding)
-            }
-            .buttonStyle(.plain)
-
-            // Content with left border
-            if isExpanded {
-                groupChildrenView
-                    .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
-                    .overlay(alignment: .leading) {
-                        Rectangle()
-                            .fill(Theme.mutedForeground(for: colorScheme).opacity(Layout.railOpacity))
-                            .frame(width: Constants.Conversation.ResponseGroup.railWidth)
-                            .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            } else {
-                // Collapsed: constrained scrollable preview
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical) {
-                        groupChildrenView
-                            .id("group-content-bottom")
-                    }
-                    .scrollIndicators(.hidden)
-                    .frame(maxHeight: Constants.Conversation.ResponseGroup.collapsedMaximumHeight)
-                    .mask(
-                        VStack(spacing: 0) {
-                            LinearGradient(
-                                colors: [.clear, .black],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: Constants.Conversation.ResponseGroup.collapsedFadeHeight)
-                            Color.black
-                        }
-                    )
-                    .onAppear {
-                        proxy.scrollTo("group-content-bottom", anchor: .bottom)
-                    }
-                }
-                .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
-                .overlay(alignment: .leading) {
-                    Rectangle()
-                        .fill(Theme.mutedForeground(for: colorScheme).opacity(Layout.railOpacity))
-                        .frame(width: Constants.Conversation.ResponseGroup.railWidth)
-                        .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
-                }
-                .transition(.opacity)
-            }
+            headerButton
+            groupContent
         }
         .padding(.bottom, Layout.bottomPadding)
+    }
+
+    private var headerButton: some View {
+        Button {
+            withAnimation(.easeInOut(duration: Constants.Conversation.ResponseGroup.expansionAnimationDuration)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(spacing: Layout.headerSpacing) {
+                Image(systemName: "rectangle.stack")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.iconOpacity))
+                    .accessibilityHidden(true)
+                Text(group.name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                if group.toolCallCount > 0 {
+                    Text("\(group.toolCallCount)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(Theme.background(for: colorScheme))
+                        .padding(.horizontal, Layout.countHorizontalPadding)
+                        .padding(.vertical, Layout.countVerticalPadding)
+                        .background(Theme.mutedForeground(for: colorScheme))
+                        .clipShape(Capsule())
+                }
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.disclosureOpacity))
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, Layout.headerVerticalPadding)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var groupContent: some View {
+        if isExpanded {
+            groupChildrenView
+                .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
+                .overlay(alignment: .leading) { contentRail }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+        } else {
+            collapsedGroupContent
+        }
+    }
+
+    private var collapsedGroupContent: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                groupChildrenView
+                    .id("group-content-bottom")
+            }
+            .scrollIndicators(.hidden)
+            .frame(maxHeight: Constants.Conversation.ResponseGroup.collapsedMaximumHeight)
+            .mask(
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                        .frame(height: Constants.Conversation.ResponseGroup.collapsedFadeHeight)
+                    Color.black
+                }
+            )
+            .onAppear {
+                proxy.scrollTo("group-content-bottom", anchor: .bottom)
+            }
+        }
+        .padding(.leading, Constants.Conversation.ResponseGroup.contentIndent)
+        .overlay(alignment: .leading) { contentRail }
+        .transition(.opacity)
+    }
+
+    private var contentRail: some View {
+        Rectangle()
+            .fill(Theme.mutedForeground(for: colorScheme).opacity(Layout.railOpacity))
+            .frame(width: Constants.Conversation.ResponseGroup.railWidth)
+            .padding(.leading, Constants.Conversation.ResponseGroup.railInset)
     }
 
     @ViewBuilder

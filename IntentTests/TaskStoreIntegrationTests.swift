@@ -53,12 +53,10 @@ struct TaskStoreIntegrationTests {
         // Deliver snapshot push to make the store live
         let push = SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         )
         fake.deliverSubscriptionPush(push)
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -81,12 +79,10 @@ struct TaskStoreIntegrationTests {
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -94,9 +90,7 @@ struct TaskStoreIntegrationTests {
         // Contiguous delta
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .delta,
             seq: 1,
-            snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(
                 added: [["id": "task-2", "title": "Task 2", "status": "in_progress", "updatedAt": "2024-01-02T00:00:00Z"]],
                 updated: [],
@@ -123,12 +117,10 @@ struct TaskStoreIntegrationTests {
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -137,9 +129,7 @@ struct TaskStoreIntegrationTests {
         // Gap (seq 5 instead of 1) triggers resnapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .delta,
             seq: 5,
-            snapshot: nil,
             delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
         ))
         try await Task.sleep(nanoseconds: 200_000_000)
@@ -165,12 +155,10 @@ struct TaskStoreIntegrationTests {
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -203,12 +191,10 @@ struct TaskStoreIntegrationTests {
         // Snapshot establishes live state
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -243,12 +229,10 @@ struct TaskStoreIntegrationTests {
         // Snapshot for sub-A
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-A",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -256,12 +240,10 @@ struct TaskStoreIntegrationTests {
         // Push for unregistered sub-B (should be ignored by store)
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-B",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-99", "title": "Should not appear", "status": "in_progress", "updatedAt": "2024-01-01T00:00:00Z"]
             ],
-            delta: nil
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 

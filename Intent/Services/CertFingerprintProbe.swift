@@ -15,8 +15,8 @@ import os
 enum CertFingerprintProbe {
     /// Decision for a completed TLS probe.
     enum Outcome: Equatable {
-        case confirmFingerprint(String)
         case abort(message: String)
+        case confirmFingerprint(String)
     }
 
     static let noCertErrorMessage =
@@ -33,7 +33,8 @@ enum CertFingerprintProbe {
     /// QR payload probes hosts sequentially, so a hung host would otherwise
     /// stall the pairing spinner for minutes. 4s matches the websocket
     /// timeout ConnectionManager.raceHosts uses per host.
-    static let probeTimeout: Duration = .seconds(4)
+    private static let probeTimeoutSeconds: Int = 4
+    static let probeTimeout: Duration = .seconds(probeTimeoutSeconds)
 
     /// Validated NWEndpoint.Port for a user-supplied port number, or nil when
     /// the value is outside 1...65535 (pure, unit-testable).
@@ -56,6 +57,75 @@ enum CertFingerprintProbe {
         )
     }
 
+    nonisolated private static func makeProbeConnection(
+        host: String,
+        port: NWEndpoint.Port,
+        captured: OSAllocatedUnfairLock<String?>,
+        continuation: AsyncStream<Void>.Continuation,
+        queue: DispatchQueue
+    ) -> NWConnection {
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_verify_block(
+            tlsOptions.securityProtocolOptions,
+            { _, trustRef, complete in
+                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
+                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
+                    captured.withLock { $0 = fingerprint }
+                }
+                complete(true)
+            },
+            queue
+        )
+        let connection = NWConnection(
+            host: NWEndpoint.Host(host),
+            port: port,
+            using: NWParameters(tls: tlsOptions)
+        )
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .setup, .preparing:
+                break
+            case .ready:
+                AppLog.connection.debug("[CertProbe] \(host): handshake completed")
+                continuation.finish()
+            case .waiting(let error):
+                AppLog.connection.debug("[CertProbe] \(host): waiting (\(String(describing: error)))")
+                continuation.finish()
+            case .failed(let error):
+                AppLog.connection.debug("[CertProbe] \(host): failed (\(String(describing: error)))")
+                continuation.finish()
+            case .cancelled:
+                continuation.finish()
+            @unknown default:
+                break
+            }
+        }
+        return connection
+    }
+
+    nonisolated private static func awaitProbeSettlement(
+        connection: NWConnection,
+        queue: DispatchQueue,
+        lifecycleEvents: AsyncStream<Void>
+    ) async {
+        await withTaskCancellationHandler {
+            connection.start(queue: queue)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in lifecycleEvents {}
+                }
+                group.addTask {
+                    try? await Task.sleep(for: probeTimeout)
+                }
+                await group.next()
+                group.cancelAll()
+            }
+        } onCancel: {
+            connection.cancel()
+        }
+        connection.cancel()
+    }
+
     /// Probe the server's TLS certificate fingerprint via a bare TLS
     /// handshake — no HTTP request is needed, the handshake alone yields the
     /// certificate. Returns nil on timeout, unreachable hosts, or plain-TCP
@@ -72,69 +142,14 @@ enum CertFingerprintProbe {
         let captured = OSAllocatedUnfairLock<String?>(initialState: nil)
         let queue = DispatchQueue(label: "CertFingerprintProbe.\(host)")
         let (lifecycleEvents, lifecycleContinuation) = AsyncStream<Void>.makeStream()
-
-        let tlsOptions = NWProtocolTLS.Options()
-        sec_protocol_options_set_verify_block(
-            tlsOptions.securityProtocolOptions,
-            { _, trustRef, complete in
-                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
-                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
-                    captured.withLock { $0 = fingerprint }
-                }
-                // Accept the handshake: trust is informational only for the
-                // probe — the fingerprint is surfaced to the user to confirm
-                // and the connection is closed immediately after capture.
-                complete(true)
-            },
-            queue
-        )
-
-        let connection = NWConnection(
-            host: NWEndpoint.Host(host),
+        let connection = makeProbeConnection(
+            host: host,
             port: nwPort,
-            using: NWParameters(tls: tlsOptions)
+            captured: captured,
+            continuation: lifecycleContinuation,
+            queue: queue
         )
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .setup, .preparing:
-                break
-            case .ready:
-                AppLog.connection.debug("[CertProbe] \(host): handshake completed")
-                lifecycleContinuation.finish()
-            case .waiting(let error):
-                // NWConnection retries in .waiting on unreachable/refusing
-                // hosts; treat it as terminal so sequential probing moves on.
-                AppLog.connection.debug("[CertProbe] \(host): waiting (\(String(describing: error)))")
-                lifecycleContinuation.finish()
-            case .failed(let error):
-                AppLog.connection.debug("[CertProbe] \(host): failed (\(String(describing: error)))")
-                lifecycleContinuation.finish()
-            case .cancelled:
-                lifecycleContinuation.finish()
-            @unknown default:
-                break
-            }
-        }
-
-        await withTaskCancellationHandler {
-            connection.start(queue: queue)
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    // No values are ever yielded; the stream just terminates
-                    // when the handshake settles.
-                    for await _ in lifecycleEvents {}
-                }
-                group.addTask {
-                    try? await Task.sleep(for: probeTimeout)
-                }
-                await group.next()
-                group.cancelAll()
-            }
-        } onCancel: {
-            connection.cancel()
-        }
-        connection.cancel()
-
+        await awaitProbeSettlement(connection: connection, queue: queue, lifecycleEvents: lifecycleEvents)
         return captured.withLock { $0 }
     }
 

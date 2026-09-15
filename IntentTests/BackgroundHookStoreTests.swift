@@ -4,11 +4,23 @@ import Testing
 
 @MainActor
 struct BackgroundHookStoreTests {
+    private struct HookStateExpectation {
+        let rawValue: String
+        let state: BackgroundHook.State
+        let isActive: Bool
+    }
+
+    private enum PerpetualFixtureState {
+        case oneShot
+        case perpetual
+        case unreported
+    }
+
     private func makeHookDict(
         hookId: String = "hook-1",
         state: String = "scheduled",
         nextRunAt: String? = "2026-07-31T10:06:00Z",
-        perpetual: Bool? = nil
+        perpetual: PerpetualFixtureState = .unreported
     ) -> [String: Any] {
         var dict: [String: Any] = [
             "hookId": hookId,
@@ -23,7 +35,11 @@ struct BackgroundHookStoreTests {
             "runCount": 6
         ]
         if let nextRunAt { dict["nextRunAt"] = nextRunAt }
-        if let perpetual { dict["perpetual"] = perpetual }
+        switch perpetual {
+        case .oneShot: dict["perpetual"] = false
+        case .perpetual: dict["perpetual"] = true
+        case .unreported: break
+        }
         return dict
     }
 
@@ -47,25 +63,25 @@ struct BackgroundHookStoreTests {
     }
 
     @Test func parsesPerpetualFlag() throws {
-        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: true)))
+        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .perpetual)))
         #expect(perpetual.perpetual == true)
-        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: false)))
+        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .oneShot)))
         #expect(oneShot.perpetual == false)
     }
 
     @Test func parsesAllStatesAndIsActive() throws {
-        let expectations: [(String, BackgroundHook.State, Bool)] = [
-            ("scheduled", .scheduled, true),
-            ("running", .running, true),
-            ("dispatched", .dispatched, false),
-            ("evicted", .evicted, false),
-            ("cancelled", .cancelled, false),
-            ("expired", .expired, false)
+        let expectations = [
+            HookStateExpectation(rawValue: "scheduled", state: .scheduled, isActive: true),
+            HookStateExpectation(rawValue: "running", state: .running, isActive: true),
+            HookStateExpectation(rawValue: "dispatched", state: .dispatched, isActive: false),
+            HookStateExpectation(rawValue: "evicted", state: .evicted, isActive: false),
+            HookStateExpectation(rawValue: "cancelled", state: .cancelled, isActive: false),
+            HookStateExpectation(rawValue: "expired", state: .expired, isActive: false)
         ]
-        for (raw, expected, active) in expectations {
-            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: raw)))
-            #expect(hook.state == expected)
-            #expect(hook.isActive == active)
+        for expectation in expectations {
+            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: expectation.rawValue)))
+            #expect(hook.state == expectation.state)
+            #expect(hook.isActive == expectation.isActive)
         }
     }
 
@@ -185,7 +201,9 @@ struct BackgroundHookStoreTests {
         )
         #expect(result.hooks[0].code == "const s = await ws.pr.status();")
     }
+}
 
+extension BackgroundHookStoreTests {
     // MARK: - Store integration (subscribe / events / RPC / reconnect)
 
     private func makeSubscribedStore(

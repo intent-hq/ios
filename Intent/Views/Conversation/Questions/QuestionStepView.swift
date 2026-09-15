@@ -70,31 +70,7 @@ struct QuestionStepView: View {
         Button {
             onSelect(optionIndex)
         } label: {
-            HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
-                if isMulti {
-                    checkbox(selected)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(option.label)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let description = option.description {
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if !isMulti {
-                    Image(systemName: "arrow.right")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.secondaryLabelOpacity))
-                        .accessibilityHidden(true)
-                }
-            }
+            optionLabel(option, selected: selected)
             .frame(
                 maxWidth: .infinity,
                 minHeight: Constants.Accessibility.minimumTapTarget,
@@ -102,36 +78,63 @@ struct QuestionStepView: View {
             )
             .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
             .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
-            .background(
-                selected
-                    ? Theme.primary(for: colorScheme).opacity(
-                        colorSchemeContrast == .increased ? Self.selectedHighContrastOpacity : Self.selectedOpacity
-                    )
-                    : Theme.background(for: colorScheme).opacity(Self.optionBackgroundOpacity)
-            )
+            .background(optionBackground(selected: selected))
             .clipShape(RoundedRectangle(
                 cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
             ))
-            .overlay(
-                RoundedRectangle(
-                    cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
-                )
-                    .strokeBorder(
-                        selected
-                            ? Theme.primary(for: colorScheme)
-                            : Theme.border(
-                                for: colorScheme,
-                                contrast: colorSchemeContrast
-                            )
-                                .opacity(colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity),
-                        lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
-                    )
-            )
+            .overlay(optionBorder(selected: selected))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(option.label)
         .accessibilityValue(selected ? "Selected" : "Not selected")
+    }
+
+    private func optionLabel(_ option: QuestionOption, selected: Bool) -> some View {
+        HStack(spacing: Constants.Conversation.QuestionWizard.controlSpacing) {
+            if isMulti {
+                checkbox(selected)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(option.label)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let description = option.description {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .multilineTextAlignment(.leading)
+            Spacer(minLength: 0)
+            if !isMulti {
+                Image(systemName: "arrow.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.secondaryLabelOpacity))
+                    .accessibilityHidden(true)
+            }
+        }
+    }
+
+    private func optionBackground(selected: Bool) -> Color {
+        selected
+            ? Theme.primary(for: colorScheme).opacity(
+                colorSchemeContrast == .increased ? Self.selectedHighContrastOpacity : Self.selectedOpacity
+            )
+            : Theme.background(for: colorScheme).opacity(Self.optionBackgroundOpacity)
+    }
+
+    private func optionBorder(selected: Bool) -> some View {
+        RoundedRectangle(cornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius)
+            .strokeBorder(
+                selected
+                    ? Theme.primary(for: colorScheme)
+                    : Theme.border(for: colorScheme, contrast: colorSchemeContrast)
+                        .opacity(colorSchemeContrast == .increased ? 1 : Self.standardBorderOpacity),
+                lineWidth: selected || colorSchemeContrast == .increased ? 2 : 1
+            )
     }
 
     @ViewBuilder

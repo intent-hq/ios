@@ -3,21 +3,21 @@ import Foundation
 /// Why a dictation session stopped. Determines whether a final recognition
 /// result that arrives after the stop should still be applied to the text.
 enum DictationStopReason {
-    /// The user tapped the mic button to end dictation.
-    case userTapped
-    /// The message was sent; the composer text was consumed.
-    case send
-    /// The composer view left the screen.
-    case viewDisappeared
-    /// The scene became inactive (e.g. the user looked away / app backgrounded).
-    case sceneInactive
     /// The recognizer reported an error.
     case recognitionError
     /// The recognizer delivered a final result on its own (e.g. after silence).
     case recognizerFinished
+    /// The scene became inactive (e.g. the user looked away / app backgrounded).
+    case sceneInactive
+    /// The message was sent; the composer text was consumed.
+    case send
     /// The composer text was edited outside dictation (typed, or replaced by
     /// the view model). The edit wins; a late final must not clobber it.
     case textEdited
+    /// The user tapped the mic button to end dictation.
+    case userTapped
+    /// The composer view left the screen.
+    case viewDisappeared
 
     /// Whether a final transcription arriving after this stop should still
     /// replace the partial text. Deliberate endings keep the (usually more
@@ -37,8 +37,8 @@ enum DictationStopReason {
 /// `startRecording()` awaits the permission prompts.
 enum DictationPhase: Equatable {
     case idle
-    case starting
     case recording
+    case starting
 }
 
 /// Pure start-window state for `SpeechDictationController`, extracted so the
@@ -94,18 +94,18 @@ struct DictationStartState: Equatable {
 /// already-consumed text. A stop while a start is pending (awaiting
 /// permissions) cancels the start before any audio begins.
 enum DictationStopAction: Equatable {
-    /// No active session and the reason keeps final results flowing: no-op.
-    case ignore
-    /// End the active session, letting the recognizer deliver its final.
-    case finish
     /// End the active session, cancel outright and sever the callback.
     case cancelAndSever
-    /// No active session, but the transcript callback must still be severed
-    /// and any lingering recognition task cancelled.
-    case severOnly
     /// A start is pending: cancel it so `begin` never runs, and sever any
     /// recognition lingering from an earlier graceful stop.
     case cancelStart
+    /// End the active session, letting the recognizer deliver its final.
+    case finish
+    /// No active session and the reason keeps final results flowing: no-op.
+    case ignore
+    /// No active session, but the transcript callback must still be severed
+    /// and any lingering recognition task cancelled.
+    case severOnly
 
     static func action(for reason: DictationStopReason, phase: DictationPhase) -> Self {
         switch (phase, reason.acceptsFinalResult) {
@@ -195,10 +195,10 @@ struct DictationSession: Equatable {
     }
 
     enum MergeOutcome: Equatable {
-        /// Replace the composer text with the merged value.
-        case merged(String)
         /// `currentText` was edited outside dictation; nothing was applied.
         case diverged
+        /// Replace the composer text with the merged value.
+        case merged(String)
     }
 
     /// Merges `transcription` into `currentText`. `endsSegment` marks a
@@ -208,7 +208,14 @@ struct DictationSession: Equatable {
     /// after it instead of replacing it.
     mutating func apply(
         transcription: String,
-        endsSegment: Bool = false,
+        to currentText: String
+    ) -> MergeOutcome {
+        apply(transcription: transcription, endsSegment: false, to: currentText)
+    }
+
+    mutating func apply(
+        transcription: String,
+        endsSegment: Bool,
         to currentText: String
     ) -> MergeOutcome {
         guard currentText == (lastMergedText ?? transcript.baseText) else {

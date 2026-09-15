@@ -179,7 +179,9 @@ import SwiftUI
             connectionManager.removeEventHandler(id: handlerId)
         }
     }
+}
 
+extension ConversationStore {
     /// Test-only helper: activate the chat channel and set its subscriptionId,
     /// bypassing the real subscribe flow, so the strict push gate accepts test payloads.
     func setTestChatChannel(subscriptionId: String) {
@@ -388,41 +390,55 @@ import SwiftUI
             } catch is CancellationError {
                 return
             } catch {
-                guard isPendingQuestionRecoveryCurrent(messageId) else { return }
-                let nsError = error as NSError
-                if nsError.domain == "WebSocket", nsError.code == Self.invalidParametersErrorCode {
-                    if nsError.isEntityNotFound {
-                        raiseAgentNotFoundIfDefinitive(error)
-                        clearPendingQuestionRecovery()
-                        return
-                    }
-                    AppLog.conversation.warning(
-                        "[ConversationStore] marked question message \(messageId) unknown to the daemon: "
-                            + nsError.localizedDescription
-                    )
-                    settlePendingQuestionRecovery(messageId, status: .notFound)
-                    return
-                }
-                guard attempt < delays.count else {
-                    AppLog.conversation.error(
-                        "[ConversationStore] Failed to recover marked question message \(messageId) "
-                            + "after bounded retries: \(error)"
-                    )
-                    settlePendingQuestionRecovery(messageId, status: .error)
-                    return
-                }
-                AppLog.conversation.warning(
-                    "[ConversationStore] Retrying marked question recovery for \(messageId) "
-                        + "(attempt \(attempt + 1)): \(error)"
-                )
-                do {
-                    try await Task.sleep(for: delays[attempt])
-                } catch {
-                    return
-                }
-                guard isPendingQuestionRecoveryCurrent(messageId) else { return }
+                guard await handleMarkedQuestionRecoveryFailure(
+                    error,
+                    messageId: messageId,
+                    attempt: attempt,
+                    delays: delays
+                ) else { return }
             }
         }
+    }
+
+    private func handleMarkedQuestionRecoveryFailure(
+        _ error: Error,
+        messageId: String,
+        attempt: Int,
+        delays: [Duration]
+    ) async -> Bool {
+        guard isPendingQuestionRecoveryCurrent(messageId) else { return false }
+        let nsError = error as NSError
+        if nsError.domain == "WebSocket", nsError.code == Self.invalidParametersErrorCode {
+            if nsError.isEntityNotFound {
+                raiseAgentNotFoundIfDefinitive(error)
+                clearPendingQuestionRecovery()
+                return false
+            }
+            AppLog.conversation.warning(
+                "[ConversationStore] marked question message \(messageId) unknown to the daemon: "
+                    + nsError.localizedDescription
+            )
+            settlePendingQuestionRecovery(messageId, status: .notFound)
+            return false
+        }
+        guard attempt < delays.count else {
+            AppLog.conversation.error(
+                "[ConversationStore] Failed to recover marked question message \(messageId) "
+                    + "after bounded retries: \(error)"
+            )
+            settlePendingQuestionRecovery(messageId, status: .error)
+            return false
+        }
+        AppLog.conversation.warning(
+            "[ConversationStore] Retrying marked question recovery for \(messageId) "
+                + "(attempt \(attempt + 1)): \(error)"
+        )
+        do {
+            try await Task.sleep(for: delays[attempt])
+        } catch {
+            return false
+        }
+        return isPendingQuestionRecoveryCurrent(messageId)
     }
 
     private func isPendingQuestionRecoveryCurrent(_ messageId: String) -> Bool {
@@ -596,31 +612,7 @@ import SwiftUI
             return
         }
 
-        // Early agent ID filter: skip events not meant for our agent.
-        // This is critical when multiple ConversationStore instances exist.
-        // Watched-agent (delegate) events are exempt: the switch below handles
-        // them and returns before any transcript mutation.
-        if let myAgentId = agentId {
-            let eventAgentId: String? = {
-                if let inner = dict["event"] as? [String: Any] {
-                    let eventData = inner["data"] as? [String: Any] ?? inner
-                    return eventData["agentId"] as? String ?? inner["agentId"] as? String
-                }
-                let eventData = dict["data"] as? [String: Any] ?? dict
-                return eventData["agentId"] as? String ?? dict["agentId"] as? String
-            }()
-            if let eAgentId = eventAgentId, eAgentId != myAgentId,
-               !watchedAgentIds.contains(eAgentId) {
-                return
-            }
-        }
-
-        // Filter by subscription ID to avoid processing events from the global subscription.
-        // Each event delivery includes a subscriptionId. Only process events matching OUR subscription.
-        let eventSubscriptionId = dict["subscriptionId"] as? String
-        if let mySubId = subscriptionId, let eventSubId = eventSubscriptionId, eventSubId != mySubId {
-            return
-        }
+        guard !shouldIgnoreStreamEvent(dict) else { return }
 
         let event: [String: Any]
         if let innerEvent = dict["event"] as? [String: Any] {
@@ -633,59 +625,11 @@ import SwiftUI
               let data = event["data"] as? [String: Any] else { return }
 
         let eventAgentId = data["agentId"] as? String
-
-        // Workspace-level events — handle regardless of which agent emitted them
-        switch eventType {
-        case "agent:deleted":
-            // Our agent was deleted while its conversation is open — surface it
-            // so the view falls back to the agent list. Handled before the
-            // isLoading buffer so a deletion during the initial fetch is not lost.
-            if let myAgentId = agentId, eventAgentId == myAgentId {
-                agentNotFound = true
-                clearPendingQuestionRecovery()
-            }
-            return
-        case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
-            if let agentId = self.agentId, let workspaceId = self.workspaceId {
-                Task { await self.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
-            }
-            // If this event is also for our agent, continue processing below; otherwise return
-            if eventAgentId != agentId { return }
-        case "agent:status-changed", "agent:idle":
-            // If this is a watched agent, immediately refresh just that agent
-            if let eventAgentId {
-                watchedAgentCoordinator.handleStatusChange(agentId: eventAgentId)
-            }
-            // Also re-fetch subscriptions for the parent agent (sub-agents completing may change groups)
-            if let agentId = self.agentId, let workspaceId = self.workspaceId {
-                Task { await self.fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
-            }
-            if eventAgentId != agentId { return }
-        case "agent:stream:activity":
-            // Liveness ping ({ agentId, messageId }) throttled leading-edge by
-            // the daemon (first chunk immediate, then ≤1/s per agent). The
-            // payload carries live preview fields (lastAgentResponse, digest)
-            // when the turn has produced them — apply those push-style to an
-            // already-loaded watched agent instead of refetching via agent.get.
-            if let eventAgentId {
-                watchedAgentCoordinator.handleActivity(
-                    agentId: eventAgentId,
-                    lastAgentResponse: data["lastAgentResponse"] as? String,
-                    digest: data["digest"] as? String
-                )
-            }
-            guard eventAgentId == agentId else { return }
-        case "agent:stream:end":
-            // When a watched agent finishes streaming, always refresh (bypass debounce) for final state
-            if let eventAgentId {
-                watchedAgentCoordinator.handleStreamEnd(agentId: eventAgentId)
-            }
-            // Only continue processing if this is our agent
-            guard eventAgentId == agentId else { return }
-        default:
-            // Agent-specific events — only handle for our agent
-            guard eventAgentId == agentId else { return }
-        }
+        guard shouldContinueAfterWorkspaceEvent(
+            eventType,
+            data: data,
+            eventAgentId: eventAgentId
+        ) else { return }
 
         // When the chat.subscribe channel is live, block-level deltas own the transcript.
         // Drop firehose agent:stream:* mutations so they cannot create duplicate blocks
@@ -711,6 +655,53 @@ import SwiftUI
             return
         }
 
+        handleAgentStreamEvent(eventType, data: data)
+    }
+
+    private func shouldContinueAfterWorkspaceEvent(
+        _ eventType: String,
+        data: [String: Any],
+        eventAgentId: String?
+    ) -> Bool {
+        switch eventType {
+        case "agent:deleted":
+            if let agentId, eventAgentId == agentId {
+                agentNotFound = true
+                clearPendingQuestionRecovery()
+            }
+            return false
+        case "agent:subscribed", "agent:unsubscribed", "agent:woken-by-subscription":
+            refreshSubscriptions()
+        case "agent:status-changed", "agent:idle":
+            if let eventAgentId {
+                watchedAgentCoordinator.handleStatusChange(agentId: eventAgentId)
+            }
+            refreshSubscriptions()
+        case "agent:stream:activity":
+            if let eventAgentId {
+                watchedAgentCoordinator.handleActivity(
+                    agentId: eventAgentId,
+                    lastAgentResponse: data["lastAgentResponse"] as? String,
+                    digest: data["digest"] as? String
+                )
+            }
+        case "agent:stream:end":
+            if let eventAgentId {
+                watchedAgentCoordinator.handleStreamEnd(agentId: eventAgentId)
+            }
+        default:
+            break
+        }
+        return eventAgentId == agentId
+    }
+
+    private func refreshSubscriptions() {
+        if let agentId, let workspaceId {
+            Task { await fetchSubscriptions(agentId: agentId, workspaceId: workspaceId) }
+        }
+    }
+
+    private func handleAgentStreamEvent(_ eventType: String, data: [String: Any]) {
         switch eventType {
         case "agent:stream:start":
             handleStreamStart(data)
@@ -725,32 +716,58 @@ import SwiftUI
         case "agent:user-message:sent":
             handleUserMessageSent(data)
         case "agent:status-changed":
-            let newStatus = data["status"] as? String
-                ?? data["newStatus"] as? String
-            let statusLower = newStatus?.lowercased() ?? ""
-            if statusLower == "responding" || statusLower == "streaming" || statusLower == "processing" {
-                isStreaming = true
-            } else if statusLower == "idle" || statusLower == "completed" || statusLower == "failed" || statusLower == "error" {
-                isStreaming = false
-            }
-            // Turn boundary — refresh the pending attention request (raised when
-            // a turn ends, cleared when the agent next receives a message).
-            if let agentId = self.agentId {
-                Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
-            }
+            handleAgentStatusChanged(data)
         case "agent:idle":
-            isStreaming = false
-            // Re-fetch conversation to get final state (unless in live mode)
-            if liveTranscript.shouldRefetchAfterLegacyStreamEnd,
-               let agentId = self.agentId {
-                Task { await self.fetchConversation(agentId: agentId) }
-            }
-            // Turn ended — refresh the pending attention request
-            if let agentId = self.agentId {
-                Task { await self.fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
-            }
+            handleAgentIdle()
         default:
             break
+        }
+    }
+
+    private func handleAgentStatusChanged(_ data: [String: Any]) {
+        let newStatus = data["status"] as? String ?? data["newStatus"] as? String
+        let status = newStatus?.lowercased() ?? ""
+        if status == "responding" || status == "streaming" || status == "processing" {
+            isStreaming = true
+        } else if status == "idle" || status == "completed" || status == "failed" || status == "error" {
+            isStreaming = false
+        }
+        if let agentId {
+            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+        }
+    }
+
+    private func handleAgentIdle() {
+        isStreaming = false
+        if liveTranscript.shouldRefetchAfterLegacyStreamEnd, let agentId {
+            Task { await fetchConversation(agentId: agentId) }
+        }
+        if let agentId {
+            Task { await fetchAgentStreamingState(agentId: agentId, raiseOnly: true) }
+        }
+    }
+
+    /// Skip events for another unwatched agent or another subscription. The
+    /// watched-agent exception must run before transcript-specific routing.
+    private func shouldIgnoreStreamEvent(_ event: [String: Any]) -> Bool {
+        if let myAgentId = agentId {
+            let inner = event["event"] as? [String: Any]
+            let envelope = inner ?? event
+            let eventData = envelope["data"] as? [String: Any] ?? envelope
+            let eventAgentId = eventData["agentId"] as? String
+                ?? envelope["agentId"] as? String
+            if let eventAgentId,
+               eventAgentId != myAgentId,
+               !watchedAgentIds.contains(eventAgentId) {
+                return true
+            }
+        }
+
+        let eventSubscriptionId = event["subscriptionId"] as? String
+        return if let subscriptionId, let eventSubscriptionId {
+            eventSubscriptionId != subscriptionId
+        } else {
+            false
         }
     }
 
@@ -869,9 +886,9 @@ import SwiftUI
         agentId: String,
         content: String,
         workspaceId: String,
-        imageBlocks: [[String: Any]]? = nil,
-        fileBlocks: [[String: Any]]? = nil,
-        messageMetadata: [String: Any]? = nil
+        imagePayload: OutgoingImagePayload = .none,
+        filePayload: OutgoingFilePayload = .none,
+        messageMetadata: MessageSendMetadata = .none
     ) async throws {
         // Reuse messageId if retrying the same content after a failure
         let messageId: String
@@ -890,7 +907,8 @@ import SwiftUI
             id: messageId,
             role: .user,
             contentBlocks: [ContentBlock(id: "\(messageId):0", type: .text, text: content)],
-            metadata: messageMetadata?.mapValues { AnyCodable($0) }
+            metadata: messageMetadata.optimisticFields,
+            metadataWasProvided: messageMetadata.wasProvided
         )
         withAnimation(.spring(
             response: Constants.Conversation.Sending.messageAppendSpringResponse,
@@ -908,15 +926,15 @@ import SwiftUI
 
         let queued: Bool
         do {
-            queued = try await commands.sendMessage(
+            queued = try await commands.sendMessage(.init(
                 agentId: agentId,
                 content: content,
                 workspaceId: workspaceId,
                 messageId: messageId,
-                imageBlocks: imageBlocks,
-                fileBlocks: fileBlocks,
+                imagePayload: imagePayload,
+                filePayload: filePayload,
                 messageMetadata: messageMetadata
-            )
+            ))
         } catch {
             // Track the failed send so retrying reuses the same messageId
             lastFailedSend = (messageId: messageId, content: content)
@@ -998,14 +1016,14 @@ import SwiftUI
     func queueMessage(
         agentId: String,
         content: String,
-        imageBlocks: [[String: Any]]? = nil,
-        fileBlocks: [[String: Any]]? = nil
+        imagePayload: OutgoingImagePayload = .none,
+        filePayload: OutgoingFilePayload = .none
     ) async throws {
         try await commands.queueMessage(
             agentId: agentId,
             content: content,
-            imageBlocks: imageBlocks,
-            fileBlocks: fileBlocks
+            imagePayload: imagePayload,
+            filePayload: filePayload
         )
     }
 

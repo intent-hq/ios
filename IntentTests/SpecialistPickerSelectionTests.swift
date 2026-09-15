@@ -31,7 +31,7 @@ struct SpecialistPickerSelectionTests {
 
     @Test func unauthenticatedProvidersAreNotSelectable() {
         #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "auggie", authenticated: true)))
-        #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "grok", authenticated: nil)))
+        #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "grok", authenticated: .unknown)))
         #expect(!SpecialistPickerView.isSelectable(ProviderInfo(id: "codex", authenticated: false)))
     }
 
@@ -39,7 +39,7 @@ struct SpecialistPickerSelectionTests {
         let providers = [
             ProviderInfo(id: "auggie", authenticated: false),
             ProviderInfo(id: "claude-code", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil)
+            ProviderInfo(id: "grok", authenticated: .unknown)
         ]
         #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers)?.id == "grok")
     }
@@ -95,7 +95,7 @@ struct SpecialistPickerSelectionTests {
         // nil (unknown) stays selectable since probes can fail transiently
         let unknown = [
             ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil)
+            ProviderInfo(id: "grok", authenticated: .unknown)
         ]
         #expect(!unknown.noneSelectable)
     }
@@ -103,11 +103,11 @@ struct SpecialistPickerSelectionTests {
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     private func isCreateDisabled(
+        providers: [ProviderInfo],
         hasSpecialist: Bool = true,
         isCreating: Bool = false,
         isLoadingProviders: Bool = false,
-        isLoadingModels: Bool = false,
-        providers: [ProviderInfo]
+        isLoadingModels: Bool = false
     ) -> Bool {
         SpecialistPickerView.isCreateDisabled(
             hasSpecialist: hasSpecialist,
@@ -129,7 +129,7 @@ struct SpecialistPickerSelectionTests {
     @Test func createEnabledWhenAProviderIsSelectable() {
         #expect(!isCreateDisabled(providers: [ProviderInfo(id: "auggie", authenticated: true)]))
         // nil (unknown) stays selectable since probes can fail transiently
-        #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: nil)]))
+        #expect(!isCreateDisabled(providers: [ProviderInfo(id: "grok", authenticated: .unknown)]))
     }
 
     @Test func createEnabledWhenProviderListEmpty() {
@@ -139,10 +139,10 @@ struct SpecialistPickerSelectionTests {
 
     @Test func createDisabledWhileLoadingCreatingOrWithoutSpecialist() {
         let providers = [ProviderInfo(id: "auggie", authenticated: true)]
-        #expect(isCreateDisabled(hasSpecialist: false, providers: providers))
-        #expect(isCreateDisabled(isCreating: true, providers: providers))
-        #expect(isCreateDisabled(isLoadingProviders: true, providers: providers))
-        #expect(isCreateDisabled(isLoadingModels: true, providers: providers))
+        #expect(isCreateDisabled(providers: providers, hasSpecialist: false))
+        #expect(isCreateDisabled(providers: providers, isCreating: true))
+        #expect(isCreateDisabled(providers: providers, isLoadingProviders: true))
+        #expect(isCreateDisabled(providers: providers, isLoadingModels: true))
     }
 
     // MARK: - daemonDefaultLabel (resolvedModel/resolvedProvider preview)
@@ -199,7 +199,7 @@ struct SpecialistPickerSelectionTests {
 
     @Test func sendsProviderOnlyWhenNoExplicitPick() {
         let selection = SpecialistPickerView.buildCreateAgentSelection(
-            provider: ProviderInfo(id: "grok", authenticated: nil),
+            provider: ProviderInfo(id: "grok", authenticated: .unknown),
             model: nil
         )
         #expect(selection.provider == "grok")

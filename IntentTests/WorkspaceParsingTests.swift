@@ -172,10 +172,11 @@ struct WorkspaceParsingTests {
         #expect(prs[1].title == nil)
     }
 
-    @Test func parseAbsentPullRequestsYieldsNil() async {
+    @Test func parseAbsentPullRequestsYieldsUnreportedEmptyPool() async {
         let workspace = WorkspaceStore.parseWorkspace(["id": "ws-pr2", "title": "No PRs"])
         #expect(workspace != nil)
-        #expect(workspace?.pullRequests == nil)
+        #expect(workspace?.pullRequests.isEmpty == true)
+        #expect(workspace?.pullRequestsWereReported == false)
     }
 
     @Test func parseUnknownPullRequestStatusKeptRaw() async {
@@ -185,8 +186,8 @@ struct WorkspaceParsingTests {
             "pullRequests": [["number": 7, "status": "SomeFutureStatus"] as [String: Any]]
         ]
         let workspace = WorkspaceStore.parseWorkspace(dict)
-        #expect(workspace?.pullRequests?.count == 1)
-        #expect(workspace?.pullRequests?.first?.status == "SomeFutureStatus")
+        #expect(workspace?.pullRequests.count == 1)
+        #expect(workspace?.pullRequests.first?.status == "SomeFutureStatus")
     }
 
     @Test func parseActivePullRequest() async throws {

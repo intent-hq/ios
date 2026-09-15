@@ -55,7 +55,6 @@ struct CommentStoreLiveStateTests {
 
         let push = SubscriptionPush(
             subscriptionId: "sub-1",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 [
@@ -81,14 +80,17 @@ struct CommentStoreLiveStateTests {
                     "commentCount": 2
                 ]
             ],
-            delta: nil
         )
 
+        guard case let .collectionSnapshot(snapshot) = push.payload else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
         store.handleEvent("subscription.push", params: [
             "subscriptionId": "sub-1",
             "kind": "snapshot",
             "seq": 0,
-            "snapshot": push.snapshot ?? []
+            "snapshot": snapshot
         ])
 
         #expect(store.threads.count == 2)

@@ -126,8 +126,7 @@ extension AgentAvatarDesign {
     // Glyph geometry below is also verbatim artwork data; naming each coordinate
     // would obscure its relationship to the desktop source.
     private static func makeGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
-        var stroke = Path()
-        var fill = Path()
+        var (stroke, fill) = (Path(), Path())
         var transform = CGAffineTransform.identity
         switch design {
         case .coordinator:
@@ -198,10 +197,7 @@ extension AgentAvatarDesign {
             // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 6.5, centerY: 1.5, radius: 1.5))
         }
-        return AgentAvatarGlyph(
-            strokePath: stroke.applying(transform),
-            fillPath: fill.applying(transform)
-        )
+        return AgentAvatarGlyph(strokePath: stroke.applying(transform), fillPath: fill.applying(transform))
     }
 
     // swiftlint:disable:next line_length
@@ -212,89 +208,111 @@ extension AgentAvatarDesign {
     }
 }
 
+private struct SVGPathParser {
+    private let characters: [Character]
+    private var index = 0
+    private var command: Character = " "
+    private var currentPoint = CGPoint.zero
+
+    init(_ data: String) {
+        characters = Array(data)
+    }
+
+    mutating func append(to path: inout Path) {
+        while true {
+            skipSeparators()
+            guard index < characters.count else { return }
+            if characters[index].isLetter {
+                command = characters[index]
+                index += 1
+            }
+            guard appendCommand(to: &path) else { return }
+        }
+    }
+
+    private mutating func appendCommand(to path: inout Path) -> Bool {
+        switch command {
+        case "M":
+            guard let point = point() else { return false }
+            path.move(to: point)
+            currentPoint = point
+            command = "L"
+        case "L":
+            guard let point = point() else { return false }
+            path.addLine(to: point)
+            currentPoint = point
+        case "H":
+            guard let x = number() else { return false }
+            currentPoint = CGPoint(x: x, y: currentPoint.y)
+            path.addLine(to: currentPoint)
+        case "V":
+            guard let y = number() else { return false }
+            currentPoint = CGPoint(x: currentPoint.x, y: y)
+            path.addLine(to: currentPoint)
+        case "C":
+            guard let control1 = point(), let control2 = point(), let point = point() else { return false }
+            path.addCurve(to: point, control1: control1, control2: control2)
+            currentPoint = point
+        default:
+            return false
+        }
+        return true
+    }
+
+    private mutating func skipSeparators() {
+        while index < characters.count,
+              characters[index] == " " || characters[index] == "," {
+            index += 1
+        }
+    }
+
+    private mutating func number() -> CGFloat? {
+        skipSeparators()
+        let start = index
+        if index < characters.count,
+           characters[index] == "-" || characters[index] == "+" {
+            index += 1
+        }
+        var seenDot = false
+        var seenDigit = false
+        while index < characters.count {
+            let character = characters[index]
+            if character == "." {
+                if seenDot { break }
+                seenDot = true
+            } else if character >= "0", character <= "9" {
+                seenDigit = true
+            } else {
+                break
+            }
+            index += 1
+        }
+        guard seenDigit else {
+            index = start
+            return nil
+        }
+        var text = String(characters[start..<index])
+        if text.hasPrefix(".") { text = "0" + text }
+        if text.hasPrefix("-.") { text = "-0" + text.dropFirst() }
+        guard let value = Double(text) else {
+            index = start
+            return nil
+        }
+        return CGFloat(value)
+    }
+
+    private mutating func point() -> CGPoint? {
+        guard let x = number(), let y = number() else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+}
+
 extension Path {
     /// Parses absolute-command SVG path data — the M/L/H/V/C subset the
     /// desktop avatar glyphs use. Unsupported input stops parsing early.
     init(svgPathData data: String) {
         self.init()
-        let chars = Array(data)
-        var i = 0
-        var command: Character = " "
-        var current = CGPoint.zero
-
-        func skipSeparators() {
-            while i < chars.count, chars[i] == " " || chars[i] == "," { i += 1 }
-        }
-
-        func number() -> CGFloat? {
-            skipSeparators()
-            let start = i
-            if i < chars.count, chars[i] == "-" || chars[i] == "+" { i += 1 }
-            var seenDot = false
-            var seenDigit = false
-            while i < chars.count {
-                let character = chars[i]
-                if character == "." {
-                    if seenDot { break }
-                    seenDot = true
-                } else if character >= "0", character <= "9" {
-                    seenDigit = true
-                } else {
-                    break
-                }
-                i += 1
-            }
-            guard seenDigit else {
-                i = start
-                return nil
-            }
-            var text = String(chars[start..<i])
-            if text.hasPrefix(".") { text = "0" + text }
-            if text.hasPrefix("-.") { text = "-0" + text.dropFirst() }
-            guard let value = Double(text) else {
-                i = start
-                return nil
-            }
-            return CGFloat(value)
-        }
-
-        func point() -> CGPoint? {
-            guard let x = number(), let y = number() else { return nil }
-            return CGPoint(x: x, y: y)
-        }
-
-        while true {
-            skipSeparators()
-            guard i < chars.count else { return }
-            if chars[i].isLetter {
-                command = chars[i]
-                i += 1
-            }
-            switch command {
-            case "M":
-                guard let p = point() else { return }
-                move(to: p)
-                current = p
-                command = "L"
-            case "L":
-                guard let p = point() else { return }
-                addLine(to: p)
-                current = p
-            case "H":
-                guard let x = number() else { return }
-                current = CGPoint(x: x, y: current.y)
-                addLine(to: current)
-            case "V":
-                guard let y = number() else { return }
-                current = CGPoint(x: current.x, y: y)
-                addLine(to: current)
-            case "C":
-                guard let control1 = point(), let control2 = point(), let p = point() else { return }
-                addCurve(to: p, control1: control1, control2: control2)
-                current = p
-            default:
-                return
-            }
-        }
+        var parser = SVGPathParser(data)
+        parser.append(to: &self)
     }
 }

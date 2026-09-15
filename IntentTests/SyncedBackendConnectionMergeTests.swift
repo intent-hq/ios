@@ -6,10 +6,24 @@ import Testing
 /// Merge matrix for `SyncedBackendConnectionMerge`: new/newer/older/tombstone/
 /// absent records, fingerprint vs host:port matching, token rotation.
 struct SyncedBackendConnectionMergeTests {
+    private enum RecordHosts: ExpressibleByArrayLiteral {
+        case primaryHost
+        case values([String])
+
+        init(arrayLiteral elements: String...) { self = .values(elements) }
+
+        func resolved(primaryHost: String) -> [String] {
+            switch self {
+            case .primaryHost: [primaryHost]
+            case let .values(hosts): hosts
+            }
+        }
+    }
+
     private func record(
         label: String = "Mac Studio",
         host: String = "10.0.0.1",
-        hosts: [String]? = nil,
+        hosts: RecordHosts = .primaryHost,
         port: Int = 8843,
         fingerprint: String = "aa:bb",
         token: String = "tok-remote",
@@ -19,7 +33,7 @@ struct SyncedBackendConnectionMergeTests {
         SyncedBackendRecord(
             label: label,
             host: host,
-            hosts: hosts ?? [host],
+            hosts: hosts.resolved(primaryHost: host),
             port: port,
             fingerprint: fingerprint,
             hostname: nil,
@@ -228,7 +242,9 @@ struct SyncedBackendConnectionMergeTests {
         #expect(result.updatedIds == [existing.id])
         #expect(result.connections[0].token == "tok-remote")
     }
+}
 
+extension SyncedBackendConnectionMergeTests {
     // MARK: - Tombstones
 
     @Test func tombstoneRemovesFingerprintMatch() {

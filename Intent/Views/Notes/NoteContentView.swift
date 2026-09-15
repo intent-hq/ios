@@ -122,43 +122,8 @@ private struct LinkedTaskCardRow: View {
 
     var body: some View {
         HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
-            Menu {
-                ForEach(Self.statusOptions, id: \.wire) { option in
-                    Button {
-                        onSetStatus(option.wire)
-                    } label: {
-                        Text("\(option.status.emoji) \(option.status.label)")
-                    }
-                }
-            } label: {
-                TaskStatusIconView(status: status, size: Constants.Notes.Content.taskIconSize)
-                    .frame(
-                        minWidth: Constants.Accessibility.minimumTapTarget,
-                        minHeight: Constants.Accessibility.minimumTapTarget
-                    )
-            }
-            .accessibilityLabel("Change status for \(title)")
-            .accessibilityValue(status.label)
-            Button(action: onOpen) {
-                HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
-                    Text(title)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                }
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: Constants.Accessibility.minimumTapTarget,
-                    alignment: .leading
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open task \(title)")
+            statusMenu
+            openTaskButton
         }
         .padding(.horizontal, Constants.Notes.Content.linkedTaskHorizontalPadding)
         .padding(.vertical, Constants.Notes.Content.linkedTaskVerticalPadding)
@@ -172,5 +137,46 @@ private struct LinkedTaskCardRow: View {
                 )
         )
         .padding(.leading, indentPadding(line.indentColumns))
+    }
+
+    private var statusMenu: some View {
+        Menu {
+            ForEach(Self.statusOptions, id: \.wire) { option in
+                Button { onSetStatus(option.wire) } label: {
+                    Text("\(option.status.emoji) \(option.status.label)")
+                }
+            }
+        } label: {
+            TaskStatusIconView(status: status, size: Constants.Notes.Content.taskIconSize)
+                .frame(
+                    minWidth: Constants.Accessibility.minimumTapTarget,
+                    minHeight: Constants.Accessibility.minimumTapTarget
+                )
+        }
+        .accessibilityLabel("Change status for \(title)")
+        .accessibilityValue(status.label)
+    }
+
+    private var openTaskButton: some View {
+        Button(action: onOpen) {
+            HStack(spacing: Constants.Notes.Content.linkedTaskSpacing) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            }
+            .frame(
+                maxWidth: .infinity,
+                minHeight: Constants.Accessibility.minimumTapTarget,
+                alignment: .leading
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open task \(title)")
     }
 }

@@ -138,7 +138,10 @@ struct ManualTokenEntryViewTests {
         #expect(status == errSecSuccess)
         let dicts = try #require(items as? [[String: Any]])
         let first = try #require(dicts.first)
-        return try #require(first[kSecImportItemIdentity as String] as? SecIdentity)
+        let identity = try #require(first[kSecImportItemIdentity as String])
+        let object = identity as AnyObject
+        try #require(CFGetTypeID(object) == SecIdentityGetTypeID())
+        return unsafeDowncast(object, to: SecIdentity.self)
     }
 
     /// Starts a loopback TLS listener serving the fixture identity and waits

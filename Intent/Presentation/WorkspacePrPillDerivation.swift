@@ -1,15 +1,15 @@
 import SwiftUI
 
 extension WorkspaceRowView {
+    struct PrIndicatorPill: Equatable {
+        let status: WorkspacePrPill.Status
+        let number: Int?
+    }
+
     /// What the metadata line shows for PRs: the primary pill (nil renders
     /// no pill — exactly today's legacy behavior) and the "+N" count.
     struct PrIndicatorModel: Equatable {
-        struct Pill: Equatable {
-            let status: WorkspacePrPill.Status
-            let number: Int?
-        }
-
-        let pill: Pill?
+        let pill: PrIndicatorPill?
         let otherMonitorCount: Int
     }
 
@@ -29,8 +29,8 @@ extension WorkspaceRowView {
             workspaceRepo = "\(owner)/\(name)"
         }
         let basePrs: [WorkspacePullRequest]
-        if let prs = workspace.pullRequests, !prs.isEmpty {
-            basePrs = prs
+        if !workspace.pullRequests.isEmpty {
+            basePrs = workspace.pullRequests
         } else if let activePr = workspace.activePullRequest {
             basePrs = [activePr]
         } else {
@@ -44,11 +44,11 @@ extension WorkspaceRowView {
         )
         let primary = WorkspacePrPill.selectPrimaryPr(pool)
 
-        let pill: PrIndicatorModel.Pill?
+        let pill: PrIndicatorPill?
         if let primary {
-            pill = PrIndicatorModel.Pill(status: primary.status, number: primary.number)
+            pill = PrIndicatorPill(status: primary.status, number: primary.number)
         } else if let legacy = workspace.prStatus.flatMap(legacyPillStatus) {
-            pill = PrIndicatorModel.Pill(status: legacy, number: workspace.prNumber)
+            pill = PrIndicatorPill(status: legacy, number: workspace.prNumber)
         } else {
             pill = nil
         }

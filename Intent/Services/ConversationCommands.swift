@@ -1,4 +1,46 @@
 import Foundation
+
+enum OutgoingImagePayload {
+    case attachments([[String: Any]])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .attachments(blocks) = self { params["imageBlocks"] = blocks }
+    }
+}
+
+enum OutgoingFilePayload {
+    case attachments([[String: Any]])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .attachments(blocks) = self { params["fileBlocks"] = blocks }
+    }
+}
+
+enum MessageSendMetadata {
+    case fields([String: Any])
+    case none
+
+    func apply(to params: inout [String: Any]) {
+        if case let .fields(fields) = self { params["messageMetadata"] = fields }
+    }
+
+    var optimisticFields: [String: AnyCodable] {
+        guard case let .fields(fields) = self else { return [:] }
+        return fields.mapValues(AnyCodable.init)
+    }
+
+    var wasProvided: Bool {
+        if case .fields = self { return true }
+        return false
+    }
+}
+
+enum AgentListFetchResult {
+    case sessions([AgentSession])
+    case unavailable
+}
 import Observation
 
 @MainActor
@@ -23,6 +65,16 @@ final class ConversationCommands {
         let delegationGroupStatus: (completed: Int, total: Int)?
     }
 
+    struct SendRequest {
+        let agentId: String
+        let content: String
+        let workspaceId: String
+        let messageId: String
+        let imagePayload: OutgoingImagePayload
+        let filePayload: OutgoingFilePayload
+        let messageMetadata: MessageSendMetadata
+    }
+
     var queuedMessages: [QueuedMessage] = []
     var pendingQuestionsMessageId: String?
     var dismissedQuestionsMessageId: String?
@@ -34,7 +86,9 @@ final class ConversationCommands {
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
     }
+}
 
+extension ConversationCommands {
     func fetchAgentState(agentId: String) async throws -> AgentState? {
         let result = try await connectionManager.request(
             "agent.get",
@@ -107,24 +161,16 @@ final class ConversationCommands {
         )
     }
 
-    func sendMessage(
-        agentId: String,
-        content: String,
-        workspaceId: String,
-        messageId: String,
-        imageBlocks: [[String: Any]]?,
-        fileBlocks: [[String: Any]]?,
-        messageMetadata: [String: Any]?
-    ) async throws -> Bool {
+    func sendMessage(_ request: SendRequest) async throws -> Bool {
         var params: [String: Any] = [
-            "agentId": agentId,
-            "content": content,
-            "workspaceId": workspaceId,
-            "messageId": messageId
+            "agentId": request.agentId,
+            "content": request.content,
+            "workspaceId": request.workspaceId,
+            "messageId": request.messageId
         ]
-        if let imageBlocks { params["imageBlocks"] = imageBlocks }
-        if let fileBlocks { params["fileBlocks"] = fileBlocks }
-        if let messageMetadata { params["messageMetadata"] = messageMetadata }
+        request.imagePayload.apply(to: &params)
+        request.filePayload.apply(to: &params)
+        request.messageMetadata.apply(to: &params)
         let result = try await connectionManager.request("agent.sendMessage", params: params)
         guard let response = result as? [String: Any],
               response["queued"] as? Bool == true else { return false }
@@ -199,12 +245,12 @@ final class ConversationCommands {
     func queueMessage(
         agentId: String,
         content: String,
-        imageBlocks: [[String: Any]]?,
-        fileBlocks: [[String: Any]]?
+        imagePayload: OutgoingImagePayload,
+        filePayload: OutgoingFilePayload
     ) async throws {
         var params: [String: Any] = ["agentId": agentId, "content": content]
-        if let imageBlocks { params["imageBlocks"] = imageBlocks }
-        if let fileBlocks { params["fileBlocks"] = fileBlocks }
+        imagePayload.apply(to: &params)
+        filePayload.apply(to: &params)
         let result = try await connectionManager.request("agent.queueMessage", params: params)
         guard let response = result as? [String: Any],
               let dictionary = response["queuedMessage"] as? [String: Any],
@@ -348,15 +394,17 @@ final class ConversationCommands {
         return AgentSession.parseAgent(dictionary)
     }
 
-    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> [AgentSession]? {
+    func listAgents(workspaceId: String, watchedAgentIds: [String]) async throws -> AgentListFetchResult {
         let result = try await connectionManager.request(
             "agent.list",
             params: ["workspaceId": workspaceId]
         )
         guard let response = result as? [String: Any],
-              let dictionaries = response["agents"] as? [[String: Any]] else { return nil }
+              let dictionaries = response["agents"] as? [[String: Any]] else { return .unavailable }
         let watchedSet = Set(watchedAgentIds)
-        return dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
+        return .sessions(
+            dictionaries.compactMap(AgentSession.parseAgent).filter { watchedSet.contains($0.id) }
+        )
     }
 
     func reset() {

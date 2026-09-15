@@ -24,193 +24,37 @@ enum ToolClassifier {
         return cleanedName
     }
 
-    static func classify(name: String, input: [String: AnyCodable]?) -> ToolDisplay {
-        let clean = cleanToolName(name).lowercased()
-        let input = input ?? [:]
-        let pathVal = input["path"]?.value as? String
-        let filePath = input["file_path"]?.value as? String
-        let p = pathVal ?? filePath
-        let command = input["command"]?.value as? String
-        let query = input["query"]?.value as? String
-        let infoReq = input["information_request"]?.value as? String
-        let url = input["url"]?.value as? String
-        // ACP human-readable title echoed by the daemon (input._acpTitle) —
-        // often the ONLY input available mid-turn (providers send raw_input: null).
-        let acpTitle = nonEmpty((input["_acpTitle"]?.value as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
-
-        // workspace_api: prefer human-readable label over the raw tool name
-        // (detected by name, or by input shape: code + summary)
-        let summary = nonEmpty((input["summary"]?.value as? String)?
-            .trimmingCharacters(in: .whitespacesAndNewlines))
-        if clean == "workspace_api"
-            || (input["code"]?.value is String && summary != nil) {
-            let titleIsRawName = acpTitle.map { title in
-                cleanToolName(title).lowercased() == "workspace_api"
-            } ?? true
-            if let label = titleIsRawName ? (summary ?? acpTitle) : (acpTitle ?? summary) {
-                return ToolDisplay(
-                    icon: "📁",
-                    verb: String(label.prefix(Constants.Conversation.ToolClassifier.titleMaximumLength)),
-                    subject: nil,
-                    path: nil
-                )
-            }
+    /// Detect prose ACP titles (human-readable, not tool identifiers): either
+    /// colon-prefixed like "sub-agent-explore: Explore …" or 3+ words. Mirrors
+    /// the desktop classifier's isProseToolName.
+    static func isProseTitle(_ title: String) -> Bool {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else { return false }
+        if trimmed.range(of: #"^[A-Za-z0-9._-]+:\s"#, options: .regularExpression) != nil {
+            return true
         }
+        return trimmed.split { $0.isWhitespace }.count
+            >= Constants.Conversation.ToolClassifier.proseMinimumWordCount
+    }
 
-        // File read
-        if clean.contains("view") || clean.contains("read"),
-           !clean.contains("terminal"),
-           !clean.contains("process"),
-           !clean.contains("agent"),
-           !clean.contains("note") {
-            let isDir = (input["type"]?.value as? String) == "directory"
-            if let p {
-                let hasSearch = input["search_query_regex"]?.value is String
-                let verb = hasSearch ? "Search" : isDir ? "List" : "Read"
-                return ToolDisplay(icon: "📄", verb: verb, subject: filename(p), path: dirname(p))
-            }
-            // _acpTitle fallback: extract the path from e.g. "Read `src/foo.rs`"
-            // (no end anchor: multi-line titles match on the first line, like desktop)
-            if let title = acpTitle,
-               let captured = firstCapture(#"^(?:Read|View|List\s+Contents?)\s+(.+)"#, in: title),
-               let candidate = pathCandidate(captured) {
-                let titleIsDir = isDir
-                    || title.range(
-                        of: #"^List\s+Contents?"#,
-                        options: [.regularExpression, .caseInsensitive]
-                    ) != nil
-                return ToolDisplay(
-                    icon: "📄",
-                    verb: titleIsDir ? "List" : "Read",
-                    subject: filename(candidate),
-                    path: dirname(candidate)
-                )
-            }
-        }
+    static func filename(_ path: String) -> String {
+        let parts = path.split(separator: "/")
+        return parts.last.map(String.init) ?? path
+    }
 
-        // File write/edit
-        if clean.contains("edit") || clean.contains("str-replace") || clean.contains("str_replace")
-            || clean.contains("save") || clean.contains("write"),
-           !clean.contains("note"),
-           !clean.contains("process") {
-            let verb = (clean.contains("save") || clean.contains("write")) ? "Save" : "Edit"
-            if p != nil || input["file_content"]?.value != nil || input["old_str_1"]?.value != nil {
-                let file = p ?? ""
-                return ToolDisplay(icon: "✏️", verb: verb, subject: filename(file), path: dirname(file))
-            }
-            // _acpTitle fallback: extract the path from e.g. "Edit `src/foo.ts`"
-            if let title = acpTitle,
-               let captured = firstCapture(#"^(?:Edit|Save|Read|Write|Delete|View|Create)\s+(.+)"#, in: title),
-               let candidate = pathCandidate(captured) {
-                return ToolDisplay(
-                    icon: "✏️",
-                    verb: verb,
-                    subject: filename(candidate),
-                    path: dirname(candidate)
-                )
-            }
-        }
+    static func dirname(_ path: String) -> String? {
+        let parts = path.split(separator: "/")
+        guard parts.count > 1 else { return nil }
+        return parts.dropLast().joined(separator: "/")
+    }
+}
 
-        // File delete
-        if clean.contains("remove") || clean.contains("delete"),
-           !clean.contains("note"),
-           !clean.contains("comment") {
-            if let paths = input["file_paths"]?.value as? [Any], !paths.isEmpty {
-                if paths.count == 1, let first = paths[0] as? String {
-                    return ToolDisplay(icon: "🗑️", verb: "Delete", subject: filename(first), path: dirname(first))
-                }
-                return ToolDisplay(icon: "🗑️", verb: "Delete", subject: "\(paths.count) files", path: nil)
-            }
-            if let p {
-                return ToolDisplay(icon: "🗑️", verb: "Delete", subject: filename(p), path: dirname(p))
-            }
-        }
-
-        // Terminal/process
-        if clean.contains("process") || clean.contains("terminal") || clean.contains("bash")
-            || clean.contains("shell") || clean == "run" || clean.hasPrefix("run ")
-            || clean == "launch" || clean.hasPrefix("launch ") || command != nil {
-            if clean.contains("read") { return ToolDisplay(icon: "▶️", verb: "Read", subject: "terminal", path: nil) }
-            if clean.contains("write") { return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil) }
-            if clean.contains("kill") { return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil) }
-            if clean.contains("list") { return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil) }
-            var verb = "Run"
-            var cmd = command.map { command in
-                String(command.split(separator: "\n").first ?? "")
-                    .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength)
-            }
-            .map(String.init)
-            if cmd == nil, let title = acpTitle {
-                // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
-                // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity)
-                let pattern = #"^(Run|Launch|Read|List|Kill|Write)\s+`?(.+?)`?\s*$"#
-                if let titleVerb = firstCapture(pattern, in: title, group: 1)?.lowercased(),
-                   let rest = firstCapture(pattern, in: title, group: 2)?
-                       .trimmingCharacters(in: .whitespaces),
-                   !rest.isEmpty {
-                    switch titleVerb {
-                    case "list": verb = "List"; cmd = rest
-                    case "read": verb = "Read"; cmd = rest
-                    case "kill": verb = "Kill"; cmd = rest
-                    case "write": verb = "Write to"; cmd = rest
-                    case "launch":
-                        verb = "Launch"
-                        cmd = String(String(rest.split(separator: "\n").first ?? "")
-                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
-                    default:
-                        cmd = String(String(rest.split(separator: "\n").first ?? "")
-                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
-                    }
-                }
-            }
-            return ToolDisplay(icon: "▶️", verb: verb, subject: cmd, path: nil)
-        }
-
-        // Script operations
-        if clean.contains("script") {
-            let scriptName = input["name"]?.value as? String
-            if clean.contains("create") { return ToolDisplay(icon: "▶️", verb: "Create script", subject: scriptName, path: nil) }
-            if clean.contains("start") || clean.contains("run") { return ToolDisplay(icon: "▶️", verb: "Run script", subject: scriptName, path: nil) }
-            if clean.contains("stop") { return ToolDisplay(icon: "▶️", verb: "Stop script", subject: scriptName, path: nil) }
-            if clean.contains("output") { return ToolDisplay(icon: "▶️", verb: "Script output", subject: scriptName, path: nil) }
-            return ToolDisplay(icon: "▶️", verb: "Script", subject: scriptName, path: nil)
-        }
-
-        // Context engine
-        if clean.contains("codebase") || clean.contains("retrieval") || clean.contains("git_commit_retrieval") || clean.contains("git-commit-retrieval") {
-            let request = infoReq ?? query
-            let source = clean.contains("git") || clean.contains("commit") ? "Commit History" :
-                          clean.contains("conversation") ? "Conversations" : "Codebase"
-            let subject = request.map { request in
-                "\(source) · \(String(request.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength)))"
-            } ?? source
-            return ToolDisplay(icon: "🧠", verb: "Context Engine", subject: subject, path: nil)
-        }
-
-        // Search
-        if clean.contains("search") || clean.contains("grep") || clean.contains("glob") || clean.contains("find") {
-            if clean.contains("web") {
-                return ToolDisplay(
-                    icon: "🌐",
-                    verb: "Search web",
-                    subject: query.map { query in
-                        String(query.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
-                    },
-                    path: nil
-                )
-            }
-            let request = query ?? infoReq ?? (input["pattern"]?.value as? String)
-            return ToolDisplay(
-                icon: "🔍",
-                verb: "Search",
-                subject: request.map { request in
-                    String(request.prefix(Constants.Conversation.ToolClassifier.standardSubjectMaximumLength))
-                },
-                path: nil
-            )
-        }
-
+extension ToolClassifier {
+    static func classifyServices(_ context: ClassificationContext) -> ToolDisplay? {
+        let input = context.input
+        let clean = context.clean
+        let pathVal = context.pathValue
+        let url = context.url
         // GitHub API
         if clean.contains("github") {
             let method = input["method"]?.value as? String ?? "GET"
@@ -250,6 +94,14 @@ enum ToolClassifier {
             return ToolDisplay(icon: "🖥️", verb: "Browser", subject: nil, path: nil)
         }
 
+        return nil
+    }
+}
+
+extension ToolClassifier {
+    static func classifyAgents(_ context: ClassificationContext) -> ToolDisplay? {
+        let input = context.input
+        let clean = context.clean
         // Agent operations
         if clean.contains("agent") || clean.contains("delegate") || (clean.contains("report") && clean.contains("parent")) {
             if clean.contains("create") {
@@ -283,12 +135,30 @@ enum ToolClassifier {
             return ToolDisplay(icon: "🤖", verb: "Agent", subject: nil, path: nil)
         }
 
-        // Note/workspace operations
-        if clean.contains("note") || clean.contains("workspace") || clean.contains("timeline") {
-            let title = input["title"]?.value as? String ?? input["noteId"]?.value as? String
-            let displayTitle = title == "spec"
-                ? "Spec"
-                : title.map { title in String(title.prefix(Constants.Conversation.ToolClassifier.noteTitleMaximumLength)) }
+        return nil
+    }
+}
+
+extension ToolClassifier {
+    static func classifyNotesAndWorkspace(_ context: ClassificationContext) -> ToolDisplay? {
+        let input = context.input
+        let clean = context.clean
+        guard clean.contains("note") || clean.contains("workspace") || clean.contains("timeline") else {
+            return nil
+        }
+        let title = input["title"]?.value as? String ?? input["noteId"]?.value as? String
+        let displayTitle = title == "spec"
+            ? "Spec"
+            : title.map { title in
+                String(title.prefix(Constants.Conversation.ToolClassifier.noteTitleMaximumLength))
+            }
+        if let display = classifyPrimaryNoteOperation(clean: clean, displayTitle: displayTitle) {
+            return display
+        }
+        return classifySecondaryNoteOperation(input: input, clean: clean, displayTitle: displayTitle)
+    }
+
+    static func classifyPrimaryNoteOperation(clean: String, displayTitle: String?) -> ToolDisplay? {
             if clean.contains("create"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Create note", subject: displayTitle, path: nil) }
             if clean.contains("read"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Read note", subject: displayTitle, path: nil) }
             if clean.contains("edit"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Edit note", subject: displayTitle, path: nil) }
@@ -297,6 +167,14 @@ enum ToolClassifier {
             if clean.contains("delete"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "Delete note", subject: displayTitle, path: nil) }
             if clean.contains("list"), clean.contains("note") { return ToolDisplay(icon: "📝", verb: "List notes", subject: nil, path: nil) }
             if clean.contains("comment") { return ToolDisplay(icon: "📝", verb: "Comment", subject: displayTitle, path: nil) }
+        return nil
+    }
+
+    static func classifySecondaryNoteOperation(
+        input: [String: AnyCodable],
+        clean: String,
+        displayTitle: String?
+    ) -> ToolDisplay {
             if clean.contains("task"), clean.contains("status") {
                 let status = input["status"]?.value as? String
                 let subject = displayTitle.flatMap { title in
@@ -318,8 +196,13 @@ enum ToolClassifier {
                 )
             }
             return ToolDisplay(icon: "📁", verb: "Workspace", subject: displayTitle, path: nil)
-        }
+    }
+}
 
+extension ToolClassifier {
+    static func classifyTasksAndGit(_ context: ClassificationContext) -> ToolDisplay? {
+        let input = context.input
+        let clean = context.clean
         // Task operations
         if clean.contains("task") {
             if clean.contains("view") || clean.contains("list") { return ToolDisplay(icon: "📋", verb: "View", subject: "task list", path: nil) }
@@ -346,6 +229,21 @@ enum ToolClassifier {
             return ToolDisplay(icon: "📦", verb: "Git", subject: nil, path: nil)
         }
 
+        return nil
+    }
+}
+
+extension ToolClassifier {
+    static func classifyFallback(_ context: ClassificationContext) -> ToolDisplay {
+        let input = context.input
+        let clean = context.clean
+        let acpTitle = context.acpTitle
+        let pathVal = context.pathValue
+        let query = context.query
+        let infoReq = context.informationRequest
+        let command = context.command
+        let url = context.url
+        let name = context.name
         // Prose _acpTitle fallback: render the human-readable title verbatim
         // rather than the generic spanner row (mid-turn blocks often carry
         // ONLY the title — providers send raw_input: null). Guarded by a prose
@@ -375,74 +273,5 @@ enum ToolClassifier {
             .map { component in component.prefix(1).uppercased() + component.dropFirst().lowercased() }
             .joined(separator: " ")
         return ToolDisplay(icon: "🔧", verb: cleanedName, subject: fallbackSubject, path: nil)
-    }
-
-    /// Nth capture group of a case-insensitive regex match, or nil.
-    /// Compiled regexes are cached by pattern (rows re-render often mid-turn).
-    private static var regexCache: [String: Regex<AnyRegexOutput>] = [:]
-    private static let regexCacheLock = NSLock()
-
-    private static func firstCapture(_ pattern: String, in text: String, group: Int = 1) -> String? {
-        regexCacheLock.lock()
-        var regex = regexCache[pattern]
-        if regex == nil {
-            regex = try? Regex(pattern).ignoresCase()
-            if let regex {
-                regexCache[pattern] = regex
-            } else {
-                assertionFailure("Invalid tool-title regex pattern: \(pattern)")
-            }
-        }
-        regexCacheLock.unlock()
-        guard let regex else { return nil }
-        guard group >= 0,
-              let match = text.firstMatch(of: regex),
-              match.output.count > group,
-              let capture = match.output[group].substring else {
-            return nil
-        }
-        return String(capture)
-    }
-
-    /// Treat a captured title fragment as a file path when it looks like one:
-    /// contains "." or "/", or is a single backtick-quoted token (extensionless
-    /// filenames like "Read `LICENSE`" / "Edit `Makefile`").
-    private static func pathCandidate(_ captured: String) -> String? {
-        let raw = captured.trimmingCharacters(in: .whitespaces)
-        let wasQuoted = raw.count > 2 && raw.hasPrefix("`") && raw.hasSuffix("`")
-        let candidate = raw.trimmingCharacters(in: CharacterSet(charactersIn: "`"))
-        guard !candidate.isEmpty else { return nil }
-        if candidate.contains(".") || candidate.contains("/") { return candidate }
-        if wasQuoted, !candidate.contains(" ") { return candidate }
-        return nil
-    }
-
-    private static func nonEmpty(_ string: String?) -> String? {
-        guard let string, !string.isEmpty else { return nil }
-        return string
-    }
-
-    /// Detect prose ACP titles (human-readable, not tool identifiers): either
-    /// colon-prefixed like "sub-agent-explore: Explore …" or 3+ words. Mirrors
-    /// the desktop classifier's isProseToolName.
-    static func isProseTitle(_ title: String) -> Bool {
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) != nil else { return false }
-        if trimmed.range(of: #"^[A-Za-z0-9._-]+:\s"#, options: .regularExpression) != nil {
-            return true
-        }
-        return trimmed.split { $0.isWhitespace }.count
-            >= Constants.Conversation.ToolClassifier.proseMinimumWordCount
-    }
-
-    static func filename(_ path: String) -> String {
-        let parts = path.split(separator: "/")
-        return parts.last.map(String.init) ?? path
-    }
-
-    static func dirname(_ path: String) -> String? {
-        let parts = path.split(separator: "/")
-        guard parts.count > 1 else { return nil }
-        return parts.dropLast().joined(separator: "/")
     }
 }

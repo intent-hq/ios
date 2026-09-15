@@ -4,16 +4,14 @@ import Testing
 
 @MainActor
 struct TaskStoreLiveStateTests {
-    @Test func appliesSnapshot() async throws {
+    @Test func appliesSnapshot() async {
         let push = SubscriptionPush(
             subscriptionId: "sub-123",
-            kind: .snapshot,
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2026-07-17T12:00:00Z"],
                 ["id": "task-2", "title": "Task 2", "status": "in_progress", "updatedAt": "2026-07-17T12:01:00Z"]
             ],
-            delta: nil
         )
 
         // Directly initialize reconciler and apply push (simulating what subscribeLiveState does)
@@ -21,7 +19,10 @@ struct TaskStoreLiveStateTests {
             getId: { dict in dict["id"] as? String },
             normalize: { dict in WorkspaceTask.parseTask(dict) }
         )
-        let snapshot = try #require(push.snapshot)
+        guard case let .collectionSnapshot(snapshot) = push.payload else {
+            Issue.record("Expected snapshot payload")
+            return
+        }
         reconciler.applySnapshot(seq: push.seq, rawItems: snapshot)
 
         let values = reconciler.values()

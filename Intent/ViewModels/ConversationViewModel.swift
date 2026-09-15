@@ -22,25 +22,6 @@ import SwiftUI
     let workspaceId: String
     var agentName: String
 
-    var messages: [ConversationMessage] { store.messages }
-
-    /// All transcript messages — nothing is display-filtered anymore.
-    /// Event-notification wakes render as a compact event-wake banner and
-    /// agent-to-agent sends (`metadata.type == "agent_message"`) render with
-    /// a sender attribution header (FE parity: ChatPanel.svelte /
-    /// ChatMessage.svelte), so MessageView owns all automated-row rendering.
-    var filteredMessages: [ConversationMessage] {
-        store.messages
-    }
-    var isStreaming: Bool { store.isStreaming }
-    var isLoading: Bool { store.isLoading }
-    /// Display-only filter: show only user-authored entries in the
-    /// queued-messages section — daemon-originated wakes (hook, PR-monitor,
-    /// event-notification) and agent-to-agent sends are hidden. The store
-    /// keeps the full queue and flush behavior is unchanged.
-    var queuedMessages: [QueuedMessage] {
-        store.queuedMessages.filter { $0.isUserMessage }
-    }
     var isTruncated: Bool { store.isTruncated }
     var totalMessageCount: Int { store.totalMessageCount }
     var attentionRequest: PendingAttentionRequest? { store.attentionRequest }
@@ -91,6 +72,11 @@ import SwiftUI
     // Specialist info (for empty state display)
     var specialistName: String?
     var specialistDescription: String?
+
+    /// User-facing message for a failed `agent.dismissQuestions`
+    /// (intent-hq/monorepo#1800) — the view presents it as a non-destructive
+    /// alert. Nil when there is nothing to surface.
+    var dismissQuestionsError: String?
 
     private let attachmentPipeline: ConversationAttachmentPipeline
     var pendingImages: [UIImage] {
@@ -165,7 +151,6 @@ import SwiftUI
 
         observeStreaming()
     }
-
     func load() async {
         // Subscribe to streaming BEFORE fetching the conversation snapshot.
         // This prevents a race condition where stream deltas arriving between
@@ -212,14 +197,6 @@ import SwiftUI
             messageIds: store.messages.map(\.id),
             lastSeenMessageId: store.lastSeenMessageId
         )
-    }
-
-    /// Tears down the live-store subscriptions (background hooks + PR
-    /// monitors) when the conversation leaves the screen (`load()`
-    /// re-subscribes on the next appearance).
-    func teardownLiveStores() async {
-        await hookStore.unsubscribe()
-        await monitoredPrStore.unsubscribe()
     }
 
     // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
@@ -312,10 +289,6 @@ import SwiftUI
         Task { await store.markSeen(agentId: agentId, workspaceId: workspaceId) }
     }
 
-    func cancelWait() async {
-        await store.cancelSubscriptions(agentId: agentId, workspaceId: workspaceId)
-    }
-
     func stopAgent(agentId: String) async {
         do {
             _ = try await connection.request(
@@ -325,15 +298,6 @@ import SwiftUI
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Failed to stop agent: \(error)")
         }
-    }
-
-    func stopAllWatchedAgents() async {
-        let ids = store.watchedAgentIds
-        await store.stopWatchedAgents(
-            agentIds: ids,
-            parentAgentId: agentId,
-            workspaceId: workspaceId
-        )
     }
 
     /// Fetch the agent's current model and specialist from the backend.
@@ -377,24 +341,46 @@ import SwiftUI
 
     // MARK: - Send / Queue
 
-    func sendMessage(_ content: String, images: [UIImage]? = nil) async {
-        let sourceImages = images ?? pendingImages
-        let imageBlocks: [[String: Any]]?
+    private enum ComposerImageSelection {
+        case explicit([UIImage])
+        case pending
+    }
+
+    func sendMessage(_ content: String) async {
+        await sendMessage(content, imageSelection: .pending)
+    }
+
+    func sendMessage(_ content: String, images: [UIImage]) async {
+        await sendMessage(content, imageSelection: .explicit(images))
+    }
+
+    private func sendMessage(_ content: String, imageSelection: ComposerImageSelection) async {
+        let sourceImages: [UIImage]
+        let imageRecovery: ComposerImageRecovery
+        switch imageSelection {
+        case let .explicit(images):
+            sourceImages = images
+            imageRecovery = .restore(images)
+        case .pending:
+            sourceImages = pendingImages
+            imageRecovery = .preserveCurrentSelection
+        }
+        let imagePayload: OutgoingImagePayload
         do {
-            imageBlocks = try await buildImageBlocks(from: sourceImages)
+            imagePayload = try await buildImageBlocks(from: sourceImages)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
             attachmentPipeline.surfaceImagePlacementFailure(
                 error,
                 content: content,
-                images: images != nil ? sourceImages : nil,
+                imageRecovery: imageRecovery,
                 messageText: &messageText
             )
             return
         }
-        let fileBlocks: [[String: Any]]?
+        let filePayload: OutgoingFilePayload
         do {
-            fileBlocks = try await buildFileBlocks(from: pendingFiles)
+            filePayload = try await buildFileBlocks(from: pendingFiles)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
             // `pendingFiles` is never pre-cleared by the view, so the files
@@ -402,13 +388,19 @@ import SwiftUI
             attachmentPipeline.surfaceFilePlacementFailure(
                 error,
                 content: content,
-                images: images != nil ? sourceImages : nil,
+                imageRecovery: imageRecovery,
                 messageText: &messageText
             )
             return
         }
         do {
-            try await store.sendMessage(agentId: agentId, content: content, workspaceId: workspaceId, imageBlocks: imageBlocks, fileBlocks: fileBlocks)
+            try await store.sendMessage(
+                agentId: agentId,
+                content: content,
+                workspaceId: workspaceId,
+                imagePayload: imagePayload,
+                filePayload: filePayload
+            )
             // Files rode the send as placed references — release the pending
             // list (and its security-scoped access) only on success.
             clearPendingFiles()
@@ -425,49 +417,42 @@ import SwiftUI
         }
     }
 
-    /// Send a suggested prompt as-is: prompt text only. Unlike `sendMessage`,
-    /// this never attaches `pendingImages` and never clears the persisted
-    /// composer draft — the in-progress draft (text + attachments) stays
-    /// intact for the user's own message.
-    func sendSuggestedPrompt(_ prompt: String) async {
-        do {
-            try await store.sendMessage(agentId: agentId, content: prompt, workspaceId: workspaceId)
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Send suggested prompt failed: \(error)")
-        }
-    }
-
     func queueMessage(_ content: String) async {
-        let imageBlocks: [[String: Any]]?
+        let imagePayload: OutgoingImagePayload
         do {
-            imageBlocks = try await buildImageBlocks(from: pendingImages)
+            imagePayload = try await buildImageBlocks(from: pendingImages)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] Image placement failed: \(error)")
             // `pendingImages` was never cleared on this path — composer intact.
             attachmentPipeline.surfaceImagePlacementFailure(
                 error,
                 content: content,
-                images: nil,
+                imageRecovery: .preserveCurrentSelection,
                 messageText: &messageText
             )
             return
         }
-        let fileBlocks: [[String: Any]]?
+        let filePayload: OutgoingFilePayload
         do {
-            fileBlocks = try await buildFileBlocks(from: pendingFiles)
+            filePayload = try await buildFileBlocks(from: pendingFiles)
         } catch {
             AppLog.conversation.error("[ConversationViewModel] File placement failed: \(error)")
             // `pendingFiles` was never cleared on this path — composer intact.
             attachmentPipeline.surfaceFilePlacementFailure(
                 error,
                 content: content,
-                images: nil,
+                imageRecovery: .preserveCurrentSelection,
                 messageText: &messageText
             )
             return
         }
         do {
-            try await store.queueMessage(agentId: agentId, content: content, imageBlocks: imageBlocks, fileBlocks: fileBlocks)
+            try await store.queueMessage(
+                agentId: agentId,
+                content: content,
+                imagePayload: imagePayload,
+                filePayload: filePayload
+            )
             pendingImages.removeAll()
             clearPendingFiles()
         } catch {
@@ -475,61 +460,7 @@ import SwiftUI
         }
     }
 
-    func stopStreaming() async {
-        await store.stopStreaming(agentId: agentId)
-    }
-
-    // MARK: - Queue management
-
-    func editQueuedMessage(messageId: String, content: String) async {
-        do {
-            try await store.editQueuedMessage(agentId: agentId, messageId: messageId, content: content)
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Edit queued message failed: \(error)")
-        }
-    }
-
-    func removeQueuedMessage(messageId: String) async {
-        do {
-            try await store.removeQueuedMessage(agentId: agentId, messageId: messageId)
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Remove queued message failed: \(error)")
-        }
-    }
-
-    func sendQueuedMessageNow(messageId: String) async {
-        do {
-            try await store.sendQueuedMessageNow(agentId: agentId, messageId: messageId, workspaceId: workspaceId)
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Send now failed: \(error)")
-        }
-    }
-
     // MARK: - Models
-
-    func fetchModels() async {
-        do {
-            // Backend returns flat: [{ id: "sonnet4.5", name: "sonnet4.5 (balanced)", provider: "auggie" }]
-            let raw = try await store.getModels(agentId: agentId)
-            availableModels = raw.compactMap { dict -> ModelInfo? in
-                guard let id = dict["id"] as? String,
-                      let name = dict["name"] as? String else { return nil }
-                let provider = dict["provider"] as? String ?? "Unknown"
-                return ModelInfo(id: id, name: name, provider: provider)
-            }
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Fetch models failed: \(error)")
-        }
-    }
-
-    func setModel(_ modelId: String) async {
-        do {
-            try await store.setModel(agentId: agentId, modelId: modelId, workspaceId: workspaceId)
-            currentModelId = modelId
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Set model failed: \(error)")
-        }
-    }
 
     func renameAgent(_ newName: String) async throws {
         _ = try await connection.request(
@@ -545,11 +476,6 @@ import SwiftUI
 
     // MARK: - Attachments
 
-    typealias ImagePlacementError = ConversationAttachmentPipeline.ImagePlacementError
-    typealias FilePlacementError = ConversationAttachmentPipeline.FilePlacementError
-
-    static let maxImageReferenceBytes = ConversationAttachmentPipeline.maxImageReferenceBytes
-
     func addImage(_ image: UIImage) { attachmentPipeline.addImage(image) }
     func removeImage(at index: Int) { attachmentPipeline.removeImage(at: index) }
     func loadSelectedPhotos() async { await attachmentPipeline.loadSelectedPhotos() }
@@ -562,175 +488,11 @@ import SwiftUI
 
     var isUploadingFiles: Bool { attachmentPipeline.isUploadingFiles }
 
-    func buildImageBlocks(from images: [UIImage]) async throws -> [[String: Any]]? {
+    func buildImageBlocks(from images: [UIImage]) async throws -> OutgoingImagePayload {
         try await attachmentPipeline.buildImageBlocks(from: images, workspaceId: workspaceId)
     }
 
-    func buildFileBlocks(from files: [PendingFile]) async throws -> [[String: Any]]? {
+    func buildFileBlocks(from files: [PendingFile]) async throws -> OutgoingFilePayload {
         try await attachmentPipeline.buildFileBlocks(from: files, workspaceId: workspaceId)
-    }
-
-    static func mimeType(for url: URL) -> String? {
-        ConversationAttachmentPipeline.mimeType(for: url)
-    }
-
-    // MARK: - Agent Q&A pending questions
-
-    /// Pending Agent Q&A question set for the composer-slot wizard. When the
-    /// daemon's `pendingQuestionsMessageId` marker is present (PROTOCOL §5.5)
-    /// it is authoritative: the marked set appears once the asking turn ends
-    /// and stays STICKY across later turns — automatic deliveries or a plain
-    /// user message do not hide it. It hides only once a user row carries the
-    /// `question_answers` tag naming it (the optimistic answer row appended by
-    /// `submitQuestionAnswers` mirrors the tag, so Send hides it immediately;
-    /// when the daemon auto-queues that answer mid-turn the tag lives on the
-    /// queue entry instead, which counts the same), once it is dismissed
-    /// (`agent.dismissQuestions` marker), or once the
-    /// daemon clears the marker to `""`. Against a legacy daemon (marker
-    /// absent) the transcript-tail fallback applies: nil while the turn is
-    /// active (`isStreaming`) or once a later user message supersedes it. A
-    /// failed wizard send is rolled back (`ConversationStore.rollbackFailedSend`)
-    /// so unanswered questions re-pend in both paths.
-    ///
-    /// When the marked row is outside the loaded page, the copy recovered by
-    /// the store's targeted seek (`pendingQuestionRecovery`, status `found`)
-    /// is prepended to the transcript for the derivation, so the marker path
-    /// finds it while the tail is still scanned for the tagged answer row and
-    /// the queued-answer / dismissal bridges apply unchanged. A resident row
-    /// always wins over the recovered copy (FE parity: `wizard-gate.ts`
-    /// `deriveWizardPendingQuestions`).
-    var pendingQuestions: PendingQuestionSet? {
-        var derivationMessages = messages
-        if let recovered = recoveredMarkedMessage {
-            derivationMessages.insert(recovered, at: 0)
-        }
-        return PendingQuestionSet.derive(
-            messages: derivationMessages,
-            isTurnActive: isStreaming,
-            dismissedQuestionsMessageId: store.dismissedQuestionsMessageId,
-            pendingQuestionsMessageId: store.pendingQuestionsMessageId,
-            queuedAnsweredQuestionsMessageIds: Set(
-                store.queuedMessages.compactMap(\.answeredQuestionsMessageId)
-            )
-        )
-    }
-
-    /// The marker's id when it names a row that is NOT in the loaded
-    /// transcript, else nil. Both recovery-aware derivations key off this.
-    private var nonResidentMarkedMessageId: String? {
-        guard case .set(let markedId) = PendingQuestionSet.MarkerState(store.pendingQuestionsMessageId),
-              !messages.contains(where: { $0.id == markedId }) else { return nil }
-        return markedId
-    }
-
-    /// The recovered copy of the marked row (store seek settled `found` for
-    /// the CURRENT marker id) while that row is not resident, else nil. A
-    /// stale recovery for another id, or one superseded by the row arriving
-    /// in the transcript, is ignored.
-    private var recoveredMarkedMessage: ConversationMessage? {
-        guard let markedId = nonResidentMarkedMessageId,
-              let recovery = store.pendingQuestionRecovery,
-              recovery.messageId == markedId, recovery.status == .found else { return nil }
-        return recovery.message
-    }
-
-    /// Fail-closed gate for the composer slot: true while the marker names a
-    /// row that is not resident and no recovered wizard can be rendered from
-    /// it — the seek is in flight, settled `notFound`/`error`, or found a row
-    /// without a valid question set. Exhausted retries end the network
-    /// attempts, not marker authority: the ordinary composer and suggested
-    /// prompts stay withheld until the daemon clears or replaces the marker
-    /// (FE parity: `deriveMarkedQuestionRecoveryState` + ChatPanel's
-    /// `pendingQuestionRecoveryLoading`). False until the initial transcript
-    /// fetch has settled — the row may simply not have loaded yet — and false
-    /// once a recovered wizard exists, even if it is answered or dismissed.
-    var isPendingQuestionRecoveryLoading: Bool {
-        guard !isLoading, let markedId = nonResidentMarkedMessageId else { return false }
-        guard let recovered = recoveredMarkedMessage else { return true }
-        return PendingQuestionSet.derive(
-            messages: [recovered],
-            isTurnActive: false,
-            pendingQuestionsMessageId: markedId
-        ) == nil
-    }
-
-    /// Flatten the wizard's answers into ONE plain-text user message of
-    /// `Q:`/`A:` pairs and send it through the ordinary send path tagged with
-    /// `messageMetadata { type: "question_answers",
-    /// answeredQuestionsMessageId }` (wire contract — no image attachments).
-    /// The structured tag, never the answer text, is what makes the daemon
-    /// retire the question hold and demote `needs_attention` (FE parity:
-    /// `answer-message.ts` / `ChatPanel`). `answeredQuestionsMessageId` is the
-    /// wizard's mount-time question-bearing assistant message id (the wizard
-    /// is `.id`-keyed on it) — passed in rather than re-derived here so a
-    /// derivation flip between the tap and this main-actor hop (pushed stream
-    /// start, superseding row from another client) can never send the answer
-    /// untagged. Completing the wizard clears any pending composer image
-    /// attachments (FE parity: `ChatPanel.performLocalSendCleanup`) so stale
-    /// images never ride a later message.
-    func submitQuestionAnswers(
-        _ answers: [QuestionAnswer],
-        answeredQuestionsMessageId: String
-    ) async {
-        pendingImages.removeAll()
-        do {
-            try await store.sendMessage(
-                agentId: agentId,
-                content: QuestionAnswer.flattenToMessage(answers),
-                workspaceId: workspaceId,
-                messageMetadata: [
-                    "type": "question_answers",
-                    "answeredQuestionsMessageId": answeredQuestionsMessageId
-                ]
-            )
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Submit question answers failed: \(error)")
-            store.rollbackFailedSend()
-        }
-    }
-
-    /// User-facing message for a failed `agent.dismissQuestions`
-    /// (intent-hq/monorepo#1800) — the view presents it as a non-destructive
-    /// alert. Nil when there is nothing to surface.
-    var dismissQuestionsError: String?
-
-    /// Dismiss the pending question set WITHOUT answering
-    /// (`agent.dismissQuestions`). Persistent — unlike Ignore's transient
-    /// collapse, the daemon-persisted marker means the set never re-pends,
-    /// even after reload. `messageId` is the wizard's mount-time
-    /// question-bearing assistant message id (same capture discipline as
-    /// `submitQuestionAnswers`). A failed RPC leaves the wizard pending
-    /// (the store rolls the optimistic marker back) and surfaces
-    /// `dismissQuestionsError`.
-    func dismissQuestions(messageId: String) async {
-        dismissQuestionsError = nil
-        do {
-            try await store.dismissQuestions(
-                agentId: agentId,
-                messageId: messageId,
-                workspaceId: workspaceId
-            )
-        } catch {
-            AppLog.conversation.error("[ConversationViewModel] Dismiss questions failed: \(error)")
-            dismissQuestionsError = error.localizedDescription
-        }
-    }
-
-    // MARK: - Suggested prompts parsing
-
-    var suggestedPrompts: [String] {
-        // Suggested prompts stay hidden whenever the turn has pending Agent
-        // Q&A questions — including while the wizard is Ignore-collapsed —
-        // and while the marked question row is still being recovered
-        // (fail-closed, like the composer). Only answering (or any
-        // superseding user message) brings them back.
-        guard pendingQuestions == nil, !isPendingQuestionRecoveryLoading else { return [] }
-        guard let lastMessage = messages.last,
-              lastMessage.role == .assistant else { return [] }
-        // The same message-level scan the views use for stripping (empty
-        // join like the desktop, so mid-line splits reassemble): prompts and
-        // stripping come from one scan and can never disagree
-        // (intent-hq/intent#3936; see `SuggestedPrompts.parse(contentBlocks:)`).
-        return SuggestedPrompts.parse(contentBlocks: lastMessage.contentBlocks ?? []).prompts
     }
 }

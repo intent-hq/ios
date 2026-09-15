@@ -3,90 +3,36 @@ import Foundation
 import Observation
 import os
 
-/// The minimal surface `ConnectionManager.raceCandidates` needs from a
-/// connection candidate, letting tests race fakes instead of live sockets.
-nonisolated protocol HostRacingConnection: Sendable {
-    var host: String { get }
-
-    func disconnect() async
-}
-
-extension WebSocketConnection: HostRacingConnection {}
-
-/// One raced candidate's live result: the WebSocket plus the tailcat tunnel
-/// session carrying it (nil for direct host candidates). `disconnect()` tears
-/// down both, so loser cleanup in `raceCandidates` releases tunnel resources
-/// when a direct host wins.
-nonisolated struct RacedConnection: HostRacingConnection {
-    let socket: WebSocketConnection
-    let tunnel: (any TunnelSession)?
-    /// The candidate label: the direct host, or
-    /// `ConnectionManager.tunnelCandidateLabel` for the tunnel route.
-    let host: String
-
-    func disconnect() async {
-        await socket.disconnect()
-        await tunnel?.close()
-    }
-}
-
-/// The settled result of one `raceCandidates` run: the winner (if any), every
-/// per-host certificate mismatch observed before settling, and the failure to
-/// throw when no candidate won.
-nonisolated struct HostRaceOutcome<Connection: Sendable>: Sendable {
-    let winner: Connection?
-    let mismatches: [HostCertMismatch]
-    let failure: (any Error)?
-    /// The background task draining the candidates still in flight when the
-    /// race settled: it disconnects every late success (a losing tunnel
-    /// session is never leaked) and resolves to the certificate mismatches
-    /// those candidates reported. `nil` when every candidate had already
-    /// finished.
-    let drain: Task<[HostCertMismatch], Never>?
-}
-
-/// A single-consumer mailbox for raced candidate results. `raceCandidates`
-/// runs its candidates as unstructured tasks — a task group's body cannot
-/// return before every child finishes, which is exactly the stall a slow
-/// loser would cause — and awaits them here. Unlike `AsyncStream`, delivery
-/// keeps working after the consuming task is cancelled, so cleanup can still
-/// drain every candidate.
-nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
-    private struct State: Sendable {
-        var pending: [Result<Connection, any Error>] = []
-        var waiter: CheckedContinuation<Result<Connection, any Error>, Never>?
-    }
-
-    private let lock = OSAllocatedUnfairLock(initialState: State())
-
-    func deliver(_ result: Result<Connection, any Error>) {
-        let waiter = lock.withLock { state -> CheckedContinuation<Result<Connection, any Error>, Never>? in
-            if let waiter = state.waiter {
-                state.waiter = nil
-                return waiter
-            }
-            state.pending.append(result)
-            return nil
-        }
-        waiter?.resume(returning: result)
-    }
-
-    func next() async -> Result<Connection, any Error> {
-        await withCheckedContinuation { continuation in
-            let ready = lock.withLock { state -> Result<Connection, any Error>? in
-                if state.pending.isEmpty {
-                    state.waiter = continuation
-                    return nil
-                }
-                return state.pending.removeFirst()
-            }
-            if let ready { continuation.resume(returning: ready) }
-        }
-    }
-}
-
 @MainActor
 @Observable class ConnectionManager: ConnectionManagerRouting {
+    enum LocalIPsResult: Equatable {
+        case unavailable
+        case value([String])
+    }
+
+    private struct ReconnectParameters {
+        let hosts: [String]
+        let port: Int
+        let token: String
+        let certFingerprint: String?
+        let tcAddress: String?
+    }
+
+    private struct ConnectTarget {
+        let hosts: [String]
+        let port: Int
+        let token: String
+        let certFingerprint: String?
+        let tcAddress: String?
+    }
+
+    private struct ConnectAttemptContext {
+        let generation: Int
+        let attempt: Int
+        let preservesLiveConnection: Bool
+        let certMismatchesBeforeAttempt: [HostCertMismatch]
+    }
+
     static let shared = ConnectionManager()
 
     var connectionState: ConnectionState = .disconnected {
@@ -128,8 +74,8 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     private static let pongTimeout: TimeInterval = 30   // Dead if no pong in 30s
     private static let stableConnectionThreshold: TimeInterval = 10
     nonisolated private static let millisecondsPerSecond: CFTimeInterval = 1000
-    private static let initialReconnectAttempt: Int = 1
-    private static let minimumBackedOffReconnectAttempt: Int = 2
+    nonisolated private static let initialReconnectAttempt: Int = 1
+    nonisolated private static let minimumBackedOffReconnectAttempt: Int = 2
     private static let webSocketErrorDomain = "WebSocket"
     private static let requestTimedOutErrorCode = -2
     private static let connectionClosedErrorCode = -3
@@ -165,7 +111,9 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
     init() {}
+}
 
+extension ConnectionManager {
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
         connectionStateSubject.eraseToAnyPublisher()
@@ -190,21 +138,62 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         certFingerprint: String? = nil,
         tcAddress: String? = nil
     ) async throws {
+        let target = ConnectTarget(
+            hosts: hosts,
+            port: port,
+            token: token,
+            certFingerprint: certFingerprint,
+            tcAddress: tcAddress
+        )
         let connectStart = CFAbsoluteTimeGetCurrent()
-        // Snapshot before the reset: a preserving connect (below) that fails
-        // must leave `certMismatches` exactly as the live connection had it —
-        // neither cleared by this target-change reset nor polluted by
-        // mismatches the failed pairing race recorded.
-        let certMismatchesBeforeAttempt = certMismatches
-        resetCertMismatchesIfTargetChanged(hosts: hosts, port: port, certFingerprint: certFingerprint)
+        let context = beginConnectAttempt(target)
+        let raceStart = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * Self.millisecondsPerSecond))ms")
+        let raced: WonHostRace
+        do {
+            raced = try await raceHosts(target)
+        } catch {
+            restoreCertMismatchesAfterFailedConnect(context)
+            throw error
+        }
+        let winner = raced.winner
+        var lateMismatchGeneration = context.generation
+        defer {
+            recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
+        }
+        let raceEnd = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
+        AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(context.generation)")
+        do {
+            try Task.checkCancellation()
+        } catch {
+            await winner.disconnect()
+            throw error
+        }
+        guard connectionGeneration == context.generation, connectAttempt == context.attempt else {
+            AppLog.connection.debug("[ConnectionManager] Superseded after race: generation current=\(connectionGeneration) mine=\(context.generation), attempt current=\(connectAttempt) mine=\(context.attempt)")
+            await winner.disconnect()
+            throw CancellationError()
+        }
+        lateMismatchGeneration = adoptConnectedWinner(
+            winner,
+            target: target,
+            preservesLiveConnection: context.preservesLiveConnection,
+            initialGeneration: context.generation
+        )
+        let setupEnd = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * Self.millisecondsPerSecond))ms (at +\(Int((setupEnd - connectStart) * Self.millisecondsPerSecond))ms)")
+        let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
+        AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * Self.millisecondsPerSecond))ms, connected to \(self.host ?? "?")")
+    }
 
-        // A connect over an established or recovering connection (pairing a
-        // new daemon via QR / manual token / intent:// link) must not tear
-        // it down up front: if the new attempt fails, the existing
-        // connection (or its reconnect loop) keeps serving instead of
-        // stranding the app in .connecting on a dead socket (monorepo#4185).
-        // The old connection is torn down only after the replacement socket
-        // is established, below.
+    private func beginConnectAttempt(_ target: ConnectTarget) -> ConnectAttemptContext {
+        let previousMismatches = certMismatches
+        resetCertMismatchesIfTargetChanged(
+            hosts: target.hosts,
+            port: target.port,
+            certFingerprint: target.certFingerprint
+        )
         let preservesLiveConnection: Bool
         switch connectionState {
         case .connected, .reconnecting:
@@ -212,99 +201,69 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         case .connecting, .disconnected:
             preservesLiveConnection = false
             teardownConnection()
-            self.hosts = hosts
-            self.port = port
-            self.token = token
-            self.certFingerprint = certFingerprint
-            self.tcAddress = tcAddress
+            cacheConnectTarget(target)
             connectionState = .connecting
         }
-        let myGeneration = connectionGeneration
+        let generation = connectionGeneration
         connectAttempt += 1
-        let myAttempt = connectAttempt
+        return ConnectAttemptContext(
+            generation: generation,
+            attempt: connectAttempt,
+            preservesLiveConnection: preservesLiveConnection,
+            certMismatchesBeforeAttempt: previousMismatches
+        )
+    }
 
-        let raceStart = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts starting at +\(Int((raceStart - connectStart) * Self.millisecondsPerSecond))ms")
+    private func raceHosts(_ target: ConnectTarget) async throws -> WonHostRace {
+        try await raceHosts(
+            target.hosts,
+            port: target.port,
+            token: target.token,
+            certFingerprint: target.certFingerprint,
+            tcAddress: target.tcAddress
+        )
+    }
 
-        let raced: WonHostRace
-        do {
-            raced = try await raceHosts(
-                hosts,
-                port: port,
-                token: token,
-                certFingerprint: certFingerprint,
-                tcAddress: tcAddress
-            )
-        } catch {
-            // Failed preserving connect: the live connection keeps serving,
-            // so restore its mismatch bookkeeping (unless a newer connect or
-            // disconnect owns it now).
-            if preservesLiveConnection,
-                connectionGeneration == myGeneration, connectAttempt == myAttempt,
-                certMismatches != certMismatchesBeforeAttempt {
-                certMismatches = certMismatchesBeforeAttempt
-            }
-            throw error
+    private func restoreCertMismatchesAfterFailedConnect(_ context: ConnectAttemptContext) {
+        if context.preservesLiveConnection,
+           connectionGeneration == context.generation,
+           connectAttempt == context.attempt,
+           certMismatches != context.certMismatchesBeforeAttempt {
+            certMismatches = context.certMismatchesBeforeAttempt
         }
-        let winner = raced.winner
-        // The drain's late mismatches belong to this connect's generation.
-        // The preserving path advances it below when it retires the old
-        // connection — that is not supersession of this race — so the
-        // generation to guard against is settled only on the way out.
-        var lateMismatchGeneration = myGeneration
-        defer {
-            recordLateCertMismatches(from: raced.drain, generation: lateMismatchGeneration)
-        }
+    }
 
-        let raceEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms (at +\(Int((raceEnd - connectStart) * Self.millisecondsPerSecond))ms)")
-        AppLog.connection.debug("[ConnectionManager] Race won by \(winner.host), generation=\(myGeneration)")
-
-        do {
-            try Task.checkCancellation()
-        } catch {
-            await winner.disconnect()
-            throw error
-        }
-
-        // Check if we've been superseded: a teardown/disconnect advanced the
-        // generation, or a newer connect() started (preserving connects share
-        // a generation, so the attempt counter carries their ordering).
-        guard connectionGeneration == myGeneration, connectAttempt == myAttempt else {
-            AppLog.connection.debug("[ConnectionManager] Superseded after race: generation current=\(connectionGeneration) mine=\(myGeneration), attempt current=\(connectAttempt) mine=\(myAttempt)")
-            await winner.disconnect()
-            throw CancellationError()
-        }
-
+    private func adoptConnectedWinner(
+        _ winner: RacedConnection,
+        target: ConnectTarget,
+        preservesLiveConnection: Bool,
+        initialGeneration: Int
+    ) -> Int {
+        var lateMismatchGeneration = initialGeneration
         if preservesLiveConnection {
-            // The replacement is established: now retire the old connection
-            // and adopt the new target's parameters.
             teardownConnection()
             lateMismatchGeneration = connectionGeneration
-            self.hosts = hosts
-            self.port = port
-            self.token = token
-            self.certFingerprint = certFingerprint
-            self.tcAddress = tcAddress
+            cacheConnectTarget(target)
         }
-
-        self.socket = winner.socket
-        self.activeTunnel = winner.tunnel
-        self.host = winner.host
+        socket = winner.socket
+        activeTunnel = winner.tunnel
+        host = winner.host
         configureSocketMessagePump()
-
-        let setupEnd = CFAbsoluteTimeGetCurrent()
-        AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * Self.millisecondsPerSecond))ms (at +\(Int((setupEnd - connectStart) * Self.millisecondsPerSecond))ms)")
-
         connectionState = .connected
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
         subscribeToAllEvents()
         startPingTimer()
         scheduleHostRoutesRefresh()
+        return lateMismatchGeneration
+    }
 
-        let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
-        AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * Self.millisecondsPerSecond))ms, connected to \(self.host ?? "?")")
+    private func cacheConnectTarget(_ target: ConnectTarget) {
+        hosts = target.hosts
+        port = target.port
+        token = target.token
+        certFingerprint = target.certFingerprint
+        tcAddress = target.tcAddress
     }
 
     /// Adopt registry-merged fields for the ACTIVE connection (called when a
@@ -587,7 +546,7 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
             }
         }
 
-        guard let reported = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
+        guard case let .value(reported) = Self.localIps(fromSystemStatus: result), !reported.isEmpty else {
             AppLog.connection.debug("[ConnectionManager] Host route refresh: no localIps reported (skipping)")
             return
         }
@@ -655,12 +614,12 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         }
     }
 
-    /// Extracts the `localIps` array from a `system.status` result. Returns nil
+    /// Extracts the `localIps` array from a `system.status` result. Returns unavailable
     /// when the field is absent (older daemon) or malformed.
-    static func localIps(fromSystemStatus result: Any) -> [String]? {
+    static func localIps(fromSystemStatus result: Any) -> LocalIPsResult {
         guard let status = result as? [String: Any],
-              let ips = status["localIps"] as? [String] else { return nil }
-        return ips
+              let ips = status["localIps"] as? [String] else { return .unavailable }
+        return .value(ips)
     }
 
     /// Extracts the `tcAddress` field from a `system.status` result. Returns
@@ -856,136 +815,6 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         certMismatches = merged
     }
 
-    /// Races one connect attempt per host and settles on the first success
-    /// WITHOUT waiting for the losers: the remaining candidates are cancelled
-    /// and drained by a background task (see `HostRaceOutcome.drain`) that
-    /// disconnects late successes and reports late certificate mismatches, so
-    /// a slow loser never delays an already-won connect. Mismatches observed
-    /// before settling are collected on the outcome (a loser's mismatch is not
-    /// swallowed by the winner). When no candidate succeeds, every candidate
-    /// is awaited and `failure` prefers an aggregate certificate error over
-    /// generic failures. Cancelling the losers runs each candidate's task
-    /// cancellation handlers synchronously on the settling thread, so
-    /// candidate cancellation handlers must not block (the tunnel dial's
-    /// `DialHandle.cancel()` closes off-thread for this reason) — a blocking
-    /// handler would stall the settle inside `cancelAll()`. Generic over the
-    /// connection so tests can race fakes; internal for test visibility.
-    nonisolated static func raceCandidates<Connection: HostRacingConnection>(
-        _ hosts: [String],
-        connect: @escaping @Sendable (String) async throws -> Connection
-    ) async -> HostRaceOutcome<Connection> {
-        let mailbox = RaceMailbox<Connection>()
-        let candidates = hosts.map { host in
-            Task {
-                do {
-                    let connection = try await connect(host)
-                    mailbox.deliver(.success(connection))
-                } catch {
-                    mailbox.deliver(.failure(error))
-                }
-            }
-        }
-        let cancelAll = { @Sendable in
-            for candidate in candidates { candidate.cancel() }
-        }
-
-        return await withTaskCancellationHandler { () -> HostRaceOutcome<Connection> in
-            var lastError: Error?
-            var mismatches: [HostCertMismatch] = []
-            var winner: Connection?
-            var cancellationObserved = false
-            var remaining = hosts.count
-            settle: while remaining > 0 {
-                let result = await mailbox.next()
-                remaining -= 1
-                switch result {
-                case .success(let connection):
-                    cancelAll()
-                    if Task.isCancelled {
-                        cancellationObserved = true
-                        await connection.disconnect()
-                        break settle
-                    }
-                    winner = connection
-                    break settle
-                case .failure(let error):
-                    if Task.isCancelled {
-                        cancellationObserved = true
-                        cancelAll()
-                    }
-                    lastError = error
-                    if let transportError = error as? WebSocketTransportError,
-                       case let .certificateMismatch(host, fingerprint) = transportError {
-                        mismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
-                    }
-                    AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
-                    if cancellationObserved { break settle }
-                }
-            }
-
-            var drain: Task<[HostCertMismatch], Never>?
-            if remaining > 0 {
-                let pending = remaining
-                AppLog.connection.debug("[ConnectionManager] Host racing settled; draining \(pending) candidate(s) in the background")
-                drain = Task.detached { () -> [HostCertMismatch] in
-                    var lateMismatches: [HostCertMismatch] = []
-                    for _ in 0..<pending {
-                        switch await mailbox.next() {
-                        case .success(let loser):
-                            await loser.disconnect()
-                        case .failure(let error):
-                            if let transportError = error as? WebSocketTransportError,
-                               case let .certificateMismatch(host, fingerprint) = transportError {
-                                lateMismatches.append(HostCertMismatch(host: host, fingerprint: fingerprint))
-                            }
-                            AppLog.connection.debug("[ConnectionManager] Host racing: \(error.localizedDescription)")
-                        }
-                    }
-                    return lateMismatches
-                }
-            }
-
-            if cancellationObserved || Task.isCancelled {
-                if let winner {
-                    await winner.disconnect()
-                }
-                return HostRaceOutcome(
-                    winner: nil,
-                    mismatches: mismatches,
-                    failure: CancellationError(),
-                    drain: drain
-                )
-            }
-            if let winner {
-                return HostRaceOutcome(
-                    winner: winner,
-                    mismatches: mismatches,
-                    failure: nil,
-                    drain: drain
-                )
-            }
-            if !mismatches.isEmpty {
-                return HostRaceOutcome(
-                    winner: nil,
-                    mismatches: mismatches,
-                    failure: WebSocketTransportError.certificateMismatches(mismatches: mismatches),
-                    drain: drain
-                )
-            }
-            return HostRaceOutcome(
-                winner: nil,
-                mismatches: mismatches,
-                failure: lastError ?? WebSocketTransportError.failed(
-                    host: hosts.first ?? "unknown",
-                    message: "No reachable host found"
-                ),
-                drain: drain
-            )
-        } onCancel: {
-            cancelAll()
-        }
-    }
-
     private func configureSocketMessagePump() {
         let currentSocket = socket
         messagePumpTask?.cancel()
@@ -1111,109 +940,117 @@ nonisolated private final class RaceMailbox<Connection: Sendable>: Sendable {
         reconnectTask = Task { [weak self] in
             var attempt = startingAttempt
             while !Task.isCancelled {
-                if attempt > Self.initialReconnectAttempt {
-                    let delay = min(
-                        Double(1 << min(
-                            attempt - Self.minimumBackedOffReconnectAttempt,
-                            Constants.Connection.reconnectBackoffExponentCap
-                        )),
-                        Constants.Connection.reconnectBackoffMaximum
-                    )
-                    try? await Task.sleep(for: .seconds(delay))
-                    if Task.isCancelled { break }
-                }
-
-                let attemptStart = CFAbsoluteTimeGetCurrent()
-                AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * Self.millisecondsPerSecond))ms")
-
-                // Check freshness before mutating observable state, then read the connection parameters.
-                let parameters: ([String], Int, String, String?, String?)?
-                if !Task.isCancelled,
-                   let self,
-                   connectionGeneration == myGeneration {
-                    connectionState = .reconnecting(attempt: attempt)
-                    parameters = (
-                        hosts,
-                        port ?? 0,
-                        token ?? "",
-                        certFingerprint,
-                        tcAddress
-                    )
-                } else {
-                    parameters = nil
-                }
-                guard let (hostsToTry, currentPort, currentToken, currentCertFingerprint, currentTcAddress) = parameters else {
-                    return
-                }
-
-                do {
-                    let raceStart = CFAbsoluteTimeGetCurrent()
-                    AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * Self.millisecondsPerSecond))ms")
-
-                    let raced = try await self?.raceHosts(
-                        hostsToTry,
-                        port: currentPort,
-                        token: currentToken,
-                        certFingerprint: currentCertFingerprint,
-                        tcAddress: currentTcAddress
-                    )
-
-                    let raceEnd = CFAbsoluteTimeGetCurrent()
-                    AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms")
-
-                    guard let raced else { continue }
-                    let winner = raced.winner
-                    self?.recordLateCertMismatches(from: raced.drain, generation: myGeneration)
-
-                    do {
-                        try Task.checkCancellation()
-                    } catch {
-                        await winner.disconnect()
-                        return
-                    }
-
-                    // Batch write: check generation + set up socket + transition to connected synchronously.
-                    let genOk: Bool
-                    if !Task.isCancelled,
-                       let self,
-                       connectionGeneration == myGeneration {
-                        socket = winner.socket
-                        activeTunnel = winner.tunnel
-                        host = winner.host
-                        configureSocketMessagePump()
-                        connectionState = .connected
-                        lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
-                        lastReconnectAttempt = attempt
-                        subscribeToAllEvents()
-                        startPingTimer()
-                        scheduleHostRoutesRefresh()
-                        genOk = true
-                    } else {
-                        genOk = false
-                    }
-                    guard genOk else {
-                        await winner.disconnect()
-                        return
-                    }
-
-                    let elapsed = (CFAbsoluteTimeGetCurrent() - reconnectStart) * Self.millisecondsPerSecond
-                    AppLog.connection.debug("[ConnectionManager] Reconnect complete in \(Int(elapsed))ms")
-                    return
-                } catch {
-                    if let transportError = error as? WebSocketTransportError,
-                       transportError.isCertificateMismatch {
-                        guard !Task.isCancelled,
-                              self?.connectionGeneration == myGeneration else { return }
-                        AppLog.connection.debug("[ConnectionManager] Certificate mismatch detected, stopping reconnection")
-                        self?.certMismatchDetected = true
-                        self?.connectionState = .disconnected
-                        return
-                    }
-                    AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")
-                }
+                guard await Self.waitBeforeReconnectAttempt(attempt), let self else { return }
+                let shouldStop = await performReconnectAttempt(
+                    attempt: attempt,
+                    generation: myGeneration,
+                    reconnectStart: reconnectStart
+                )
+                if shouldStop { return }
                 attempt += 1
             }
         }
+    }
+
+    nonisolated private static func waitBeforeReconnectAttempt(_ attempt: Int) async -> Bool {
+        guard attempt > initialReconnectAttempt else { return !Task.isCancelled }
+        let delay = await min(
+            Double(1 << min(
+                attempt - minimumBackedOffReconnectAttempt,
+                Constants.Connection.reconnectBackoffExponentCap
+            )),
+            Constants.Connection.reconnectBackoffMaximum
+        )
+        try? await Task.sleep(for: .seconds(delay))
+        return !Task.isCancelled
+    }
+
+    private func performReconnectAttempt(
+        attempt: Int,
+        generation: Int,
+        reconnectStart: CFAbsoluteTime
+    ) async -> Bool {
+        let attemptStart = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) starting at +\(Int((attemptStart - reconnectStart) * Self.millisecondsPerSecond))ms")
+        guard !Task.isCancelled, connectionGeneration == generation else { return true }
+        connectionState = .reconnecting(attempt: attempt)
+        let parameters = ReconnectParameters(
+            hosts: hosts,
+            port: port ?? 0,
+            token: token ?? "",
+            certFingerprint: certFingerprint,
+            tcAddress: tcAddress
+        )
+        do {
+            return try await connectReconnectCandidate(
+                parameters,
+                attempt: attempt,
+                generation: generation,
+                reconnectStart: reconnectStart
+            )
+        } catch {
+            return handleReconnectFailure(error, attempt: attempt, generation: generation)
+        }
+    }
+
+    private func connectReconnectCandidate(
+        _ parameters: ReconnectParameters,
+        attempt: Int,
+        generation: Int,
+        reconnectStart: CFAbsoluteTime
+    ) async throws -> Bool {
+        let raceStart = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] raceHosts starting at +\(Int((raceStart - reconnectStart) * Self.millisecondsPerSecond))ms")
+        let raced = try await raceHosts(
+            parameters.hosts,
+            port: parameters.port,
+            token: parameters.token,
+            certFingerprint: parameters.certFingerprint,
+            tcAddress: parameters.tcAddress
+        )
+        let raceEnd = CFAbsoluteTimeGetCurrent()
+        AppLog.connection.debug("[ConnectionManager] raceHosts completed in \(Int((raceEnd - raceStart) * Self.millisecondsPerSecond))ms")
+        let winner = raced.winner
+        recordLateCertMismatches(from: raced.drain, generation: generation)
+        guard !Task.isCancelled, adoptReconnectWinner(winner, attempt: attempt, generation: generation) else {
+            await winner.disconnect()
+            return true
+        }
+        let elapsed = (CFAbsoluteTimeGetCurrent() - reconnectStart) * Self.millisecondsPerSecond
+        AppLog.connection.debug("[ConnectionManager] Reconnect complete in \(Int(elapsed))ms")
+        return true
+    }
+
+    private func adoptReconnectWinner(
+        _ winner: RacedConnection,
+        attempt: Int,
+        generation: Int
+    ) -> Bool {
+        guard !Task.isCancelled, connectionGeneration == generation else { return false }
+        socket = winner.socket
+        activeTunnel = winner.tunnel
+        host = winner.host
+        configureSocketMessagePump()
+        connectionState = .connected
+        lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
+        lastReconnectAttempt = attempt
+        subscribeToAllEvents()
+        startPingTimer()
+        scheduleHostRoutesRefresh()
+        return true
+    }
+
+    private func handleReconnectFailure(_ error: Error, attempt: Int, generation: Int) -> Bool {
+        if let transportError = error as? WebSocketTransportError,
+           transportError.isCertificateMismatch {
+            guard !Task.isCancelled, connectionGeneration == generation else { return true }
+            AppLog.connection.debug("[ConnectionManager] Certificate mismatch detected, stopping reconnection")
+            certMismatchDetected = true
+            connectionState = .disconnected
+            return true
+        }
+        AppLog.connection.debug("[ConnectionManager] Reconnect attempt \(attempt) failed: \(error.localizedDescription)")
+        return false
     }
 
     private func subscribeToAllEvents() {

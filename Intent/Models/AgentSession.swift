@@ -1,6 +1,19 @@
 import Foundation
 
 struct AgentSession: Identifiable, Equatable {
+    private struct AttentionRequestSurface {
+        let kind: String
+        let reason: String?
+        let timestamp: String?
+
+        init?(_ values: [String: Any]) {
+            guard let kind = values["attentionRequestKind"] as? String else { return nil }
+            self.kind = kind
+            reason = values["attentionRequestReason"] as? String
+            timestamp = values["attentionRequestTimestamp"] as? String
+        }
+    }
+
     let id: String
     let name: String
     let status: String
@@ -206,9 +219,9 @@ struct AgentSession: Identifiable, Equatable {
             digest: dict["digest"] as? String,
             specialist: metadata?["specialist"] as? String,
             createdByAgentId: metadata?["createdByAgentId"] as? String,
-            attentionRequestKind: attentionSurface?["attentionRequestKind"] as? String,
-            attentionRequestReason: attentionSurface?["attentionRequestReason"] as? String,
-            attentionRequestTimestamp: attentionSurface?["attentionRequestTimestamp"] as? String,
+            attentionRequestKind: attentionSurface?.kind,
+            attentionRequestReason: attentionSurface?.reason,
+            attentionRequestTimestamp: attentionSurface?.timestamp,
             pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String
         )
@@ -219,11 +232,11 @@ struct AgentSession: Identifiable, Equatable {
     /// agent.get); absent on both when no request is pending (PROTOCOL §5.5).
     /// The whole trio is read from whichever surface carries the kind so a
     /// mixed payload cannot blend fields from the two surfaces.
-    private static func attentionRequestSurface(_ dict: [String: Any]) -> [String: Any]? {
-        if dict["attentionRequestKind"] is String { return dict }
+    private static func attentionRequestSurface(_ dict: [String: Any]) -> AttentionRequestSurface? {
+        if let surface = AttentionRequestSurface(dict) { return surface }
         if let metadata = dict["metadata"] as? [String: Any],
-           metadata["attentionRequestKind"] is String {
-            return metadata
+           let surface = AttentionRequestSurface(metadata) {
+            return surface
         }
         return nil
     }
@@ -232,12 +245,11 @@ struct AgentSession: Identifiable, Equatable {
     /// without requiring the full session parse (which needs id/name), so
     /// attention state can still raise/clear on a partial payload.
     static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
-        guard let surface = attentionRequestSurface(dict),
-              let kind = surface["attentionRequestKind"] as? String else { return nil }
+        guard let surface = attentionRequestSurface(dict) else { return nil }
         return PendingAttentionRequest(
-            kind: AgentAttentionKind(wire: kind),
-            reason: oneLiner(surface["attentionRequestReason"] as? String),
-            raisedAt: ISO8601DateFormatter.lenientDate(from: surface["attentionRequestTimestamp"] as? String)
+            kind: AgentAttentionKind(wire: surface.kind),
+            reason: oneLiner(surface.reason),
+            raisedAt: ISO8601DateFormatter.lenientDate(from: surface.timestamp)
         )
     }
 }
@@ -262,8 +274,8 @@ struct PendingAttentionRequest: Equatable {
 /// (PROTOCOL §5.5). Unknown wire kinds fall back to the discussion treatment
 /// so newer daemons still surface an indicator.
 enum AgentAttentionKind: Equatable {
-    case discussion
     case blocker
+    case discussion
 
     init(wire: String) {
         self = wire == "blocker" ? .blocker : .discussion
@@ -291,14 +303,14 @@ enum AgentAttentionKind: Equatable {
 /// attention (blocker/discussion, unless a turn is live) > waiting >
 /// running > idle.
 enum AgentAvatarState: Equatable {
+    case attentionBlocker
+    case attentionDiscussion
+    case completed
+    case failed
     case idle
+    case question
     case running
     case waiting
-    case failed
-    case completed
-    case question
-    case attentionDiscussion
-    case attentionBlocker
 
     static func state(for session: AgentSession) -> Self {
         let status = session.status.lowercased()
