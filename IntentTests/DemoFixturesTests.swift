@@ -126,7 +126,14 @@ struct DemoFixturesTests {
         let first = try #require(long.items.first)
         let last = try #require(long.items.last)
         #expect(text(of: first).hasPrefix(DemoFixtures.longConversationFirstSentence))
-        #expect(text(of: last).hasSuffix(DemoFixtures.longConversationLastSentence))
+        // The last message carries the suggested-prompts block after its
+        // closing sentence; the rendered (stripped) text still ends there.
+        let lastText = text(of: last)
+        #expect(SuggestedPrompts.parse(lastText) == DemoFixtures.longConversationSuggestedPrompts)
+        #expect(DemoFixtures.longConversationSuggestedPrompts.count == 3)
+        #expect(SuggestedPrompts.stripBlocks(from: lastText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasSuffix(DemoFixtures.longConversationLastSentence))
         #expect(!long.items.contains { text(of: $0).contains("more than 90 days") })
     }
 

@@ -525,12 +525,25 @@ enum DemoFixtures {
     static let longConversationLastSentence =
         "End of the flake investigation: 50 consecutive green runs on the payment integration suite."
 
+    /// Suggested prompts carried by the last (assistant) message of
+    /// `longConversationMessages` as a trailing `<!-- suggested-prompts -->`
+    /// block, so the transcript's prompt rows — and the scroll transition
+    /// when one is tapped — can be exercised against `--demo-data`.
+    static let longConversationSuggestedPrompts = [
+        "Open a PR for the deflake changes",
+        "Show me the final evidence table",
+        "Schedule the worker scaling follow-up",
+    ]
+
     /// A transcript several screens tall on an iPhone: 32 alternating
     /// user/assistant messages, each a few lines long, so scroll-position UI
     /// (the "Go to End" button) can be exercised against `--demo-data`.
     /// The first message begins with `longConversationFirstSentence` and the
-    /// last one ends with `longConversationLastSentence`.
+    /// last one's rendered text ends with `longConversationLastSentence`,
+    /// followed only by the stripped `longConversationSuggestedPrompts` block.
     static var longConversationMessages: [[String: Any]] {
+        let suggestedPromptsBlock = (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"])
+            .joined(separator: "\n")
         let exchanges: [(user: String, assistant: String)] = [
             (
                 """
@@ -776,6 +789,8 @@ enum DemoFixtures {
                 settlement) fixed without touching production code, retry decorators \
                 removed, README corrected, and a follow-up filed for worker scaling. \
                 \(longConversationLastSentence)
+
+                \(suggestedPromptsBlock)
                 """
             ),
         ]

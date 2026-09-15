@@ -40,10 +40,15 @@ enum Constants {
             static let dividerProbeDelay: Double = 0.15
             static let scrollDebounceMilliseconds = 100
             static let scrollCompletionMilliseconds = 300
-            /// How many times a forced follow that came to rest short of the
-            /// bottom (content grew under the animation) scrolls again before
-            /// the scrolled-away gate reopens on whatever geometry it reached.
+            /// How many corrections (a scroll again from short of the bottom,
+            /// a clamp from past the end) a forced follow issues while its
+            /// landing reads off the bottom before it gives up.
             static let followLandingRetries = 2
+            /// Spacing between the live geometry reads that verify a forced
+            /// follow's landing; two identical reads mean it is at rest.
+            static let followLandingPollMilliseconds = 50
+            /// Longest a forced follow keeps verifying its landing.
+            static let followLandingTimeoutMilliseconds = 1_500
             /// Minimum spacing between follow-to-bottom scrolls issued for
             /// streaming deltas. The bottom-anchored ScrollView keeps a pinned
             /// viewport on the bottom as content grows, so deltas only re-pin a
