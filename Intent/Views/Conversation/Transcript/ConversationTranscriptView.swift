@@ -164,11 +164,31 @@ struct ConversationTranscriptView: View {
                 containerHeight: geometry.visibleRect.height
             )
         } action: { old, new in
-            scrollState.liveIsScrolledAway = new.isScrolledAway
             if rePinAfterContainerHeightChange(
                 from: old.containerHeight, to: new.containerHeight, proxy: proxy
             ) { return }
-            syncScrolledAwayFromGeometry()
+            applyScrolledAwayEdge(geometryAway: new.isScrolledAway, proxy: proxy)
+        }
+        // A gesture's last geometry edge can arrive after UIKit has cleared
+        // its deceleration flag, and the band observer above drops a flip
+        // that reverses within one layout pass (#280); the phase ending is
+        // one authoritative sample of where the gesture left the viewport.
+        // A forced follow that cut the gesture short (Go to End stopping a
+        // fling) owns the flag instead.
+        .onScrollPhaseChange { oldPhase, newPhase, context in
+            scrollState.isUserScrollPhase = newPhase.isUserDriven
+            guard oldPhase.isUserDriven, !newPhase.isUserDriven, !isScrollingToBottom else { return }
+            let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: context.geometry.contentSize.height,
+                contentOffsetY: context.geometry.contentOffset.y,
+                containerHeight: context.geometry.visibleRect.height,
+                bottomInset: context.geometry.contentInsets.bottom
+            )
+            applyScrolledAwayEdge(
+                geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance),
+                isInteracting: true,
+                proxy: proxy
+            )
         }
         // A viewport resting past the end of content taller than the container
         // (blank band under the last message) reads "at bottom" above, so it
@@ -187,7 +207,7 @@ struct ConversationTranscriptView: View {
             )
         } action: { _, isPastEnd in
             if isPastEnd {
-                scheduleRePinIfRestingPastEnd()
+                scheduleRePinIfRestingPastEnd(proxy: proxy)
             }
         }
         .onDisappear {
@@ -202,10 +222,11 @@ struct ConversationTranscriptView: View {
     /// still bouncing or re-laying out is checked again after it settles,
     /// since the past-end edge has already fired and will not fire twice. A
     /// programmatic follow in flight is deferred the same way so the clamp
-    /// cannot land mid-animation. Without a scroll view to clamp, the viewport
-    /// is recorded as scrolled away through the usual gate so Go to End
-    /// offers the way back once the gate is open.
+    /// cannot land mid-animation. Without a scroll view to clamp, a following
+    /// viewport is pinned back through SwiftUI's own layout instead; the pin
+    /// is never broken for a blank band the user did not scroll to.
     private func scheduleRePinIfRestingPastEnd(
+        proxy: ScrollViewProxy,
         confirming: ScrollViewMomentumProxy.RestingGeometry? = nil
     ) {
         scrollState.pastEndRePinTask?.cancel()
@@ -215,18 +236,24 @@ struct ConversationTranscriptView: View {
             scrollState.pastEndRePinTask = nil
             let outcome = scrollMomentumProxy.rePinIfRestingPastEnd(
                 confirming: confirming,
-                isFollowing: scrollDebounceTask != nil || isScrollingToBottom
+                isFollowing: isFollowing
             )
             switch outcome {
             case .deferred(let geometry):
-                scheduleRePinIfRestingPastEnd(confirming: geometry)
+                scheduleRePinIfRestingPastEnd(proxy: proxy, confirming: geometry)
             case .unavailable:
-                scrollState.liveIsScrolledAway = true
-                syncScrolledAwayFromGeometry()
+                if shouldFollowToBottom {
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                }
             case .rePinned, .notPastEnd:
                 break
             }
         }
+    }
+
+    /// A follow is in flight from its request until its landing is verified.
+    private var isFollowing: Bool {
+        scrollDebounceTask != nil || isScrollingToBottom
     }
 
     private func cancelPastEndRePin() {
@@ -308,17 +335,33 @@ struct ConversationTranscriptView: View {
         scrollState.containerRePinTask = nil
     }
 
-    /// Applies the latest geometry edge to `userIsScrolledAway` when the gate
-    /// is open; called on every edge and again whenever the gate opens.
-    private func syncScrolledAwayFromGeometry() {
-        let resolved = ConversationTranscriptScrollPolicy.resolvedScrolledAway(
-            live: scrollState.liveIsScrolledAway,
+    /// Applies a geometry edge to `userIsScrolledAway` under the rule that
+    /// only a gesture may break the pin (see
+    /// `ConversationTranscriptScrollPolicy.scrolledAwayTransition`), and
+    /// follows a pinned viewport that content grew under straight back to
+    /// the bottom. The pin goes through SwiftUI's own layout, as the
+    /// container re-pin does: the UIScrollView may not have laid out the new
+    /// content yet when this runs. `isInteracting` defaults to the live
+    /// gesture state; a phase ending passes true for its final sample.
+    private func applyScrolledAwayEdge(geometryAway: Bool, isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
+        let isInteracting = isInteracting ?? (scrollMomentumProxy.isInteracting || scrollState.isUserScrollPhase)
+        let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: userIsScrolledAway,
-            hasInitiallyScrolled: hasInitiallyScrolled,
-            isScrollingToBottom: isScrollingToBottom
+            geometryAway: geometryAway,
+            isInteracting: isInteracting
         )
-        if resolved != userIsScrolledAway {
-            userIsScrolledAway = resolved
+        if next != userIsScrolledAway {
+            userIsScrolledAway = next
+        }
+        if ConversationTranscriptScrollPolicy.shouldRePinAfterContentGrowth(
+            geometryAway: geometryAway,
+            isInteracting: isInteracting,
+            isFollowing: isFollowing,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: next
+        ) {
+            AppLog.ui.debug("[SCROLL] Content grew under the pinned viewport; re-pinning to the bottom")
+            proxy.scrollTo("scroll-bottom", anchor: .bottom)
         }
     }
 
@@ -375,6 +418,7 @@ struct ConversationTranscriptView: View {
     private var goToEndButton: some View {
         Button {
             scrollMomentumProxy.stopMomentum()
+            scrollState.isUserScrollPhase = false
             isScrollingToBottom = true
             userIsScrolledAway = false
         } label: {
@@ -521,16 +565,13 @@ struct ConversationTranscriptView: View {
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
                 hasInitiallyScrolled = true
-                syncScrolledAwayFromGeometry()
             }
         }
     }
 
+    /// Without an unread divider the entry scroll is a forced follow, so its
+    /// landing is verified from the live geometry like any other.
     private func performInitialScroll(proxy: ScrollViewProxy) {
-        // A geometry edge recorded before this scroll (the initial layout at
-        // the bottom) describes the pre-scroll viewport; dropping it keeps
-        // the gate-open sync from overwriting the divider probe's flag.
-        scrollState.liveIsScrolledAway = nil
         guard viewModel.newMessagesDividerAnchorId != nil else {
             scrollToBottom(proxy: proxy, animated: false, forced: true)
             return
@@ -559,8 +600,7 @@ struct ConversationTranscriptView: View {
     }
 
     /// The user scrolling away drops an automatic follow still in its debounce;
-    /// a forced one (Go to End sets `isScrollingToBottom`, so geometry cannot
-    /// flip this flag during it anyway) keeps going.
+    /// a forced one keeps going (its landing yields to the user on its own).
     private func cancelPendingAutomaticFollow() {
         guard !scrollState.pendingFollowIsForced else { return }
         scrollDebounceTask?.cancel()
@@ -572,15 +612,19 @@ struct ConversationTranscriptView: View {
     /// Forced follows always land and are never preempted by automatic ones;
     /// automatic follows are re-validated by the policy once the debounce
     /// elapses, so a user who scrolled away meanwhile is not snapped back.
-    /// A forced follow that came to rest short of the bottom (rows realized
-    /// during the animation grew the content under it) is issued again before
-    /// the gate reopens, so the geometry it reopens on is the real bottom
-    /// (see `ConversationTranscriptScrollPolicy.shouldRetryFollowLanding`).
+    /// A forced follow raises `isScrollingToBottom` for its whole duration
+    /// and is complete only once the live geometry confirms its landing (see
+    /// `awaitForcedFollowLanding`); an automatic follow rides the bottom
+    /// anchor and the next delta re-pins a drifted one, so it just waits out
+    /// its animation.
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
         if !forced && scrollState.pendingFollowIsForced { return }
         scrollDebounceTask?.cancel()
         scrollState.pendingFollowIsForced = forced
+        if forced {
+            isScrollingToBottom = true
+        }
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
             guard !Task.isCancelled else { return }
@@ -590,31 +634,86 @@ struct ConversationTranscriptView: View {
                 distanceToBottom: scrollMomentumProxy.distanceToBottom
             )
             if shouldExecute {
-                var retriesLeft = Constants.Conversation.Transcript.followLandingRetries
-                while true {
-                    if animated {
-                        withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
-                            proxy.scrollTo("scroll-bottom", anchor: .bottom)
-                        }
-                    } else {
-                        proxy.scrollTo("scroll-bottom", anchor: .bottom)
-                    }
+                issueScrollToBottom(proxy: proxy, animated: animated)
+                if forced {
+                    await awaitForcedFollowLanding(proxy: proxy, animated: animated)
+                } else {
                     try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollCompletionMilliseconds))
-                    guard !Task.isCancelled else { return }
-                    guard ConversationTranscriptScrollPolicy.shouldRetryFollowLanding(
-                        forced: forced,
-                        distanceToBottom: scrollMomentumProxy.distanceToBottom,
-                        isInteracting: scrollMomentumProxy.isInteracting,
-                        retriesLeft: retriesLeft
-                    ) else { break }
-                    retriesLeft -= 1
-                    AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
                 }
+                guard !Task.isCancelled else { return }
             }
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
             scrollDebounceTask = nil
-            syncScrolledAwayFromGeometry()
         }
+    }
+
+    private func issueScrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        if animated {
+            withAnimation(.easeOut(duration: Constants.Conversation.Transcript.scrollAnimationDuration)) {
+                proxy.scrollTo("scroll-bottom", anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo("scroll-bottom", anchor: .bottom)
+        }
+    }
+
+    /// Polls the live scroll view until the forced follow has landed within
+    /// the at-bottom band, scrolling again from short of the bottom and
+    /// clamping from past the end a bounded number of times (#281, #271; see
+    /// `ConversationTranscriptScrollPolicy.followLandingStep`). Ends early
+    /// when the user takes over — the geometry edges then carry the gesture
+    /// rule, and the live distance is applied once as the gesture's sample in
+    /// case its edge was dropped — and on the timeout, leaving the pin as it
+    /// is. Bails out silently when the follow is restarted (task cancelled).
+    private func awaitForcedFollowLanding(proxy: ScrollViewProxy, animated: Bool) async {
+        let deadline = ContinuousClock.now
+            + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
+        var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
+        var previous: ScrollViewMomentumProxy.RestingGeometry?
+        while true {
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.followLandingPollMilliseconds))
+            guard !Task.isCancelled else { return }
+            let geometry = scrollMomentumProxy.restingGeometry
+            let step = ConversationTranscriptScrollPolicy.followLandingStep(
+                geometry: geometry,
+                previous: previous,
+                isInteracting: scrollMomentumProxy.isInteracting,
+                correctionsLeft: correctionsLeft,
+                timedOut: ContinuousClock.now >= deadline
+            )
+            previous = geometry
+            switch step {
+            case .settling:
+                continue
+            case .scrollAgain:
+                correctionsLeft -= 1
+                AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
+                issueScrollToBottom(proxy: proxy, animated: animated)
+            case .clampPastEnd:
+                correctionsLeft -= 1
+                AppLog.ui.debug("[SCROLL] Forced follow landed past the end, clamping")
+                _ = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: geometry)
+            case .yieldToUser:
+                if let distance = scrollMomentumProxy.distanceToBottom {
+                    applyScrolledAwayEdge(
+                        geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance),
+                        isInteracting: true,
+                        proxy: proxy
+                    )
+                }
+                return
+            case .landed, .giveUp:
+                return
+            }
+        }
+    }
+}
+
+private extension ScrollPhase {
+    /// Phases driven by the user's finger or the deceleration after it;
+    /// `.animating` is a programmatic scroll and `.idle` is at rest.
+    var isUserDriven: Bool {
+        self == .tracking || self == .interacting || self == .decelerating
     }
 }

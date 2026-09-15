@@ -173,22 +173,41 @@ enum ConversationTranscriptScrollPolicy {
         return .rePin
     }
 
-    /// The scrolled-away flag driving "Go to End" and follow-to-bottom.
-    /// `onScrollGeometryChange` is edge-triggered and its edges are ignored
-    /// while the entry scroll or a programmatic follow is in flight; an edge
-    /// that lands while gated would otherwise be lost for good, because the
-    /// geometry emits no new edge until the threshold is crossed again. The
-    /// live value is therefore kept and re-applied whenever the gate opens.
-    /// A nil `live` means no edge has been observed yet, so `current` stands
-    /// (e.g. the divider probe's flag before the entry scroll's edge lands).
-    static func resolvedScrolledAway(
-        live: Bool?,
+    /// The scrolled-away flag driving "Go to End" and follow-to-bottom, on a
+    /// geometry edge. Once pinned, the transcript stays pinned until the user
+    /// drags it up (#281): the only transition to "scrolled away" is a
+    /// gesture — the finger on the scroll view or the deceleration after it —
+    /// that leaves the viewport past `atBottomThreshold`. Content growth of
+    /// any kind (a row re-measuring, a footer row, the keyboard, streaming,
+    /// an append) reads the same "away" geometry without a gesture and keeps
+    /// the current flag; #272, #280 and #281 each patched one such instance.
+    /// Geometry reading within the threshold always re-pins, gesture or not
+    /// (the user dragged back, or Go to End landed).
+    static func scrolledAwayTransition(
         current: Bool,
-        hasInitiallyScrolled: Bool,
-        isScrollingToBottom: Bool
+        geometryAway: Bool,
+        isInteracting: Bool
     ) -> Bool {
-        guard let live, hasInitiallyScrolled, !isScrollingToBottom else { return current }
-        return live
+        guard geometryAway else { return false }
+        return isInteracting ? true : current
+    }
+
+    /// A geometry edge reading "away" without a gesture on a pinned, settled
+    /// transcript is content that grew under the viewport, and the pin is
+    /// followed to the new end. A follow already in flight lands there on
+    /// its own; under the finger the edge is a gesture, not growth; before
+    /// the entry scroll has decided the viewport is not following yet.
+    static func shouldRePinAfterContentGrowth(
+        geometryAway: Bool,
+        isInteracting: Bool,
+        isFollowing: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool
+    ) -> Bool {
+        geometryAway && !isInteracting && !isFollowing && shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
     }
 
     /// Discrete, user-visible transitions (a message appended, "Go to End",
@@ -298,25 +317,82 @@ enum ConversationTranscriptScrollPolicy {
         )
     }
 
-    /// `scrollTo` targets the bottom as laid out when the animation starts, and
-    /// rows the lazy stack realizes during it grow the content underneath, so
-    /// a forced follow can come to rest above the real bottom (Go to End on
-    /// the 32-row demo transcript landed 379 points short). The follow used to
-    /// be re-issued by the geometry edge clearing the flag, which #280 stopped
-    /// so it would not fight the user's pan; the follow itself now re-scrolls
-    /// while its landing still reads scrolled away, a bounded number of times.
-    /// Automatic follows are not retried (the bottom anchor keeps a pinned
-    /// viewport pinned and the next delta re-pins a drifted one), nor is any
-    /// follow once the user has taken over the scroll view, and an unknown
-    /// distance proves nothing.
-    static func shouldRetryFollowLanding(
-        forced: Bool,
-        distanceToBottom: CGFloat?,
+    /// Everything a landing or re-pin decision reads from the live scroll
+    /// view. `containerHeight` is the full bounds; the adjusted insets are
+    /// part of it because the keyboard or safe area can change them between
+    /// two reads while offset, content size and bounds stay the same.
+    struct ViewportGeometry: Equatable {
+        let contentOffsetY: CGFloat
+        let contentHeight: CGFloat
+        let containerHeight: CGFloat
+        let topInset: CGFloat
+        let bottomInset: CGFloat
+
+        var distanceToBottom: CGFloat {
+            ConversationTranscriptScrollPolicy.distanceToBottom(
+                contentHeight: contentHeight,
+                contentOffsetY: contentOffsetY,
+                containerHeight: containerHeight,
+                bottomInset: bottomInset
+            )
+        }
+
+        var verticalInsets: CGFloat { topInset + bottomInset }
+    }
+
+    enum FollowLandingStep: Equatable {
+        /// No scroll view yet, or the geometry moved since the last poll.
+        case settling
+        /// At rest within `atBottomThreshold` of the bottom.
+        case landed
+        /// At rest short of the bottom: issue the scroll again.
+        case scrollAgain
+        /// At rest past the end of the content: clamp the offset back.
+        case clampPastEnd
+        /// The user took over the scroll view; the gesture rule owns the flag.
+        case yieldToUser
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
+    }
+
+    /// A forced follow (entry, a new user message, the thinking indicator,
+    /// Go to End) is complete only when the live geometry confirms it (#281).
+    /// `scrollTo` targets the bottom as laid out when it is issued, and rows
+    /// the lazy stack realizes afterwards re-measure: taller, the viewport
+    /// rests short of the bottom (Go to End on the demo transcript landed
+    /// 379 points short); shorter, it rests past the end over a blank band
+    /// (#271). Ending the follow on a timer then copied that geometry into
+    /// the flag, Go to End showed, and every later append was skipped as
+    /// "user scrolled away". The landing is polled instead: two identical
+    /// reads mean the geometry is at rest, and a rest short of the bottom is
+    /// scrolled again, past the end clamped, each a bounded number of times;
+    /// a bound that runs out leaves the pin as it is, so no follow ever
+    /// shows Go to End without a gesture. Content shorter than the container
+    /// rests at a negative distance and is landed.
+    static func followLandingStep(
+        geometry: ViewportGeometry?,
+        previous: ViewportGeometry?,
         isInteracting: Bool,
-        retriesLeft: Int,
+        correctionsLeft: Int,
+        timedOut: Bool,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
-    ) -> Bool {
-        guard forced, retriesLeft > 0, !isInteracting, let distanceToBottom else { return false }
-        return isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold)
+    ) -> FollowLandingStep {
+        if isInteracting { return .yieldToUser }
+        if timedOut { return .giveUp }
+        guard let geometry, geometry == previous else { return .settling }
+        let distance = geometry.distanceToBottom
+        if isPastEnd(
+            distanceToBottom: distance,
+            contentHeight: geometry.contentHeight,
+            containerHeight: geometry.containerHeight,
+            verticalInsets: geometry.verticalInsets,
+            atBottomThreshold: atBottomThreshold
+        ) {
+            return correctionsLeft > 0 ? .clampPastEnd : .giveUp
+        }
+        if isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
+            return correctionsLeft > 0 ? .scrollAgain : .giveUp
+        }
+        return .landed
     }
 }
