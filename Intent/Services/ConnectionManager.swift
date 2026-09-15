@@ -1304,6 +1304,12 @@ nonisolated enum InboundFrame: Sendable {
     /// sequentially (at most one in flight) and are bound to the connection
     /// generation that started them, so the outcome of a probe whose
     /// connection was retired while it was in flight is ignored.
+    ///
+    /// The loop's own cancellation is the other retirement signal: the
+    /// automatic reconnect keeps the generation, so a cadence sleep that
+    /// completed just before `stopHeartbeat()` cancelled the task would
+    /// otherwise wake to find the replacement socket connected and probe it
+    /// from a cancelled task.
     private func startHeartbeat() {
         stopHeartbeat()
         let myGeneration = connectionGeneration
@@ -1315,7 +1321,7 @@ nonisolated enum InboundFrame: Sendable {
                 } catch {
                     return
                 }
-                guard let self else { return }
+                guard !Task.isCancelled, let self else { return }
                 await self.probeConnectionHealth(generation: myGeneration)
             }
         }
@@ -1327,15 +1333,21 @@ nonisolated enum InboundFrame: Sendable {
     }
 
     private func probeConnectionHealth(generation: Int) async {
-        guard connectionGeneration == generation, connectionState == .connected,
+        guard !Task.isCancelled, connectionGeneration == generation, connectionState == .connected,
               let currentSocket = socket else { return }
         let clock = heartbeatClock
         do {
             try await Self.probe(currentSocket, timeout: Self.heartbeatProbeTimeout, clock: clock)
-            guard connectionGeneration == generation, socket === currentSocket else { return }
+            guard !Task.isCancelled, connectionGeneration == generation, socket === currentSocket else {
+                AppLog.connection.debug("[ConnectionManager] Ignoring late pong from retired heartbeat (generation \(generation))")
+                return
+            }
             AppLog.connection.debug("[ConnectionManager] Received pong")
         } catch {
-            guard connectionGeneration == generation, socket === currentSocket else {
+            // A cancelled probe was retired by `stopHeartbeat()`; its
+            // CancellationError says nothing about the socket's health.
+            guard !Task.isCancelled, !(error is CancellationError),
+                  connectionGeneration == generation, socket === currentSocket else {
                 AppLog.connection.debug("[ConnectionManager] Ignoring heartbeat probe outcome from retired generation \(generation)")
                 return
             }

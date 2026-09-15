@@ -1796,6 +1796,16 @@ struct ConnectionManagerTests {
             }
         }
 
+        /// Drops every accepted client socket but keeps listening, so the
+        /// client's automatic reconnect can re-establish against this server.
+        func dropClients() {
+            let dropped = state.withLock { state in
+                defer { state.accepted.removeAll() }
+                return state.accepted
+            }
+            for connection in dropped { connection.cancel() }
+        }
+
         private func receiveNext(on connection: NWConnection) {
             connection.receiveMessage { [weak self] data, context, _, error in
                 guard let self, error == nil else { return }
@@ -2152,6 +2162,13 @@ struct ConnectionManagerTests {
     /// Manual `HeartbeatClock`: sleepers park until `advance(by:)` moves the
     /// clock past their deadline; cancellation removes them. Tests observe
     /// what is parked via `pendingDurations`.
+    ///
+    /// While `holdsCancelledSleepers` is set, a cancelled sleeper is moved to
+    /// a held list instead of being resumed, and `releaseHeld(asCompleted:)`
+    /// finishes it later — either as a sleep that had already completed
+    /// when the cancellation arrived, or as the cancellation itself. That
+    /// pins the wake of a retired heartbeat task to a chosen point in the
+    /// test.
     private nonisolated final class ManualHeartbeatClock: HeartbeatClock, @unchecked Sendable {
         private struct Sleeper {
             let id: Int
@@ -2163,12 +2180,20 @@ struct ConnectionManagerTests {
             var now: Duration = .zero
             var nextID = 0
             var sleepers: [Sleeper] = []
+            var held: [Sleeper] = []
+            var holdsCancelledSleepers = false
         }
 
         private let lock = OSAllocatedUnfairLock(initialState: State())
 
         /// Requested durations of the parked sleepers, in registration order.
         var pendingDurations: [Duration] { lock.withLock { $0.sleepers.map(\.duration) } }
+        /// Requested durations of the cancelled-but-held sleepers.
+        var heldDurations: [Duration] { lock.withLock { $0.held.map(\.duration) } }
+        var holdsCancelledSleepers: Bool {
+            get { lock.withLock { $0.holdsCancelledSleepers } }
+            set { lock.withLock { $0.holdsCancelledSleepers = newValue } }
+        }
 
         func sleep(for duration: Duration) async throws {
             let id = lock.withLock { state in
@@ -2179,10 +2204,15 @@ struct ConnectionManagerTests {
                 try await withCheckedThrowingContinuation {
                     (continuation: CheckedContinuation<Void, any Error>) in
                     let parked = lock.withLock { state in
-                        guard !Task.isCancelled else { return false }
-                        state.sleepers.append(Sleeper(
+                        let sleeper = Sleeper(
                             id: id, duration: duration, deadline: state.now + duration,
-                            continuation: continuation))
+                            continuation: continuation)
+                        if Task.isCancelled {
+                            guard state.holdsCancelledSleepers else { return false }
+                            state.held.append(sleeper)
+                        } else {
+                            state.sleepers.append(sleeper)
+                        }
                         return true
                     }
                     if !parked { continuation.resume(throwing: CancellationError()) }
@@ -2192,9 +2222,30 @@ struct ConnectionManagerTests {
                     guard let index = state.sleepers.firstIndex(where: { $0.id == id }) else {
                         return nil
                     }
-                    return state.sleepers.remove(at: index)
+                    let sleeper = state.sleepers.remove(at: index)
+                    if state.holdsCancelledSleepers {
+                        state.held.append(sleeper)
+                        return nil
+                    }
+                    return sleeper
                 }
                 cancelled?.continuation.resume(throwing: CancellationError())
+            }
+        }
+
+        /// Finishes every held sleeper: as a normally completed sleep when
+        /// `completed`, otherwise as the cancellation that was held back.
+        func releaseHeld(asCompleted completed: Bool) {
+            let released = lock.withLock { state in
+                defer { state.held.removeAll() }
+                return state.held
+            }
+            for sleeper in released {
+                if completed {
+                    sleeper.continuation.resume()
+                } else {
+                    sleeper.continuation.resume(throwing: CancellationError())
+                }
             }
         }
 
@@ -2378,6 +2429,133 @@ struct ConnectionManagerTests {
         #expect(disconnects.count == 0)
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
+    }
+
+    /// The retired generation's pong may also arrive late as a SUCCESS: A's
+    /// probe is answered but completes only after B has been adopted. That
+    /// success is ignored — it neither counts for B nor spares B its own
+    /// probe, which still times out when B never answers.
+    @Test @MainActor func latePongOfRetiredGenerationIsIgnored() async throws {
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let serverA = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let serverB = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            clock.holdsCancelledSleepers = false
+            manager.disconnect()
+            clock.releaseHeld(asCompleted: false)
+            manager.heartbeatClock = originalClock
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // A answers the ping, which cancels the probe's deadline sleeper;
+        // holding that sleeper keeps the probe from completing, parking A's
+        // success until released.
+        clock.holdsCancelledSleepers = true
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverA.pingsReceived == 1
+                && clock.heldDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(clock.heldDurations == [ConnectionManager.heartbeatProbeTimeout])
+        #expect(clock.pendingDurations.isEmpty)
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        clock.holdsCancelledSleepers = false
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // A's success lands now, after B's adoption.
+        clock.releaseHeld(asCompleted: false)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(clock.heldDurations.isEmpty)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+
+        // B still has to answer its own probe, and does not.
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverB.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(serverB.pingsReceived == 1)
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        try await Self.settle(timeout: .seconds(5)) {
+            manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(disconnects.count == 1)
+        #expect(serverA.pingsReceived == 1)
+        #expect(serverB.pingsReceived == 1)
+        #expect(manager.port == serverB.port)
+    }
+
+    /// The automatic reconnect keeps the connection generation. A cadence
+    /// sleep that completed just as the socket dropped must not, when its
+    /// retired loop finally wakes after the reconnect, probe the replacement
+    /// from a cancelled task and tear the healthy replacement down.
+    @Test @MainActor func lateCadenceWakeAfterAutomaticReconnectDoesNotProbe() async throws {
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            clock.holdsCancelledSleepers = false
+            manager.disconnect()
+            clock.releaseHeld(asCompleted: false)
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // Drop the socket server-side while the cadence sleep is parked; the
+        // teardown cancels the heartbeat, and the clock holds that wake back
+        // until the automatic reconnect has armed the replacement's heartbeat.
+        clock.holdsCancelledSleepers = true
+        server.dropClients()
+        try await Self.settle(timeout: .seconds(5)) {
+            clock.heldDurations == [ConnectionManager.heartbeatInterval]
+                && manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        clock.holdsCancelledSleepers = false
+        #expect(clock.heldDurations == [ConnectionManager.heartbeatInterval])
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+        #expect(server.pingsReceived == 0)
+
+        // The retired loop's sleep had completed before the cancellation:
+        // release it as such. It must do nothing.
+        clock.releaseHeld(asCompleted: true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
+        #expect(server.pingsReceived == 0)
+
+        // Only the replacement's own heartbeat probes.
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
     }
 
     /// Normal operation: one answered probe per interval, none early.
