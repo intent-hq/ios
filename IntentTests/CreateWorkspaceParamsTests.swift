@@ -305,6 +305,53 @@ struct CreateWorkspaceParamsTests {
             current: makeSpecialist(id: "retired"), specialists: specialists)?.id == "verifier")
     }
 
+    @Test func preselectedSpecialistRebindsSurvivingSelectionToFreshMetadata() {
+        // A background refresh returns the same ids with a new default-model
+        // preview: the selection must carry the fresh DTO, not the stale one.
+        let stale = makeSpecialist(id: "implementor", resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
+        let refreshed = [
+            makeSpecialist(id: "verifier"),
+            makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie"),
+        ]
+        let kept = CreateWorkspaceView.preselectedSpecialist(current: stale, specialists: refreshed)
+        #expect(kept?.id == "implementor")
+        #expect(kept?.resolvedModel == "opus4.6")
+        #expect(kept == refreshed[1])
+    }
+
+    @Test func preselectedSpecialistRedefaultsWhenSelectionTurnsHiddenUnderSameIds() {
+        // Identical catalog ids, but the selected specialist flipped to
+        // hidden: it leaves the picker list, so the selection re-defaults.
+        let selected = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        let refreshed = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true),
+        ]
+        #expect(refreshed.map(\.id) == ["coordinator", "implementor"])
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: selected, specialists: CreateWorkspaceView.pickerSpecialists(refreshed))?.id
+            == "coordinator")
+        // The same catalog with the role flipped to internal behaves alike.
+        let internalised = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: selected, specialists: CreateWorkspaceView.pickerSpecialists(internalised))?.id
+            == "coordinator")
+    }
+
+    @Test func specialistCatalogEqualityTracksMetadataNotJustIds() {
+        // The view observes the cached catalog by value: a same-id change in
+        // hidden / role / default preview must compare unequal so the
+        // observer fires and reconciliation runs.
+        let base = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        #expect([base] == [makeCatalogSpecialist(id: "implementor", name: "Implementor")])
+        #expect([base] != [makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true)])
+        #expect([base] != [makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")])
+        #expect([base] != [makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie")])
+    }
+
     @Test func preselectedSpecialistKeepsSelectionAcrossAnEmptyList() {
         // A reconnect clears the cache before reloading it: the selection
         // survives the empty interim (and nil stays nil).
@@ -347,6 +394,19 @@ struct CreateWorkspaceParamsTests {
             current: makeProvider(id: "codex"), providers: codexSignedOut)?.id == "auggie")
     }
 
+    @Test func preselectedProviderRebindsSurvivingSelectionAndEqualityTracksAuth() {
+        // Same provider ids, auth state changed: the arrays compare unequal
+        // (so the observer fires) and the kept selection carries the fresh
+        // tri-state rather than the stale DTO.
+        let cached = [makeProvider(id: "auggie", authenticated: true), makeProvider(id: "codex", authenticated: nil)]
+        let refreshed = [makeProvider(id: "auggie", authenticated: true), makeProvider(id: "codex", authenticated: true)]
+        #expect(cached.map(\.id) == refreshed.map(\.id))
+        #expect(cached != refreshed)
+        let kept = CreateWorkspaceView.preselectedProvider(current: cached[1], providers: refreshed)
+        #expect(kept == refreshed[1])
+        #expect(kept?.authenticated == true)
+    }
+
     @Test func preselectedProviderIsNilWhenNoneSelectableAndKeepsSelectionAcrossAnEmptyList() {
         let allSignedOut = [
             makeProvider(id: "auggie", authenticated: false),
@@ -357,6 +417,41 @@ struct CreateWorkspaceParamsTests {
         #expect(CreateWorkspaceView.preselectedProvider(
             current: makeProvider(id: "codex"), providers: [])?.id == "codex")
         #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: []) == nil)
+    }
+
+    // MARK: - reconciledModel (explicit model vs. the displayed catalog)
+
+    @Test func reconciledModelKeepsAndRebindsWhileStillListedForSameProvider() {
+        let refreshed = [
+            makeModel(id: "sonnet4.5", provider: "auggie"),
+            ModelInfo(id: "opus4.6", name: "opus4.6 (renamed)", provider: "auggie", isDefault: true),
+        ]
+        let kept = CreateWorkspaceView.reconciledModel(
+            current: makeModel(id: "opus4.6", provider: "auggie"), models: refreshed)
+        #expect(kept == refreshed[1])
+        #expect(kept?.name == "opus4.6 (renamed)")
+        #expect(CreateWorkspaceView.reconciledModel(current: nil, models: refreshed) == nil)
+    }
+
+    @Test func reconciledModelDropsRetiredOrClearedCatalogEntries() {
+        let current = makeModel(id: "opus4.6", provider: "auggie")
+        #expect(CreateWorkspaceView.reconciledModel(
+            current: current, models: [makeModel(id: "sonnet4.5", provider: "auggie")]) == nil)
+        // Reconnect clear / catalog not loaded yet: daemon default applies.
+        #expect(CreateWorkspaceView.reconciledModel(current: current, models: []) == nil)
+    }
+
+    @Test func reconciledModelDropsExplicitModelAcrossProviderSwitchWithSharedBareId() {
+        // Two cached provider catalogs share a bare model id. After an
+        // automatic provider switch the old explicit pick must not survive
+        // into the new provider's catalog: the daemon default applies.
+        let codexCatalog = [makeModel(id: "sonnet4.5", provider: "codex"), makeModel(id: "gpt-5", provider: "codex")]
+        let auggieCatalog = [makeModel(id: "sonnet4.5", provider: "auggie")]
+        #expect(codexCatalog.map(\.id).contains("sonnet4.5") && auggieCatalog.map(\.id).contains("sonnet4.5"))
+        let pickedOnCodex = codexCatalog[0]
+        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
+        // Staying on the same provider keeps it.
+        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
     }
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
