@@ -65,6 +65,7 @@ struct ConversationTranscriptView: View {
                 let appendedUserMessage = newCount > oldCount
                     && viewModel.filteredMessages.last?.role == .user
                 if appendedUserMessage {
+                    claimViewportForExplicitFollow()
                     userIsScrolledAway = false
                 }
                 if shouldFollowToBottom {
@@ -166,19 +167,25 @@ struct ConversationTranscriptView: View {
                 containerHeight: geometry.visibleRect.height
             )
         } action: { old, new in
+            takeOverPendingFollowIfGesture()
             if rePinAfterContainerHeightChange(
                 from: old.containerHeight, to: new.containerHeight, proxy: proxy
             ) { return }
             applyScrolledAwayEdge(geometryAway: new.isScrolledAway, proxy: proxy)
         }
-        // A gesture's last geometry edge can arrive after UIKit has cleared
-        // its deceleration flag, and the band observer above drops a flip
-        // that reverses within one layout pass (#280); the phase ending is
-        // one authoritative sample of where the gesture left the viewport.
-        // A forced follow that cut the gesture short (Go to End stopping a
-        // fling) owns the flag instead.
+        // A user-driven phase beginning takes over whatever follow is pending
+        // (see `takeOverPendingFollowIfGesture`). A gesture's last geometry
+        // edge can arrive after UIKit has cleared its deceleration flag, and
+        // the band observer above drops a flip that reverses within one
+        // layout pass (#280); the phase ending is one authoritative sample of
+        // where the gesture left the viewport. An explicit follow that cut
+        // the gesture short (Go to End stopping a fling, the tap that sent a
+        // message) owns the flag instead.
         .onScrollPhaseChange { oldPhase, newPhase, context in
             scrollState.isUserScrollPhase = newPhase.isUserDriven
+            if newPhase.isUserDriven {
+                takeOverPendingFollowIfGesture(isInteracting: true)
+            }
             guard oldPhase.isUserDriven, !newPhase.isUserDriven, !isScrollingToBottom else { return }
             let distance = ConversationTranscriptScrollPolicy.distanceToBottom(
                 contentHeight: context.geometry.contentSize.height,
@@ -344,7 +351,9 @@ struct ConversationTranscriptView: View {
     /// the bottom. The pin goes through SwiftUI's own layout, as the
     /// container re-pin does: the UIScrollView may not have laid out the new
     /// content yet when this runs. `isInteracting` defaults to the live
-    /// gesture state; a phase ending passes true for its final sample.
+    /// gesture state; a phase ending passes true for its final sample. The
+    /// takeover latch is released against the live state, so the phase
+    /// ending pinned releases it at once.
     private func applyScrolledAwayEdge(geometryAway: Bool, isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
         let isInteracting = isInteracting ?? isUserInteracting
         let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
@@ -355,6 +364,11 @@ struct ConversationTranscriptView: View {
         if next != userIsScrolledAway {
             userIsScrolledAway = next
         }
+        scrollState.forcedFollowTakenOverByGesture = ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch(
+            current: scrollState.forcedFollowTakenOverByGesture,
+            geometryAway: geometryAway,
+            isInteracting: isUserInteracting
+        )
         if ConversationTranscriptScrollPolicy.shouldRePinAfterContentGrowth(
             geometryAway: geometryAway,
             isInteracting: isInteracting,
@@ -441,7 +455,7 @@ struct ConversationTranscriptView: View {
     private var goToEndButton: some View {
         Button {
             scrollMomentumProxy.stopMomentum()
-            scrollState.isUserScrollPhase = false
+            claimViewportForExplicitFollow()
             isScrollingToBottom = true
             scrollState.goToEndRequested = true
             userIsScrolledAway = false
@@ -623,17 +637,34 @@ struct ConversationTranscriptView: View {
         scrollToBottom(proxy: proxy, forced: false)
     }
 
-    /// The user scrolling away consumes whatever follow is still pending: an
+    /// A gesture observed while a follow is pending — a user-driven scroll
+    /// phase beginning, or a geometry edge under UIKit tracking, dragging or
+    /// deceleration — takes it over there and then (see
+    /// `ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow`).
+    /// Waiting for the task to come due is not enough: the gesture's final
+    /// away edge can be dropped and its ending delivered first, and the
+    /// check would then read idle and pinned and scroll the user back.
+    private func takeOverPendingFollowIfGesture(isInteracting: Bool? = nil) {
+        guard ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
+            isInteracting: isInteracting ?? isUserInteracting,
+            isFollowing: isFollowing
+        ) else { return }
+        cancelPendingFollowOnTakeover()
+    }
+
+    /// The user taking over consumes whatever follow is still pending: an
     /// automatic one in its debounce, or a forced one in its debounce or its
     /// landing loop. Every forced follow is requested from a pinned viewport,
-    /// so the gesture that raised the flag came after the request and wins —
-    /// the request is not kept for after the gesture ends. A cancelled task
-    /// cannot drain its own flags, so they are cleared here; the execution
-    /// and landing checks on the flag cover the frame before this change
-    /// handler runs. Go to End tapped afterwards is a fresh request.
+    /// so the gesture came after the request and wins — the request is not
+    /// kept for after the gesture ends, and its takeover is latched so a
+    /// forced follow content raises meanwhile does not revive it. A cancelled
+    /// task cannot drain its own flags, so they are cleared here; the
+    /// execution and landing checks cover the frame before this runs. Go to
+    /// End tapped afterwards is a fresh request.
     private func cancelPendingFollowOnTakeover() {
         if scrollState.pendingFollowIsForced {
-            AppLog.ui.debug("[SCROLL] Forced follow cancelled: the user scrolled away")
+            AppLog.ui.debug("[SCROLL] Forced follow cancelled: the user took over")
+            scrollState.forcedFollowTakenOverByGesture = true
         }
         scrollDebounceTask?.cancel()
         scrollDebounceTask = nil
@@ -641,10 +672,23 @@ struct ConversationTranscriptView: View {
         isScrollingToBottom = false
     }
 
+    /// An explicit request — Go to End, or the user's own message — takes
+    /// the viewport back from any gesture: the takeover latch is released
+    /// and the SwiftUI phase is no longer the gesture's, so a phase ending
+    /// delivered after the request (the fling it stopped, the tap that sent
+    /// the message lifting) is not applied as the gesture's final sample and
+    /// does not take the request's follow over.
+    private func claimViewportForExplicitFollow() {
+        scrollState.forcedFollowTakenOverByGesture = false
+        scrollState.isUserScrollPhase = false
+    }
+
     /// Stamps the request time up front so deltas arriving inside the debounce
     /// window are rejected by the policy instead of restarting the debounce.
-    /// Forced follows are never preempted by automatic ones; the user
-    /// scrolling away cancels either (see `cancelPendingFollowOnTakeover`).
+    /// Forced follows are never preempted by automatic ones; a user gesture
+    /// cancels either at once (see `takeOverPendingFollowIfGesture`), and a
+    /// forced follow raised while a gesture's takeover is latched is refused
+    /// (see `ConversationTranscriptScrollPolicy.shouldHonorForcedFollow`).
     /// Automatic follows are re-validated by the policy once the debounce
     /// elapses, so a user who scrolled away meanwhile is not snapped back.
     /// A forced follow raises `isScrollingToBottom` for its whole duration
@@ -657,6 +701,12 @@ struct ConversationTranscriptView: View {
     /// the band during the debounce with no gesture is re-pinned, not left
     /// short with Go to End hidden.
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
+        if forced, !ConversationTranscriptScrollPolicy.shouldHonorForcedFollow(
+            takenOverByGesture: scrollState.forcedFollowTakenOverByGesture
+        ) {
+            AppLog.ui.debug("[SCROLL] Forced follow refused: a gesture took over the last one")
+            return
+        }
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
         if !forced && scrollState.pendingFollowIsForced { return }
         scrollDebounceTask?.cancel()

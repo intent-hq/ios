@@ -776,9 +776,10 @@ struct ConversationTranscriptScrollPolicyTests {
     /// Ordered regression: a user append raises a forced follow while pinned;
     /// during its debounce the user drags away and the gesture ends (phase
     /// final sample with the gesture → away) before the follow comes due. The
-    /// view cancels the pending follow the moment the flag rises; should the
-    /// task still reach execution or a landing poll first, the raised flag
-    /// makes it yield instead of snapping the user back. The viewport stays
+    /// view cancels the pending follow the moment the gesture is observed
+    /// (see `gestureObservedWhileForcedFollowPendingCancelsItImmediately`);
+    /// should the task still reach execution or a landing poll first, the
+    /// raised flag makes it yield instead of snapping the user back. The viewport stays
     /// away with Go to End showing, nothing re-queues the follow (the flag is
     /// not a Go to End request), and a later Go to End tap is a fresh request.
     @Test func gestureThatEndedAwayDuringForcedFollowDebounceWins() {
@@ -795,6 +796,68 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
             goToEndRequested: true))
         #expect(executeFollow(forced: true, userIsScrolledAway: false, distanceToBottom: 300))
+    }
+
+    private func takesOver(isInteracting: Bool, isFollowing: Bool) -> Bool {
+        ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
+            isInteracting: isInteracting, isFollowing: isFollowing)
+    }
+
+    private func latch(current: Bool = true, distanceToBottom: CGFloat, isInteracting: Bool) -> Bool {
+        ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch(
+            current: current,
+            geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(
+                distanceToBottom: distanceToBottom, atBottomThreshold: 50),
+            isInteracting: isInteracting
+        )
+    }
+
+    private func honorForced(takenOver: Bool) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldHonorForcedFollow(takenOverByGesture: takenOver)
+    }
+
+    /// Ordered regression: a forced follow is pending (debounce or landing
+    /// loop) when a user gesture is observed — a user-driven phase beginning,
+    /// or a geometry edge under UIKit tracking. The follow is taken over and
+    /// cancelled at that moment; the gesture then drags away, its final away
+    /// edge is dropped by the band observer, and the phase ends (its sample
+    /// arriving as "away") before the follow would have come due. Nothing is
+    /// left to execute or land, so no scroll is issued; the phase sample
+    /// raises the flag and Go to End shows. The takeover is latched, so the
+    /// thinking indicator appearing meanwhile does not revive the follow;
+    /// Go to End tapped afterwards is a fresh request that clears the latch.
+    @Test func gestureObservedWhileForcedFollowPendingCancelsItImmediately() {
+        #expect(executeFollow(forced: true, distanceToBottom: 0))
+        #expect(takesOver(isInteracting: true, isFollowing: true))
+        #expect(!takesOver(isInteracting: false, isFollowing: true))
+        #expect(!takesOver(isInteracting: true, isFollowing: false))
+        // Mid-gesture edges within the threshold keep the pin and the latch.
+        #expect(!transition(current: false, distanceToBottom: 20, isInteracting: true))
+        #expect(latch(distanceToBottom: 20, isInteracting: true))
+        // The final away edge is dropped; the phase ending is the sample.
+        #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
+        #expect(latch(distanceToBottom: 300, isInteracting: false))
+        #expect(!honorForced(takenOver: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
+            isStreaming: true, hasInitiallyScrolled: true, userIsScrolledAway: true))
+        #expect(!rePinAfterGrowth(isFollowing: false, userIsScrolledAway: true))
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            goToEndRequested: true))
+        #expect(honorForced(takenOver: false))
+        #expect(executeFollow(forced: true, distanceToBottom: 300))
+    }
+
+    /// The latch releases only once the viewport rests within the threshold
+    /// with no gesture in progress: a gesture that ends pinned, or drags back
+    /// and lifts, hands the transcript back to content-raised forced follows.
+    @Test func forcedFollowTakeoverLatchReleasesWhenTheGestureRestsPinned() {
+        #expect(latch(distanceToBottom: 300, isInteracting: true))
+        #expect(latch(distanceToBottom: 300, isInteracting: false))
+        #expect(latch(distanceToBottom: 0, isInteracting: true))
+        #expect(!latch(distanceToBottom: 0, isInteracting: false))
+        #expect(!latch(distanceToBottom: 50, isInteracting: false))
+        #expect(!latch(current: false, distanceToBottom: 300, isInteracting: true))
+        #expect(honorForced(takenOver: false))
     }
 
     /// The forced-follow gesture predicate is the same one the geometry edges

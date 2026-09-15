@@ -329,6 +329,37 @@ enum ConversationTranscriptScrollPolicy {
         )
     }
 
+    /// A user gesture observed while a follow is pending — SwiftUI reporting
+    /// a user-driven scroll phase, or a geometry edge under UIKit tracking,
+    /// dragging or deceleration — takes the follow over there and then: the
+    /// pending task (debounce or landing loop) is cancelled at the moment the
+    /// gesture is seen, not re-checked when it comes due. The gesture's final
+    /// geometry edge can be dropped (#280) and its ending delivered before
+    /// that check, which would then read idle and pinned and scroll the user
+    /// back from where the gesture left the viewport.
+    static func gestureTakesOverPendingFollow(isInteracting: Bool, isFollowing: Bool) -> Bool {
+        isInteracting && isFollowing
+    }
+
+    /// The takeover of a forced follow is latched for the rest of the gesture
+    /// and for as long as it left the viewport away, so a forced follow raised
+    /// by content meanwhile (the thinking indicator appearing) does not revive
+    /// the scroll the gesture cancelled (see `shouldHonorForcedFollow`). The
+    /// latch releases once the viewport rests within `atBottomThreshold` with
+    /// no gesture in progress — the gesture ended pinned or dragged back — and
+    /// is cleared outright by an explicit request: Go to End, or the user's
+    /// own message.
+    static func forcedFollowTakeoverLatch(current: Bool, geometryAway: Bool, isInteracting: Bool) -> Bool {
+        current && (geometryAway || isInteracting)
+    }
+
+    /// Forced follows are honored unless a gesture's takeover is latched; the
+    /// explicit requests clear the latch before asking, so only content-raised
+    /// forced follows are refused.
+    static func shouldHonorForcedFollow(takenOverByGesture: Bool) -> Bool {
+        !takenOverByGesture
+    }
+
     /// Everything a landing or re-pin decision reads from the live scroll
     /// view. `containerHeight` is the full bounds; the adjusted insets are
     /// part of it because the keyboard or safe area can change them between

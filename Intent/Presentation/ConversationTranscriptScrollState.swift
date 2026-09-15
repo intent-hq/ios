@@ -13,8 +13,15 @@ final class ConversationTranscriptScrollState {
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
-    /// geometry edge decides whether it came from a gesture.
+    /// geometry edge decides whether it came from a gesture. Cleared by an
+    /// explicit follow request (Go to End, the user's own message), which
+    /// takes the viewport from the gesture: the phase ending that follows is
+    /// then the request's, not the gesture's final sample.
     @ObservationIgnored var isUserScrollPhase = false
+    /// Latched when a gesture takes over a pending forced follow; while set,
+    /// content-raised forced follows are refused (see
+    /// `ConversationTranscriptScrollPolicy.forcedFollowTakeoverLatch`).
+    @ObservationIgnored var forcedFollowTakenOverByGesture = false
     var hasInitiallyScrolled = false
     var initialScrollScheduled = false
     /// True while the scheduled entry scroll waits for the finder to resolve.
@@ -28,6 +35,6 @@ final class ConversationTranscriptScrollState {
     /// Uptime of the last follow-to-bottom request; rate-limits streaming follows.
     var lastFollowToBottomAt: TimeInterval?
     /// True while `debounceTask` carries a forced follow, which automatic
-    /// follows and scroll-away must not cancel.
+    /// follows must not preempt; a user gesture cancels either.
     var pendingFollowIsForced = false
 }
