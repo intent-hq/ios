@@ -28,11 +28,13 @@ struct CreateWorkspaceView: View {
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
     @State private var branchSearchTask: Task<Void, Never>?
-    /// Set once this sheet's own options load — the specialist/provider
-    /// lists and the selected provider's first model catalog — has settled,
-    /// so a cold load that failed shows the empty state rather than loading
-    /// forever, and Create stays disabled until the catalog is resolved.
-    @State private var hasSettledOptionsLoad = false
+    /// Which of this sheet's own loads returned (options; models per
+    /// provider), so a cold load that failed shows the empty state or falls
+    /// back to the daemon default instead of loading forever, while Create
+    /// stays disabled until the selected provider's catalog is resolved.
+    /// Published only for loads that returned in the store generation they
+    /// started in; a reconnect clear resets every marker.
+    @State private var settledLoads = SpecialistPickerView.SettledLoads()
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var selectedProvider: ProviderInfo?
     @State private var selectedModel: ModelInfo?
@@ -71,16 +73,18 @@ struct CreateWorkspaceView: View {
     private var isLoadingOptions: Bool {
         Self.showsOptionsLoading(
             storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
-            settled: hasSettledOptionsLoad)
+            settled: settledLoads.options)
     }
-    /// True while the selected provider's first catalog load is unresolved:
-    /// Create stays disabled (as before the cache) so a workspace is never
-    /// created before the provider's model choices are known. A warm catalog
-    /// is instant and never gates.
+    /// True while the selected provider's catalog is uncached and this
+    /// sheet's load for that provider has not settled: Create stays disabled
+    /// (as before the cache) so a workspace is never created before the
+    /// provider's model choices are known — per provider, so switching to an
+    /// uncached provider re-arms the gate. A warm catalog is instant and
+    /// never gates.
     private var isLoadingSelectedModelCatalog: Bool {
         Self.showsModelCatalogLoading(
             catalogCached: selectedProvider.map { optionsStore.models(for: $0.id) != nil },
-            settled: hasSettledOptionsLoad)
+            settled: selectedProvider.map { settledLoads.modelProviders.contains($0.id) } ?? false)
     }
     /// The branch step's state for the selected repo, owned by the store
     /// (authoritative listing, cached-first paint, cold-load error), never a
@@ -170,6 +174,17 @@ struct CreateWorkspaceView: View {
                 Task { await fetchBranches() }
             }
         }
+        // A reconnect hard-clears the options store too: every settled
+        // marker belonged to the dropped cache, so drop them and, while the
+        // create step is open, reload (joining the store's own cold reload)
+        // and re-warm the selected provider's catalog so Create gates on the
+        // fresh load rather than staying enabled on a pre-reconnect one.
+        .onChange(of: optionsStore.loadGeneration) { _, _ in
+            settledLoads.reset()
+            if navigationPath.contains(.create) {
+                Task { await fetchCreationOptions() }
+            }
+        }
     }
 
     private func reconcileBranchSelection(with listing: GitHubBranchListing) {
@@ -244,15 +259,19 @@ struct CreateWorkspaceView: View {
 
     /// Cold (nothing cached): awaits the specialist/provider load while
     /// `isLoadingOptions` shows, then the selected provider's model catalog
-    /// with Create disabled; the load settles only once both are resolved
-    /// (success or failure). Cached: the pickers already render the cached
-    /// lists — the store revalidates in the background and neither loading
-    /// state shows.
+    /// with Create disabled; each settles on its own (success or failure).
+    /// Cached: the pickers already render the cached lists — the store
+    /// revalidates in the background and neither loading state shows. A load
+    /// superseded by a reconnect clear publishes nothing: the
+    /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func fetchCreationOptions() async {
+        let generation = optionsStore.loadGeneration
         await optionsStore.loadIfNeeded()
+        guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
+            return
+        }
         reconcileSpecialistSelection()
         await reconcileProviderSelection()
-        hasSettledOptionsLoad = true
     }
 
     /// Defaults the specialist selection (orchestrator, else first) and
@@ -277,16 +296,24 @@ struct CreateWorkspaceView: View {
             return
         }
         if provider.id != previousProviderId { selectedModel = nil }
-        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        await loadModels(for: provider)
     }
 
     private func selectProvider(_ provider: ProviderInfo) {
         guard provider.authenticated != false, provider.id != selectedProvider?.id else { return }
         selectedProvider = provider
         selectedModel = nil
-        Task {
-            await optionsStore.loadModelsIfNeeded(providerId: provider.id)
-        }
+        Task { await loadModels(for: provider) }
+    }
+
+    /// Loads the provider's catalog (instant when cached) and settles its
+    /// Create gate only when the load returned in the generation it started
+    /// in — a completion from before a reconnect clear settles nothing.
+    private func loadModels(for provider: ProviderInfo) async {
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadModelsIfNeeded(providerId: provider.id)
+        settledLoads.settleModels(
+            for: provider.id, startedAt: generation, current: optionsStore.loadGeneration)
     }
 
     /// The picker's specialist list: the modal-pickable set (no hidden or
@@ -332,10 +359,11 @@ struct CreateWorkspaceView: View {
     }
 
     /// Create's model-catalog gate: on while the selected provider's catalog
-    /// is not cached (`catalogCached == false`) and this sheet's first load
-    /// has not settled; never for a cached catalog (instant path), no
-    /// selected provider (nothing to wait on), or after the load settled —
-    /// a failed catalog load then falls back to the daemon default.
+    /// is not cached (`catalogCached == false`) and this sheet's load for
+    /// that provider has not settled; never for a cached catalog (instant
+    /// path), no selected provider (nothing to wait on), or after that
+    /// provider's load settled — a failed catalog load then falls back to
+    /// the daemon default.
     static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
         catalogCached == false && !settled
     }
