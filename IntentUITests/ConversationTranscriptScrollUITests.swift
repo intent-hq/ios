@@ -80,6 +80,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // Walks of the visible band before an empty band is reported; rows
         // (de)realizing between two queries can empty a single walk.
         static let visibleBandAttempts = 3
+        // The transcript scroll view's accessibility value under --demo-data
+        // (ConversationTranscriptScrollPolicy.forcedFollowLandingSummary):
+        // the last forced follow's outcome. Only `landed` means the live
+        // geometry confirmed the end was reached; `giveUp` leaves the pin
+        // with the viewport wherever the retries left it.
+        static let landedFollowValuePrefix = "lastForcedFollow=landed"
+        // Outlasts the follow's landing timeout and the debounce before it.
+        static let landingReportTimeout: TimeInterval = 5
     }
 
     /// The conversation's elements once the transcript has settled at the bottom.
@@ -279,6 +287,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "sent prompt row left the screen after the transcript settled — "
                 + restingState(of: sentRow, named: "sent prompt row", in: opened))
         XCTAssertFalse(goToEnd.exists, "Go to End is visible after tapping the suggested prompt")
+        assertLastForcedFollowLanded(in: opened, context: "after tapping the suggested prompt")
     }
 
     /// Entering the conversation must land the transcript at the bottom
@@ -365,6 +374,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 isInside(endRow, transcript),
                 "\(context): the transcript is short of the end after the quiet window — "
                     + restingState(of: endRow, named: "first suggested prompt", in: opened))
+            assertLastForcedFollowLanded(in: opened, context: context)
             app.terminate()
         }
     }
@@ -424,6 +434,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             isInside(endRow, transcript),
             "one tap from the top stopped short of the end: the prompt rows under the last message are not "
                 + "on screen — " + restingState(of: endRow, named: "first suggested prompt", in: opened))
+        assertLastForcedFollowLanded(in: opened, context: "after one tap on Go to End from the top")
     }
 
     // MARK: - Helpers
@@ -540,6 +551,22 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             broke,
             "\(context): transcript is not resting at the bottom after settling — "
                 + restingState(of: lastRow, named: rowName, in: opened))
+    }
+
+    /// The transcript's last forced follow must have ended `landed`: the
+    /// geometry checks cannot tell a follow that reached the end from one
+    /// that gave up a few points short with the pin kept, so the outcome is
+    /// read from the accessibility value the app exposes under demo data.
+    @MainActor
+    private func assertLastForcedFollowLanded(in opened: OpenConversation, context: String) {
+        let transcript = opened.transcript
+        let landed = waitUntil(timeout: Fixture.landingReportTimeout) {
+            (transcript.value as? String)?.hasPrefix(Fixture.landedFollowValuePrefix) == true
+        }
+        XCTAssertTrue(
+            landed,
+            "\(context): the last forced follow did not report landed — transcript value "
+                + "\(String(describing: transcript.value))")
     }
 
     /// True when the element's whole frame lies inside the container's frame

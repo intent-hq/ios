@@ -994,6 +994,19 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(rounds * roundMilliseconds < Double(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds))
     }
 
+    /// The accessibility value the UI tests read under demo data names the
+    /// outcome and the corrections spent, and reads pending in flight.
+    @Test func forcedFollowLandingSummaryNamesOutcomeAndCorrections() {
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(outcome: nil, corrections: 0)
+            == "lastForcedFollow=pending")
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(outcome: .landed, corrections: 1)
+            == "lastForcedFollow=landed corrections=1")
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(outcome: .giveUp, corrections: 3)
+            == "lastForcedFollow=giveUp corrections=3")
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(outcome: .yieldToUser, corrections: 0)
+            == "lastForcedFollow=yieldToUser corrections=0")
+    }
+
     @Test func followLandingYieldsToTheUserAndToTheTimeout() {
         #expect(landing(geometry(offsetY: 0), isInteracting: true) == .yieldToUser)
         #expect(landing(geometry(offsetY: 300), isInteracting: true) == .yieldToUser)

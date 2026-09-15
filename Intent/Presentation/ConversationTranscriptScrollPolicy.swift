@@ -453,4 +453,25 @@ enum ConversationTranscriptScrollPolicy {
         }
         return .landed
     }
+
+    /// The transcript's accessibility value under `--demo-data`: the last
+    /// forced follow's outcome and the corrections it spent, e.g.
+    /// `lastForcedFollow=landed corrections=1`, or
+    /// `lastForcedFollow=pending` while one is in flight (or before the
+    /// first). Lets the XCUITests assert the follow landed rather than gave
+    /// up with the pin kept, which the visible geometry alone cannot tell
+    /// apart within the at-bottom band (#304, #305).
+    static func forcedFollowLandingSummary(outcome: FollowLandingStep?, corrections: Int) -> String {
+        guard let outcome else { return "lastForcedFollow=pending" }
+        let name: String
+        switch outcome {
+        case .landed: name = "landed"
+        case .giveUp: name = "giveUp"
+        case .yieldToUser: name = "yieldToUser"
+        case .settling: name = "settling"
+        case .scrollAgain: name = "scrollAgain"
+        case .clampPastEnd: name = "clampPastEnd"
+        }
+        return "lastForcedFollow=\(name) corrections=\(corrections)"
+    }
 }
