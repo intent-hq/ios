@@ -24,7 +24,9 @@ crashed suite, or mutation checks use the subset forms — `scripts/xcodebuild.s
 test-ios-unit` (skips the `IntentUITests` bundle) and
 `ONLY_TESTING='IntentTests/SomeTests ...' scripts/xcodebuild.sh test-without-building`
 (one `-only-testing:` per whitespace-separated `Target[/Class[/method]]`; also honoured
-by `test-ios` and `test-ios-unit`). iOS builds link the gitignored prebuilt
+by `test-ios` and `test-ios-unit`). `gh workflow run ci.yml --repo intent-hq/ios --ref
+<branch> -f only_testing='IntentTests/SomeTests'` runs the same filter in CI as a
+non-gating `iOS Filtered Tests` job. iOS builds link the gitignored prebuilt
 `TailcatKit/build/TailcatKit.xcframework`: `scripts/xcodebuild.sh` builds it via
 `TailcatKit/build_xcframework.sh` when Go is on PATH and otherwise exits naming that
 script; `TAILCATKIT_AUTOBUILD=0` disables the auto-build.
