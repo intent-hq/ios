@@ -298,12 +298,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// A cold entry — fresh launch, first open of the long conversation —
     /// must show the last message inside the transcript at the very first
-    /// settled sample, over a non-empty visible band: no blank transcript
-    /// while the LazyVStack lays out (intent-hq/ios#304). Unlike
-    /// `assertRestsAtBottom`, the checks run at the first sample where the
-    /// content holds still rather than after a grace period in which a late
-    /// re-pin could mask the symptom, and Go to End must stay absent over the
-    /// quiet window that follows.
+    /// settled sample, over a non-empty visible band, and must have reached
+    /// the very end: the prompt rows under the last message — the
+    /// LazyVStack's final content rows — are realized and on screen too. A
+    /// transcript that rests on the last message with those rows never laid
+    /// out is short of the end with Go to End hidden (the state the
+    /// coordinator-shaped fixture reproduces on CI; intent-hq/ios#304).
+    /// Unlike `assertRestsAtBottom`, the checks run at the first sample where
+    /// the content holds still rather than after a grace period in which a
+    /// late re-pin could mask the symptom, and Go to End must stay absent
+    /// over the quiet window that follows.
     @MainActor
     func testFirstOpenOfLongConversationShowsLastMessageWithNoBlankBand() throws {
         let app = launchDemoApp()
@@ -311,6 +315,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
+        let endRow = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
 
         // 1. First settled sample: the last row exists and its frame holds
         //    still across two consecutive polls. An unrealized last row (the
@@ -332,9 +337,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             isInside(lastMessage, transcript),
             "cold entry: at the first settled sample the last message is not inside the transcript — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            isInside(endRow, transcript),
+            "cold entry: at the first settled sample the transcript is short of the end — the prompt rows under "
+                + "the last message are not on screen — "
+                + restingState(of: endRow, named: "first suggested prompt", in: opened))
 
         // 2. Go to End never appears over the quiet window, and the last
-        //    message is still on screen at the end of it.
+        //    message and the end row are still on screen at the end of it.
         XCTAssertFalse(
             goToEnd.waitForExistence(timeout: Fixture.quietWindow),
             "cold entry: Go to End appeared after the transcript settled — "
@@ -343,12 +353,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             waitUntilVisible(lastMessage, in: transcript, timeout: Fixture.settleWindow),
             "cold entry: the last message left the screen after the quiet window — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            isInside(endRow, transcript),
+            "cold entry: the transcript is short of the end after the quiet window — "
+                + restingState(of: endRow, named: "first suggested prompt", in: opened))
     }
 
     /// From the very top of the long transcript a single tap on Go to End
-    /// must land at the end: the last message comes on screen, the button
-    /// disappears and stays gone over the quiet window — no second tap
-    /// (intent-hq/ios#305).
+    /// must land at the very end: the last message and the prompt rows under
+    /// it come on screen, the button disappears and stays gone over the quiet
+    /// window — no second tap (intent-hq/ios#305).
     @MainActor
     func testGoToEndFromTopOfLongTranscriptLandsAtEndInOneTap() throws {
         let app = launchDemoApp()
@@ -356,6 +370,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
+        let endRow = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
         assertRestsAtBottom(
             lastRow: lastMessage, named: "last assistant paragraph",
             in: opened, context: "before scrolling to the top")
@@ -395,6 +410,10 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             isInside(lastMessage, transcript),
             "the last message is not inside the transcript after one tap from the top — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            isInside(endRow, transcript),
+            "one tap from the top stopped short of the end: the prompt rows under the last message are not "
+                + "on screen — " + restingState(of: endRow, named: "first suggested prompt", in: opened))
     }
 
     // MARK: - Helpers
