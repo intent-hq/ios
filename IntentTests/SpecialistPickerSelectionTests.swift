@@ -1,9 +1,13 @@
+import Foundation
 import Testing
 @testable import Intent
 
-/// Tests for the SpecialistPickerView step-2 selection helpers:
-/// provider selection/fallback, default model resolution, and the
-/// provider/model params sent on agent.create.
+/// Tests for the SpecialistPickerView selection helpers: specialist
+/// reconciliation against the cached catalog, the loading states derived
+/// from `CreationOptionsStore` (cached and cold paths), and the
+/// provider/model params sent on agent.create. Provider defaulting and
+/// model reconciliation reuse `CreateWorkspaceView`'s helpers (covered in
+/// `CreateWorkspaceParamsTests`).
 struct SpecialistPickerSelectionTests {
     private func makeSpecialist(resolvedModel: String? = nil, resolvedProvider: String? = nil) -> SpecialistInfo {
         SpecialistInfo(
@@ -12,19 +16,17 @@ struct SpecialistPickerSelectionTests {
         )
     }
 
+    private func makeCatalogSpecialist(
+        id: String, name: String, hidden: Bool = false, role: String? = nil
+    ) -> SpecialistInfo {
+        SpecialistInfo(id: id, name: name, description: "", hidden: hidden, role: role)
+    }
+
     private func makeModel(_ id: String, provider: String = "auggie", isDefault: Bool = false) -> ModelInfo {
         ModelInfo(id: id, name: id, provider: provider, isDefault: isDefault)
     }
 
-    // MARK: - resolveProviderSelection
-
-    @Test func defaultsToAuggieWhenSelectable() {
-        let providers = [
-            ProviderInfo(id: "claude-code", authenticated: true),
-            ProviderInfo(id: "auggie", authenticated: true),
-        ]
-        #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers)?.id == "auggie")
-    }
+    // MARK: - isSelectable
 
     @Test func unauthenticatedProvidersAreNotSelectable() {
         #expect(SpecialistPickerView.isSelectable(ProviderInfo(id: "auggie", authenticated: true)))
@@ -32,40 +34,203 @@ struct SpecialistPickerSelectionTests {
         #expect(!SpecialistPickerView.isSelectable(ProviderInfo(id: "codex", authenticated: false)))
     }
 
-    @Test func fallsBackToFirstSelectableWhenAuggieSignedOut() {
-        let providers = [
-            ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "claude-code", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil),
+    // MARK: - reconciledSpecialist (cached catalog → New Agent selection)
+
+    @Test func reconciledSpecialistDefaultsToOrchestratorElseFirstInDaemonOrder() {
+        let withOrchestrator = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
         ]
-        #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers)?.id == "grok")
+        #expect(SpecialistPickerView.reconciledSpecialist(
+            current: nil, catalog: withOrchestrator)?.id == "coordinator")
+        // No orchestrator: the first pickable specialist as the daemon lists
+        // it, not by name (the picker shows daemon order).
+        let plain = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: plain)?.id == "verifier")
     }
 
-    @Test func keepsCurrentSelectionWhenStillSelectable() {
-        let providers = [
-            ProviderInfo(id: "auggie", authenticated: true),
-            ProviderInfo(id: "claude-code", authenticated: true),
+    @Test func reconciledSpecialistSkipsHiddenAndInternalDefaults() {
+        let catalog = [
+            makeCatalogSpecialist(id: "secret", name: "Secret", hidden: true),
+            makeCatalogSpecialist(id: "helper", name: "Helper", role: "internal"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
         ]
-        let current = ProviderInfo(id: "claude-code", authenticated: true)
-        #expect(SpecialistPickerView.resolveProviderSelection(current: current, providers: providers)?.id == "claude-code")
+        #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: catalog)?.id == "implementor")
     }
 
-    @Test func fallsBackWhenCurrentSelectionBecomesDisabled() {
-        let providers = [
-            ProviderInfo(id: "auggie", authenticated: true),
-            ProviderInfo(id: "claude-code", authenticated: false),
+    @Test func reconciledSpecialistRebindsSurvivingSelectionToFreshMetadata() {
+        let current = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        var fresh = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        fresh.resolvedModel = "sonnet4.5"
+        let catalog = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            fresh,
         ]
-        let current = ProviderInfo(id: "claude-code", authenticated: true)
-        #expect(SpecialistPickerView.resolveProviderSelection(current: current, providers: providers)?.id == "auggie")
+        let reconciled = SpecialistPickerView.reconciledSpecialist(current: current, catalog: catalog)
+        #expect(reconciled?.id == "implementor")
+        #expect(reconciled?.resolvedModel == "sonnet4.5")
     }
 
-    @Test func returnsNilWhenNoProviderSelectable() {
-        let providers = [
-            ProviderInfo(id: "auggie", authenticated: false),
-            ProviderInfo(id: "codex", authenticated: false),
+    @Test func reconciledSpecialistRedefaultsWhenSelectionGoneOrHidden() {
+        let current = makeCatalogSpecialist(id: "verifier", name: "Verifier")
+        let gone = [
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
         ]
-        #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: providers) == nil)
-        #expect(SpecialistPickerView.resolveProviderSelection(current: nil, providers: []) == nil)
+        #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: gone)?.id == "coordinator")
+        // Same ids, but the selection turned hidden under a refresh: a
+        // hidden id must never be submitted.
+        let hidden = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier", hidden: true),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: hidden)?.id == "implementor")
+    }
+
+    @Test func reconciledSpecialistClearsWhenNothingPickableAndKeepsSelectionAcrossEmptyCatalog() {
+        let current = makeCatalogSpecialist(id: "verifier", name: "Verifier")
+        let nonePickable = [makeCatalogSpecialist(id: "verifier", name: "Verifier", hidden: true)]
+        #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: nonePickable) == nil)
+        // A reconnect clear (or cold load) empties the catalog: the
+        // selection survives until the reload answers.
+        #expect(SpecialistPickerView.reconciledSpecialist(current: current, catalog: [])?.id == "verifier")
+        #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: []) == nil)
+    }
+
+    // MARK: - showsModelsLoading (cached catalog never spins; failed cold load settles)
+
+    @Test func showsModelsLoadingOnlyWhileCatalogUncachedAndUnsettled() {
+        #expect(SpecialistPickerView.showsModelsLoading(catalog: nil, settled: false))
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: nil, settled: true))
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: [], settled: false))
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: [makeModel("sonnet4.5")], settled: false))
+    }
+
+    // MARK: - Loading states against the session store (cached vs. cold path)
+
+    private func configureStoreResponses(_ fake: FakeConnectionManager) {
+        fake.responseMap["specialist.list"] = ["specialists": [
+            ["id": "implementor", "name": "Implementor", "description": "d"],
+            ["id": "coordinator", "name": "Coordinator", "description": "d", "role": "orchestrator"],
+        ]]
+        fake.responseMap["host.providerAuthStatus"] = ["providers": [
+            ["id": "auggie", "authenticated": true],
+            ["id": "claude-code", "authenticated": false],
+        ]]
+        fake.responseMap["models.list"] = ["models": [
+            ["id": "sonnet4.5", "name": "sonnet4.5", "provider": "auggie", "isDefault": true],
+        ]]
+    }
+
+    @MainActor
+    @Test func cachedStoreRendersSpecialistsProvidersAndModelsWithoutLoading() async {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+        // A previous sheet (or the New Workspace flow) warmed the cache.
+        await store.loadIfNeeded()
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        fake.clearRequestLog()
+
+        // A reopened sheet before its own load settles: no spinner on either
+        // step, and the selections resolve synchronously from the cache.
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: store.isLoading, storeHasLoaded: store.hasLoaded, settled: false))
+        #expect(SpecialistPickerView.reconciledSpecialist(
+            current: nil, catalog: store.specialists)?.id == "coordinator")
+        let provider = CreateWorkspaceView.preselectedProvider(current: nil, providers: store.providers)
+        #expect(provider?.id == "auggie")
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: false))
+        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
+        #expect(!SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: true, isCreating: false, isLoadingProviders: false,
+            isLoadingModels: false, providers: store.providers))
+        // Nothing was fetched to render the cached lists.
+        #expect(fake.requestLog.isEmpty)
+    }
+
+    @MainActor
+    @Test func coldStoreShowsLoadingUntilSettledThenReconciles() async {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+
+        // First open in the session: nothing cached, both steps spin and
+        // Create stays disabled.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: store.isLoading, storeHasLoaded: store.hasLoaded, settled: false))
+        #expect(SpecialistPickerView.reconciledSpecialist(current: nil, catalog: store.specialists) == nil)
+        #expect(SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: false))
+        #expect(SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: false, isCreating: false, isLoadingProviders: true,
+            isLoadingModels: true, providers: store.providers))
+
+        await store.loadIfNeeded()
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: store.isLoading, storeHasLoaded: store.hasLoaded, settled: true))
+        #expect(SpecialistPickerView.reconciledSpecialist(
+            current: nil, catalog: store.specialists)?.id == "coordinator")
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: true))
+        #expect(fake.paramsForMethod("specialist.list").count == 1)
+        #expect(fake.paramsForMethod("models.list").count == 1)
+    }
+
+    @MainActor
+    @Test func failedColdModelLoadSettlesToDaemonDefaultInsteadOfSpinning() async {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        fake.errorMap["models.list"] = URLError(.notConnectedToInternet)
+        let store = CreationOptionsStore(connectionManager: fake)
+        await store.loadIfNeeded()
+
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        // The catalog stays uncached, but the sheet's load settled: the
+        // Model section shows the daemon-default row and Create is enabled
+        // rather than wedged behind "Loading models...".
+        #expect(store.models(for: "auggie") == nil)
+        #expect(!SpecialistPickerView.showsModelsLoading(catalog: store.models(for: "auggie"), settled: true))
+        #expect(!SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: true, isCreating: false, isLoadingProviders: false,
+            isLoadingModels: false, providers: store.providers))
+    }
+
+    @MainActor
+    @Test func olderProviderResponseNeverPresentsAsNewerSelectionsCatalog() async throws {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+        await store.loadIfNeeded()
+
+        // The user picks grok (slow), then auggie (fast): the picker derives
+        // `models` from the selected provider's cache slot, so grok's late
+        // response can only land under "grok" and never as auggie's list.
+        fake.pendingMethods = ["models.list"]
+        let grokLoad = Task { await store.loadModelsIfNeeded(providerId: "grok") }
+        for _ in 0..<200 where fake.paramsForMethod("models.list").isEmpty {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(fake.paramsForMethod("models.list").count == 1)
+        fake.pendingMethods = []
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
+        #expect(store.models(for: "grok") == nil)
+
+        fake.resolvePending("models.list", with: ["models": [
+            ["id": "grok-4", "name": "grok-4", "provider": "grok"],
+        ]])
+        await grokLoad.value
+
+        let auggieModels = store.models(for: "auggie") ?? []
+        #expect(auggieModels.map(\.id) == ["sonnet4.5"])
+        #expect(store.models(for: "grok")?.map(\.id) == ["grok-4"])
+        // An explicit grok pick does not survive the switch to auggie even
+        // if a bare id were shared: reconciliation matches id and provider.
+        let stalePick = makeModel("grok-4", provider: "grok")
+        #expect(CreateWorkspaceView.reconciledModel(current: stalePick, models: auggieModels) == nil)
     }
 
     // MARK: - noneSelectable (desktop-setup guidance state, monorepo#985)
@@ -207,66 +372,5 @@ struct SpecialistPickerSelectionTests {
         let selection = SpecialistPickerView.buildCreateAgentSelection(provider: nil, model: nil)
         #expect(selection.provider == nil)
         #expect(selection.model == nil)
-    }
-
-    // MARK: - modelFetchOutcome (stale-response guard + loading reset)
-
-    @Test func modelFetchOutcomeAppliesCurrentProviderResults() throws {
-        // A fresh catalog resets the selection to the daemon-default row (nil).
-        let fetched = [makeModel("sonnet4.5", isDefault: true), makeModel("opus4.7")]
-        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: "auggie",
-            selectedProviderId: "auggie",
-            requestGeneration: 1,
-            latestGeneration: 1
-        ))
-        #expect(outcome.models?.map(\.id) == ["sonnet4.5", "opus4.7"])
-        #expect(outcome.selectedModel == nil)
-        #expect(!outcome.isLoadingModels)
-    }
-
-    @Test func modelFetchOutcomeIgnoresSupersededFetchEntirely() {
-        // Regression: a late response from an older fetch must be ignored
-        // entirely while a newer fetch is still in flight — it must not
-        // clear isLoadingModels (or the previous provider's catalog could
-        // briefly present as the current provider's and allow a mismatched
-        // (provider, model) pair on create).
-        let outcome = SpecialistPickerView.modelFetchOutcome(
-            fetched: [makeModel("grok-4", provider: "grok")],
-            requestedProviderId: "grok",
-            selectedProviderId: "grok",
-            requestGeneration: 1,
-            latestGeneration: 2
-        )
-        #expect(outcome == nil)
-    }
-
-    @Test func modelFetchOutcomeDropsStaleProviderResults() throws {
-        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
-            fetched: [makeModel("grok-4", provider: "grok")],
-            requestedProviderId: "grok",
-            selectedProviderId: "auggie",
-            requestGeneration: 2,
-            latestGeneration: 2
-        ))
-        #expect(outcome.models == nil)
-        #expect(outcome.selectedModel == nil)
-        #expect(!outcome.isLoadingModels)
-    }
-
-    @Test func modelFetchOutcomeClearsLoadingWhenProviderDeselected() throws {
-        // Regression: a provider refresh can resolve the selection to nil while
-        // a fetch is in flight; the loading flag must still clear so the
-        // Create button doesn't wedge disabled.
-        let outcome = try #require(SpecialistPickerView.modelFetchOutcome(
-            fetched: [makeModel("sonnet4.5")],
-            requestedProviderId: "auggie",
-            selectedProviderId: nil,
-            requestGeneration: 1,
-            latestGeneration: 1
-        ))
-        #expect(outcome.models == nil)
-        #expect(!outcome.isLoadingModels)
     }
 }

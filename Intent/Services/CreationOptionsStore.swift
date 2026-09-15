@@ -34,7 +34,9 @@ import Observation
     /// Bumped by `invalidate()`: a load captures it on start and every
     /// write after an await is dropped once it no longer matches, so a
     /// completion from before an invalidation cannot repopulate the cache.
-    @ObservationIgnored private var loadGeneration = 0
+    /// Observable so an open picker can reload — and re-warm its selected
+    /// provider's catalog — after the reconnect clear.
+    private(set) var loadGeneration = 0
     /// True from the first `loadIfNeeded()` until `invalidate()`, whether
     /// that load is in flight, succeeded or failed — a reconnect re-warms
     /// only a cache the picker has asked for.

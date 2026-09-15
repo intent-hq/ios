@@ -17,30 +17,30 @@ extension SpecialistPickerView {
         !hasSpecialist || isCreating || isLoadingProviders || isLoadingModels || providers.noneSelectable
     }
 
-    /// Keeps the current selection when it is still selectable, otherwise falls
-    /// back to auggie if selectable, else the first selectable provider.
-    static func resolveProviderSelection(current: ProviderInfo?, providers: [ProviderInfo]) -> ProviderInfo? {
-        let selectable = providers.filter { isSelectable($0) }
-        if let current, let updated = selectable.first(where: { $0.id == current.id }) {
-            return updated
+    /// Keeps the selection while `current`'s id is still pickable in the
+    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
+    /// metadata is what the picker shows; otherwise the resolved
+    /// orchestrator (PROTOCOL §5.11), else the first pickable specialist in
+    /// daemon order, else nil when the catalog lists nothing pickable (a
+    /// hidden id must never be submitted). An empty catalog (cold load or
+    /// reconnect clear) keeps `current` so the selection survives the reload.
+    static func reconciledSpecialist(
+        current: SpecialistInfo?, catalog: [SpecialistInfo]
+    ) -> SpecialistInfo? {
+        guard !catalog.isEmpty else { return current }
+        let pickable = catalog.modalPickable
+        if let current, let fresh = pickable.first(where: { $0.id == current.id }) {
+            return fresh
         }
-        return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
+        return pickable.orchestrator ?? pickable.first
     }
 
-    /// Returns nil for a superseded fetch. A current fetch only applies models
-    /// when its requested provider is still selected.
-    static func modelFetchOutcome(
-        fetched: [ModelInfo],
-        requestedProviderId: String,
-        selectedProviderId: String?,
-        requestGeneration: Int,
-        latestGeneration: Int
-    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool)? {
-        guard requestGeneration == latestGeneration else { return nil }
-        guard selectedProviderId == requestedProviderId else {
-            return (nil, nil, false)
-        }
-        return (fetched, nil, false)
+    /// The Model section's loading state: shown while the selected
+    /// provider's catalog is not cached and this sheet's load for it has not
+    /// settled; never for a cached catalog (revalidation is silent), and not
+    /// after a settled load that failed (the daemon-default row instead).
+    static func showsModelsLoading(catalog: [ModelInfo]?, settled: Bool) -> Bool {
+        catalog == nil && !settled
     }
 
     /// Builds the provider/model params for `agent.create`; auggie is omitted

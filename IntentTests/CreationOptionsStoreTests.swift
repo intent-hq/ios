@@ -237,6 +237,18 @@ struct CreationOptionsStoreTests {
         #expect(store.isLoading == false)
     }
 
+    @Test func invalidateBumpsObservableLoadGeneration() async {
+        // An open picker observes `loadGeneration` to reload after the
+        // reconnect clear; a plain load must not bump it.
+        let (store, _) = await makeLoadedStore()
+        let generation = store.loadGeneration
+        await store.loadIfNeeded()
+        #expect(store.loadGeneration == generation)
+
+        store.invalidate()
+        #expect(store.loadGeneration == generation + 1)
+    }
+
     @Test func loadAfterInvalidateRunsCold() async throws {
         let (store, fake) = await makeLoadedStore()
         store.invalidate()
