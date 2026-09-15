@@ -318,17 +318,45 @@ struct GitHubRepoStoreTests {
 
     @Test func concurrentColdLoadsShareOneFlight() async throws {
         let fake = FakeConnectionManager()
-        fake.responseMap["github.authStatus"] = ["isConfigured": true]
         fake.responseMap["repo.list"] = ["repos": []]
         fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict()]]
+        // Hold the flight's first read so it cannot complete before both
+        // callers have entered loadIfNeeded(), whichever order they start
+        // in. Without the gate, a flight that finishes before the second
+        // caller runs leaves it on the cached path (a silent refresh), which
+        // is a second set of reads rather than a shared flight (ios#308).
+        fake.pendingMethods = ["github.authStatus"]
         let store = GitHubRepoStore(connectionManager: fake)
 
-        async let first: Void = store.loadIfNeeded()
-        async let second: Void = store.loadIfNeeded()
-        _ = await (first, second)
+        // Each caller checks in immediately before entering loadIfNeeded().
+        // It then runs on the main actor without suspending until it awaits
+        // the shared flight, so once both check-ins have been received both
+        // callers are attached to the flight and the gate can be released.
+        let (checkIns, checkIn) = AsyncStream<Void>.makeStream()
+        let first = Task { checkIn.yield(); await store.loadIfNeeded() }
+        let second = Task { checkIn.yield(); await store.loadIfNeeded() }
+        var pendingCheckIns = checkIns.makeAsyncIterator()
+        _ = await pendingCheckIns.next()
+        _ = await pendingCheckIns.next()
+        try await waitFor("cold read") { !fake.paramsForMethod("github.authStatus").isEmpty }
+        let coldReads = fake.paramsForMethod("github.authStatus").count
+        #expect(coldReads == 1)
+        #expect(store.isLoading)
+        #expect(store.hasLoaded == false)
+
+        // Release every held read, not just one: if a regression ever starts
+        // a second flight, the test must fail on the count above rather than
+        // hang on a caller whose read was never resumed.
+        for _ in 0..<coldReads {
+            fake.resolvePending("github.authStatus", with: ["isConfigured": true])
+        }
+        await first.value
+        await second.value
 
         #expect(store.hasLoaded)
+        #expect(store.isLoading == false)
         #expect(fake.paramsForMethod("github.authStatus").count == 1)
+        #expect(fake.paramsForMethod("repo.list").count == 1)
         #expect(fake.paramsForMethod("github.repos.list").count == 1)
     }
 
