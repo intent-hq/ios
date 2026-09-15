@@ -148,6 +148,7 @@ final class BackendSessionRegistry {
                     backendID: backendID,
                     claimScreenRestoration: claim)
             },
+            githubRepoStore: GitHubRepoStore(connectionManager: connection),
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,

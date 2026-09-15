@@ -9,6 +9,9 @@ import SwiftUI
 /// desktop-setup guidance instead — there is no fallback flow, so recents
 /// are deliberately auth-gated at render time too: picking a repo needs
 /// GitHub for branch listing and workspace creation either way.
+///
+/// `store` is the session-owned cache: on a reopen the cached lists render
+/// immediately (no spinner) while `loadIfNeeded` revalidates silently.
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
@@ -23,9 +26,6 @@ struct GitHubRepoPickerView: View {
     /// The qualifying query currently in its debounce or remote-search phase.
     @State private var pendingSearchQuery: String?
     @State private var searchTask: Task<Void, Never>?
-    /// False until the first `github.authStatus` read completes, so the
-    /// not-connected guidance doesn't flash while the status is unknown.
-    @State private var authChecked = false
 
     private var suggestions: GitHubRepoSuggestions.Sections {
         GitHubRepoSuggestions.merged(
@@ -41,7 +41,7 @@ struct GitHubRepoPickerView: View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
-            if !authChecked {
+            if !store.hasCheckedAuth {
                 ProgressView("Checking GitHub connection...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if !store.isConfigured {
@@ -51,16 +51,10 @@ struct GitHubRepoPickerView: View {
             }
         }
         .task {
-            // Recents come from the daemon registry (no GitHub round-trip),
-            // so fetch them concurrently with the auth-gated GitHub list —
-            // they render as soon as they arrive.
-            async let recents: Void = store.fetchRecentRepos()
-            let configured = await store.fetchAuthStatus()
-            authChecked = true
-            if configured {
-                await store.fetchOwnRepos()
-            }
-            await recents
+            // Search results are per-view: drop any left by a previous sheet
+            // before the cached lists (or a cold load) render.
+            store.searchResults = []
+            await store.loadIfNeeded()
         }
         .onChange(of: searchText) { _, newValue in
             scheduleSearch(for: newValue)

@@ -22,7 +22,6 @@ struct CreateWorkspaceView: View {
     /// through its connection so pinned windows never hit the default backend.
     private let session: BackendSession
     @State private var navigationPath: [Route] = []
-    @State private var githubStore: GitHubRepoStore
     @State private var selectedRepo: GitHubRepo?
     @State private var remoteBranches: [String] = []
     @State private var defaultBranch: String?
@@ -49,8 +48,12 @@ struct CreateWorkspaceView: View {
 
     init(session: BackendSession) {
         self.session = session
-        _githubStore = State(initialValue: GitHubRepoStore(connectionManager: session.connection))
     }
+
+    /// The session-owned repo cache: it outlives this sheet so a reopen
+    /// renders the cached list instantly while it revalidates in the
+    /// background.
+    private var githubStore: GitHubRepoStore { session.githubRepoStore }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {

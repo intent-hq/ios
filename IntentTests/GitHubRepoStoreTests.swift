@@ -19,6 +19,32 @@ struct GitHubRepoStoreTests {
         return dict
     }
 
+    /// A fake whose three load reads answer immediately with one recent and
+    /// one own repo, plus a store that has completed its cold load over it.
+    private func makeLoadedStore(
+        configured: Bool = true
+    ) async -> (store: GitHubRepoStore, fake: FakeConnectionManager) {
+        let fake = FakeConnectionManager()
+        fake.responseMap["github.authStatus"] = ["isConfigured": configured]
+        fake.responseMap["repo.list"] = ["repos": [
+            ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+             "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
+        ]]
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "cached")]]
+        let store = GitHubRepoStore(connectionManager: fake)
+        await store.loadIfNeeded()
+        return (store, fake)
+    }
+
+    /// Poll (bounded) until the condition holds — avoids fixed-sleep
+    /// flakiness for assertions on Task-spawned background refreshes.
+    private func waitFor(_ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
+
     // MARK: - Model parsing
 
     @Test func parsesFullRepo() throws {
@@ -223,6 +249,181 @@ struct GitHubRepoStoreTests {
         #expect(results == nil)
         #expect(store.lastError == "search down")
         #expect(store.isLoading == false)
+    }
+
+    // MARK: - loadIfNeeded (session cache, stale-while-revalidate)
+
+    @Test func coldLoadIssuesAllReadsAndMarksLoaded() async {
+        let (store, fake) = await makeLoadedStore()
+        #expect(store.hasCheckedAuth)
+        #expect(store.isConfigured)
+        #expect(store.hasLoaded)
+        #expect(store.lastLoadedAt != nil)
+        #expect(store.isLoading == false)
+        #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo"])
+        #expect(store.ownRepos.map(\.name) == ["cached"])
+        #expect(fake.paramsForMethod("github.authStatus").count == 1)
+        #expect(fake.paramsForMethod("repo.list").count == 1)
+        #expect(fake.paramsForMethod("github.repos.list").count == 1)
+    }
+
+    @Test func coldLoadNotConfiguredSkipsOwnReposButIsStillLoaded() async {
+        let (store, fake) = await makeLoadedStore(configured: false)
+        #expect(store.hasCheckedAuth)
+        #expect(store.isConfigured == false)
+        #expect(store.hasLoaded)
+        #expect(store.ownRepos.isEmpty)
+        #expect(fake.didCallMethod("github.repos.list") == false)
+    }
+
+    @Test func secondLoadIfNeededKeepsDataAndRevalidatesSilently() async throws {
+        let (store, fake) = await makeLoadedStore()
+        let cachedRecents = store.recentRepos
+        let cachedOwn = store.ownRepos
+        // Keep the refresh's GitHub read in flight so the mid-refresh state
+        // is observable.
+        fake.pendingMethods = ["github.repos.list"]
+
+        await store.loadIfNeeded()
+
+        // Returned immediately with the cache intact; the background refresh
+        // still issues its reads but never flips the spinner.
+        try await waitFor {
+            fake.paramsForMethod("github.repos.list").count == 2
+                && fake.paramsForMethod("repo.list").count == 2
+        }
+        #expect(store.isLoading == false)
+        #expect(store.hasLoaded)
+        #expect(store.recentRepos == cachedRecents)
+        #expect(store.ownRepos == cachedOwn)
+        #expect(fake.paramsForMethod("github.authStatus").count == 2)
+
+        // The refresh lands in place once it resolves.
+        fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "fresh")]])
+        try await waitFor { store.ownRepos.map(\.name) == ["fresh"] }
+        #expect(store.isLoading == false)
+    }
+
+    @Test func concurrentColdLoadsShareOneFlight() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["github.authStatus"] = ["isConfigured": true]
+        fake.responseMap["repo.list"] = ["repos": []]
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict()]]
+        let store = GitHubRepoStore(connectionManager: fake)
+
+        async let first: Void = store.loadIfNeeded()
+        async let second: Void = store.loadIfNeeded()
+        _ = await (first, second)
+
+        #expect(store.hasLoaded)
+        #expect(fake.paramsForMethod("github.authStatus").count == 1)
+        #expect(fake.paramsForMethod("github.repos.list").count == 1)
+    }
+
+    @Test func forceRefetchesEvenWhenCached() async {
+        let (store, fake) = await makeLoadedStore()
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+
+        await store.loadIfNeeded(force: true)
+
+        #expect(fake.paramsForMethod("github.repos.list").count == 2)
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(store.hasLoaded)
+        #expect(store.isLoading == false)
+    }
+
+    @Test func failedBackgroundRefreshKeepsCachedLists() async {
+        let (store, fake) = await makeLoadedStore()
+        let cachedOwn = store.ownRepos
+        fake.errorMap["github.repos.list"] = NSError(
+            domain: "t", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "rate limited"]
+        )
+
+        await store.loadIfNeeded(force: true)
+
+        #expect(store.ownRepos == cachedOwn)
+        #expect(store.lastError == "rate limited")
+        #expect(store.hasLoaded)
+    }
+
+    @Test func failedColdLoadLeavesHasLoadedFalseSoNextCallRetries() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["github.authStatus"] = ["isConfigured": true]
+        fake.responseMap["repo.list"] = ["repos": []]
+        fake.errorMap["github.repos.list"] = NSError(domain: "t", code: -1)
+        let store = GitHubRepoStore(connectionManager: fake)
+
+        await store.loadIfNeeded()
+        #expect(store.hasCheckedAuth)
+        #expect(store.hasLoaded == false)
+        #expect(store.lastLoadedAt == nil)
+        #expect(store.isLoading == false)
+
+        fake.errorMap.removeValue(forKey: "github.repos.list")
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict()]]
+        await store.loadIfNeeded()
+        #expect(store.hasLoaded)
+        #expect(store.ownRepos.count == 1)
+        #expect(fake.paramsForMethod("github.repos.list").count == 2)
+    }
+
+    @Test func invalidateEmptiesListsAndResetsHasLoaded() async {
+        let (store, _) = await makeLoadedStore()
+        store.searchResults = [GitHubRepo.parseRepo(makeRepoDict(name: "s"))!]
+
+        store.invalidate()
+
+        #expect(store.recentRepos.isEmpty)
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.searchResults.isEmpty)
+        #expect(store.isConfigured == false)
+        #expect(store.hasCheckedAuth == false)
+        #expect(store.hasLoaded == false)
+        #expect(store.lastLoadedAt == nil)
+        #expect(store.lastError == nil)
+    }
+
+    @Test func loadAfterInvalidateRunsCold() async {
+        let (store, fake) = await makeLoadedStore()
+        store.invalidate()
+        fake.clearRequestLog()
+
+        await store.loadIfNeeded()
+
+        #expect(store.hasLoaded)
+        #expect(store.ownRepos.map(\.name) == ["cached"])
+        #expect(fake.paramsForMethod("github.repos.list").count == 1)
+    }
+
+    // MARK: - Reconnect
+
+    @Test func reconnectRefreshesExistingCacheInPlace() async throws {
+        let (store, fake) = await makeLoadedStore()
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+        fake.clearRequestLog()
+
+        fake.simulateConnect()
+
+        try await waitFor { store.ownRepos.map(\.name) == ["fresh"] }
+        #expect(fake.didCallMethod("github.authStatus"))
+        #expect(fake.didCallMethod("repo.list"))
+        #expect(store.isLoading == false)
+        #expect(store.hasLoaded)
+    }
+
+    @Test func reconnectWithoutCacheDoesNotFetch() async throws {
+        let fake = FakeConnectionManager()
+        fake.responseMap["github.authStatus"] = ["isConfigured": true]
+        fake.responseMap["repo.list"] = ["repos": []]
+        fake.responseMap["github.repos.list"] = ["repos": []]
+        let store = GitHubRepoStore(connectionManager: fake)
+
+        fake.simulateConnect()
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        #expect(fake.requestLog.isEmpty)
+        #expect(store.hasLoaded == false)
     }
 
     // MARK: - fetchDefaultBranch
