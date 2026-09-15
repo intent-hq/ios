@@ -432,12 +432,8 @@ struct ConnectionManagerTests {
     /// The plaintext test override is loopback-only: even when enabled it
     /// never lets a pin-less URL reach a non-loopback host.
     @Test func plaintextLoopbackOverrideNeverReachesRemoteHosts() throws {
-        let previous = WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { state in
-            let was = state
-            state = true
-            return was
-        }
-        defer { WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous } }
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
 
         let loopback = try WebSocketConnection.makeURL(
             host: "127.0.0.1", port: 4242, certFingerprint: nil)
@@ -1833,6 +1829,21 @@ struct ConnectionManagerTests {
         WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous }
     }
 
+    /// The enable/restore pair is registered before any throwing setup, so a
+    /// failed server start cannot leak the plaintext override into later tests.
+    @Test func plaintextLoopbackOverrideRestoredWhenSetupThrows() {
+        struct SetupFailed: Error {}
+        func failingSetup() throws {
+            let previous = Self.enablePlaintextLoopback()
+            defer { Self.restorePlaintextLoopback(previous) }
+            #expect(WebSocketConnection.plaintextLoopbackOverrideActive)
+            throw SetupFailed()
+        }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+        #expect(throws: SetupFailed.self) { try failingSetup() }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+    }
+
     /// ios#251 (RED on origin/main): a saved record without a certificate
     /// pin must fail closed — `connect()` refuses before any socket opens,
     /// so the bearer token is never sent over plain ws://. The plaintext
@@ -1844,7 +1855,7 @@ struct ConnectionManagerTests {
             manager.disconnect()
             server.stop()
         }
-        #expect(!WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock({ $0 }))
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
         let stateBefore = manager.connectionState
 
         for fingerprint in [nil, "", "  "] as [String?] {

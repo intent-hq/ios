@@ -92,10 +92,22 @@ actor WebSocketConnection {
 
     // MARK: - URL / header / pinning helpers (pure, unit-testable)
 
+    #if DEBUG
     /// The only plaintext (`ws://`) escape hatch, for the test suite's
-    /// loopback servers: opt-in, loopback-only, and never set by app code, so
-    /// no saved record can reach an unpinned socket (ios#251).
+    /// loopback servers: opt-in, loopback-only, never set by app code, and
+    /// compiled out of release builds, so no saved record can reach an
+    /// unpinned socket (ios#251).
     nonisolated static let allowsPlaintextLoopbackForTesting = OSAllocatedUnfairLock(initialState: false)
+    #endif
+
+    /// Whether the loopback test override is active; always false in release.
+    nonisolated static var plaintextLoopbackOverrideActive: Bool {
+        #if DEBUG
+        allowsPlaintextLoopbackForTesting.withLock { $0 }
+        #else
+        false
+        #endif
+    }
 
     /// The pin a record carries, or nil when it has none: legacy/synced
     /// records may store an empty string, which is no pin at all.
@@ -113,7 +125,7 @@ actor WebSocketConnection {
     /// refused (fail closed) unless the loopback test override applies.
     nonisolated static func transportScheme(host: String, certFingerprint: String?) throws -> String {
         if trustedPin(certFingerprint) != nil { return "wss" }
-        if allowsPlaintextLoopbackForTesting.withLock({ $0 }), isLoopbackHost(host) { return "ws" }
+        if plaintextLoopbackOverrideActive, isLoopbackHost(host) { return "ws" }
         throw WebSocketTransportError.missingCertificatePin(host: host)
     }
 

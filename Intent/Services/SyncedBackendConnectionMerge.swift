@@ -4,8 +4,9 @@ import Foundation
 /// `SyncedBackendRegistry.listBackends()`) into the app's saved connections.
 /// iOS has no opt-out: every live registry record WITH a cert fingerprint
 /// appears as a saved connection (fingerprint-less records are never
-/// auto-added — no pinned cert means a plain-`ws://` fallback that would
-/// leak the synced token), a newer remote copy overwrites the local fields
+/// auto-added — without a pinned cert the transport refuses to connect
+/// (ios#251), so the record could only ever surface as a re-pair prompt
+/// for a host this device never trusted), a newer remote copy overwrites the local fields
 /// (last-writer-wins on `updatedAt`), and a tombstone removes the matching
 /// local connection — matched by cert fingerprint first, `host:port` as
 /// fallback. Absence is NOT deletion: local-only connections that predate

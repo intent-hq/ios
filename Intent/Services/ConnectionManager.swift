@@ -221,7 +221,7 @@ nonisolated enum InboundFrame: Sendable {
         // token (ios#251). Only the loopback test override may pass here;
         // per-host admission in WebSocketConnection.makeURL still applies.
         guard WebSocketConnection.trustedPin(certFingerprint) != nil
-            || WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock({ $0 })
+            || WebSocketConnection.plaintextLoopbackOverrideActive
         else {
             throw WebSocketTransportError.missingCertificatePin(host: hosts.first ?? "unknown")
         }
