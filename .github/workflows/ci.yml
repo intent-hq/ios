@@ -5,8 +5,23 @@ name: CI
 # Caches are seeded on main by warm-cache.yml instead: a PR can only restore
 # caches created on its own merge ref or on main, so without that seeding
 # every PR's first run started cold.
+# workflow_dispatch adds a filtered lane for iteration: `only_testing` narrows
+# the test step via ONLY_TESTING and renames the macOS job to
+# "iOS Filtered Tests (non-gating)", so a filtered green can never satisfy
+# the ruleset-required "iOS Build & Test" check. pull_request runs never
+# receive a filter.
 on:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      only_testing:
+        description: >-
+          Whitespace-separated Target[/Class[/method]] identifiers passed to
+          ONLY_TESTING (e.g. 'IntentTests/DemoFixturesTests'). Empty runs the
+          full bundle.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -43,7 +58,7 @@ jobs:
         run: go test -timeout 300s ./...
 
   build-and-test:
-    name: iOS Build & Test
+    name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
     # The repo ruleset requires only this job. A job skipped because a
     # `needs` dependency failed counts as passing for required checks, so
     # `needs: go-test` would not keep a Go failure merge-blocking; instead
@@ -185,14 +200,23 @@ jobs:
           echo "--- device:"
           xcrun simctl list devices | grep -F "$SIM_UDID" || true
 
+      - name: Note test filter
+        if: github.event_name == 'workflow_dispatch' && inputs.only_testing != ''
+        env:
+          ONLY_TESTING: ${{ inputs.only_testing }}
+        run: |
+          echo "Filtered test run (non-gating): ONLY_TESTING='$ONLY_TESTING'" >> "$GITHUB_STEP_SUMMARY"
+
       # The script removes any existing result bundle at RESULT_BUNDLE
       # (xcodebuild refuses an existing path). xcodebuild forwards its
       # TEST_RUNNER_-prefixed environment variables into the test process
       # (minus the prefix), carrying the tcecho token to the TailcatKit
-      # smoke test.
+      # smoke test. ONLY_TESTING is set only on a workflow_dispatch, so a
+      # pull_request run always executes the full bundle.
       - name: Run unit tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: scripts/xcodebuild.sh test-without-building
 
       - name: Upload test results
@@ -225,7 +249,9 @@ jobs:
     name: visionOS Build
     # Build-only job (no tests) keeping the xros destination green.
     # TailcatKit is linked with an iOS-only platform filter, so this job
-    # needs no Go toolchain and no xcframework build.
+    # needs no Go toolchain and no xcframework build. Skipped on a filtered
+    # dispatch to save a macOS runner.
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.only_testing != '') }}
     runs-on: macos-15
     timeout-minutes: 45
     env:
