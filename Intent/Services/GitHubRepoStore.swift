@@ -13,7 +13,8 @@ import Observation
 /// `loadIfNeeded()` blocks with `isLoading`; later calls return immediately
 /// with the cached lists and revalidate silently in the background
 /// (stale-while-revalidate, FE github-repos slice parity). A reconnect
-/// refreshes an existing cache the same silent way.
+/// hard-clears the cache and reloads cold: stale lists never survive a
+/// connection flap.
 @MainActor
 @Observable class GitHubRepoStore {
     var isConfigured = false
@@ -34,6 +35,10 @@ import Observation
     private(set) var lastLoadedAt: Date?
 
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    /// Bumped by `invalidate()`: a load captures it on start and every
+    /// write after an await is dropped once it no longer matches, so a
+    /// completion from before an invalidation cannot repopulate the cache.
+    @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var connectionObserver: AnyCancellable?
 
     /// Page size for `github.repos.search` (§5.27 default 50, max 200).
@@ -78,8 +83,13 @@ import Observation
     }
 
     /// Drops every cached list and the auth/loaded markers so the next
-    /// `loadIfNeeded()` runs as a cold load.
+    /// `loadIfNeeded()` runs as a cold load. A load in flight is superseded:
+    /// its completion is dropped (see `loadGeneration`) and it is no longer
+    /// joined, so the next call starts a fresh flight.
     func invalidate() {
+        loadGeneration &+= 1
+        loadTask = nil
+        isLoading = false
         recentRepos = []
         ownRepos = []
         isConfigured = false
@@ -92,27 +102,31 @@ import Observation
     /// Single-flight: a load already in flight is joined, not duplicated.
     private func startLoad(silent: Bool) {
         guard loadTask == nil else { return }
+        let generation = loadGeneration
         loadTask = Task { [weak self] in
-            await self?.runLoad(silent: silent)
-            self?.loadTask = nil
+            await self?.runLoad(silent: silent, generation: generation)
+            guard let self, self.loadGeneration == generation else { return }
+            self.loadTask = nil
         }
     }
 
-    private func runLoad(silent: Bool) async {
+    private func runLoad(silent: Bool, generation: Int) async {
         if !silent { isLoading = true }
         lastError = nil
         // Recents come from the daemon registry (no GitHub round-trip), so
         // fetch them concurrently with the auth-gated GitHub list.
-        async let recents: Void = fetchRecentRepos()
-        let configured = await fetchAuthStatus()
+        async let recents: Void = fetchRecentRepos(generation: generation)
+        let configured = await fetchAuthStatus(generation: generation)
+        guard generation == loadGeneration else { return }
         // A transport error on the auth read fails the load: cached auth and
         // lists stay as they were, and a cold load is retried next time.
         var succeeded = configured != nil
         if configured != nil { hasCheckedAuth = true }
         if configured == true {
-            succeeded = await fetchOwnRepos()
+            succeeded = await fetchOwnRepos(generation: generation)
         }
         await recents
+        guard generation == loadGeneration else { return }
         if succeeded {
             hasLoaded = true
             lastLoadedAt = Date()
@@ -120,11 +134,15 @@ import Observation
         if !silent { isLoading = false }
     }
 
-    /// A reconnect refreshes an existing cache in place; with nothing cached
-    /// there is nothing to re-warm until the picker asks.
+    /// A reconnect hard-clears the cache (the daemon may have changed
+    /// underneath it) and reloads cold, so stale lists never stay visible
+    /// across a connection flap and a pre-reconnect load is neither joined
+    /// nor applied. With nothing cached or in flight there is nothing to
+    /// re-warm until the picker asks.
     private func onConnected() async {
-        guard hasLoaded else { return }
-        await loadIfNeeded(force: true)
+        guard hasLoaded || loadTask != nil else { return }
+        invalidate()
+        await loadIfNeeded()
     }
 
     // MARK: - Auth
@@ -135,13 +153,19 @@ import Observation
     /// cached, connected picker into not-connected guidance.
     @discardableResult
     func fetchAuthStatus() async -> Bool? {
+        await fetchAuthStatus(generation: loadGeneration)
+    }
+
+    private func fetchAuthStatus(generation: Int) async -> Bool? {
         do {
             let result = try await connectionManager.request("github.authStatus")
+            guard generation == loadGeneration else { return nil }
             let configured = (result as? [String: Any])?["isConfigured"] as? Bool ?? false
             isConfigured = configured
             return configured
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.authStatus failed: \(error)")
+            guard generation == loadGeneration else { return nil }
             lastError = error.localizedDescription
             return nil
         }
@@ -156,9 +180,14 @@ import Observation
     /// answers. Best-effort: errors and malformed responses leave
     /// `recentRepos` unchanged.
     func fetchRecentRepos() async {
+        await fetchRecentRepos(generation: loadGeneration)
+    }
+
+    private func fetchRecentRepos(generation: Int) async {
         do {
             let result = try await connectionManager.request("repo.list")
-            guard let items = (result as? [String: Any])?["repos"] as? [[String: Any]] else { return }
+            guard generation == loadGeneration,
+                  let items = (result as? [String: Any])?["repos"] as? [[String: Any]] else { return }
             recentRepos = items.compactMap { GitHubRepo.parseRepo($0) }
         } catch {
             AppLog.github.error("[GitHubRepoStore] repo.list failed: \(error)")
@@ -173,16 +202,22 @@ import Observation
     /// `loadIfNeeded`, not here.
     @discardableResult
     func fetchOwnRepos() async -> Bool {
+        await fetchOwnRepos(generation: loadGeneration)
+    }
+
+    private func fetchOwnRepos(generation: Int) async -> Bool {
         lastError = nil
         do {
             let result = try await connectionManager.request("github.repos.list", params: [
                 "limit": Self.ownReposLimit
             ])
+            guard generation == loadGeneration else { return false }
             let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
             ownRepos = items.compactMap { GitHubRepo.parseRepo($0) }
             return true
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.repos.list failed: \(error)")
+            guard generation == loadGeneration else { return false }
             lastError = error.localizedDescription
             return false
         }

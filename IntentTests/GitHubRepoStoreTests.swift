@@ -38,11 +38,13 @@ struct GitHubRepoStoreTests {
 
     /// Poll (bounded) until the condition holds — avoids fixed-sleep
     /// flakiness for assertions on Task-spawned background refreshes.
-    private func waitFor(_ condition: () -> Bool) async throws {
+    /// Records a failure on timeout so a missed update cannot pass silently.
+    private func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
         for _ in 0..<200 {
             if condition() { return }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
+        Issue.record("Timed out waiting for \(description)")
     }
 
     // MARK: - Model parsing
@@ -469,20 +471,105 @@ struct GitHubRepoStoreTests {
         #expect(fake.paramsForMethod("github.repos.list").count == 1)
     }
 
+    @Test func invalidateDuringPendingRefreshRejectsStaleCompletion() async throws {
+        let (store, fake) = await makeLoadedStore()
+        // A silent refresh whose GitHub read is still in flight.
+        fake.pendingMethods = ["github.repos.list"]
+        await store.loadIfNeeded()
+        try await waitFor("refresh read") { fake.paramsForMethod("github.repos.list").count == 2 }
+
+        store.invalidate()
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.hasLoaded == false)
+
+        // The superseded refresh completes with data from before the
+        // invalidation: it must not repopulate the cache or mark it loaded.
+        fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.recentRepos.isEmpty)
+        #expect(store.hasLoaded == false)
+        #expect(store.lastLoadedAt == nil)
+        #expect(store.isLoading == false)
+
+        // The next call starts a fresh cold load rather than joining the
+        // superseded flight.
+        fake.pendingMethods = []
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+        await store.loadIfNeeded()
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(store.hasLoaded)
+        #expect(fake.paramsForMethod("github.repos.list").count == 3)
+    }
+
     // MARK: - Reconnect
 
-    @Test func reconnectRefreshesExistingCacheInPlace() async throws {
+    @Test func reconnectHardClearsCacheThenReloadsCold() async throws {
         let (store, fake) = await makeLoadedStore()
         fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+        // Hold the reload's first reads so the cleared state is observable
+        // before any fresh data lands.
+        fake.pendingMethods = ["github.authStatus", "repo.list"]
         fake.clearRequestLog()
 
         fake.simulateConnect()
 
-        try await waitFor { store.ownRepos.map(\.name) == ["fresh"] }
-        #expect(fake.didCallMethod("github.authStatus"))
-        #expect(fake.didCallMethod("repo.list"))
+        try await waitFor("reload reads") {
+            fake.didCallMethod("github.authStatus") && fake.didCallMethod("repo.list")
+        }
+        // Stale lists are gone before the reload answers; the picker shows
+        // the cold spinner rather than a stale list.
+        #expect(store.recentRepos.isEmpty)
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.hasLoaded == false)
+        #expect(store.hasCheckedAuth == false)
+        #expect(store.lastLoadedAt == nil)
+        #expect(store.isLoading)
+
+        fake.resolvePending("github.authStatus", with: ["isConfigured": true])
+        fake.resolvePending("repo.list", with: ["repos": [
+            ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+             "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
+        ]])
+        try await waitFor("reload completion") { store.hasLoaded }
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo"])
+        #expect(store.hasCheckedAuth)
+        #expect(store.isConfigured)
         #expect(store.isLoading == false)
-        #expect(store.hasLoaded)
+        #expect(fake.paramsForMethod("github.repos.list").count == 1)
+    }
+
+    @Test func reconnectDoesNotJoinOrApplyPreReconnectRefresh() async throws {
+        let (store, fake) = await makeLoadedStore()
+        // A silent refresh whose GitHub read is still in flight when the
+        // connection flaps.
+        fake.pendingMethods = ["github.repos.list"]
+        await store.loadIfNeeded()
+        try await waitFor("pre-reconnect read") { fake.paramsForMethod("github.repos.list").count == 2 }
+
+        fake.simulateConnect()
+
+        // The reconnect starts its own cold load instead of joining the
+        // superseded flight, and the cache is already cleared.
+        try await waitFor("reconnect read") { fake.paramsForMethod("github.repos.list").count == 3 }
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.hasLoaded == false)
+        #expect(store.isLoading)
+
+        // The pre-reconnect read resolves first (oldest pending) with stale
+        // data: dropped.
+        fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "stale")]])
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.hasLoaded == false)
+        #expect(store.isLoading)
+
+        // The reconnect's own read lands.
+        fake.resolvePending("github.repos.list", with: ["repos": [makeRepoDict(name: "fresh")]])
+        try await waitFor("reconnect completion") { store.hasLoaded }
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(store.isLoading == false)
     }
 
     @Test func reconnectWithoutCacheDoesNotFetch() async throws {
