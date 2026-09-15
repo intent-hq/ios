@@ -2,9 +2,17 @@ import XCTest
 
 /// Guards the "Go to End" affordance of the conversation transcript against
 /// `--demo-data` fixtures: hidden while resting at the bottom, shown once the
-/// user scrolls up, hidden again after tapping it or scrolling back down, and
+/// user scrolls up, hidden again after tapping it or scrolling back down,
 /// still hidden — with the last message still on screen — when a footer row
-/// (the background-hooks chip row) appears under the settled transcript.
+/// (the background-hooks chip row) appears under the settled transcript,
+/// still hidden after tapping a suggested prompt under the last message, and
+/// hidden on every one of several consecutive entries into the conversation.
+///
+/// Every "rests at the bottom" failure message reports whether Go to End is
+/// present and where the last row's frame lies relative to the transcript's
+/// frame (ABOVE it: viewport past the end over a blank band; BELOW it:
+/// viewport short of the end) so a CI failure is diagnostic on its own
+/// (intent-hq/ios#281).
 ///
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 /// The transcript is the 32-message `DemoFixtures.longConversationMessages`
@@ -23,6 +31,21 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let firstMessageFragment = "Start of the flake investigation"
         static let lastMessageFragment = "End of the flake investigation"
         static let goToEndIdentifier = "transcript.goToEnd"
+        // ConversationTranscriptView.suggestedPromptsView's first button, and
+        // DemoFixtures.longConversationSuggestedPrompts[0] — the text of the
+        // optimistic user row the tap appends.
+        static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
+        static let firstSuggestedPrompt = "Open a PR for the deflake changes"
+        // ConversationTranscriptView.thinkingIndicatorView's label: the last
+        // transcript row once a send is in flight (demo `agent.sendMessage`
+        // answers `{}`, so the indicator stays and no reply ever streams).
+        static let thinkingIndicatorLabel = "Thinking..."
+        // Entry symptoms are intermittent; each cycle is a fresh entry.
+        static let entryCycles = 5
+        // Window during which Go to End must not appear and the last row
+        // must stay inside the transcript once it has settled; outlasts the
+        // follow's completion timer and its landing retries.
+        static let settleWindow: TimeInterval = 3
         // The transcript's own ScrollView; the hooks row is a horizontal
         // ScrollView too, so `scrollViews.firstMatch` could resolve to it.
         static let transcriptIdentifier = "transcript.scrollView"
@@ -186,6 +209,79 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "last transcript message is not visible after the hooks row appeared")
     }
 
+    /// Tapping a suggested prompt under the last assistant message appends
+    /// the optimistic user row and the thinking indicator while the prompt
+    /// rows disappear (the last message is now the user's). The transcript
+    /// was resting at the bottom, so it must follow: once layout settles Go
+    /// to End must not be shown and the sent row and the thinking indicator
+    /// must rest inside the transcript (intent-hq/ios#281, symptom 1).
+    @MainActor
+    func testTappingSuggestedPromptKeepsTranscriptAtBottomAndGoToEndHidden() throws {
+        let app = launchDemoApp()
+        let opened = openLongConversation(in: app)
+        let transcript = opened.transcript
+        let goToEnd = opened.goToEnd
+
+        // 1. Settled at the bottom with the prompt rows on screen.
+        assertRestsAtBottom(
+            lastRow: opened.lastMessage, named: "last assistant paragraph",
+            in: opened, context: "before tapping the suggested prompt")
+        let prompt = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
+        XCTAssertTrue(
+            prompt.waitForExistence(timeout: 5),
+            "first suggested prompt button not found under the last message")
+        XCTAssertTrue(
+            waitUntilVisible(prompt, in: transcript, timeout: 5),
+            "first suggested prompt is not on screen while the transcript rests at the bottom — "
+                + restingState(of: prompt, named: "prompt button", in: opened))
+
+        // 2. Tap it: the prompt rows collapse, the sent row and the thinking
+        //    indicator appear as the new tail.
+        prompt.tap()
+        XCTAssertTrue(
+            prompt.waitForNonExistence(timeout: 5),
+            "suggested prompt rows stayed in the transcript after tapping one")
+        let sentRow = message(in: app, containing: Fixture.firstSuggestedPrompt)
+        let thinkingIndicator = app.staticTexts[Fixture.thinkingIndicatorLabel].firstMatch
+        XCTAssertTrue(
+            thinkingIndicator.waitForExistence(timeout: 5),
+            "thinking indicator did not appear after tapping the suggested prompt — "
+                + restingState(of: sentRow, named: "sent prompt row", in: opened))
+
+        // 3. Still pinned: the sent row on screen, the indicator (last row)
+        //    inside the transcript, no Go to End over the settle window.
+        XCTAssertTrue(
+            waitUntilVisible(sentRow, in: transcript, timeout: 10),
+            "sent prompt row never came on screen after tapping the suggested prompt — "
+                + restingState(of: sentRow, named: "sent prompt row", in: opened))
+        assertRestsAtBottom(
+            lastRow: thinkingIndicator, named: "thinking indicator",
+            in: opened, context: "after tapping the suggested prompt")
+        XCTAssertTrue(
+            waitUntilVisible(sentRow, in: transcript, timeout: 2),
+            "sent prompt row left the screen after the transcript settled — "
+                + restingState(of: sentRow, named: "sent prompt row", in: opened))
+        XCTAssertFalse(goToEnd.exists, "Go to End is visible after tapping the suggested prompt")
+    }
+
+    /// Entering the conversation must land the transcript at the bottom
+    /// every time: last row inside the transcript — neither above it (viewport
+    /// past the end over a blank band, intent-hq/ios#271) nor below it (short
+    /// of the end) — and no Go to End once layout settles. Both entry
+    /// symptoms are intermittent, so the entry is repeated
+    /// (intent-hq/ios#281, symptoms 2 and 3).
+    @MainActor
+    func testEnteringConversationRepeatedlyRestsAtBottomWithGoToEndHidden() throws {
+        let app = launchDemoApp()
+        for cycle in 1...Fixture.entryCycles {
+            let opened = openLongConversation(in: app, context: "entry cycle \(cycle)")
+            assertRestsAtBottom(
+                lastRow: opened.lastMessage, named: "last assistant paragraph",
+                in: opened, context: "entry cycle \(cycle)")
+            leaveConversation(in: app)
+        }
+    }
+
     // MARK: - Helpers
 
     @MainActor
@@ -197,9 +293,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     }
 
     /// Taps the long-conversation workspace row and waits for its transcript,
-    /// Go to End button handle and scroll view.
+    /// Go to End button handle and scroll view. A missing last message is
+    /// reported with the resting state (a viewport past the end may leave the
+    /// last row unrealized and off the accessibility hierarchy).
     @MainActor
-    private func openLongConversation(in app: XCUIApplication) -> OpenConversation {
+    private func openLongConversation(in app: XCUIApplication, context: String = "after opening") -> OpenConversation {
         let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
         if !workspaceRow.waitForExistence(timeout: 30) {
             // Same fallback as AppStoreScreenshotTests: a collapsed iPad
@@ -210,11 +308,99 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         workspaceRow.tap()
 
         let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
-        XCTAssertTrue(lastMessage.waitForExistence(timeout: 15), "last transcript message never appeared")
         let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
-        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "transcript scroll view not found")
-        return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+        XCTAssertTrue(transcript.waitForExistence(timeout: 5), "\(context): transcript scroll view not found")
+        let opened = OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+        XCTAssertTrue(
+            lastMessage.waitForExistence(timeout: 15),
+            "\(context): last transcript message never appeared — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        return opened
+    }
+
+    /// Navigates back out of the transcript to the workspace list so the
+    /// next `openLongConversation` is a fresh entry; relaunches when no back
+    /// path leads there (a split view keeps the transcript in its detail column).
+    @MainActor
+    private func leaveConversation(in app: XCUIApplication) {
+        let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        var backTapsLeft = 2
+        while backTapsLeft > 0, !workspaceRow.waitForExistence(timeout: 3) {
+            let back = app.navigationBars.buttons.element(boundBy: 0)
+            guard back.exists else { break }
+            back.tap()
+            backTapsLeft -= 1
+        }
+        if !workspaceRow.waitForExistence(timeout: 5) {
+            app.launch()
+        }
+    }
+
+    /// Asserts the transcript rests at the bottom with `lastRow` as its last
+    /// row: the row comes on screen, its frame stops moving, and then — over
+    /// `Fixture.settleWindow`, which outlasts the follow's completion timer
+    /// and its retries — it stays inside the transcript's frame while Go to
+    /// End never appears. Every failure message carries `restingState`.
+    @MainActor
+    private func assertRestsAtBottom(
+        lastRow: XCUIElement, named rowName: String, in opened: OpenConversation, context: String
+    ) {
+        let transcript = opened.transcript
+        let goToEnd = opened.goToEnd
+        XCTAssertTrue(
+            waitUntilVisible(lastRow, in: transcript, timeout: 10),
+            "\(context): transcript did not settle on the \(rowName) — "
+                + restingState(of: lastRow, named: rowName, in: opened))
+        XCTAssertNotNil(
+            waitUntilSteady(timeout: 5, tolerance: Fixture.rePinTolerance, { lastRow.frame.maxY }),
+            "\(context): transcript kept moving after the \(rowName) became visible — "
+                + restingState(of: lastRow, named: rowName, in: opened))
+        let broke = waitUntil(timeout: Fixture.settleWindow) {
+            goToEnd.exists || !isInside(lastRow, transcript)
+        }
+        XCTAssertFalse(
+            broke,
+            "\(context): transcript is not resting at the bottom after settling — "
+                + restingState(of: lastRow, named: rowName, in: opened))
+    }
+
+    /// True when the element's whole frame lies inside the container's frame
+    /// (within `rePinTolerance` for rounding).
+    @MainActor
+    private func isInside(_ element: XCUIElement, _ container: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        return !frame.isEmpty
+            && container.frame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(frame)
+    }
+
+    /// Diagnostic sentence for failure messages: Go to End presence and
+    /// where `row`'s frame lies relative to the transcript's frame — ABOVE it
+    /// means the viewport rests past the end (blank band), BELOW it means the
+    /// viewport rests short of the end.
+    @MainActor
+    private func restingState(of row: XCUIElement, named rowName: String, in opened: OpenConversation) -> String {
+        let transcriptFrame = opened.transcript.frame
+        let goToEndState = opened.goToEnd.exists ? "Go to End PRESENT" : "Go to End absent"
+        guard row.exists else {
+            return "\(goToEndState); \(rowName) is not in the accessibility hierarchy (unrealized / off screen); "
+                + "transcript frame \(transcriptFrame)"
+        }
+        let rowFrame = row.frame
+        let position: String
+        if rowFrame.maxY <= transcriptFrame.minY {
+            position = "ABOVE the transcript (viewport rests past the end)"
+        } else if rowFrame.minY >= transcriptFrame.maxY {
+            position = "BELOW the transcript (viewport rests short of the end)"
+        } else if transcriptFrame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(rowFrame) {
+            position = "inside the transcript"
+        } else if rowFrame.minY < transcriptFrame.minY {
+            position = "clipped by the transcript's top edge (partly past the end)"
+        } else {
+            position = "clipped by the transcript's bottom edge (partly short of the end)"
+        }
+        return "\(goToEndState); \(rowName) frame \(rowFrame) is \(position); transcript frame \(transcriptFrame)"
     }
 
     @MainActor

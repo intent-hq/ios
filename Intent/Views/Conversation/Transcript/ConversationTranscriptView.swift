@@ -416,7 +416,7 @@ struct ConversationTranscriptView: View {
     #if !os(visionOS)
     private var suggestedPromptsView: some View {
         VStack(spacing: 8) {
-            ForEach(viewModel.suggestedPrompts, id: \.self) { prompt in
+            ForEach(Array(viewModel.suggestedPrompts.enumerated()), id: \.element) { index, prompt in
                 Button {
                     Task { await viewModel.sendSuggestedPrompt(prompt) }
                 } label: {
@@ -442,6 +442,7 @@ struct ConversationTranscriptView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("transcript.suggestedPrompt.\(index)")
             }
         }
     }
