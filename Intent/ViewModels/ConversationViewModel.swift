@@ -84,8 +84,17 @@ import SwiftUI
     }
 
     // Model selection
+    /// Legacy `agent.getModels` catalog, used only while the agent's provider
+    /// is unknown; provider-scoped catalogs come from `optionsStore`.
     var availableModels: [ModelInfo] = []
     var currentModelId: String?
+    /// The agent's provider id from `agent.get`; keys the shared
+    /// `models.list` cache in `optionsStore`.
+    var currentProviderId: String?
+
+    /// The session-wide creation options cache (specialists, providers,
+    /// per-provider model catalogs).
+    let optionsStore: CreationOptionsStore
 
     // Specialist info (for empty state display)
     var specialistName: String?
@@ -128,12 +137,14 @@ import SwiftUI
     init(
         agentId: String, workspaceId: String, agentName: String,
         connection: any ConnectionManagerRouting,
-        uploadService: AttachmentUploadService
+        uploadService: AttachmentUploadService,
+        optionsStore: CreationOptionsStore
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.connection = connection
+        self.optionsStore = optionsStore
         self.store = ConversationStore(connectionManager: connection)
         self.hookStore = BackgroundHookStore(connectionManager: connection)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
@@ -334,6 +345,9 @@ import SwiftUI
                 if let model = agent["model"] as? String {
                     currentModelId = model
                 }
+                if let provider = agent["provider"] as? String, !provider.isEmpty {
+                    currentProviderId = provider
+                }
                 // Extract specialist ID from metadata
                 if let metadata = agent["metadata"] as? [String: Any],
                    let specialistId = metadata["specialist"] as? String {
@@ -478,6 +492,67 @@ import SwiftUI
     }
 
     // MARK: - Models
+
+    /// The catalog the picker offers: the shared per-provider `models.list`
+    /// cache once the agent's provider is known (nil until it is cached),
+    /// otherwise the legacy `agent.getModels` list.
+    var selectableModels: [ModelInfo]? {
+        if let providerId = currentProviderId {
+            return optionsStore.models(for: providerId)
+        }
+        return availableModels
+    }
+
+    /// The current model's human-readable name from the cached catalog,
+    /// falling back to the bare model id while the catalog is unavailable.
+    var currentModelDisplayName: String? {
+        guard let modelId = currentModelId else { return nil }
+        return Self.modelDisplayName(
+            modelId: modelId, provider: currentProviderId, catalog: selectableModels ?? [])
+    }
+
+    /// Resolves `modelId` against `catalog`, matching on provider too when
+    /// one is known so same-id models under different providers never alias.
+    static func modelDisplayName(
+        modelId: String, provider: String?, catalog: [ModelInfo]
+    ) -> String {
+        let match = catalog.first { model in
+            model.id == modelId && (provider == nil || model.provider == provider)
+        }
+        return match?.name ?? modelId
+    }
+
+    /// Identity for the view's `.task(id:)`: changes when the provider
+    /// becomes known and when its catalog flips between cached and cleared
+    /// (reconnect invalidation), so the catalog reloads exactly then.
+    struct ModelCatalogKey: Equatable {
+        let providerId: String?
+        let isCached: Bool
+    }
+
+    var modelCatalogKey: ModelCatalogKey {
+        ModelCatalogKey(
+            providerId: currentProviderId,
+            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false)
+    }
+
+    /// Cold-loads the provider's catalog when it is not cached; a cached
+    /// catalog issues no request.
+    func loadModelCatalogIfNeeded() async {
+        guard let providerId = currentProviderId,
+              optionsStore.models(for: providerId) == nil else { return }
+        await optionsStore.loadModelsIfNeeded(providerId: providerId)
+    }
+
+    /// Picker entry: serve the cached catalog immediately and revalidate it
+    /// silently (SWR), or use the legacy path while the provider is unknown.
+    func refreshSelectableModels() async {
+        if let providerId = currentProviderId {
+            await optionsStore.loadModelsIfNeeded(providerId: providerId)
+        } else {
+            await fetchModels()
+        }
+    }
 
     func fetchModels() async {
         do {

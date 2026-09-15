@@ -272,8 +272,7 @@ private struct ConversationEmptyView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                 }
-                if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+                if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
@@ -291,8 +290,7 @@ private struct ConversationEmptyView: View {
                 Text("Messages will appear here as the agent works.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+                if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
                         .font(.caption)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))

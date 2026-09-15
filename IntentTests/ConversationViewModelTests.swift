@@ -15,7 +15,8 @@ struct ConversationViewModelTests {
     private func makeVM() -> ConversationViewModel {
         ConversationViewModel(
             agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared, uploadService: .shared)
+            connection: ConnectionManager.shared, uploadService: .shared,
+            optionsStore: CreationOptionsStore())
     }
 
     private func textMessage(id: String = UUID().uuidString, role: MessageRole, text: String,
@@ -368,8 +369,72 @@ struct ConversationViewModelTests {
         let service = AttachmentUploadService(connection: FakeConnectionManager())
         let vm = ConversationViewModel(
             agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
-            connection: ConnectionManager.shared, uploadService: service)
+            connection: ConnectionManager.shared, uploadService: service,
+            optionsStore: CreationOptionsStore())
         #expect(vm.uploadService === service)
+    }
+
+    // MARK: - Model display name (conversation menu)
+
+    @Test func modelDisplayNameResolvesNameFromCatalog() {
+        let catalog = [
+            ModelInfo(id: "sonnet4.5", name: "Sonnet 4.5 (balanced)", provider: "auggie"),
+            ModelInfo(id: "sonnet4.5", name: "Sonnet 4.5 via Grok", provider: "grok"),
+        ]
+        #expect(
+            ConversationViewModel.modelDisplayName(
+                modelId: "sonnet4.5", provider: "grok", catalog: catalog)
+                == "Sonnet 4.5 via Grok")
+        #expect(
+            ConversationViewModel.modelDisplayName(
+                modelId: "sonnet4.5", provider: nil, catalog: catalog)
+                == "Sonnet 4.5 (balanced)")
+    }
+
+    @Test func modelDisplayNameFallsBackToIdWhenCatalogEmptyOrMissesId() {
+        let catalog = [ModelInfo(id: "opus", name: "Opus", provider: "auggie")]
+        #expect(
+            ConversationViewModel.modelDisplayName(
+                modelId: "sonnet4.5", provider: "auggie", catalog: [])
+                == "sonnet4.5")
+        #expect(
+            ConversationViewModel.modelDisplayName(
+                modelId: "sonnet4.5", provider: "auggie", catalog: catalog)
+                == "sonnet4.5")
+        #expect(
+            ConversationViewModel.modelDisplayName(
+                modelId: "opus", provider: "grok", catalog: catalog)
+                == "opus")
+    }
+
+    /// The menu label reads the session's shared per-provider cache once the
+    /// provider is known, so a warm cache renders the name with no request.
+    @Test func currentModelDisplayNameReadsSharedProviderCatalog() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["models.list"] = ["models": [
+            ["id": "sonnet4.5", "name": "Sonnet 4.5 (balanced)", "provider": "auggie"],
+        ]]
+        let store = CreationOptionsStore(connectionManager: fake)
+        let vm = ConversationViewModel(
+            agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
+            connection: fake, uploadService: AttachmentUploadService(connection: fake),
+            optionsStore: store)
+        vm.currentModelId = "sonnet4.5"
+        vm.currentProviderId = "auggie"
+
+        #expect(vm.selectableModels == nil)
+        #expect(vm.currentModelDisplayName == "sonnet4.5")
+        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: false))
+
+        await vm.loadModelCatalogIfNeeded()
+
+        #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
+        #expect(vm.selectableModels?.map(\.id) == ["sonnet4.5"])
+        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: true))
+
+        let requestsAfterLoad = fake.requestLog.count
+        await vm.loadModelCatalogIfNeeded()
+        #expect(fake.requestLog.count == requestsAfterLoad)
     }
 
     private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {
