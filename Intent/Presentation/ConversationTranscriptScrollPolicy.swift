@@ -298,9 +298,12 @@ enum ConversationTranscriptScrollPolicy {
 
     /// Re-validated when a debounced follow finally runs. Forced follows (Go to
     /// End, a new user message, the entry scroll, the thinking indicator
-    /// appearing) land unless the user's finger is on the transcript (or it is
-    /// decelerating after it) at that moment: the gesture wins, and the
-    /// geometry edges it produces carry the scrolled-away rule. An automatic
+    /// appearing) are all requested from a pinned viewport, so at execution a
+    /// raised `userIsScrolledAway` can only be a gesture that came after the
+    /// request — it wins whether it is still in progress (`isInteracting`) or
+    /// already ended away during the debounce, and the forced follow yields
+    /// without re-queuing itself; the geometry edges of the gesture carry the
+    /// scrolled-away rule from there. An automatic
     /// follow is dropped when the user scrolled away during the debounce — by
     /// the flag or by the live distance having left the at-bottom band — or
     /// when the viewport is already pinned; an unknown distance (scroll view
@@ -316,8 +319,8 @@ enum ConversationTranscriptScrollPolicy {
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
-        if forced { return !isInteracting }
         if userIsScrolledAway { return false }
+        if forced { return !isInteracting }
         guard let distanceToBottom else { return true }
         return isDriftedWithinBottomBand(
             distanceToBottom: distanceToBottom,
@@ -377,16 +380,20 @@ enum ConversationTranscriptScrollPolicy {
     /// scrolled again, past the end clamped, each a bounded number of times;
     /// a bound that runs out leaves the pin as it is, so no follow ever
     /// shows Go to End without a gesture. Content shorter than the container
-    /// rests at a negative distance and is landed.
+    /// rests at a negative distance and is landed. The user takes over by a
+    /// gesture in progress or by one that already set `userIsScrolledAway`
+    /// between two polls: a forced follow starts pinned, so the flag being
+    /// raised while it lands is the user's later intent.
     static func followLandingStep(
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
         isInteracting: Bool,
+        userIsScrolledAway: Bool = false,
         correctionsLeft: Int,
         timedOut: Bool,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> FollowLandingStep {
-        if isInteracting { return .yieldToUser }
+        if isInteracting || userIsScrolledAway { return .yieldToUser }
         if timedOut { return .giveUp }
         guard let geometry, geometry == previous else { return .settling }
         let distance = geometry.distanceToBottom

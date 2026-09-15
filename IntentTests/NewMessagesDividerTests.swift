@@ -760,12 +760,44 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(executeFollow(distanceToBottom: nil))
     }
 
-    @Test func forcedFollowExecutesUnlessUserIsInteracting() {
-        #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
+    /// A forced follow is requested pinned, so at execution it lands unless
+    /// the user took over meanwhile: a gesture in progress, or one that
+    /// already ended having set the flag.
+    @Test func forcedFollowExecutesUnlessUserTookOver() {
+        #expect(executeFollow(forced: true, distanceToBottom: 400))
         #expect(executeFollow(forced: true, distanceToBottom: 0))
         #expect(executeFollow(forced: true, distanceToBottom: nil))
         #expect(!executeFollow(forced: true, distanceToBottom: 400, isInteracting: true))
         #expect(!executeFollow(forced: true, distanceToBottom: 0, isInteracting: true))
+        #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
+        #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: nil))
+    }
+
+    /// Ordered regression: a user append raises a forced follow while pinned;
+    /// during its debounce the user drags away and the gesture ends (phase
+    /// final sample with the gesture → away) before the follow comes due. The
+    /// away flag outlives the gesture, so the follow yields at execution
+    /// instead of snapping the user back, and the flag is not a Go to End
+    /// request, so nothing re-queues it. The same trace with the gesture
+    /// still in progress at execution yields on the gesture alone.
+    @Test func gestureThatEndedAwayDuringForcedFollowDebounceWins() {
+        #expect(executeFollow(forced: true, distanceToBottom: 0))
+        #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
+        #expect(transition(current: true, distanceToBottom: 300, isInteracting: false))
+        #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 300))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            goToEndRequested: false))
+        #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 300, isInteracting: true))
+        #expect(!rePinAfterGrowth(isFollowing: false, userIsScrolledAway: true))
+    }
+
+    /// The forced-follow gesture predicate is the same one the geometry edges
+    /// read: a SwiftUI scroll phase counts as interacting even when the finder
+    /// has not resolved a UIScrollView and its flags read false.
+    @Test func phaseOnlyInteractionYieldsForcedFollowAndLanding() {
+        #expect(!executeFollow(forced: true, distanceToBottom: nil, isInteracting: true))
+        #expect(landing(nil, isInteracting: true) == .yieldToUser)
+        #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
     }
 
     /// Ordered regression: pinned, a streaming delta at distance 20 queues an
@@ -803,6 +835,7 @@ struct ConversationTranscriptScrollPolicyTests {
         _ geometry: ViewportGeometry?,
         previous: ViewportGeometry?? = nil,
         isInteracting: Bool = false,
+        userIsScrolledAway: Bool = false,
         correctionsLeft: Int = 2,
         timedOut: Bool = false
     ) -> LandingStep {
@@ -810,6 +843,7 @@ struct ConversationTranscriptScrollPolicyTests {
             geometry: geometry,
             previous: previous ?? geometry,
             isInteracting: isInteracting,
+            userIsScrolledAway: userIsScrolledAway,
             correctionsLeft: correctionsLeft,
             timedOut: timedOut,
             atBottomThreshold: 50
@@ -878,6 +912,17 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 0), isInteracting: true, timedOut: true) == .yieldToUser)
         #expect(Constants.Conversation.Transcript.followLandingPollMilliseconds
             < Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
+    }
+
+    /// A gesture that started and ended between two landing polls left only
+    /// the raised flag behind; the landing yields to it rather than scrolling
+    /// the user back, even from a viewport at rest short of the bottom.
+    @Test func followLandingYieldsToAGestureThatAlreadyEndedAway() {
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .yieldToUser)
+        #expect(landing(geometry(offsetY: 300), userIsScrolledAway: true) == .yieldToUser)
+        #expect(landing(nil, userIsScrolledAway: true) == .yieldToUser)
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true, timedOut: true) == .yieldToUser)
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: false) == .scrollAgain)
     }
 
     /// An unknown distance never releases a scrolled-away state: every

@@ -346,7 +346,7 @@ struct ConversationTranscriptView: View {
     /// content yet when this runs. `isInteracting` defaults to the live
     /// gesture state; a phase ending passes true for its final sample.
     private func applyScrolledAwayEdge(geometryAway: Bool, isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
-        let isInteracting = isInteracting ?? (scrollMomentumProxy.isInteracting || scrollState.isUserScrollPhase)
+        let isInteracting = isInteracting ?? isUserInteracting
         let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: userIsScrolledAway,
             geometryAway: geometryAway,
@@ -365,6 +365,14 @@ struct ConversationTranscriptView: View {
             AppLog.ui.debug("[SCROLL] Content grew under the pinned viewport; re-pinning to the bottom")
             proxy.scrollTo("scroll-bottom", anchor: .bottom)
         }
+    }
+
+    /// The one gesture predicate every scrolled-away and forced-follow
+    /// decision reads: the UIScrollView flags once the finder resolved, or
+    /// the SwiftUI scroll phase, which also covers a gesture on a transcript
+    /// whose scroll view the finder has not resolved yet.
+    private var isUserInteracting: Bool {
+        scrollMomentumProxy.isInteracting || scrollState.isUserScrollPhase
     }
 
     /// Applies the live distance as a geometry edge (see
@@ -616,7 +624,8 @@ struct ConversationTranscriptView: View {
     }
 
     /// The user scrolling away drops an automatic follow still in its debounce;
-    /// a forced one keeps going (its landing yields to the user on its own).
+    /// a forced one keeps its task so that it drains its own flags, but yields
+    /// at execution and while landing to the raised `userIsScrolledAway`.
     private func cancelPendingAutomaticFollow() {
         guard !scrollState.pendingFollowIsForced else { return }
         scrollDebounceTask?.cancel()
@@ -631,7 +640,7 @@ struct ConversationTranscriptView: View {
     /// A forced follow raises `isScrollingToBottom` for its whole duration
     /// and is complete only once the live geometry confirms its landing (see
     /// `awaitForcedFollowLanding`), or yields when the user is interacting
-    /// as it comes due. An automatic follow rides the bottom anchor and just
+    /// — or already scrolled away — as it comes due. An automatic follow rides the bottom anchor and just
     /// waits out its animation; growth edges are suppressed while it is in
     /// flight, so when it drains — executed or dropped — the live distance is
     /// applied once as the edge it may have swallowed: content that grew past
@@ -652,7 +661,7 @@ struct ConversationTranscriptView: View {
                 forced: forced,
                 userIsScrolledAway: userIsScrolledAway,
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
-                isInteracting: scrollMomentumProxy.isInteracting
+                isInteracting: isUserInteracting
             )
             if shouldExecute {
                 issueScrollToBottom(proxy: proxy, animated: animated)
@@ -705,7 +714,8 @@ struct ConversationTranscriptView: View {
             let step = ConversationTranscriptScrollPolicy.followLandingStep(
                 geometry: geometry,
                 previous: previous,
-                isInteracting: scrollMomentumProxy.isInteracting,
+                isInteracting: isUserInteracting,
+                userIsScrolledAway: userIsScrolledAway,
                 correctionsLeft: correctionsLeft,
                 timedOut: ContinuousClock.now >= deadline
             )
