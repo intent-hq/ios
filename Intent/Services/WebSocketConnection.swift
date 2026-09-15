@@ -20,11 +20,16 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
     /// candidate presented a wrong certificate — carries every observed
     /// per-host mismatch instead of just the last one.
     case certificateMismatches(mismatches: [HostCertMismatch])
+    /// The record has no trusted certificate pin, so there is no identity to
+    /// verify: the connection is refused before any socket opens (ios#251).
+    case missingCertificatePin(host: String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL(let host):
             "Invalid WebSocket URL for \(host)"
+        case .missingCertificatePin(let host):
+            "No trusted certificate is saved for \(host). Re-pair this device to connect securely."
         case .timedOut(let host):
             "Connection to \(host) timed out"
         case .failed(let host, let message):
@@ -45,6 +50,11 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
         case .certificateMismatch, .certificateMismatches: true
         default: false
         }
+    }
+
+    var isMissingCertificatePin: Bool {
+        if case .missingCertificatePin = self { return true }
+        return false
     }
 }
 
@@ -82,12 +92,37 @@ actor WebSocketConnection {
 
     // MARK: - URL / header / pinning helpers (pure, unit-testable)
 
+    /// The only plaintext (`ws://`) escape hatch, for the test suite's
+    /// loopback servers: opt-in, loopback-only, and never set by app code, so
+    /// no saved record can reach an unpinned socket (ios#251).
+    nonisolated static let allowsPlaintextLoopbackForTesting = OSAllocatedUnfairLock(initialState: false)
+
+    /// The pin a record carries, or nil when it has none: legacy/synced
+    /// records may store an empty string, which is no pin at all.
+    nonisolated static func trustedPin(_ certFingerprint: String?) -> String? {
+        guard let pin = certFingerprint?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !pin.isEmpty else { return nil }
+        return pin
+    }
+
+    nonisolated static func isLoopbackHost(_ host: String) -> Bool {
+        ["127.0.0.1", "localhost", "::1", "[::1]"].contains(host.lowercased())
+    }
+
+    /// Admission: a trusted pin selects `wss`; without one the connection is
+    /// refused (fail closed) unless the loopback test override applies.
+    nonisolated static func transportScheme(host: String, certFingerprint: String?) throws -> String {
+        if trustedPin(certFingerprint) != nil { return "wss" }
+        if allowsPlaintextLoopbackForTesting.withLock({ $0 }), isLoopbackHost(host) { return "ws" }
+        throw WebSocketTransportError.missingCertificatePin(host: host)
+    }
+
     nonisolated static func makeURL(
         host: String,
         port: Int,
         certFingerprint: String?
     ) throws -> URL {
-        let scheme = certFingerprint == nil ? "ws" : "wss"
+        let scheme = try transportScheme(host: host, certFingerprint: certFingerprint)
         guard let url = URL(string: "\(scheme)://\(host):\(port)/ws") else {
             throw WebSocketTransportError.invalidURL(host: host)
         }
@@ -122,7 +157,7 @@ actor WebSocketConnection {
         verifyQueue: DispatchQueue
     ) -> NWParameters {
         let parameters: NWParameters
-        if let pinned = certFingerprint {
+        if let pinned = trustedPin(certFingerprint) {
             let tlsOptions = NWProtocolTLS.Options()
             // Fingerprint pinning is the sole trust decision: the verify block
             // replaces default chain evaluation entirely (the daemon's cert is

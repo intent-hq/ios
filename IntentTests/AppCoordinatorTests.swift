@@ -180,6 +180,63 @@ final class AppCoordinatorTests {
         }
     }
 
+    /// ios#251: a legacy saved record with no certificate pin is routed to
+    /// an actionable re-pair state — cold start still dials it (no silent
+    /// deletion), transport admission refuses it, the failure lands on the
+    /// cert path (no auto-retry, "Re-pair Device"), and re-pair offers the
+    /// saved connections with the record's metadata intact.
+    @Test @MainActor func legacyPinlessRecordRoutesToRepairAndIsKept() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let legacy = persistence.upsertConnection(Self.makeConnection(port: 5181))
+        #expect(WebSocketConnection.trustedPin(legacy.server.certFingerprint) == nil)
+        persistence.setActiveConnection(id: legacy.id)
+        let coordinator = AppCoordinator(
+            backendID: BackendID(legacy.id),
+            persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
+
+        coordinator.onLoadComplete()
+        guard case .connecting = coordinator.currentScreen else {
+            Issue.record("Expected .connecting, got \(coordinator.currentScreen)")
+            return
+        }
+
+        // The transport's admission decision for this record.
+        let refusal: WebSocketTransportError
+        do {
+            _ = try WebSocketConnection.makeURL(
+                host: legacy.server.hosts[0], port: legacy.server.port,
+                certFingerprint: legacy.server.certFingerprint)
+            Issue.record("Expected the pin-less record to be refused")
+            return
+        } catch let error as WebSocketTransportError {
+            refusal = error
+        }
+        #expect(refusal.isMissingCertificatePin)
+
+        coordinator.onConnectionFailed(error: refusal.localizedDescription)
+        guard case .connectionFailed(let message) = coordinator.currentScreen else {
+            Issue.record("Expected .connectionFailed, got \(coordinator.currentScreen)")
+            return
+        }
+        #expect(ConnectionFailureView.isCertificateMismatchMessage(message))
+        #expect(coordinator.connectionFailureRetryPolicy == .automaticConnection)
+
+        coordinator.onReconnect()
+        guard case .pairing = coordinator.currentScreen else {
+            Issue.record("Expected .pairing, got \(coordinator.currentScreen)")
+            return
+        }
+        #expect(coordinator.pairingShowsSavedConnections)
+
+        let kept = try #require(persistence.loadConnections().first { $0.id == legacy.id })
+        #expect(kept.server.hosts == ["10.0.0.1"])
+        #expect(kept.server.port == 5181)
+        #expect(kept.server.name == "daemon-5181")
+        #expect(kept.token == "tok-5181")
+    }
+
     @Test @MainActor func onRetryConnection_setsConnecting() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onRetryConnection()

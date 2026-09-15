@@ -25,6 +25,14 @@ struct ConnectionFailureViewTests {
             "Server certificate has changed. Please re-pair your device."))
     }
 
+    /// ios#251: a saved record refused for having no trusted pin lands on
+    /// the re-pair path — no auto-retry (which would re-dial the same
+    /// pin-less record), "Re-pair Device" offered, saved record kept.
+    @Test func missingPinRefusalRoutesToCertPath() {
+        let error = WebSocketTransportError.missingCertificatePin(host: "10.0.0.1")
+        #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
+    }
+
     @Test func genericFailuresDoNotRouteToCertPath() {
         #expect(!ConnectionFailureView.isCertificateMismatchMessage(
             "Connection to 192.168.1.42 timed out"))

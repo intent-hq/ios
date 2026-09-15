@@ -216,6 +216,15 @@ nonisolated enum InboundFrame: Sendable {
         hosts: [String], port: Int, token: String, certFingerprint: String? = nil,
         tcAddress: String? = nil
     ) async throws {
+        // Fail closed before touching any state or socket: a record without
+        // a trusted pin would otherwise dial plain ws:// carrying the bearer
+        // token (ios#251). Only the loopback test override may pass here;
+        // per-host admission in WebSocketConnection.makeURL still applies.
+        guard WebSocketConnection.trustedPin(certFingerprint) != nil
+            || WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock({ $0 })
+        else {
+            throw WebSocketTransportError.missingCertificatePin(host: hosts.first ?? "unknown")
+        }
         let connectStart = CFAbsoluteTimeGetCurrent()
         // Snapshot before the reset: a preserving connect (below) that fails
         // must leave `certMismatches` exactly as the live connection had it —
@@ -806,6 +815,8 @@ nonisolated enum InboundFrame: Sendable {
                         host: tunnelCandidateLabel, fingerprint: fingerprint)
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
+                case .missingCertificatePin:
+                    throw WebSocketTransportError.missingCertificatePin(host: tunnelCandidateLabel)
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
                 case .failed(_, let message):
@@ -1241,10 +1252,10 @@ nonisolated enum InboundFrame: Sendable {
                     return
                 } catch {
                     if let transportError = error as? WebSocketTransportError,
-                       transportError.isCertificateMismatch {
+                       transportError.isCertificateMismatch || transportError.isMissingCertificatePin {
                         guard !Task.isCancelled,
                               self?.connectionGeneration == myGeneration else { return }
-                        AppLog.connection.debug("[ConnectionManager] Certificate mismatch detected, stopping reconnection")
+                        AppLog.connection.debug("[ConnectionManager] Certificate trust failure (\(transportError.localizedDescription)), stopping reconnection")
                         self?.certMismatchDetected = true
                         self?.connectionState = .disconnected
                         return
