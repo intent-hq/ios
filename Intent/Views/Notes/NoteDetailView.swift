@@ -139,10 +139,14 @@ struct NoteDetailView: View {
             // so names stay current while the note is open.
             agentStore.startObservingEvents()
             await agentStore.fetchAgents(workspaceId: workspaceId)
-            noteStore.onNoteChanged = { [self] in
-                Task { await self.refreshNote() }
-            }
             noteStore.startObservingEvents(workspaceId: workspaceId)
+            // Refresh on note events for as long as this task lives: SwiftUI
+            // cancels it when the view disappears, which ends the stream, so
+            // the store never holds a reference back to the view and no stale
+            // refresh runs after dismissal (ios#250).
+            for await _ in noteStore.noteChanges() {
+                await refreshNote()
+            }
         }
         .onChange(of: noteStore.notes) { _, newNotes in
             // Live-delta removal: if the open note vanished from the workspace's note
