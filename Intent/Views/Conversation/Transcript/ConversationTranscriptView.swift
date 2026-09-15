@@ -104,7 +104,7 @@ struct ConversationTranscriptView: View {
                 let goToEndRequested = scrollState.goToEndRequested
                 scrollState.goToEndRequested = false
                 if scrolledAway {
-                    cancelPendingAutomaticFollow()
+                    cancelPendingFollowOnTakeover()
                 } else if ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
                     goToEndRequested: goToEndRequested
                 ) {
@@ -623,19 +623,29 @@ struct ConversationTranscriptView: View {
         scrollToBottom(proxy: proxy, forced: false)
     }
 
-    /// The user scrolling away drops an automatic follow still in its debounce;
-    /// a forced one keeps its task so that it drains its own flags, but yields
-    /// at execution and while landing to the raised `userIsScrolledAway`.
-    private func cancelPendingAutomaticFollow() {
-        guard !scrollState.pendingFollowIsForced else { return }
+    /// The user scrolling away consumes whatever follow is still pending: an
+    /// automatic one in its debounce, or a forced one in its debounce or its
+    /// landing loop. Every forced follow is requested from a pinned viewport,
+    /// so the gesture that raised the flag came after the request and wins —
+    /// the request is not kept for after the gesture ends. A cancelled task
+    /// cannot drain its own flags, so they are cleared here; the execution
+    /// and landing checks on the flag cover the frame before this change
+    /// handler runs. Go to End tapped afterwards is a fresh request.
+    private func cancelPendingFollowOnTakeover() {
+        if scrollState.pendingFollowIsForced {
+            AppLog.ui.debug("[SCROLL] Forced follow cancelled: the user scrolled away")
+        }
         scrollDebounceTask?.cancel()
         scrollDebounceTask = nil
+        scrollState.pendingFollowIsForced = false
+        isScrollingToBottom = false
     }
 
     /// Stamps the request time up front so deltas arriving inside the debounce
     /// window are rejected by the policy instead of restarting the debounce.
-    /// Forced follows always land and are never preempted by automatic ones;
-    /// automatic follows are re-validated by the policy once the debounce
+    /// Forced follows are never preempted by automatic ones; the user
+    /// scrolling away cancels either (see `cancelPendingFollowOnTakeover`).
+    /// Automatic follows are re-validated by the policy once the debounce
     /// elapses, so a user who scrolled away meanwhile is not snapped back.
     /// A forced follow raises `isScrollingToBottom` for its whole duration
     /// and is complete only once the live geometry confirms its landing (see

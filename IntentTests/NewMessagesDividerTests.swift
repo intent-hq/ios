@@ -776,19 +776,25 @@ struct ConversationTranscriptScrollPolicyTests {
     /// Ordered regression: a user append raises a forced follow while pinned;
     /// during its debounce the user drags away and the gesture ends (phase
     /// final sample with the gesture → away) before the follow comes due. The
-    /// away flag outlives the gesture, so the follow yields at execution
-    /// instead of snapping the user back, and the flag is not a Go to End
-    /// request, so nothing re-queues it. The same trace with the gesture
-    /// still in progress at execution yields on the gesture alone.
+    /// view cancels the pending follow the moment the flag rises; should the
+    /// task still reach execution or a landing poll first, the raised flag
+    /// makes it yield instead of snapping the user back. The viewport stays
+    /// away with Go to End showing, nothing re-queues the follow (the flag is
+    /// not a Go to End request), and a later Go to End tap is a fresh request.
     @Test func gestureThatEndedAwayDuringForcedFollowDebounceWins() {
         #expect(executeFollow(forced: true, distanceToBottom: 0))
         #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
         #expect(transition(current: true, distanceToBottom: 300, isInteracting: false))
         #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 300))
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .yieldToUser)
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
             goToEndRequested: false))
         #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 300, isInteracting: true))
         #expect(!rePinAfterGrowth(isFollowing: false, userIsScrolledAway: true))
+        #expect(transition(current: true, distanceToBottom: 300, isInteracting: false))
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            goToEndRequested: true))
+        #expect(executeFollow(forced: true, userIsScrolledAway: false, distanceToBottom: 300))
     }
 
     /// The forced-follow gesture predicate is the same one the geometry edges
