@@ -28,8 +28,10 @@ struct CreateWorkspaceView: View {
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
     @State private var branchSearchTask: Task<Void, Never>?
-    /// Set once this sheet's own options load has settled, so a cold load
-    /// that failed shows the empty state rather than loading forever.
+    /// Set once this sheet's own options load — the specialist/provider
+    /// lists and the selected provider's first model catalog — has settled,
+    /// so a cold load that failed shows the empty state rather than loading
+    /// forever, and Create stays disabled until the catalog is resolved.
     @State private var hasSettledOptionsLoad = false
     @State private var selectedSpecialist: SpecialistInfo?
     @State private var selectedProvider: ProviderInfo?
@@ -69,6 +71,15 @@ struct CreateWorkspaceView: View {
     private var isLoadingOptions: Bool {
         Self.showsOptionsLoading(
             storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
+            settled: hasSettledOptionsLoad)
+    }
+    /// True while the selected provider's first catalog load is unresolved:
+    /// Create stays disabled (as before the cache) so a workspace is never
+    /// created before the provider's model choices are known. A warm catalog
+    /// is instant and never gates.
+    private var isLoadingSelectedModelCatalog: Bool {
+        Self.showsModelCatalogLoading(
+            catalogCached: selectedProvider.map { optionsStore.models(for: $0.id) != nil },
             settled: hasSettledOptionsLoad)
     }
     /// The branch step's state for the selected repo, owned by the store
@@ -114,7 +125,8 @@ struct CreateWorkspaceView: View {
                             branch: selectedBranch ?? "",
                             specialists: specialists, isLoadingSpecialists: isLoadingOptions,
                             selectedSpecialist: $selectedSpecialist,
-                            providers: providers, isLoadingProviders: isLoadingOptions,
+                            providers: providers,
+                            isLoadingProviders: isLoadingOptions || isLoadingSelectedModelCatalog,
                             selectedProvider: $selectedProvider,
                             models: models, selectedModel: $selectedModel,
                             messageText: $messageText,
@@ -230,15 +242,17 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    /// Cold (nothing cached): awaits the specialist/provider load and the
-    /// selected provider's model catalog while `isLoadingOptions` shows.
-    /// Cached: the pickers already render the cached lists — the store
-    /// revalidates in the background and the loading state never shows.
+    /// Cold (nothing cached): awaits the specialist/provider load while
+    /// `isLoadingOptions` shows, then the selected provider's model catalog
+    /// with Create disabled; the load settles only once both are resolved
+    /// (success or failure). Cached: the pickers already render the cached
+    /// lists — the store revalidates in the background and neither loading
+    /// state shows.
     private func fetchCreationOptions() async {
         await optionsStore.loadIfNeeded()
-        hasSettledOptionsLoad = true
         reconcileSpecialistSelection()
         await reconcileProviderSelection()
+        hasSettledOptionsLoad = true
     }
 
     /// Defaults the specialist selection (orchestrator, else first) and
@@ -315,6 +329,15 @@ struct CreateWorkspaceView: View {
         storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
     ) -> Bool {
         storeIsLoading || (!storeHasLoaded && !settled)
+    }
+
+    /// Create's model-catalog gate: on while the selected provider's catalog
+    /// is not cached (`catalogCached == false`) and this sheet's first load
+    /// has not settled; never for a cached catalog (instant path), no
+    /// selected provider (nothing to wait on), or after the load settled —
+    /// a failed catalog load then falls back to the daemon default.
+    static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
+        catalogCached == false && !settled
     }
 
     /// Keeps the selection while `current`'s id is still selectable, rebound

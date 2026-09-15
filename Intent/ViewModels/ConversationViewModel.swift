@@ -95,6 +95,11 @@ import SwiftUI
     /// under (nil until the first `agent.get` lands). A reconnect bumps the
     /// store generation, so a mismatch means the metadata must be re-read.
     @ObservationIgnored private(set) var modelMetadataGeneration: Int?
+    /// True when the last provider-scoped catalog load settled without
+    /// caching anything (transport error), so the picker shows a retryable
+    /// error state instead of spinning on the nil catalog forever. Cleared
+    /// when a load starts.
+    private(set) var modelCatalogLoadFailed = false
 
     /// The session-wide creation options cache (specialists, providers,
     /// per-provider model catalogs).
@@ -561,26 +566,45 @@ import SwiftUI
     /// catalog issues no request. After a reconnect (store generation moved
     /// past the one the metadata was read under) the agent's model and
     /// provider are re-read first, so the label never keeps pre-reconnect
-    /// metadata.
+    /// metadata: when that re-read fails, the stale model and provider are
+    /// dropped (placeholder label) and no catalog is loaded for them until
+    /// a fresh `agent.get` lands.
     func loadModelCatalogIfNeeded() async {
         let generation = optionsStore.loadGeneration
         if let readUnder = modelMetadataGeneration, readUnder != generation {
             await fetchCurrentModel()
             guard generation == optionsStore.loadGeneration else { return }
+            guard modelMetadataGeneration == generation else {
+                currentModelId = nil
+                currentProviderId = nil
+                return
+            }
         }
         guard let providerId = currentProviderId,
               optionsStore.models(for: providerId) == nil else { return }
-        await optionsStore.loadModelsIfNeeded(providerId: providerId)
+        await loadProviderCatalog(providerId)
     }
 
     /// Picker entry: serve the cached catalog immediately and revalidate it
     /// silently (SWR), or use the legacy path while the provider is unknown.
     func refreshSelectableModels() async {
         if let providerId = currentProviderId {
-            await optionsStore.loadModelsIfNeeded(providerId: providerId)
+            await loadProviderCatalog(providerId)
         } else {
             await fetchModels()
         }
+    }
+
+    /// Loads the provider's catalog through the shared store and records
+    /// whether it settled uncached (`modelCatalogLoadFailed`). A load
+    /// superseded by a reconnect records nothing: the store generation moved
+    /// and the catalog task reloads under it.
+    private func loadProviderCatalog(_ providerId: String) async {
+        modelCatalogLoadFailed = false
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadModelsIfNeeded(providerId: providerId)
+        guard generation == optionsStore.loadGeneration else { return }
+        modelCatalogLoadFailed = optionsStore.models(for: providerId) == nil
     }
 
     func fetchModels() async {

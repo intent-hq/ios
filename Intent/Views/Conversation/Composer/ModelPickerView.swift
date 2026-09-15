@@ -10,6 +10,8 @@ struct ModelPickerView: View {
             Group {
                 if let models = viewModel.selectableModels {
                     modelList(models)
+                } else if viewModel.modelCatalogLoadFailed {
+                    loadFailedState
                 } else {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -24,6 +26,20 @@ struct ModelPickerView: View {
             }
             .task {
                 await viewModel.refreshSelectableModels()
+            }
+        }
+    }
+
+    /// The provider's `models.list` failed and nothing is cached: an
+    /// explicit retry instead of an indefinite spinner.
+    private var loadFailedState: some View {
+        ContentUnavailableView {
+            Label("Models Unavailable", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("The model list could not be loaded.")
+        } actions: {
+            Button("Retry") {
+                Task { await viewModel.refreshSelectableModels() }
             }
         }
     }
