@@ -156,16 +156,24 @@ struct CreationOptionsStoreTests {
         #expect(store.isLoading == false)
     }
 
-    @Test func concurrentColdLoadsShareOneFlight() async {
+    @Test func concurrentColdLoadsShareOneFlight() async throws {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
 
-        async let first: Void = store.loadIfNeeded()
-        async let second: Void = store.loadIfNeeded()
-        _ = await (first, second)
+        // Hold the read open so the second caller enters the store while the
+        // first flight is still in flight (a completed flight would turn it
+        // into a legitimate stale-while-revalidate refresh).
+        fake.pendingMethods = ["specialist.list"]
+        let first = Task { await store.loadIfNeeded() }
+        let second = Task { await store.loadIfNeeded() }
+        try await waitFor("cold read") { fake.paramsForMethod("specialist.list").count == 1 }
+        #expect(!store.hasLoaded)
+        fake.resolvePending("specialist.list", with: ["specialists": [specialistDict(id: "implementor")]])
+        _ = await (first.value, second.value)
 
         #expect(store.hasLoaded)
+        #expect(store.specialists.map(\.id) == ["implementor"])
         #expect(fake.paramsForMethod("specialist.list").count == 1)
         #expect(fake.paramsForMethod("host.providerAuthStatus").count == 1)
     }
