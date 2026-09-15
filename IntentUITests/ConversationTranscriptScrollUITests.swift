@@ -5,8 +5,11 @@ import XCTest
 /// user scrolls up, hidden again after tapping it or scrolling back down,
 /// still hidden — with the last message still on screen — when a footer row
 /// (the background-hooks chip row) appears under the settled transcript,
-/// still hidden after tapping a suggested prompt under the last message, and
-/// hidden on every one of several consecutive entries into the conversation.
+/// still hidden after tapping a suggested prompt under the last message,
+/// hidden on every one of several consecutive entries into the conversation,
+/// hidden — with the last message on screen and no blank band — at the first
+/// settled sample of a cold entry (intent-hq/ios#304), and hidden after a
+/// single tap from the very top of the transcript (intent-hq/ios#305).
 ///
 /// Every "rests at the bottom" failure message reports whether Go to End is
 /// present and where the last row's frame lies relative to the transcript's
@@ -15,12 +18,15 @@ import XCTest
 /// (intent-hq/ios#281).
 ///
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
-/// The transcript is the 32-message `DemoFixtures.longConversationMessages`
-/// served for the "Deflake payment integration tests" workspace, whose single
-/// agent opens straight into the transcript from the workspace row. That
-/// workspace's `hook.list` fixture waits on `DemoFixtures.longConversationHookListGate`
-/// — a delay by default, or a trigger file the test creates — so its hooks
-/// row lands only after the transcript has been observed settled.
+/// The transcript is the coordinator-shaped, 150+-message
+/// `DemoFixtures.longConversationMessages` (tool-call groups, agent-to-agent
+/// rows, code fences, tables) served for the "Deflake payment integration
+/// tests" workspace, whose single foreground agent opens straight into the
+/// transcript from the workspace row with the "Waiting for all" footer
+/// already under it. That workspace's `hook.list` fixture waits on
+/// `DemoFixtures.longConversationHookListGate` — a delay by default, or a
+/// trigger file the test creates — so its hooks row lands only after the
+/// transcript has been observed settled.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     private enum Fixture {
@@ -63,6 +69,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // transcript's bottom edge after the re-pin as before the row (an
         // unpinned transcript is off by the row's full height, ~36 pt).
         static let rePinTolerance: CGFloat = 4
+        // Window after the first settled sample of a cold entry, and after a
+        // single Go to End tap has landed, during which the button must not
+        // (re)appear (#304, #305).
+        static let quietWindow: TimeInterval = 2
+        // Upper bound on fast swipes to reach the first message from the
+        // bottom of the 150+-message transcript; the loop exits as soon as
+        // the first message is on screen.
+        static let maxSwipesToTop = 150
     }
 
     /// The conversation's elements once the transcript has settled at the bottom.
@@ -282,6 +296,107 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         }
     }
 
+    /// A cold entry — fresh launch, first open of the long conversation —
+    /// must show the last message inside the transcript at the very first
+    /// settled sample, over a non-empty visible band: no blank transcript
+    /// while the LazyVStack lays out (intent-hq/ios#304). Unlike
+    /// `assertRestsAtBottom`, the checks run at the first sample where the
+    /// content holds still rather than after a grace period in which a late
+    /// re-pin could mask the symptom, and Go to End must stay absent over the
+    /// quiet window that follows.
+    @MainActor
+    func testFirstOpenOfLongConversationShowsLastMessageWithNoBlankBand() throws {
+        let app = launchDemoApp()
+        let opened = enterLongConversation(in: app, context: "cold entry")
+        let lastMessage = opened.lastMessage
+        let goToEnd = opened.goToEnd
+        let transcript = opened.transcript
+
+        // 1. First settled sample: the last row exists and its frame holds
+        //    still across two consecutive polls. An unrealized last row (the
+        //    viewport resting past the end) never satisfies this.
+        let firstSettledSample = waitUntilSteady(timeout: 10, tolerance: Fixture.rePinTolerance) {
+            lastMessage.exists ? lastMessage.frame.maxY : .nan
+        }
+        let visibleBand = rows(intersecting: transcript)
+        XCTAssertFalse(
+            visibleBand.isEmpty,
+            "cold entry: the transcript's visible band is empty — no message row intersects the transcript frame — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertNotNil(
+            firstSettledSample,
+            "cold entry: the last message never held still inside the transcript within 10 s "
+                + "(\(visibleBand.count) row(s) in the visible band) — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            isInside(lastMessage, transcript),
+            "cold entry: at the first settled sample the last message is not inside the transcript — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+
+        // 2. Go to End never appears over the quiet window, and the last
+        //    message is still on screen at the end of it.
+        XCTAssertFalse(
+            goToEnd.waitForExistence(timeout: Fixture.quietWindow),
+            "cold entry: Go to End appeared after the transcript settled — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            waitUntilVisible(lastMessage, in: transcript, timeout: Fixture.settleWindow),
+            "cold entry: the last message left the screen after the quiet window — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+    }
+
+    /// From the very top of the long transcript a single tap on Go to End
+    /// must land at the end: the last message comes on screen, the button
+    /// disappears and stays gone over the quiet window — no second tap
+    /// (intent-hq/ios#305).
+    @MainActor
+    func testGoToEndFromTopOfLongTranscriptLandsAtEndInOneTap() throws {
+        let app = launchDemoApp()
+        let opened = openLongConversation(in: app)
+        let lastMessage = opened.lastMessage
+        let goToEnd = opened.goToEnd
+        let transcript = opened.transcript
+        assertRestsAtBottom(
+            lastRow: lastMessage, named: "last assistant paragraph",
+            in: opened, context: "before scrolling to the top")
+
+        // 1. Scroll to the very top: swipe down (content moves down) until
+        //    the first message is on screen.
+        let firstMessage = message(in: app, containing: Fixture.firstMessageFragment)
+        var swipes = 0
+        while swipes < Fixture.maxSwipesToTop, !isVisible(firstMessage, in: transcript) {
+            transcript.swipeDown(velocity: .fast)
+            swipes += 1
+        }
+        XCTAssertTrue(
+            waitUntilVisible(firstMessage, in: transcript, timeout: 5),
+            "first message never came on screen after \(swipes) swipes towards the top — "
+                + restingState(of: firstMessage, named: "first user paragraph", in: opened))
+        XCTAssertTrue(
+            goToEnd.waitForExistence(timeout: 5),
+            "Go to End is absent at the top of the transcript")
+
+        // 2. One tap, then no further interaction: the last message must
+        //    come on screen and the button must go and stay gone.
+        goToEnd.tap()
+        XCTAssertTrue(
+            waitUntilVisible(lastMessage, in: transcript, timeout: 10),
+            "one tap on Go to End from the top (after \(swipes) swipes) did not bring the last message on screen — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            goToEnd.waitForNonExistence(timeout: 5),
+            "Go to End stayed visible after one tap from the top — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertFalse(
+            goToEnd.waitForExistence(timeout: Fixture.quietWindow),
+            "Go to End reappeared after one tap from the top; a second tap would be needed — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        XCTAssertTrue(
+            isInside(lastMessage, transcript),
+            "the last message is not inside the transcript after one tap from the top — "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+    }
+
     // MARK: - Helpers
 
     @MainActor
@@ -298,6 +413,18 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// last row unrealized and off the accessibility hierarchy).
     @MainActor
     private func openLongConversation(in app: XCUIApplication, context: String = "after opening") -> OpenConversation {
+        let opened = enterLongConversation(in: app, context: context)
+        XCTAssertTrue(
+            opened.lastMessage.waitForExistence(timeout: 15),
+            "\(context): last transcript message never appeared — "
+                + restingState(of: opened.lastMessage, named: "last assistant paragraph", in: opened))
+        return opened
+    }
+
+    /// `openLongConversation` without waiting for the last message, so a
+    /// test can observe the transcript's very first settled state.
+    @MainActor
+    private func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConversation {
         let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
         if !workspaceRow.waitForExistence(timeout: 30) {
             // Same fallback as AppStoreScreenshotTests: a collapsed iPad
@@ -311,12 +438,18 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "\(context): transcript scroll view not found")
-        let opened = OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
-        XCTAssertTrue(
-            lastMessage.waitForExistence(timeout: 15),
-            "\(context): last transcript message never appeared — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        return opened
+        return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+    }
+
+    /// The transcript's static-text rows whose frames intersect its own
+    /// frame: empty when the viewport rests over a blank band.
+    @MainActor
+    private func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
+        let transcriptFrame = transcript.frame
+        return transcript.staticTexts.allElementsBoundByIndex.filter { row in
+            let frame = row.frame
+            return !frame.isEmpty && frame.intersects(transcriptFrame)
+        }
     }
 
     /// Navigates back out of the transcript to the workspace list so the
@@ -419,11 +552,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     private func waitUntilVisible(
         _ element: XCUIElement, in container: XCUIElement, timeout: TimeInterval
     ) -> Bool {
-        waitUntil(timeout: timeout) {
-            guard element.exists else { return false }
-            let frame = element.frame
-            return !frame.isEmpty && container.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
-        }
+        waitUntil(timeout: timeout) { isVisible(element, in: container) }
+    }
+
+    /// True when the element exists and its centre lies inside the
+    /// container's frame right now.
+    @MainActor
+    private func isVisible(_ element: XCUIElement, in container: XCUIElement) -> Bool {
+        guard element.exists else { return false }
+        let frame = element.frame
+        return !frame.isEmpty && container.frame.contains(CGPoint(x: frame.midX, y: frame.midY))
     }
 
     /// Polls `condition` every 0.25 s until it holds or `timeout` elapses.
