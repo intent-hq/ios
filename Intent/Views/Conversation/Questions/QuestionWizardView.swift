@@ -44,10 +44,15 @@ struct QuestionWizardView: View {
     private var isLast: Bool { idx == questions.count - 1 }
     private var isMulti: Bool { current.multiSelect }
     private var multiStep: Bool { questions.count > 1 }
-    private var showNext: Bool { isMulti || isLast }
+    private var hasFreeText: Bool {
+        !drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    // Free text on a single-select step has no advancing option tap, and
+    // Return inserts a newline where ComposerSubmitPolicy says so (iPhone),
+    // so the Next button is the submit path there.
+    private var showNext: Bool { isMulti || isLast || hasFreeText }
     private var nextDisabled: Bool {
-        (isMulti || isLast) && drafts[idx].sel.isEmpty
-            && drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        (isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
     }
 
     var body: some View {

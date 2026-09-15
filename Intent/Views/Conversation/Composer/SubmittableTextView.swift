@@ -138,6 +138,9 @@ struct SubmittableTextView: UIViewRepresentable {
     /// Reports the caret's UTF-16 offset (end of selection) on every
     /// selection change; used by visionOS dictation to insert at the caret.
     var onCaretChange: ((Int) -> Void)?
+    /// Corner radius of the visionOS hover/highlight shape; defaults to the
+    /// composer field's corners.
+    var hoverCornerRadius: CGFloat = Constants.Conversation.Composer.fieldCornerRadius
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
@@ -151,7 +154,7 @@ struct SubmittableTextView: UIViewRepresentable {
         // inside the rounded field (the outer RoundedRectangle clip in
         // MessageInputView does not affect it).
         textView.hoverStyle = UIHoverStyle(
-            shape: .rect(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+            shape: .rect(cornerRadius: hoverCornerRadius))
         #endif
         let inset = Constants.Conversation.Composer.textContainerInset
         textView.textContainerInset = UIEdgeInsets(top: inset, left: inset, bottom: inset, right: inset)

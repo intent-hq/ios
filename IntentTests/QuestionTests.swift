@@ -709,3 +709,27 @@ struct AnswerFlatteningTests {
         #expect(QuestionAnswer.flattenToMessage([]) == "")
     }
 }
+
+// MARK: - Free-text field auto-grow clamp
+
+struct QuestionStepFreeTextHeightTests {
+    private let insets = Constants.Conversation.Composer.textContainerInset * 2
+    private let lineHeight: CGFloat = 20
+
+    @Test func emptyFieldIsOneLineTall() {
+        #expect(QuestionStepView.clampedFreeTextHeight(0, lineHeight: lineHeight)
+            == lineHeight + insets)
+    }
+
+    @Test func wrappedContentGrowsWithItsHeight() {
+        let twoLines = lineHeight * 2 + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(twoLines, lineHeight: lineHeight) == twoLines)
+    }
+
+    @Test func growthCapsAtMaximumLineCount() {
+        let cap = lineHeight * CGFloat(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount)
+            + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(cap * 4, lineHeight: lineHeight) == cap)
+        #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
+    }
+}
