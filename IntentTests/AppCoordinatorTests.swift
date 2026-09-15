@@ -193,6 +193,7 @@ final class AppCoordinatorTests {
         #expect(WebSocketConnection.trustedPin(legacy.server.certFingerprint) == nil)
         persistence.setActiveConnection(id: legacy.id)
         let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true), connection: FakeConnectionManager(),
             backendID: BackendID(legacy.id),
             persistence: persistence, syncedRegistry: Self.syncedRegistry(payloads: []))
 

@@ -1874,12 +1874,12 @@ struct ConnectionManagerTests {
     /// dead socket — the existing connection keeps serving.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsItServing() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
             manager.disconnect()
             server.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
@@ -1907,12 +1907,12 @@ struct ConnectionManagerTests {
     /// the failed race must not stick to the preserved connection.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsCertMismatches() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
             manager.disconnect()
             server.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
@@ -1935,6 +1935,7 @@ struct ConnectionManagerTests {
     /// established, and the new connection serves round-trips.
     @Test @MainActor func successfulPairingOverLiveConnectionAdoptsNewTarget() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -1942,7 +1943,6 @@ struct ConnectionManagerTests {
             manager.disconnect()
             serverA.stop()
             serverB.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
@@ -1979,6 +1979,7 @@ struct ConnectionManagerTests {
     /// must still reach `certMismatches`: the race was not superseded.
     @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -1988,7 +1989,6 @@ struct ConnectionManagerTests {
             manager.disconnect()
             serverA.stop()
             serverB.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
@@ -2020,6 +2020,7 @@ struct ConnectionManagerTests {
     /// one adopts its target.
     @Test @MainActor func olderOverlappingPairingAttemptDoesNotWin() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let liveServer = try await LoopbackWebSocketServer.start()
         let olderTarget = try await LoopbackWebSocketServer.start(gated: true)
@@ -2029,7 +2030,6 @@ struct ConnectionManagerTests {
             liveServer.stop()
             olderTarget.stop()
             newerTarget.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
@@ -2069,12 +2069,12 @@ struct ConnectionManagerTests {
     /// and stranding the app in `.connecting`.
     @Test @MainActor func failedPairingWhileReconnectingKeepsReconnectLoop() async throws {
         let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
             manager.disconnect()
             server.stop()
-            Self.restorePlaintextLoopback(plaintextWasAllowed)
         }
 
         try await manager.connect(
