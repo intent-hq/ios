@@ -38,6 +38,10 @@ class AppCoordinator {
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
     var pairingShowsSavedConnections = false
+    /// True when the saved-connections store exists but could not be decoded:
+    /// the synced-registry merge was skipped and every write refuses to
+    /// overwrite the blob (intent-hq/ios#265). Cleared once a merge reads it.
+    private(set) var savedConnectionsUndecodable = false
     /// Deep-link pairing awaiting user confirmation; drives the
     /// DeepLinkPairingView sheet in RootView.
     var pendingDeepLinkPairing: DeepLinkPairingRequest?
@@ -469,6 +473,12 @@ class AppCoordinator {
         guard case .available(let records) = syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
         let outcome = persistence.mergeSyncedBackends(records: records)
+        savedConnectionsUndecodable = outcome.registryUndecodable
+        if outcome.registryUndecodable {
+            AppLog.app.error(
+                "[AppCoordinator] Saved connections could not be decoded; synced merge skipped to preserve them")
+            return outcome
+        }
         // Tombstones close windows on the removed backends; a re-added
         // record (same id resurrected from another device) clears its mark.
         sessionRegistry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))

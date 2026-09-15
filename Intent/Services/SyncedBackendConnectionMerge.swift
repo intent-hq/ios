@@ -223,5 +223,9 @@ struct SyncedBackendMergeOutcome: Equatable {
     /// True when a tombstone removed the connection that was active — the
     /// caller must disconnect and route away from it.
     var removedActiveConnection: Bool
+    /// True when the merge was skipped because the saved-connections blob
+    /// exists but could not be decoded; nothing was written so the original
+    /// blob is preserved (intent-hq/ios#265).
+    var registryUndecodable: Bool = false
     var changed: Bool { !(addedIds.isEmpty && updatedIds.isEmpty && removedIds.isEmpty) }
 }

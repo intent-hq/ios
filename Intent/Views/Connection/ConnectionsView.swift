@@ -7,9 +7,20 @@ import SwiftUI
 enum ConnectionPairing {
     enum PersistenceError: LocalizedError {
         case saveFailed
+        /// The existing saved-connections data could not be read, so the new
+        /// pairing was not written over it (intent-hq/ios#265).
+        case registryUndecodable
 
         var errorDescription: String? {
-            String(localized: "Could not save this connection. Please try again.")
+            switch self {
+            case .saveFailed:
+                String(localized: "Could not save this connection. Please try again.")
+            case .registryUndecodable:
+                String(
+                    localized:
+                        "Could not save this connection: the existing saved connections could not be read. They were left untouched."
+                )
+            }
         }
     }
 
@@ -44,6 +55,7 @@ enum ConnectionPairing {
             StoredConnection(
                 server: server, token: token,
                 displayName: displayName, lastConnectedAt: Date()))
+        guard !outcome.registryUndecodable else { throw PersistenceError.registryUndecodable }
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
         persistence.setActiveConnection(id: stored.id)
