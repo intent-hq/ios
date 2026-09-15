@@ -292,7 +292,10 @@ struct WorkspaceDetailView: View {
         }
         #endif
         .sheet(isPresented: $showSpecialistPicker) {
-            SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore)
+            SpecialistPickerView(
+                workspaceId: workspaceId, agentStore: agentStore,
+                optionsStore: session.creationOptionsStore
+            )
                 .environment(coordinator)
         }
         .navigationTitle(workspaceTitle)

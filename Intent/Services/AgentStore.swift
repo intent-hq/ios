@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import Observation
 
-struct SpecialistInfo: Identifiable {
+struct SpecialistInfo: Identifiable, Equatable {
     let id: String
     let name: String
     let description: String

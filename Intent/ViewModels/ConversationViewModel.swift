@@ -84,8 +84,26 @@ import SwiftUI
     }
 
     // Model selection
+    /// Legacy `agent.getModels` catalog, used only while the agent's provider
+    /// is unknown; provider-scoped catalogs come from `optionsStore`.
     var availableModels: [ModelInfo] = []
     var currentModelId: String?
+    /// The agent's provider id from `agent.get`; keys the shared
+    /// `models.list` cache in `optionsStore`.
+    var currentProviderId: String?
+    /// The `optionsStore.loadGeneration` the model/provider were last read
+    /// under (nil until the first `agent.get` lands). A reconnect bumps the
+    /// store generation, so a mismatch means the metadata must be re-read.
+    @ObservationIgnored private(set) var modelMetadataGeneration: Int?
+    /// True when the last provider-scoped catalog load settled without
+    /// caching anything (transport error), so the picker shows a retryable
+    /// error state instead of spinning on the nil catalog forever. Cleared
+    /// when a load starts.
+    private(set) var modelCatalogLoadFailed = false
+
+    /// The session-wide creation options cache (specialists, providers,
+    /// per-provider model catalogs).
+    let optionsStore: CreationOptionsStore
 
     // Specialist info (for empty state display)
     var specialistName: String?
@@ -128,12 +146,14 @@ import SwiftUI
     init(
         agentId: String, workspaceId: String, agentName: String,
         connection: any ConnectionManagerRouting,
-        uploadService: AttachmentUploadService
+        uploadService: AttachmentUploadService,
+        optionsStore: CreationOptionsStore
     ) {
         self.agentId = agentId
         self.workspaceId = workspaceId
         self.agentName = agentName
         self.connection = connection
+        self.optionsStore = optionsStore
         self.store = ConversationStore(connectionManager: connection)
         self.hookStore = BackgroundHookStore(connectionManager: connection)
         self.monitoredPrStore = MonitoredPrStore(connectionManager: connection)
@@ -323,16 +343,32 @@ import SwiftUI
     }
 
     /// Fetch the agent's current model and specialist from the backend.
-    private func fetchCurrentModel() async {
+    ///
+    /// Generation-gated: a response from before a reconnect (store
+    /// generation bump while the read was in flight) is stale and is never
+    /// installed; the read is repeated under the new generation instead.
+    func fetchCurrentModel() async {
         do {
-            let result = try await connection.request(
+            var generation = optionsStore.loadGeneration
+            var result = try await connection.request(
                 "agent.get",
                 params: ["agentId": agentId]
             )
+            while generation != optionsStore.loadGeneration {
+                generation = optionsStore.loadGeneration
+                result = try await connection.request(
+                    "agent.get",
+                    params: ["agentId": agentId]
+                )
+            }
+            modelMetadataGeneration = generation
             if let dict = result as? [String: Any],
                let agent = dict["agent"] as? [String: Any] {
                 if let model = agent["model"] as? String {
                     currentModelId = model
+                }
+                if let provider = agent["provider"] as? String, !provider.isEmpty {
+                    currentProviderId = provider
                 }
                 // Extract specialist ID from metadata
                 if let metadata = agent["metadata"] as? [String: Any],
@@ -478,6 +514,98 @@ import SwiftUI
     }
 
     // MARK: - Models
+
+    /// The catalog the picker offers: the shared per-provider `models.list`
+    /// cache once the agent's provider is known (nil until it is cached),
+    /// otherwise the legacy `agent.getModels` list.
+    var selectableModels: [ModelInfo]? {
+        if let providerId = currentProviderId {
+            return optionsStore.models(for: providerId)
+        }
+        return availableModels
+    }
+
+    /// The current model's human-readable name from the cached catalog,
+    /// falling back to the bare model id while the catalog is unavailable.
+    var currentModelDisplayName: String? {
+        guard let modelId = currentModelId else { return nil }
+        return Self.modelDisplayName(
+            modelId: modelId, provider: currentProviderId, catalog: selectableModels ?? [])
+    }
+
+    /// Resolves `modelId` against `catalog`, matching on provider too when
+    /// one is known so same-id models under different providers never alias.
+    static func modelDisplayName(
+        modelId: String, provider: String?, catalog: [ModelInfo]
+    ) -> String {
+        let match = catalog.first { model in
+            model.id == modelId && (provider == nil || model.provider == provider)
+        }
+        return match?.name ?? modelId
+    }
+
+    /// Identity for the view's `.task(id:)`: changes when the provider
+    /// becomes known, when its catalog flips between cached and cleared, and
+    /// on every store generation bump (reconnect invalidation — including
+    /// one that lands while a cold load is still in flight and so never
+    /// flips `isCached`), so the catalog reloads exactly then.
+    struct ModelCatalogKey: Equatable {
+        let providerId: String?
+        let isCached: Bool
+        let loadGeneration: Int
+    }
+
+    var modelCatalogKey: ModelCatalogKey {
+        ModelCatalogKey(
+            providerId: currentProviderId,
+            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false,
+            loadGeneration: optionsStore.loadGeneration)
+    }
+
+    /// Cold-loads the provider's catalog when it is not cached; a cached
+    /// catalog issues no request. After a reconnect (store generation moved
+    /// past the one the metadata was read under) the agent's model and
+    /// provider are re-read first, so the label never keeps pre-reconnect
+    /// metadata: when that re-read fails, the stale model and provider are
+    /// dropped (placeholder label) and no catalog is loaded for them until
+    /// a fresh `agent.get` lands.
+    func loadModelCatalogIfNeeded() async {
+        let generation = optionsStore.loadGeneration
+        if let readUnder = modelMetadataGeneration, readUnder != generation {
+            await fetchCurrentModel()
+            guard generation == optionsStore.loadGeneration else { return }
+            guard modelMetadataGeneration == generation else {
+                currentModelId = nil
+                currentProviderId = nil
+                return
+            }
+        }
+        guard let providerId = currentProviderId,
+              optionsStore.models(for: providerId) == nil else { return }
+        await loadProviderCatalog(providerId)
+    }
+
+    /// Picker entry: serve the cached catalog immediately and revalidate it
+    /// silently (SWR), or use the legacy path while the provider is unknown.
+    func refreshSelectableModels() async {
+        if let providerId = currentProviderId {
+            await loadProviderCatalog(providerId)
+        } else {
+            await fetchModels()
+        }
+    }
+
+    /// Loads the provider's catalog through the shared store and records
+    /// whether it settled uncached (`modelCatalogLoadFailed`). A load
+    /// superseded by a reconnect records nothing: the store generation moved
+    /// and the catalog task reloads under it.
+    private func loadProviderCatalog(_ providerId: String) async {
+        modelCatalogLoadFailed = false
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadModelsIfNeeded(providerId: providerId)
+        guard generation == optionsStore.loadGeneration else { return }
+        modelCatalogLoadFailed = optionsStore.models(for: providerId) == nil
+    }
 
     func fetchModels() async {
         do {

@@ -13,7 +13,8 @@ struct ConversationView: View {
             workspaceId: workspaceId,
             agentName: agentName,
             connection: session.connection,
-            uploadService: session.attachmentUploadService
+            uploadService: session.attachmentUploadService,
+            optionsStore: session.creationOptionsStore
         ))
     }
 
@@ -65,6 +66,9 @@ private struct ConversationViewContent: View {
             .task {
                 await viewModel.load()
                 handleAgentNotFoundIfNeeded()
+            }
+            .task(id: viewModel.modelCatalogKey) {
+                await viewModel.loadModelCatalogIfNeeded()
             }
             .onChange(of: viewModel.agentNotFound) { _, notFound in
                 if notFound {
@@ -212,8 +216,7 @@ private struct ConversationViewContent: View {
     /// Ellipsis toolbar menu (model info, rename, delete).
     private var agentMenu: some View {
         Menu {
-            if let modelId = viewModel.currentModelId {
-                let displayName = viewModel.availableModels.first(where: { $0.id == modelId })?.name ?? modelId
+            if let displayName = viewModel.currentModelDisplayName {
                 Text("Model: \(displayName)")
             }
             if viewModel.filteredMessages.isEmpty {

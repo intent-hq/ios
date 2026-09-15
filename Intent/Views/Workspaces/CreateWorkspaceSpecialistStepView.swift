@@ -271,13 +271,4 @@ extension CreateWorkspaceView {
         }
         return params
     }
-
-    static func modelFetchOutcome(
-        fetched: [ModelInfo],
-        requestedProviderId: String,
-        selectedProviderId: String?
-    ) -> (models: [ModelInfo], selectedModel: ModelInfo?)? {
-        guard selectedProviderId == requestedProviderId else { return nil }
-        return (fetched, nil)
-    }
 }
