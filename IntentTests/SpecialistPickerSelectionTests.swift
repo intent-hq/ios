@@ -109,6 +109,25 @@ struct SpecialistPickerSelectionTests {
         #expect(!SpecialistPickerView.showsModelsLoading(catalog: [makeModel("sonnet4.5")], settled: false))
     }
 
+    // MARK: - SettledLoads (generation-gated sheet markers)
+
+    @Test func settledLoadsPublishOnlyForTheGenerationTheLoadStartedIn() {
+        var settled = SpecialistPickerView.SettledLoads()
+        #expect(!settled.settleOptions(startedAt: 0, current: 1))
+        #expect(!settled.settleModels(for: "auggie", startedAt: 0, current: 1))
+        #expect(!settled.options)
+        #expect(settled.modelProviders.isEmpty)
+
+        #expect(settled.settleOptions(startedAt: 1, current: 1))
+        #expect(settled.settleModels(for: "auggie", startedAt: 1, current: 1))
+        #expect(settled.options)
+        #expect(settled.modelProviders == ["auggie"])
+
+        settled.reset()
+        #expect(!settled.options)
+        #expect(settled.modelProviders.isEmpty)
+    }
+
     // MARK: - Loading states against the session store (cached vs. cold path)
 
     private func configureStoreResponses(_ fake: FakeConnectionManager) {
@@ -231,6 +250,101 @@ struct SpecialistPickerSelectionTests {
         // if a bare id were shared: reconciliation matches id and provider.
         let stalePick = makeModel("grok-4", provider: "grok")
         #expect(CreateWorkspaceView.reconciledModel(current: stalePick, models: auggieModels) == nil)
+    }
+
+    /// Holds the sheet's auggie load, reconnects (hard clear), starts the
+    /// fresh same-provider load, and returns the OLD request first while the
+    /// fresh one stays held.
+    @MainActor
+    private func makeReconnectRace(
+        _ fake: FakeConnectionManager, store: CreationOptionsStore
+    ) async throws -> (oldGeneration: Int, oldLoad: Task<Void, Never>, settled: SpecialistPickerView.SettledLoads) {
+        await store.loadIfNeeded()
+        var settled = SpecialistPickerView.SettledLoads()
+        fake.pendingMethods = ["models.list"]
+        let oldGeneration = store.loadGeneration
+        let oldLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        for _ in 0..<200 where fake.paramsForMethod("models.list").isEmpty {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(fake.paramsForMethod("models.list").count == 1)
+
+        store.invalidate()
+        settled.reset()
+        return (oldGeneration, oldLoad, settled)
+    }
+
+    @MainActor
+    @Test func supersededModelLoadCannotSettleCurrentLoadingAfterReconnect() async throws {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+        let race = try await makeReconnectRace(fake, store: store)
+        let (oldGeneration, oldLoad) = (race.oldGeneration, race.oldLoad)
+        var settled = race.settled
+
+        let freshGeneration = store.loadGeneration
+        let freshLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        for _ in 0..<200 where fake.paramsForMethod("models.list").count < 2 {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(fake.paramsForMethod("models.list").count == 2)
+
+        // The old request answers first: the store drops its catalog, and
+        // the sheet must not settle on it — the Model section keeps loading
+        // (Create disabled) until the fresh request answers.
+        fake.resolvePending("models.list", with: ["models": [
+            ["id": "stale", "name": "stale", "provider": "auggie"],
+        ]])
+        await oldLoad.value
+        #expect(!settled.settleModels(for: "auggie", startedAt: oldGeneration, current: store.loadGeneration))
+        #expect(store.models(for: "auggie") == nil)
+        let loadingAfterOld = SpecialistPickerView.showsModelsLoading(
+            catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie"))
+        #expect(loadingAfterOld)
+        #expect(SpecialistPickerView.isCreateDisabled(
+            hasSpecialist: true, isCreating: false, isLoadingProviders: false,
+            isLoadingModels: loadingAfterOld, providers: store.providers))
+
+        fake.resolvePending("models.list", with: ["models": [
+            ["id": "sonnet4.5", "name": "sonnet4.5", "provider": "auggie", "isDefault": true],
+        ]])
+        await freshLoad.value
+        #expect(settled.settleModels(for: "auggie", startedAt: freshGeneration, current: store.loadGeneration))
+        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
+        #expect(!SpecialistPickerView.showsModelsLoading(
+            catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie")))
+    }
+
+    @MainActor
+    @Test func freshModelLoadFailureSettlesAfterReconnectWhileOldCompletionDoesNot() async throws {
+        let fake = FakeConnectionManager()
+        configureStoreResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+        let race = try await makeReconnectRace(fake, store: store)
+        let (oldGeneration, oldLoad) = (race.oldGeneration, race.oldLoad)
+        var settled = race.settled
+
+        // The fresh request fails outright: the sheet's current load settled,
+        // so the Model section shows the daemon-default row rather than
+        // spinning on a catalog that will not arrive.
+        fake.pendingMethods = []
+        fake.errorMap["models.list"] = URLError(.notConnectedToInternet)
+        let freshGeneration = store.loadGeneration
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        #expect(settled.settleModels(for: "auggie", startedAt: freshGeneration, current: store.loadGeneration))
+        #expect(store.models(for: "auggie") == nil)
+        #expect(!SpecialistPickerView.showsModelsLoading(
+            catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie")))
+
+        // The old request answering later changes nothing: its catalog is
+        // dropped and its marker is not published.
+        fake.resolvePending("models.list", with: ["models": [
+            ["id": "stale", "name": "stale", "provider": "auggie"],
+        ]])
+        await oldLoad.value
+        #expect(!settled.settleModels(for: "auggie", startedAt: oldGeneration, current: store.loadGeneration))
+        #expect(store.models(for: "auggie") == nil)
     }
 
     // MARK: - noneSelectable (desktop-setup guidance state, monorepo#985)

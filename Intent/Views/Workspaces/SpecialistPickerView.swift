@@ -22,13 +22,11 @@ struct SpecialistPickerView: View {
     @State private var agentName: String = ""
     @State private var userEditedName: Bool = false
     @State private var isSettingNameFromSpecialist: Bool = false
-    /// True once this sheet's own `loadIfNeeded` returned, so a settled
-    /// load that failed shows the empty state instead of spinning forever.
-    @State private var hasSettledOptionsLoad = false
-    /// Providers whose `loadModelsIfNeeded` returned in this sheet; a
-    /// failed cold model load (catalog still nil) then shows the daemon
-    /// default row instead of wedging Create behind a spinner.
-    @State private var settledModelProviders: Set<String> = []
+    /// Which of this sheet's own loads returned (options; models per
+    /// provider), so a settled load that failed shows the empty state or the
+    /// daemon-default row instead of spinning forever — published only for
+    /// loads that returned in the store generation they started in.
+    @State private var settledLoads = SettledLoads()
 
     @State private var selectedProvider: ProviderInfo?
     @State private var selectedModel: ModelInfo?
@@ -52,13 +50,13 @@ struct SpecialistPickerView: View {
     private var isLoadingOptions: Bool {
         CreateWorkspaceView.showsOptionsLoading(
             storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
-            settled: hasSettledOptionsLoad)
+            settled: settledLoads.options)
     }
     private var isLoadingModels: Bool {
         guard let provider = selectedProvider else { return false }
         return Self.showsModelsLoading(
             catalog: optionsStore.models(for: provider.id),
-            settled: settledModelProviders.contains(provider.id))
+            settled: settledLoads.modelProviders.contains(provider.id))
     }
 
     var body: some View {
@@ -142,8 +140,7 @@ struct SpecialistPickerView: View {
         // cold reload) and re-warm the selected provider's catalog so the
         // open step never sits loading forever on a cleared cache.
         .onChange(of: optionsStore.loadGeneration) { _, _ in
-            hasSettledOptionsLoad = false
-            settledModelProviders = []
+            settledLoads.reset()
             Task {
                 await loadOptions()
                 if navigationPath.contains(.provider) {
@@ -156,9 +153,14 @@ struct SpecialistPickerView: View {
     /// Cold (nothing cached): awaits the specialist/provider load while
     /// `isLoadingOptions` shows. Cached: the steps already render the cached
     /// lists — the store revalidates in the background and no spinner shows.
+    /// A load superseded by a reconnect clear publishes nothing: the
+    /// `loadGeneration` change starts a fresh load that settles and reconciles.
     private func loadOptions() async {
+        let generation = optionsStore.loadGeneration
         await optionsStore.loadIfNeeded()
-        hasSettledOptionsLoad = true
+        guard settledLoads.settleOptions(startedAt: generation, current: optionsStore.loadGeneration) else {
+            return
+        }
         reconcileSpecialistSelection()
     }
 
@@ -190,8 +192,10 @@ struct SpecialistPickerView: View {
     }
 
     private func loadModels(for provider: ProviderInfo) async {
+        let generation = optionsStore.loadGeneration
         await optionsStore.loadModelsIfNeeded(providerId: provider.id)
-        settledModelProviders.insert(provider.id)
+        settledLoads.settleModels(
+            for: provider.id, startedAt: generation, current: optionsStore.loadGeneration)
     }
 
     private func selectSpecialist(_ specialist: SpecialistInfo) {

@@ -43,6 +43,37 @@ extension SpecialistPickerView {
         catalog == nil && !settled
     }
 
+    /// This sheet's settled-load markers, gated by the store's
+    /// `loadGeneration`: a marker is published only when the load returned
+    /// in the generation it started in. A load superseded by a reconnect
+    /// clear (`invalidate()`) returns for a cache the store already dropped;
+    /// settling on it would show the daemon-default row and enable Create
+    /// while the fresh load for the same provider is still pending.
+    struct SettledLoads {
+        private(set) var options = false
+        private(set) var modelProviders: Set<String> = []
+
+        /// Returns true when the marker was published (the load is current).
+        @discardableResult
+        mutating func settleOptions(startedAt: Int, current: Int) -> Bool {
+            guard startedAt == current else { return false }
+            options = true
+            return true
+        }
+
+        @discardableResult
+        mutating func settleModels(for providerId: String, startedAt: Int, current: Int) -> Bool {
+            guard startedAt == current else { return false }
+            modelProviders.insert(providerId)
+            return true
+        }
+
+        /// A reconnect clear: every marker belonged to the dropped cache.
+        mutating func reset() {
+            self = SettledLoads()
+        }
+    }
+
     /// Builds the provider/model params for `agent.create`; auggie is omitted
     /// because it is the daemon default, and model is sent only when selected.
     static func buildCreateAgentSelection(
