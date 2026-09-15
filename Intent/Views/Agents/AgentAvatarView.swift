@@ -84,7 +84,7 @@ struct AgentAvatarView: View {
     }
 }
 
-private struct AgentAvatarStrokeShape: Shape {
+nonisolated private struct AgentAvatarStrokeShape: Shape {
     let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {
@@ -92,7 +92,7 @@ private struct AgentAvatarStrokeShape: Shape {
     }
 }
 
-private struct AgentAvatarFillShape: Shape {
+nonisolated private struct AgentAvatarFillShape: Shape {
     let glyphPath: Path
 
     func path(in rect: CGRect) -> Path {

@@ -24,7 +24,7 @@ struct LoadingView: View {
 // MARK: - Intent Logo Shape
 
 /// The Intent burst mark, matching cloudlands-fe's Logo.svelte vector.
-struct IntentLogo: Shape {
+nonisolated struct IntentLogo: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
