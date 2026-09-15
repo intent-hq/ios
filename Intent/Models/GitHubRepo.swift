@@ -38,3 +38,16 @@ struct GitHubBranchListing: Equatable {
     let branches: [String]
     let defaultBranch: String?
 }
+
+/// The branch step's state for one repo, owned by `GitHubRepoStore` so every
+/// consumer (two sheets on one session, a retry, a reconnect) renders one
+/// outcome: the authoritative listing, the cached-first paint shown only
+/// until it lands, and the last cold-load error (cleared by a success).
+struct GitHubBranchLoadState: Equatable {
+    var listing: GitHubBranchListing? = nil
+    var paint: GitHubBranchListing? = nil
+    var error: String? = nil
+
+    /// What the branch step renders: authoritative first, else the paint.
+    var displayed: GitHubBranchListing? { listing ?? paint }
+}

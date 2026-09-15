@@ -14,7 +14,7 @@ import Observation
 /// `loadIfNeeded()` blocks with `isLoading`; later calls return immediately
 /// with the cached lists and revalidate silently in the background
 /// (stale-while-revalidate, FE github-repos slice parity). Branch listings
-/// are cached per repo under the same contract (`branchListings`). A
+/// are cached per repo under the same contract (`branchStates`). A
 /// reconnect hard-clears the cache and reloads cold: stale lists never
 /// survive a connection flap.
 @MainActor
@@ -22,10 +22,12 @@ import Observation
     var isConfigured = false
     var recentRepos: [GitHubRepo] = []
     var ownRepos: [GitHubRepo] = []
-    /// Authoritative branch listings keyed by `owner/repo`, filled only by
-    /// `loadBranchListing` (never by the cached-first paint), so a repo the
-    /// picker has already visited renders synchronously on the next visit.
-    private(set) var branchListings: [String: GitHubBranchListing] = [:]
+    /// Branch-step state keyed by `owner/repo`: the authoritative listing
+    /// (filled only by `loadBranchListing`, so a repo the picker has already
+    /// visited renders synchronously on the next visit), the cached-first
+    /// paint and the cold-load error. Store-owned so no sheet keeps a local
+    /// snapshot that a reconnect clear or another sheet's load cannot reach.
+    private(set) var branchStates: [String: GitHubBranchLoadState] = [:]
     /// True only while a cold (uncached) load is in flight, or during a
     /// search; background revalidation never sets it.
     var isLoading = false
@@ -44,10 +46,13 @@ import Observation
     /// Bumped by `invalidate()`: a load captures it on start and every
     /// write after an await is dropped once it no longer matches, so a
     /// completion from before an invalidation cannot repopulate the cache.
-    @ObservationIgnored private var loadGeneration = 0
-    /// True from the first `loadIfNeeded()` until `invalidate()`, whether
-    /// that load is in flight, succeeded or failed — a reconnect re-warms
-    /// only a cache the picker has asked for.
+    /// Observable so an open branch step can reload — and re-warm — its
+    /// repo after the reconnect clear even when it held no listing yet.
+    private(set) var loadGeneration = 0
+    /// True from the first `loadIfNeeded()` or `loadBranchListing` until
+    /// `invalidate()`, whether that load is in flight, succeeded or failed —
+    /// a reconnect hard-clears and re-warms only a cache the picker has
+    /// asked for.
     @ObservationIgnored private var hasAttemptedLoad = false
     /// Single-flight per repo: a branch load already in flight is joined.
     @ObservationIgnored private var branchLoadTasks: [String: Task<GitHubBranchListing, Error>] = [:]
@@ -100,8 +105,9 @@ import Observation
     /// Drops every cached list and the auth/loaded markers so the next
     /// `loadIfNeeded()` runs as a cold load. A load in flight is superseded:
     /// its completion is dropped (see `loadGeneration`) and it is no longer
-    /// joined, so the next call starts a fresh flight. Branch listings and
-    /// their in-flight loads are dropped the same way.
+    /// joined, so the next call starts a fresh flight. Branch state (listing,
+    /// paint, error), in-flight branch loads and the warmed-repo set are
+    /// dropped the same way.
     func invalidate() {
         loadGeneration &+= 1
         loadTask = nil
@@ -111,7 +117,7 @@ import Observation
         isLoading = false
         recentRepos = []
         ownRepos = []
-        branchListings = [:]
+        branchStates = [:]
         isConfigured = false
         lastError = nil
         hasCheckedAuth = false
@@ -295,28 +301,42 @@ import Observation
 
     // MARK: - Branches
 
+    /// The branch step's state for `owner/repo`; empty (loading) until a
+    /// load has been asked for.
+    func branchState(owner: String, repo: String) -> GitHubBranchLoadState {
+        branchStates[Self.branchKey(owner: owner, repo: repo)] ?? GitHubBranchLoadState()
+    }
+
     /// The authoritative listing cached for `owner/repo`, if this session
     /// has loaded one; nil means the branch step must load.
     func cachedBranchListing(owner: String, repo: String) -> GitHubBranchListing? {
-        branchListings[Self.branchKey(owner: owner, repo: repo)]
+        branchStates[Self.branchKey(owner: owner, repo: repo)]?.listing
     }
 
     /// Loads the authoritative listing for one repo — the repo's default
     /// branch (`defaultBranch` when the picker already knows it, else
     /// `github.repos.get`) plus the first page of `github.branches.list` —
-    /// and caches it in `branchListings`. Single-flight per repo; a
-    /// completion from before an `invalidate()` is returned but not cached.
-    /// Throws on transport failure so callers can show an error; a cached
-    /// listing is left untouched by a failed refresh.
+    /// and publishes it in `branchStates`. Single-flight per repo; a
+    /// completion from before an `invalidate()` is returned but not
+    /// published. Cold (no listing yet): clears the error, paints the
+    /// daemon's local cache (`github.branches.listCached`) as soon as it
+    /// answers, and on failure publishes the error for every consumer. A
+    /// failed refresh keeps the cached listing and stays silent. Throws so a
+    /// direct caller can react too.
     @discardableResult
     func loadBranchListing(
         owner: String, repo: String, defaultBranch: String? = nil
     ) async throws -> GitHubBranchListing {
         let key = Self.branchKey(owner: owner, repo: repo)
+        hasAttemptedLoad = true
         if let inFlight = branchLoadTasks[key] {
             return try await inFlight.value
         }
         let generation = loadGeneration
+        if branchStates[key]?.listing == nil {
+            branchStates[key] = GitHubBranchLoadState(paint: branchStates[key]?.paint)
+            paintCachedBranches(owner: owner, repo: repo, key: key, generation: generation)
+        }
         let task = Task<GitHubBranchListing, Error> { [self] in
             var resolvedDefault = defaultBranch
             if resolvedDefault == nil {
@@ -331,19 +351,39 @@ import Observation
                 branchLoadTasks[key] = nil
             }
         }
-        let listing = try await task.value
-        if generation == loadGeneration {
-            branchListings[key] = listing
+        do {
+            let listing = try await task.value
+            if generation == loadGeneration {
+                branchStates[key] = GitHubBranchLoadState(listing: listing)
+            }
+            return listing
+        } catch {
+            if generation == loadGeneration, branchStates[key]?.listing == nil {
+                branchStates[key] = GitHubBranchLoadState(error: error.localizedDescription)
+            }
+            throw error
         }
-        return listing
+    }
+
+    /// The cached-first paint for a cold load: published only while the
+    /// same generation is still waiting on the authoritative read (no
+    /// listing, no error yet), so a late answer from before a reconnect or
+    /// after the authoritative outcome cannot land.
+    private func paintCachedBranches(owner: String, repo: String, key: String, generation: Int) {
+        Task { [self] in
+            guard let paint = await fetchCachedBranches(owner: owner, repo: repo),
+                  generation == loadGeneration,
+                  let state = branchStates[key], state.listing == nil, state.error == nil
+            else { return }
+            branchStates[key]?.paint = paint
+        }
     }
 
     /// `github.branches.listCached` — the daemon's local repo cache (or its
     /// one-shot `ls-remote` fallback), for a first paint before the
     /// authoritative read lands. Never an error authority: a transport
     /// failure, a `-32601` from an older daemon, or an empty listing all
-    /// read as a cache miss (nil). Deliberately not stored in
-    /// `branchListings`.
+    /// read as a cache miss (nil). Never promoted to `listing`.
     func fetchCachedBranches(owner: String, repo: String) async -> GitHubBranchListing? {
         do {
             let result = try await connectionManager.request("github.branches.listCached", params: [
