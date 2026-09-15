@@ -2,15 +2,16 @@ import SwiftUI
 
 /// Compact chip for an `@context[...]` mention in a user message: provider
 /// icon + truncated decoded title on a muted rounded background — the iOS
-/// counterpart of cloudlands-fe's `ContextChip.svelte`. Chips with a
-/// non-empty `url` open it in the browser; chips without one are static.
+/// counterpart of cloudlands-fe's `ContextChip.svelte`. Chips whose `url`
+/// passes the `ExternalLink` http/https allowlist open it in the browser;
+/// chips without one (or with a rejected scheme) are static.
 struct ContextMentionChipView: View {
     let mention: ContextMention
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        if let urlString = mention.url, let url = URL(string: urlString) {
+        if let url = ExternalLink.url(from: mention.url) {
             Button {
                 openURL(url)
             } label: {
