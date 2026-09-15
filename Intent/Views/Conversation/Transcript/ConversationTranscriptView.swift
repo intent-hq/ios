@@ -755,7 +755,7 @@ struct ConversationTranscriptView: View {
     }
 
     /// Polls the live scroll view until the forced follow has landed within
-    /// the at-bottom band, scrolling again from short of the bottom and
+    /// `followLandingTolerance` of the bottom, scrolling again from short of the bottom and
     /// clamping from past the end a bounded number of times (#281, #271; see
     /// `ConversationTranscriptScrollPolicy.followLandingStep`). Ends early
     /// when the user takes over — the geometry edges then carry the gesture

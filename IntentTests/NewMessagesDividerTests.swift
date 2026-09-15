@@ -915,7 +915,8 @@ struct ConversationTranscriptScrollPolicyTests {
             userIsScrolledAway: userIsScrolledAway,
             correctionsLeft: correctionsLeft,
             timedOut: timedOut,
-            atBottomThreshold: 50
+            atBottomThreshold: 50,
+            landingTolerance: 1
         )
     }
 
@@ -936,10 +937,11 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 300, bottomInset: 20)) == .settling)
     }
 
-    @Test func followLandsAtRestWithinTheAtBottomBand() {
+    @Test func followLandsAtRestWithinTheLandingTolerance() {
         #expect(landing(geometry(offsetY: 300)) == .landed)
-        #expect(landing(geometry(offsetY: 250)) == .landed)
-        #expect(landing(geometry(offsetY: 249)) != .landed)
+        #expect(landing(geometry(offsetY: 299.5)) == .landed)
+        #expect(landing(geometry(offsetY: 299)) == .landed)
+        #expect(landing(geometry(offsetY: 298)) != .landed)
         // Content shorter than the container rests at a negative distance.
         #expect(landing(geometry(offsetY: 0, contentHeight: 400)) == .landed)
         // A bounce short of the past-end threshold is at the bottom.
@@ -952,6 +954,21 @@ struct ConversationTranscriptScrollPolicyTests {
     @Test func followLandingShortIsScrolledAgain() {
         #expect(landing(geometry(offsetY: 0)) == .scrollAgain)
         #expect(landing(geometry(offsetY: 249)) == .scrollAgain)
+    }
+
+    /// Regression (#304, #305): the last rows realized by the entry scroll,
+    /// or the sent row and thinking indicator after a send, grew the content
+    /// by less than the at-bottom band. The follow rested inside the band —
+    /// "at bottom", Go to End hidden — with the rows under the last message
+    /// below the viewport; a rest short of the bottom by more than layout
+    /// rounding is scrolled again even inside the band.
+    @Test func followLandingShortInsideTheAtBottomBandIsScrolledAgain() {
+        #expect(landing(geometry(offsetY: 298)) == .scrollAgain)
+        #expect(landing(geometry(offsetY: 270)) == .scrollAgain)
+        #expect(landing(geometry(offsetY: 250)) == .scrollAgain)
+        #expect(landing(geometry(offsetY: 250), correctionsLeft: 0) == .giveUp)
+        #expect(Constants.Conversation.Transcript.followLandingTolerance
+            < Constants.Conversation.Transcript.atBottomThreshold)
     }
 
     /// Regression (#271): rows re-measured shorter after the entry scroll

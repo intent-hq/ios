@@ -49,6 +49,13 @@ enum Constants {
             static let followLandingPollMilliseconds = 50
             /// Longest a forced follow keeps verifying its landing.
             static let followLandingTimeoutMilliseconds = 1_500
+            /// Distance from the bottom (points) at or under which a forced
+            /// follow at rest has landed. Tighter than `atBottomThreshold`: a
+            /// rest anywhere inside that band reads "at bottom" and hides Go
+            /// to End, yet leaves the rows under the last message (suggested
+            /// prompts, the thinking indicator) below the viewport (#304,
+            /// #305), so the landing is corrected down to layout rounding.
+            static let followLandingTolerance: CGFloat = 1
             /// Minimum spacing between follow-to-bottom scrolls issued for
             /// streaming deltas. The bottom-anchored ScrollView keeps a pinned
             /// viewport on the bottom as content grows, so deltas only re-pin a
