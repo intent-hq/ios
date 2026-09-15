@@ -121,6 +121,7 @@ struct WorkspaceDetailViewTests {
             workspaceStore: WorkspaceStore(forTesting: true),
             coordinatorFactory: { _ in fatalError("coordinator is not built in these tests") },
             githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,

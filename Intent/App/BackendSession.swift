@@ -58,6 +58,9 @@ final class BackendSession {
     /// Session-lifetime GitHub repo cache for the New Workspace repo step;
     /// outlives the sheet so a reopen renders the cached list instantly.
     let githubRepoStore: GitHubRepoStore
+    /// Session-lifetime specialist / provider / model cache for the New
+    /// Workspace final step; same reopen-instantly contract as the repo cache.
+    let creationOptionsStore: CreationOptionsStore
     let prMonitorsStore: WorkspacePrMonitorsStore
     let attachmentUploadService: AttachmentUploadService
     let workspaceFileImageLoader: WorkspaceFileImageLoader
@@ -73,6 +76,7 @@ final class BackendSession {
         workspaceStore: WorkspaceStore,
         coordinatorFactory: @escaping CoordinatorFactory,
         githubRepoStore: GitHubRepoStore,
+        creationOptionsStore: CreationOptionsStore,
         prMonitorsStore: WorkspacePrMonitorsStore,
         attachmentUploadService: AttachmentUploadService,
         workspaceFileImageLoader: WorkspaceFileImageLoader,
@@ -84,6 +88,7 @@ final class BackendSession {
         self.workspaceStore = workspaceStore
         self.coordinatorFactory = coordinatorFactory
         self.githubRepoStore = githubRepoStore
+        self.creationOptionsStore = creationOptionsStore
         self.prMonitorsStore = prMonitorsStore
         self.attachmentUploadService = attachmentUploadService
         self.workspaceFileImageLoader = workspaceFileImageLoader

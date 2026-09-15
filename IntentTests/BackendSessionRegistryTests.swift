@@ -51,6 +51,7 @@ final class BackendSessionRegistryTests {
                     persistence: persistence, claimScreenRestoration: claim)
             },
             githubRepoStore: GitHubRepoStore(connectionManager: connection),
+            creationOptionsStore: CreationOptionsStore(connectionManager: connection),
             prMonitorsStore: WorkspacePrMonitorsStore(connectionManager: connection),
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,

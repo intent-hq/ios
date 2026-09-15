@@ -261,29 +261,102 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["model"] as? String == "sonnet4.5")
     }
 
-    // MARK: - modelFetchOutcome (stale-response guard)
+    // MARK: - pickerSpecialists (cached catalog → picker list)
 
-    @Test func modelFetchOutcomeDropsStaleProviderResults() {
-        // Provider A's catalog must not apply after the user switched to B.
-        let outcome = CreateWorkspaceView.modelFetchOutcome(
-            fetched: [makeModel(id: "grok-4", provider: "grok")],
-            requestedProviderId: "grok",
-            selectedProviderId: "claude-code"
-        )
-        #expect(outcome == nil)
+    private func makeCatalogSpecialist(
+        id: String, name: String, hidden: Bool = false, role: String? = nil
+    ) -> SpecialistInfo {
+        SpecialistInfo(id: id, name: name, description: "", hidden: hidden, role: role)
     }
 
-    @Test func modelFetchOutcomeResetsToDaemonDefaultRow() throws {
-        // A fresh catalog resets the selection to the daemon-default row (nil)
-        // — the daemon's resolver decides unless the user explicitly picks.
-        let fetched = [makeModel(id: "sonnet4.5"), makeModel(id: "opus4.6")]
-        let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: "auggie",
-            selectedProviderId: "auggie"
-        ))
-        #expect(outcome.models.map(\.id) == ["sonnet4.5", "opus4.6"])
-        #expect(outcome.selectedModel == nil)
+    @Test func pickerSpecialistsDropsHiddenAndInternalAndPinsOrchestratorFirst() {
+        let catalog = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "secret", name: "Aardvark", hidden: true),
+            makeCatalogSpecialist(id: "helper", name: "Abacus", role: "internal"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+            makeCatalogSpecialist(id: "coordinator", name: "Zeta", role: "orchestrator"),
+        ]
+        #expect(CreateWorkspaceView.pickerSpecialists(catalog).map(\.id)
+                == ["coordinator", "implementor", "verifier"])
+        #expect(CreateWorkspaceView.pickerSpecialists([]).isEmpty)
+    }
+
+    // MARK: - preselectedSpecialist
+
+    @Test func preselectedSpecialistDefaultsToOrchestratorElseFirst() {
+        let withOrchestrator = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: nil, specialists: withOrchestrator)?.id == "coordinator")
+        let plain = [makeSpecialist(id: "verifier"), makeSpecialist(id: "implementor")]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: nil, specialists: plain)?.id == "verifier")
+    }
+
+    @Test func preselectedSpecialistKeepsStillListedSelectionAndRedefaultsWhenGone() {
+        let specialists = [makeSpecialist(id: "verifier"), makeSpecialist(id: "implementor")]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "implementor"), specialists: specialists)?.id == "implementor")
+        // A background refresh dropped the selected specialist: re-default.
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "retired"), specialists: specialists)?.id == "verifier")
+    }
+
+    @Test func preselectedSpecialistKeepsSelectionAcrossAnEmptyList() {
+        // A reconnect clears the cache before reloading it: the selection
+        // survives the empty interim (and nil stays nil).
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "implementor"), specialists: [])?.id == "implementor")
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, specialists: []) == nil)
+    }
+
+    // MARK: - preselectedProvider
+
+    @Test func preselectedProviderPrefersSelectableAuggieThenFirstSelectable() {
+        let providers = [
+            makeProvider(id: "codex", authenticated: true),
+            makeProvider(id: "auggie", authenticated: true),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: providers)?.id == "auggie")
+        let auggieSignedOut = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "grok", authenticated: nil),
+            makeProvider(id: "codex", authenticated: true),
+        ]
+        // nil (unknown) stays selectable since probes can fail transiently
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: nil, providers: auggieSignedOut)?.id == "grok")
+    }
+
+    @Test func preselectedProviderKeepsStillSelectableSelectionAndRedefaultsWhenNot() {
+        let providers = [
+            makeProvider(id: "auggie", authenticated: true),
+            makeProvider(id: "codex", authenticated: true),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: providers)?.id == "codex")
+        // The selected provider signed out under a background refresh.
+        let codexSignedOut = [
+            makeProvider(id: "auggie", authenticated: true),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: codexSignedOut)?.id == "auggie")
+    }
+
+    @Test func preselectedProviderIsNilWhenNoneSelectableAndKeepsSelectionAcrossAnEmptyList() {
+        let allSignedOut = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: allSignedOut) == nil)
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: [])?.id == "codex")
+        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: []) == nil)
     }
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)

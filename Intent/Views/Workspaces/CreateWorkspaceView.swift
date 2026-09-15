@@ -32,13 +32,12 @@ struct CreateWorkspaceView: View {
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
     @State private var branchSearchTask: Task<Void, Never>?
-    @State private var specialists: [SpecialistInfo] = []
-    @State private var isLoadingSpecialists = true
+    /// True only during a cold specialist/provider load (nothing cached);
+    /// a reopen over a warm cache never shows the loading state.
+    @State private var isLoadingSpecialists: Bool
     @State private var selectedSpecialist: SpecialistInfo?
-    @State private var providers: [ProviderInfo] = []
-    @State private var isLoadingProviders = true
+    @State private var isLoadingProviders: Bool
     @State private var selectedProvider: ProviderInfo?
-    @State private var models: [ModelInfo] = []
     @State private var selectedModel: ModelInfo?
     @State private var messageText = ""
     @State private var isCreating = false
@@ -48,12 +47,29 @@ struct CreateWorkspaceView: View {
 
     init(session: BackendSession) {
         self.session = session
+        let cached = session.creationOptionsStore.hasLoaded
+        _isLoadingSpecialists = State(initialValue: !cached)
+        _isLoadingProviders = State(initialValue: !cached)
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
     /// renders the cached list instantly while it revalidates in the
     /// background.
     private var githubStore: GitHubRepoStore { session.githubRepoStore }
+    /// The session-owned specialist / provider / model cache, same contract.
+    private var optionsStore: CreationOptionsStore { session.creationOptionsStore }
+
+    /// Specialists offered by the picker: the modal-pickable set with the
+    /// orchestrator pinned first, then by name.
+    private var specialists: [SpecialistInfo] {
+        Self.pickerSpecialists(optionsStore.specialists)
+    }
+    private var providers: [ProviderInfo] { optionsStore.providers }
+    /// The selected provider's cached catalog; empty until loaded, which
+    /// hides the model row (the daemon default applies).
+    private var models: [ModelInfo] {
+        selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -96,6 +112,19 @@ struct CreateWorkspaceView: View {
                         )
                     }
                 }
+        }
+        // A background revalidation or reconnect reload swaps the cached
+        // lists under an open sheet: keep the selections valid against them.
+        .onChange(of: optionsStore.specialists.map(\.id)) { _, _ in
+            reconcileSpecialistSelection()
+        }
+        .onChange(of: optionsStore.providers.map(\.id)) { _, _ in
+            Task { await reconcileProviderSelection() }
+        }
+        .onChange(of: models.map(\.id)) { _, ids in
+            if let selectedModel, !ids.contains(selectedModel.id) {
+                self.selectedModel = nil
+            }
         }
     }
 
@@ -162,46 +191,39 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    private func fetchSpecialists() async {
-        isLoadingSpecialists = true
-        let agentStore = AgentStore(connectionManager: session.connection)
-        var fetched = await agentStore.fetchSpecialists().modalPickable
-        let orchestratorId = fetched.orchestrator?.id
-        fetched.sort { a, b in
-            let aIsOrchestrator = a.id == orchestratorId
-            let bIsOrchestrator = b.id == orchestratorId
-            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
-            return a.name < b.name
-        }
-        specialists = fetched
-        if selectedSpecialist == nil {
-            selectedSpecialist = specialists.orchestrator ?? specialists.first
-        }
-        isLoadingSpecialists = false
-    }
-
+    /// Cold (nothing cached): awaits the specialist/provider load and the
+    /// selected provider's model catalog with the loading state shown.
+    /// Cached: the pickers already render the cached lists — the store
+    /// revalidates in the background and the loading state never shows.
     private func fetchCreationOptions() async {
-        async let specialistsTask: () = fetchSpecialists()
-        async let providersTask: () = fetchProviders()
-        _ = await (specialistsTask, providersTask)
+        let cold = !optionsStore.hasLoaded
+        if cold {
+            isLoadingSpecialists = true
+            isLoadingProviders = true
+        }
+        await optionsStore.loadIfNeeded()
+        reconcileSpecialistSelection()
+        if cold { isLoadingSpecialists = false }
+        await reconcileProviderSelection()
+        if cold { isLoadingProviders = false }
     }
 
-    private func fetchProviders() async {
-        isLoadingProviders = true
-        defer { isLoadingProviders = false }
-        let agentStore = AgentStore(connectionManager: session.connection)
-        providers = await agentStore.fetchProviders()
-        let selectable = providers.filter { $0.authenticated != false }
-        let currentStillSelectable = selectedProvider.map { current in
-            selectable.contains(where: { $0.id == current.id })
-        } ?? false
-        if !currentStillSelectable {
-            selectedProvider = selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
-        }
+    /// Defaults the specialist selection (orchestrator, else first) and
+    /// re-defaults it when the selected specialist left the catalog.
+    private func reconcileSpecialistSelection() {
+        selectedSpecialist = Self.preselectedSpecialist(
+            current: selectedSpecialist, specialists: specialists)
+    }
+
+    /// Defaults the provider selection to a selectable provider (auggie
+    /// first) and loads the selected provider's model catalog — instant
+    /// when cached, awaited when cold.
+    private func reconcileProviderSelection() async {
+        selectedProvider = Self.preselectedProvider(
+            current: selectedProvider, providers: providers)
         if let provider = selectedProvider {
-            await fetchModels(providerId: provider.id)
+            await optionsStore.loadModelsIfNeeded(providerId: provider.id)
         } else {
-            models = []
             selectedModel = nil
         }
     }
@@ -210,22 +232,51 @@ struct CreateWorkspaceView: View {
         guard provider.authenticated != false, provider.id != selectedProvider?.id else { return }
         selectedProvider = provider
         selectedModel = nil
-        models = []
         Task {
-            await fetchModels(providerId: provider.id)
+            await optionsStore.loadModelsIfNeeded(providerId: provider.id)
         }
     }
 
-    private func fetchModels(providerId: String) async {
-        let agentStore = AgentStore(connectionManager: session.connection)
-        let fetched = await agentStore.fetchModels(providerId: providerId)
-        guard let outcome = Self.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: providerId,
-            selectedProviderId: selectedProvider?.id
-        ) else { return }
-        models = outcome.models
-        selectedModel = outcome.selectedModel
+    /// The picker's specialist list: the modal-pickable set (no hidden or
+    /// internal specialists) with the orchestrator pinned first, then by
+    /// name.
+    static func pickerSpecialists(_ specialists: [SpecialistInfo]) -> [SpecialistInfo] {
+        let pickable = specialists.modalPickable
+        let orchestratorId = pickable.orchestrator?.id
+        return pickable.sorted { a, b in
+            let aIsOrchestrator = a.id == orchestratorId
+            let bIsOrchestrator = b.id == orchestratorId
+            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
+            return a.name < b.name
+        }
+    }
+
+    /// Keeps `current` while it is still in `specialists`; otherwise the
+    /// orchestrator, else the first specialist. An empty list (cold load or
+    /// reconnect clear) keeps `current` so the selection survives the reload.
+    static func preselectedSpecialist(
+        current: SpecialistInfo?, specialists: [SpecialistInfo]
+    ) -> SpecialistInfo? {
+        guard !specialists.isEmpty else { return current }
+        if let current, specialists.contains(where: { $0.id == current.id }) {
+            return current
+        }
+        return specialists.orchestrator ?? specialists.first
+    }
+
+    /// Keeps `current` while it is still selectable; otherwise auggie when
+    /// selectable, else the first selectable provider, else nil (nothing
+    /// selectable — the picker shows setup guidance). An empty list keeps
+    /// `current` so the selection survives a reconnect reload.
+    static func preselectedProvider(
+        current: ProviderInfo?, providers: [ProviderInfo]
+    ) -> ProviderInfo? {
+        guard !providers.isEmpty else { return current }
+        let selectable = providers.filter(\.isSelectable)
+        if let current, selectable.contains(where: { $0.id == current.id }) {
+            return current
+        }
+        return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
     }
 
     static let createRequestTimeout: TimeInterval = 120
