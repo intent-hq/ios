@@ -113,15 +113,19 @@ struct DemoFixturesTests {
 
     @Test func longConversationRoutesByAgentId() throws {
         let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
-        #expect(long.items.count >= 30)
+        #expect(long.items.count >= 150)
         #expect(long.total == long.items.count)
 
         let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
         #expect(messages.count == long.items.count)
-        for (index, message) in messages.enumerated() {
-            #expect(message.role == (index.isMultiple(of: 2) ? .user : .assistant))
-        }
+        #expect(messages.allSatisfy { $0.role == .user || $0.role == .assistant })
+        #expect(messages.first?.role == .user)
+        #expect(messages.last?.role == .assistant)
         #expect(Set(long.items.compactMap { $0["id"] as? String }).count == long.items.count)
+        // Timestamps descend from the first message to the last.
+        let timestamps = long.items.compactMap { $0["timestamp"] as? String }
+        #expect(timestamps.count == long.items.count)
+        #expect(timestamps == timestamps.sorted())
 
         let first = try #require(long.items.first)
         let last = try #require(long.items.last)
@@ -135,6 +139,66 @@ struct DemoFixturesTests {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .hasSuffix(DemoFixtures.longConversationLastSentence))
         #expect(!long.items.contains { text(of: $0).contains("more than 90 days") })
+        // The anchors the transcript UI tests match on stay unique.
+        #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationFirstSentence) }.count == 1)
+        #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationLastSentence) }.count == 1)
+    }
+
+    /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
+    /// paired tool calls, agent-to-agent report rows attributed to the
+    /// delegates the coordinator waits on, thinking blocks, and markdown
+    /// with fenced code — so rows vary widely in height.
+    @Test func longConversationMixesToolCallsAgentMessagesAndMarkdown() throws {
+        let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
+        let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
+        let blocks = messages.flatMap { $0.contentBlocks ?? [] }
+
+        let toolUses = blocks.filter { $0.type == .toolUse }
+        let toolResults = blocks.filter { $0.type == .toolResult }
+        #expect(toolUses.count >= 30)
+        #expect(toolUses.allSatisfy { $0.resolvedName?.isEmpty == false })
+        let resultIds = Set(toolResults.compactMap(\.resolvedToolUseId))
+        #expect(toolUses.allSatisfy { resultIds.contains($0.id) })
+        #expect(Set(toolUses.map(\.id)).count == toolUses.count)
+        #expect(blocks.contains { $0.type == .thinking })
+
+        let agentRows = messages.filter { $0.agentMessageAttribution != nil }
+        #expect(agentRows.count >= 40)
+        #expect(agentRows.allSatisfy { $0.role == .user })
+        let senders = Set(agentRows.compactMap { $0.agentMessageAttribution?.fromAgentId })
+        #expect(senders == Set(DemoFixtures.longConversationDelegateIds))
+        #expect(agentRows.allSatisfy { row in
+            let attribution = row.agentMessageAttribution
+            return DemoFixtures.longConversationDelegateNames.contains(attribution?.rawName ?? "")
+        })
+
+        let texts = blocks.filter { $0.type == .text }.compactMap(\.resolvedText)
+        #expect(texts.filter { $0.contains("```") }.count >= 30)
+        // Tool-call groups: the open tag and the close tag sit in different
+        // text blocks around the tool_use/tool_result pairs.
+        #expect(texts.contains { $0.contains("<group:") && !$0.contains("</group>") })
+        #expect(texts.contains { $0.contains("</group>") && !$0.contains("<group:") })
+        #expect(texts.contains { $0.contains("| Percentile | Duration |") })
+        #expect(messages.contains { ($0.contentBlocks?.count ?? 0) >= 5 })
+    }
+
+    @Test func subscriptionsReportTheDelegationGroupForTheLongConversationAgent() throws {
+        let result = DemoFixtures.response(
+            for: "agent.getSubscriptions",
+            params: ["agentId": DemoFixtures.longConversationAgentId, "workspaceId": DemoFixtures.longConversationWorkspaceId])
+        let dict = try #require(result as? [String: Any])
+        let groups = try #require(dict["delegationGroups"] as? [[String: Any]])
+        let group = try #require(groups.first)
+        #expect(groups.count == 1)
+        #expect(group["expectedAgentIds"] as? [String] == DemoFixtures.longConversationDelegateIds)
+        #expect((group["completedAgentIds"] as? [String])?.count == 1)
+        let subscriptions = try #require(dict["subscriptions"] as? [[String: Any]])
+        #expect(subscriptions.allSatisfy { ($0["actorIds"] as? [String]).map { !$0.isEmpty } == true })
+
+        let other = DemoFixtures.response(
+            for: "agent.getSubscriptions", params: ["agentId": "demo-agent-implementor"])
+        let otherDict = try #require(other as? [String: Any])
+        #expect(otherDict.isEmpty)
     }
 
     @Test func agentListRoutesByWorkspaceId() throws {
@@ -149,7 +213,7 @@ struct DemoFixturesTests {
         #expect(try agentIds(workspaceId: nil).contains("demo-agent-implementor"))
         #expect(try agentIds(workspaceId: "demo-ws-dashboard").contains("demo-agent-implementor"))
         #expect(try agentIds(workspaceId: DemoFixtures.longConversationWorkspaceId)
-            == [DemoFixtures.longConversationAgentId])
+            == [DemoFixtures.longConversationAgentId] + DemoFixtures.longConversationDelegateIds)
 
         let result = DemoFixtures.response(
             for: "agent.get", params: ["agentId": DemoFixtures.longConversationAgentId])
@@ -157,6 +221,33 @@ struct DemoFixturesTests {
         let agentDict = try #require(dict["agent"] as? [String: Any])
         #expect(agentDict["id"] as? String == DemoFixtures.longConversationAgentId)
         #expect(agentDict["status"] as? String == "idle")
+    }
+
+    /// The delegates are background sub-agents of the coordinator, so the
+    /// coordinator stays the workspace's only foreground agent (the
+    /// workspace row still auto-opens into its transcript) while the
+    /// "Waiting for all" footer has rows to show.
+    @Test func longConversationDelegatesAreBackgroundSubAgentsOfTheCoordinator() throws {
+        let result = DemoFixtures.response(
+            for: "agent.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId])
+        let dict = try #require(result as? [String: Any])
+        let items = try #require(dict["agents"] as? [[String: Any]])
+        let agents = items.compactMap { AgentSession.parseAgent($0) }
+        #expect(agents.count == items.count)
+
+        let foreground = agents.filter { !$0.isBackground && $0.createdByAgentId == nil }
+        #expect(foreground.map(\.id) == [DemoFixtures.longConversationAgentId])
+        let delegates = agents.filter { DemoFixtures.longConversationDelegateIds.contains($0.id) }
+        #expect(delegates.count == DemoFixtures.longConversationDelegateIds.count)
+        #expect(delegates.allSatisfy { $0.isBackground && $0.createdByAgentId == DemoFixtures.longConversationAgentId })
+        #expect(delegates.contains { $0.isActive })
+
+        for delegateId in DemoFixtures.longConversationDelegateIds {
+            let fetched = DemoFixtures.response(for: "agent.get", params: ["agentId": delegateId])
+            let fetchedDict = try #require(fetched as? [String: Any])
+            let agentDict = try #require(fetchedDict["agent"] as? [String: Any])
+            #expect(agentDict["id"] as? String == delegateId)
+        }
     }
 
     // MARK: - Delayed hooks row for the long conversation

@@ -139,7 +139,6 @@ struct ConversationTranscriptView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
-            .padding(.bottom, 12)
             // Hosted on the stack itself, not a lazily realized row, so the
             // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
@@ -148,6 +147,12 @@ struct ConversationTranscriptView: View {
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.always)
         .accessibilityIdentifier("transcript.scrollView")
+        .demoAccessibilityValue(
+            ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+                outcome: scrollState.lastForcedFollowOutcome,
+                corrections: scrollState.lastForcedFollowCorrections
+            )
+        )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
@@ -448,7 +453,12 @@ struct ConversationTranscriptView: View {
                 .id("thinking-indicator")
         }
 
+        // The stack's bottom padding lives on the marker so that
+        // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
+        // of the content, not a point 12 points above it that a landing
+        // judged against `followLandingTolerance` could never reach.
         Color.clear.frame(height: 8)
+            .padding(.bottom, 12)
             .id("scroll-bottom")
     }
 
@@ -713,6 +723,8 @@ struct ConversationTranscriptView: View {
         scrollState.pendingFollowIsForced = forced
         if forced {
             isScrollingToBottom = true
+            scrollState.lastForcedFollowOutcome = nil
+            scrollState.lastForcedFollowCorrections = 0
         }
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
@@ -733,6 +745,7 @@ struct ConversationTranscriptView: View {
                 guard !Task.isCancelled else { return }
             } else if forced {
                 AppLog.ui.debug("[SCROLL] Forced follow yielded to the user's gesture")
+                scrollState.lastForcedFollowOutcome = .yieldToUser
                 applyLiveScrolledAwayEdge(isInteracting: true, proxy: proxy)
             }
             isScrollingToBottom = false
@@ -755,13 +768,19 @@ struct ConversationTranscriptView: View {
     }
 
     /// Polls the live scroll view until the forced follow has landed within
-    /// the at-bottom band, scrolling again from short of the bottom and
+    /// `followLandingTolerance` of the bottom, scrolling again from short of the bottom and
     /// clamping from past the end a bounded number of times (#281, #271; see
     /// `ConversationTranscriptScrollPolicy.followLandingStep`). Ends early
     /// when the user takes over — the geometry edges then carry the gesture
     /// rule, and the live distance is applied once as the gesture's sample in
     /// case its edge was dropped — and on the timeout, leaving the pin as it
     /// is. Bails out silently when the follow is restarted (task cancelled).
+    ///
+    /// Each correction is judged from two fresh reads taken after its scroll
+    /// has had its animation's duration to move: a poll that reused the
+    /// pre-correction rest as `previous` before a frame rendered read the
+    /// same geometry twice, spent the next correction on it and gave up with
+    /// the viewport still on its way (#305).
     private func awaitForcedFollowLanding(proxy: ScrollViewProxy, animated: Bool) async {
         let deadline = ContinuousClock.now
             + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
@@ -785,18 +804,43 @@ struct ConversationTranscriptView: View {
                 continue
             case .scrollAgain:
                 correctionsLeft -= 1
+                scrollState.lastForcedFollowCorrections += 1
                 AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
                 issueScrollToBottom(proxy: proxy, animated: animated)
+                previous = nil
+                if animated {
+                    try? await Task.sleep(for: .seconds(Constants.Conversation.Transcript.scrollAnimationDuration))
+                    guard !Task.isCancelled else { return }
+                }
             case .clampPastEnd:
                 correctionsLeft -= 1
+                scrollState.lastForcedFollowCorrections += 1
                 AppLog.ui.debug("[SCROLL] Forced follow landed past the end, clamping")
                 _ = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: geometry)
+                previous = nil
             case .yieldToUser:
+                scrollState.lastForcedFollowOutcome = step
                 applyLiveScrolledAwayEdge(isInteracting: true, proxy: proxy)
                 return
             case .landed, .giveUp:
+                scrollState.lastForcedFollowOutcome = step
                 return
             }
+        }
+    }
+}
+
+private extension View {
+    /// Under `--demo-data` only: exposes `value` as the view's accessibility
+    /// value so the XCUITests can read the transcript's landing outcome.
+    /// Zero-impact otherwise — the value is neither computed (so the observed
+    /// state behind it is not a body dependency) nor applied.
+    @ViewBuilder
+    func demoAccessibilityValue(_ value: @autoclosure () -> String) -> some View {
+        if DemoMode.isEnabled {
+            accessibilityValue(value())
+        } else {
+            self
         }
     }
 }

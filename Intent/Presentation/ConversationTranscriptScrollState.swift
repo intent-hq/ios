@@ -37,4 +37,12 @@ final class ConversationTranscriptScrollState {
     /// True while `debounceTask` carries a forced follow, which automatic
     /// follows must not preempt; a user gesture cancels either.
     var pendingFollowIsForced = false
+    /// How the last forced follow ended (`landed`, `giveUp`, `yieldToUser`);
+    /// nil while one is in flight or before the first. Read into the
+    /// transcript's accessibility value under `--demo-data` so the XCUITests
+    /// can tell a landed follow from one that gave up with the pin kept
+    /// (#304, #305).
+    var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingStep?
+    /// Corrections (scroll again / clamp) the last forced follow has spent.
+    var lastForcedFollowCorrections = 0
 }

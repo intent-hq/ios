@@ -386,9 +386,10 @@ enum ConversationTranscriptScrollPolicy {
     enum FollowLandingStep: Equatable {
         /// No scroll view yet, or the geometry moved since the last poll.
         case settling
-        /// At rest within `atBottomThreshold` of the bottom.
+        /// At rest within `landingTolerance` of the bottom.
         case landed
-        /// At rest short of the bottom: issue the scroll again.
+        /// At rest short of the bottom, even inside the at-bottom band:
+        /// issue the scroll again.
         case scrollAgain
         /// At rest past the end of the content: clamp the offset back.
         case clampPastEnd
@@ -415,6 +416,15 @@ enum ConversationTranscriptScrollPolicy {
     /// gesture in progress or by one that already set `userIsScrolledAway`
     /// between two polls: a forced follow starts pinned, so the flag being
     /// raised while it lands is the user's later intent.
+    ///
+    /// Short of the bottom is judged against `landingTolerance`, not the
+    /// at-bottom band: the last rows the lazy stack realized grew the content
+    /// by less than `atBottomThreshold`, so the viewport rested a few dozen
+    /// points short reading "at bottom" — Go to End hidden — with the rows
+    /// under the last message (suggested prompts on entry, the thinking
+    /// indicator after a send) still below the viewport (#304, #305). Past
+    /// the end keeps the band: a rest that far past it is a blank band, and
+    /// the bounce back reads the same geometry.
     static func followLandingStep(
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
@@ -422,7 +432,8 @@ enum ConversationTranscriptScrollPolicy {
         userIsScrolledAway: Bool = false,
         correctionsLeft: Int,
         timedOut: Bool,
-        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
+        landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> FollowLandingStep {
         if isInteracting || userIsScrolledAway { return .yieldToUser }
         if timedOut { return .giveUp }
@@ -437,9 +448,30 @@ enum ConversationTranscriptScrollPolicy {
         ) {
             return correctionsLeft > 0 ? .clampPastEnd : .giveUp
         }
-        if isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
+        if isScrolledAway(distanceToBottom: distance, atBottomThreshold: landingTolerance) {
             return correctionsLeft > 0 ? .scrollAgain : .giveUp
         }
         return .landed
+    }
+
+    /// The transcript's accessibility value under `--demo-data`: the last
+    /// forced follow's outcome and the corrections it spent, e.g.
+    /// `lastForcedFollow=landed corrections=1`, or
+    /// `lastForcedFollow=pending` while one is in flight (or before the
+    /// first). Lets the XCUITests assert the follow landed rather than gave
+    /// up with the pin kept, which the visible geometry alone cannot tell
+    /// apart within the at-bottom band (#304, #305).
+    static func forcedFollowLandingSummary(outcome: FollowLandingStep?, corrections: Int) -> String {
+        guard let outcome else { return "lastForcedFollow=pending" }
+        let name: String
+        switch outcome {
+        case .landed: name = "landed"
+        case .giveUp: name = "giveUp"
+        case .yieldToUser: name = "yieldToUser"
+        case .settling: name = "settling"
+        case .scrollAgain: name = "scrollAgain"
+        case .clampPastEnd: name = "clampPastEnd"
+        }
+        return "lastForcedFollow=\(name) corrections=\(corrections)"
     }
 }

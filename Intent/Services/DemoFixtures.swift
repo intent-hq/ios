@@ -43,6 +43,23 @@ enum DemoFixtures {
     /// `conversationMessages` used by App Store screenshot 03.
     static let longConversationAgentId = "demo-agent-deflake"
 
+    /// Sub-agents delegated by `longConversationAgentId`, in the order they
+    /// appear in the transcript's agent-to-agent rows. `agent.getSubscriptions`
+    /// for the coordinator reports one delegation group over all three with
+    /// the first already complete, so the conversation opens with the
+    /// "Waiting for all (1/3)" footer already under the transcript.
+    static let longConversationDelegateIds = [
+        "demo-agent-deflake-capture",
+        "demo-agent-deflake-refund",
+        "demo-agent-deflake-webhooks",
+    ]
+
+    static let longConversationDelegateNames = [
+        "Capture Race Fixer",
+        "Refund Settlement Fixer",
+        "Webhook Regression Check",
+    ]
+
     /// Name of the single scheduled hook `hook.list` serves for
     /// `longConversationAgentId`. Rendered as a chip in the hooks row above
     /// the composer; the row's own label is "Running hooks".
@@ -147,6 +164,9 @@ enum DemoFixtures {
             ] as [String: Any]
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
+        case "agent.getSubscriptions":
+            let agentId = params["agentId"] as? String
+            return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
         case "hook.list":
             let workspaceId = params["workspaceId"] as? String
             return ["hooks": workspaceId == longConversationWorkspaceId ? longConversationHooks : []]
@@ -404,20 +424,73 @@ enum DemoFixtures {
         ]
     }
 
-    /// Agents of `longConversationWorkspaceId`: the single idle agent whose
-    /// transcript is `longConversationMessages`.
+    /// Agents of `longConversationWorkspaceId`: the single top-level agent
+    /// whose transcript is `longConversationMessages` (still the only
+    /// foreground agent, so the workspace row auto-opens into it), plus its
+    /// three delegated sub-agents (`createdByAgentId`, background) that the
+    /// coordinator waits on — the rows of the "Waiting for all" footer.
     static var longConversationAgents: [[String: Any]] {
-        [
+        let delegateDigests = [
+            "Done: after_fork reset landed, 100-run loop clean at 4 workers.",
+            "Replacing the fixed 200ms poll with wait_until on refund status.",
+            "Running WebhookDeliveryTests against the after_fork branch.",
+        ]
+        let delegateStatuses = ["idle", "active", "streaming"]
+        let delegates: [[String: Any]] = longConversationDelegateIds.indices.map { index in
+            [
+                "id": longConversationDelegateIds[index],
+                "name": longConversationDelegateNames[index],
+                "status": delegateStatuses[index],
+                "isStreaming": index == 2,
+                "createdAt": iso(minutesAgo: 200 - Double(index) * 30),
+                "updatedAt": iso(minutesAgo: 50 - Double(index) * 3),
+                "lastActivity": iso(minutesAgo: 50 - Double(index) * 3),
+                "lastMessageRole": "assistant",
+                "digest": delegateDigests[index],
+                "metadata": [
+                    "specialist": index == 2 ? "verifier" : "implementor",
+                    "createdByAgentId": longConversationAgentId,
+                    "isBackground": true,
+                ] as [String: Any],
+            ]
+        }
+        return [
             [
                 "id": longConversationAgentId,
                 "name": "Test Stabilizer",
                 "status": "idle",
+                "isWaitingForOtherAgents": true,
+                "waitingForAgentIds": Array(longConversationDelegateIds.dropFirst()),
                 "createdAt": iso(minutesAgo: 250),
                 "updatedAt": iso(minutesAgo: 42),
                 "lastActivity": iso(minutesAgo: 42),
                 "lastMessageRole": "assistant",
                 "digest": "Payment integration suite is green across 50 consecutive runs.",
                 "metadata": ["specialist": "implementor"],
+            ],
+        ] + delegates
+    }
+
+    /// `agent.getSubscriptions` for `longConversationAgentId` (PROTOCOL
+    /// §5.5): one `after_all` delegation group over
+    /// `longConversationDelegateIds` with the first delegate complete, so the
+    /// conversation enters with the "Waiting for all (1/3)" footer.
+    static var longConversationSubscriptions: [String: Any] {
+        [
+            "subscriptions": [
+                [
+                    "subscriptionId": "demo-sub-deflake-group",
+                    "eventTypes": ["agent:completed", "agent:error"],
+                    "actorIds": longConversationDelegateIds,
+                ] as [String: Any],
+            ],
+            "delegationGroups": [
+                [
+                    "groupId": "demo-group-deflake",
+                    "waitMode": "after_all",
+                    "expectedAgentIds": longConversationDelegateIds,
+                    "completedAgentIds": [longConversationDelegateIds[0]],
+                ] as [String: Any],
             ],
         ]
     }
@@ -535,12 +608,18 @@ enum DemoFixtures {
         "Schedule the worker scaling follow-up",
     ]
 
-    /// A transcript several screens tall on an iPhone: 32 alternating
-    /// user/assistant messages, each a few lines long, so scroll-position UI
-    /// (the "Go to End" button) can be exercised against `--demo-data`.
-    /// The first message begins with `longConversationFirstSentence` and the
-    /// last one's rendered text ends with `longConversationLastSentence`,
-    /// followed only by the stripped `longConversationSuggestedPrompts` block.
+    /// A coordinator-shaped transcript many screens tall on an iPhone, so
+    /// scroll-position UI (the "Go to End" button) and the LazyVStack
+    /// cold-layout paths (intent-hq/ios#304, #305) can be exercised against
+    /// `--demo-data`: 16 handwritten user/assistant exchanges with a
+    /// generated delegation round between each pair — tool-call groups,
+    /// agent-to-agent report rows (`metadata.type == "agent_message"`),
+    /// multi-paragraph markdown, fenced code blocks, tables and thinking
+    /// blocks — for `longConversationMessageCount` messages of widely varying
+    /// heights. The first message begins with `longConversationFirstSentence`
+    /// and the last one's rendered text ends with
+    /// `longConversationLastSentence`, followed only by the stripped
+    /// `longConversationSuggestedPrompts` block.
     static var longConversationMessages: [[String: Any]] {
         let suggestedPromptsBlock = (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"])
             .joined(separator: "\n")
@@ -795,27 +874,268 @@ enum DemoFixtures {
             ),
         ]
 
-        var messages: [[String: Any]] = []
+        var rows: [LongConversationRow] = []
+        for (index, exchange) in exchanges.enumerated() {
+            rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
+            rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
+            if index < exchanges.count - 1 {
+                rows += longConversationRound(index)
+            }
+        }
+
         let firstMinutesAgo = 240.0
         let lastMinutesAgo = 42.0
-        let step = (firstMinutesAgo - lastMinutesAgo) / Double(exchanges.count * 2 - 1)
-        for (index, exchange) in exchanges.enumerated() {
-            let userOrdinal = index * 2
-            let assistantOrdinal = userOrdinal + 1
-            messages.append([
-                "id": "demo-long-msg-\(userOrdinal + 1)",
-                "role": "user",
-                "timestamp": iso(minutesAgo: firstMinutesAgo - step * Double(userOrdinal)),
-                "contentBlocks": [["type": "text", "text": exchange.user]],
-            ])
-            messages.append([
-                "id": "demo-long-msg-\(assistantOrdinal + 1)",
-                "role": "assistant",
-                "timestamp": iso(minutesAgo: firstMinutesAgo - step * Double(assistantOrdinal)),
-                "contentBlocks": [["type": "text", "text": exchange.assistant]],
+        let step = (firstMinutesAgo - lastMinutesAgo) / Double(rows.count - 1)
+        return rows.enumerated().map { ordinal, row in
+            var message: [String: Any] = [
+                "id": "demo-long-msg-\(ordinal + 1)",
+                "role": row.role,
+                "timestamp": iso(minutesAgo: firstMinutesAgo - step * Double(ordinal)),
+                "contentBlocks": row.contentBlocks,
+            ]
+            if let metadata = row.metadata { message["metadata"] = metadata }
+            return message
+        }
+    }
+
+    /// One `longConversationMessages` row before its id and timestamp are
+    /// assigned.
+    private struct LongConversationRow {
+        var role: String
+        var contentBlocks: [[String: Any]]
+        var metadata: [String: Any]?
+    }
+
+    private static func textBlock(_ text: String) -> [String: Any] {
+        ["type": "text", "text": text]
+    }
+
+    private static func toolUseBlock(id: String, name: String, input: [String: Any]) -> [String: Any] {
+        ["type": "tool_use", "id": id, "name": name, "input": input]
+    }
+
+    private static func toolResultBlock(toolUseId: String, output: String) -> [String: Any] {
+        ["type": "tool_result", "id": "\(toolUseId)-result", "toolUseId": toolUseId, "output": output]
+    }
+
+    /// A user-role row sent by delegate `index` (PROTOCOL §5.5 agent-to-agent
+    /// attribution on the row metadata and the text block's `messageMetadata`).
+    private static func delegateRow(_ index: Int, text: String) -> LongConversationRow {
+        let attribution: [String: Any] = [
+            "type": "agent_message",
+            "fromAgentId": longConversationDelegateIds[index],
+            "fromAgentName": longConversationDelegateNames[index],
+        ]
+        var block = textBlock(text)
+        block["messageMetadata"] = attribution
+        return LongConversationRow(role: "user", contentBlocks: [block], metadata: attribution)
+    }
+
+    /// Per-round subject matter for `longConversationRound(_:)`; one entry
+    /// per gap between handwritten exchanges.
+    private static let longConversationRoundTopics: [(
+        subject: String, file: String, symbol: String, command: String, metric: String
+    )] = [
+        ("stream id reuse after fork", "tests/payments/conftest.py", "PaymentClient.shared", "pytest tests/payments -n 4 --count 25", "7 timeouts in 100 runs"),
+        ("the pre-warmed pool inheritance", "payments/client/pool.py", "Http2Pool.warm", "pytest tests/payments/test_capture.py -n 4", "20–30s first-request stalls"),
+        ("the local reproduction loop", "scripts/repro_flake.sh", "run_loop", "scripts/repro_flake.sh --workers 4 --repeat 25", "7/100 failing, 0/100 single-worker"),
+        ("the after_fork reset hook", "tests/payments/hooks.py", "_reset_payment_client", "pytest tests/payments -n 4 --count 25 -p hooks", "0 timeouts in 100 runs"),
+        ("the stale ledger read", "tests/payments/test_refund.py", "test_refund_partial_amount", "pytest tests/payments/test_refund.py -n 4 --count 50", "3 stale reads in 50 runs"),
+        ("the settlement status poll", "tests/payments/helpers/wait.py", "wait_until", "pytest tests/payments/test_refund.py --count 50", "settled p99 3.4s"),
+        ("first-request latency per worker", "payments/client/metrics.py", "record_first_request", "scripts/repro_flake.sh --workers 4 --repeat 25 --metrics", "median 140ms, was 1.8s"),
+        ("webhook test isolation", "tests/webhooks/test_delivery.py", "WebhookDeliveryTests", "pytest tests/webhooks -n 4", "48 passed, 0 shared-client uses"),
+        ("the known-flake taxonomy", "docs/testing/flakes.md", "Known flake sources", "make docs-check", "3 rows, 3 links"),
+        ("sandbox rate limiting", "payments/client/backoff.py", "RetryPolicy.for_429", "scripts/repro_flake.sh --workers 8 --repeat 10", "55 rps at 6 workers, 429s at 8"),
+        ("the CI branch run", ".github/workflows/payments.yml", "payments-integration", "gh run watch 88123", "green in 5m12s"),
+        ("the overnight matrix", ".github/workflows/payments-matrix.yml", "matrix.repeat", "gh workflow run payments-matrix.yml -f repeat=50", "50 scheduled, 10 min apart"),
+        ("the duration distribution", "scripts/collect_durations.py", "percentiles", "scripts/collect_durations.py --runs 50", "p50 5m04s, p90 5m31s, max 6m02s"),
+        ("the retry decorators", "tests/payments/test_capture.py", "@retry(3)", "rg -n 'retry\\(3\\)' tests/payments", "3 decorators removed"),
+        ("the README sandbox key steps", "README.md", "PAYMENT_SANDBOX_KEY", "git clone … && make repro", "end to end in ~4 min"),
+    ]
+
+    /// The delegation round inserted after handwritten exchange `round`:
+    /// nine rows of deliberately uneven height — a tool-call group, three
+    /// agent-to-agent reports, a delegation tool call, markdown replies with
+    /// code fences / tables / a thinking block, and one human follow-up.
+    private static func longConversationRound(_ round: Int) -> [LongConversationRow] {
+        let topic = longConversationRoundTopics[round]
+        let ordinal = round + 1
+        let toolPrefix = "demo-long-tool-\(ordinal)"
+        let reporter = round % 3
+        let secondReporter = (round + 1) % 3
+        let thirdReporter = (round + 2) % 3
+        let repeatedParagraph = "Nothing in the production path changes for this step; the only writes " +
+            "are under `tests/` and the scripts folder, so review scope stays narrow."
+        let filler = Array(repeating: repeatedParagraph, count: round % 3 + 1).joined(separator: "\n\n")
+
+        let investigation = LongConversationRow(role: "assistant", contentBlocks: [
+            textBlock("""
+            <group:Investigating \(topic.subject)>
+            Reading `\(topic.file)` around `\(topic.symbol)` and re-running the narrow command before delegating.
+            """),
+            toolUseBlock(id: "\(toolPrefix)-view", name: "view", input: [
+                "path": topic.file,
+                "search_query_regex": topic.symbol,
+            ]),
+            toolResultBlock(toolUseId: "\(toolPrefix)-view", output: """
+            \(topic.file)
+            41 |     # \(topic.symbol)
+            42 |     client = PaymentClient.shared()
+            43 |     return client.capture(intent_id, amount=amount)
+            """),
+            toolUseBlock(id: "\(toolPrefix)-run", name: "launch-process", input: [
+                "command": topic.command,
+                "cwd": "services/billing",
+                "wait": true,
+            ]),
+            toolResultBlock(toolUseId: "\(toolPrefix)-run", output: """
+            $ \(topic.command)
+            collected 96 items across 4 workers
+            ........F.....F.........................F.......
+            \(topic.metric)
+            """),
+            textBlock("""
+            The narrow run reproduces it: \(topic.metric).
+            </group>
+
+            Round \(ordinal) of the investigation covers **\(topic.subject)**. The signal is \
+            consistent with the fork story, so I am splitting the work across the delegates \
+            instead of serialising it here.
+
+            \(filler)
+            """),
+        ])
+
+        let firstReportStatus = round % 2 == 0
+            ? "Patch is ready; running the loop once more before I report it done"
+            : "Still bisecting the second failure mode; will report within the hour"
+        let firstReportCode = round % 2 == 0 ? """
+        ```python
+        # \(topic.file)
+        def reset_for_round_\(ordinal)():
+            client = PaymentClient.reset_shared()
+            return client
+        ```
+        """ : "No code to show yet — the evidence is in the attached log."
+        let firstReport = delegateRow(reporter, text: """
+        Progress on \(topic.subject):
+
+        - Reproduced with `\(topic.command)` → \(topic.metric)
+        - Isolated the path to `\(topic.symbol)` in `\(topic.file)`
+        - \(firstReportStatus)
+
+        \(firstReportCode)
+        """)
+
+        let table = round % 3 == 0 ? """
+
+        | Run | Workers | Result |
+        |-----|---------|--------|
+        | 1 | 4 | \(topic.metric) |
+        | 2 | 4 | \(topic.metric) |
+        | 3 | 1 | clean |
+        """ : ""
+        let reply = LongConversationRow(role: "assistant", contentBlocks: [textBlock("""
+        ### Next step for \(topic.subject)
+
+        1. Keep the change confined to `\(topic.file)`
+        2. Re-run `\(topic.command)` until the loop is clean twice in a row
+        3. Attach the per-worker log to the task note
+        \(table)
+        ```bash
+        cd services/billing
+        \(topic.command) 2>&1 | tee /tmp/round-\(ordinal).log
+        ```
+
+        \(filler)
+        """)])
+
+        let delegation = LongConversationRow(role: "assistant", contentBlocks: [
+            textBlock("Delegating the verification of \(topic.subject) so it runs in parallel with the fix."),
+            toolUseBlock(id: "\(toolPrefix)-delegate", name: "workspace_api", input: [
+                "code": "return await ws.agent.delegate({ taskNoteId: \"demo-task-round-\(ordinal)\", specialist: \"verifier\", waitMode: \"after_all\" })",
+                "summary": "Delegate verification of \(topic.subject)",
+            ]),
+            toolResultBlock(toolUseId: "\(toolPrefix)-delegate", output: """
+            {"ok":true,"agentId":"\(longConversationDelegateIds[thirdReporter])","waitMode":"after_all","summary":{"started":1,"held":0,"skipped":0}}
+            """),
+            textBlock("Delegated; I will pick the evidence up when the group settles."),
+        ])
+
+        let secondReport = delegateRow(secondReporter, text: """
+        Verification of \(topic.subject) is under way. First pass: `\(topic.command)` → \(topic.metric). \
+        I am repeating it with `--count 50` to get a distribution rather than a single sample.
+        """)
+
+        var summaryBlocks: [[String: Any]] = []
+        if round % 2 == 1 {
+            summaryBlocks.append([
+                "type": "thinking",
+                "text": "Both delegates agree on \(topic.metric). The remaining risk is ordering, not connectivity; " +
+                    "check the settlement path before closing round \(ordinal).",
             ])
         }
-        return messages
+        let bullets = (0..<(round % 4 + 2)).map { bullet in
+            "- Sample \(bullet + 1): `\(topic.command)` → \(topic.metric)"
+        }.joined(separator: "\n")
+        summaryBlocks.append(textBlock("""
+        Round \(ordinal) summary for \(topic.subject):
+
+        \(bullets)
+
+        The fix stays inside `\(topic.file)`. \(filler)
+        """))
+        let summary = LongConversationRow(role: "assistant", contentBlocks: summaryBlocks)
+
+        let followUp = LongConversationRow(role: "user", contentBlocks: [textBlock(
+            round % 2 == 0
+                ? "Does round \(ordinal) change anything for the webhook tests?"
+                : "How long did round \(ordinal) take end to end?")])
+
+        let bigTable = round % 4 == 0 ? """
+
+        | Test | Before | After |
+        |------|--------|-------|
+        | capture_settles_after_authorization | 20–30s timeout | 140ms |
+        | refund_partial_amount | stale balance | settled |
+        | capture_3ds_challenge | 14s | 14s |
+        | webhook_delivery_retry | 2.1s | 2.1s |
+        | capture_idempotent_replay | 380ms | 120ms |
+        | refund_full_amount | 900ms | 410ms |
+        """ : ""
+        let answerLead = round % 2 == 0
+            ? "No: the webhook tests build their own `PaymentClient(base_url=...)` per test and never touch " +
+                "the shared pool, so round \(ordinal) leaves them untouched."
+            : "About \(9 + round) minutes end to end, most of it the `--count 50` loop; the patch itself was a few lines."
+        let answer = LongConversationRow(role: "assistant", contentBlocks: [textBlock("""
+        \(answerLead)
+        \(bigTable)
+        ```diff
+        --- a/\(topic.file)
+        +++ b/\(topic.file)
+        @@ -40,3 +40,4 @@
+        -    client = PaymentClient.shared()
+        +    client = PaymentClient.reset_shared()
+        +    # \(topic.subject): see round \(ordinal)
+        ```
+        """)])
+
+        let thirdReport = delegateRow(thirdReporter, text: """
+        Evidence for \(topic.subject), 50 runs:
+
+        | Metric | Value |
+        |--------|-------|
+        | Failures | 0 |
+        | Median | 5m04s |
+        | Max | 6m02s |
+
+        Attached the per-run log to the task note and marked the verification complete.
+        """)
+
+        return [
+            investigation, firstReport, reply, delegation, secondReport,
+            summary, followUp, answer, thirdReport,
+        ]
     }
 
     // MARK: - Tasks
