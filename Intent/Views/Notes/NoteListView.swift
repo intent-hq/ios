@@ -265,6 +265,26 @@ enum NoteRowLayout {
         depth > 0 && !hasChildren && !usesAccessibilityLayout
     }
 
+    /// Leading edge of the row's content button, mirroring the spacers and
+    /// disclosure slot laid out in `NoteRowView.body`.
+    static func contentLeadingOffset(
+        depth: Int,
+        hasChildren: Bool,
+        usesAccessibilityLayout: Bool
+    ) -> CGFloat {
+        var offset: CGFloat = 0
+        if depth > 0 {
+            offset += indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout)
+                + Constants.Notes.List.rowSpacing
+        }
+        if hasChildren || reservesDisclosureSpace(
+            depth: depth, hasChildren: hasChildren, usesAccessibilityLayout: usesAccessibilityLayout
+        ) {
+            offset += disclosureTargetSize + Constants.Notes.List.rowSpacing
+        }
+        return offset
+    }
+
     static func titleLineLimit(usesAccessibilityLayout: Bool) -> Int? {
         usesAccessibilityLayout ? nil : 2
     }

@@ -151,6 +151,21 @@ struct NoteRowLayoutTests {
             depth: 1, hasChildren: true, usesAccessibilityLayout: false))
     }
 
+    @Test(arguments: [false, true])
+    func nestedRowsStartRightOfTheirParentAtEveryDepth(usesAccessibilityLayout: Bool) {
+        for depth in 1...4 {
+            let parent = NoteRowLayout.contentLeadingOffset(
+                depth: depth - 1, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+            let leaf = NoteRowLayout.contentLeadingOffset(
+                depth: depth, hasChildren: false, usesAccessibilityLayout: usesAccessibilityLayout)
+            let branch = NoteRowLayout.contentLeadingOffset(
+                depth: depth, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+            #expect(leaf > parent, "depth \(depth) leaf sits left of its parent")
+            #expect(branch > parent, "depth \(depth) branch sits left of its parent")
+            #expect(leaf == branch, "depth \(depth) leaf and branch siblings misalign")
+        }
+    }
+
     @Test func accessibilityTitlesCanUseAsManyLinesAsNeeded() {
         #expect(NoteRowLayout.titleLineLimit(usesAccessibilityLayout: false) == 2)
         #expect(NoteRowLayout.titleLineLimit(usesAccessibilityLayout: true) == nil)
