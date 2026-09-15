@@ -307,56 +307,63 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// Unlike `assertRestsAtBottom`, the checks run at the first sample where
     /// the content holds still rather than after a grace period in which a
     /// late re-pin could mask the symptom, and Go to End must stay absent
-    /// over the quiet window that follows.
+    /// over the quiet window that follows. The symptom is intermittent (on
+    /// CI it showed at cold entry in one run and only after a send in the
+    /// next), so the cold entry is repeated — a fresh launch each cycle, as
+    /// a return through the workspace list would mount the cached transcript.
     @MainActor
     func testFirstOpenOfLongConversationShowsLastMessageWithNoBlankBand() throws {
-        let app = launchDemoApp()
-        let opened = enterLongConversation(in: app, context: "cold entry")
-        let lastMessage = opened.lastMessage
-        let goToEnd = opened.goToEnd
-        let transcript = opened.transcript
-        let endRow = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
+        for cycle in 1...Fixture.entryCycles {
+            let context = "cold entry \(cycle)/\(Fixture.entryCycles)"
+            let app = launchDemoApp()
+            let opened = enterLongConversation(in: app, context: context)
+            let lastMessage = opened.lastMessage
+            let goToEnd = opened.goToEnd
+            let transcript = opened.transcript
+            let endRow = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
 
-        // 1. First settled sample: the last row exists and its frame holds
-        //    still across two consecutive polls. An unrealized last row (the
-        //    viewport resting past the end) never satisfies this.
-        let firstSettledSample = waitUntilSteady(timeout: 10, tolerance: Fixture.rePinTolerance) {
-            lastMessage.exists ? lastMessage.frame.maxY : .nan
+            // 1. First settled sample: the last row exists and its frame holds
+            //    still across two consecutive polls. An unrealized last row (the
+            //    viewport resting past the end) never satisfies this.
+            let firstSettledSample = waitUntilSteady(timeout: 10, tolerance: Fixture.rePinTolerance) {
+                lastMessage.exists ? lastMessage.frame.maxY : .nan
+            }
+            let visibleBand = rows(intersecting: transcript)
+            XCTAssertFalse(
+                visibleBand.isEmpty,
+                "\(context): the transcript's visible band is empty — no message row intersects the transcript frame — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertNotNil(
+                firstSettledSample,
+                "\(context): the last message never held still inside the transcript within 10 s "
+                    + "(\(visibleBand.count) row(s) in the visible band) — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertTrue(
+                isInside(lastMessage, transcript),
+                "\(context): at the first settled sample the last message is not inside the transcript — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertTrue(
+                isInside(endRow, transcript),
+                "\(context): at the first settled sample the transcript is short of the end — the prompt rows under "
+                    + "the last message are not on screen — "
+                    + restingState(of: endRow, named: "first suggested prompt", in: opened))
+
+            // 2. Go to End never appears over the quiet window, and the last
+            //    message and the end row are still on screen at the end of it.
+            XCTAssertFalse(
+                goToEnd.waitForExistence(timeout: Fixture.quietWindow),
+                "\(context): Go to End appeared after the transcript settled — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertTrue(
+                waitUntilVisible(lastMessage, in: transcript, timeout: Fixture.settleWindow),
+                "\(context): the last message left the screen after the quiet window — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertTrue(
+                isInside(endRow, transcript),
+                "\(context): the transcript is short of the end after the quiet window — "
+                    + restingState(of: endRow, named: "first suggested prompt", in: opened))
+            app.terminate()
         }
-        let visibleBand = rows(intersecting: transcript)
-        XCTAssertFalse(
-            visibleBand.isEmpty,
-            "cold entry: the transcript's visible band is empty — no message row intersects the transcript frame — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertNotNil(
-            firstSettledSample,
-            "cold entry: the last message never held still inside the transcript within 10 s "
-                + "(\(visibleBand.count) row(s) in the visible band) — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertTrue(
-            isInside(lastMessage, transcript),
-            "cold entry: at the first settled sample the last message is not inside the transcript — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertTrue(
-            isInside(endRow, transcript),
-            "cold entry: at the first settled sample the transcript is short of the end — the prompt rows under "
-                + "the last message are not on screen — "
-                + restingState(of: endRow, named: "first suggested prompt", in: opened))
-
-        // 2. Go to End never appears over the quiet window, and the last
-        //    message and the end row are still on screen at the end of it.
-        XCTAssertFalse(
-            goToEnd.waitForExistence(timeout: Fixture.quietWindow),
-            "cold entry: Go to End appeared after the transcript settled — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertTrue(
-            waitUntilVisible(lastMessage, in: transcript, timeout: Fixture.settleWindow),
-            "cold entry: the last message left the screen after the quiet window — "
-                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertTrue(
-            isInside(endRow, transcript),
-            "cold entry: the transcript is short of the end after the quiet window — "
-                + restingState(of: endRow, named: "first suggested prompt", in: opened))
     }
 
     /// From the very top of the long transcript a single tap on Go to End
