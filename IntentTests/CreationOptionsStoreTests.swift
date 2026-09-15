@@ -497,13 +497,20 @@ struct CreationOptionsStoreTests {
         try await waitFor("refresh completion") { store.models(for: "auggie")?.map(\.id) == ["opus4.6"] }
     }
 
-    @Test func concurrentModelLoadsForOneProviderShareOneFlight() async {
+    @Test func concurrentModelLoadsForOneProviderShareOneFlight() async throws {
         let (store, fake) = await makeLoadedStore()
 
-        async let first: Void = store.loadModelsIfNeeded(providerId: "auggie")
-        async let second: Void = store.loadModelsIfNeeded(providerId: "auggie")
-        async let other: Void = store.loadModelsIfNeeded(providerId: "codex")
-        _ = await (first, second, other)
+        // Hold the reads open so every caller enters the store while the
+        // first flight is still in flight (a completed flight would turn the
+        // second call into a legitimate stale-while-revalidate refresh).
+        fake.pendingMethods = ["models.list"]
+        let first = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        let second = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        let other = Task { await store.loadModelsIfNeeded(providerId: "codex") }
+        try await waitFor("both cold reads") { fake.paramsForMethod("models.list").count == 2 }
+        fake.resolvePending("models.list", with: ["models": [modelDict(id: "sonnet4.5")]])
+        fake.resolvePending("models.list", with: ["models": [modelDict(id: "gpt", provider: "codex")]])
+        _ = await (first.value, second.value, other.value)
 
         let providerIds = fake.paramsForMethod("models.list").compactMap { $0["providerId"] as? String }
         #expect(providerIds.sorted() == ["auggie", "codex"])
