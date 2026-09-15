@@ -534,6 +534,71 @@ struct ConversationViewModelTests {
         #expect(fake.requestLog.count == requestsAfterReload)
     }
 
+    /// A failed post-reconnect re-read leaves no authoritative metadata:
+    /// the pre-reconnect model/provider are dropped (placeholder label, not
+    /// a stale one) and no catalog is loaded for them; the next task run
+    /// re-reads, and only a fresh `agent.get` restores the label.
+    @Test func failedPostReconnectRereadDropsStaleMetadataAndSkipsCatalog() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        await vm.fetchCurrentModel()
+        await vm.loadModelCatalogIfNeeded()
+        #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
+
+        fake.errorMap["agent.get"] = NSError(domain: "t", code: -1)
+        store.invalidate()
+        await vm.loadModelCatalogIfNeeded()
+        #expect(fake.paramsForMethod("agent.get").count == 2)
+        #expect(fake.paramsForMethod("models.list").count == 1)
+        #expect(vm.currentModelId == nil)
+        #expect(vm.currentProviderId == nil)
+        #expect(vm.currentModelDisplayName == nil)
+        #expect(store.models(for: "auggie") == nil)
+
+        fake.errorMap["agent.get"] = nil
+        fake.responseMap["agent.get"] = ["agent": ["model": "opus", "provider": "auggie"]]
+        fake.responseMap["models.list"] = ["models": [
+            ["id": "opus", "name": "Opus", "provider": "auggie"],
+        ]]
+        await vm.loadModelCatalogIfNeeded()
+        #expect(fake.paramsForMethod("agent.get").count == 3)
+        #expect(fake.paramsForMethod("models.list").count == 2)
+        #expect(vm.currentModelDisplayName == "Opus")
+    }
+
+    /// A failed provider-scoped `models.list` leaves the catalog nil: the
+    /// picker must surface a retryable failure state instead of spinning
+    /// forever, and a successful retry clears it.
+    @Test func pickerSurfacesCatalogLoadFailureInsteadOfSpinning() async {
+        let (vm, _, fake) = makeCatalogVM()
+        await vm.fetchCurrentModel()
+        fake.errorMap["models.list"] = NSError(domain: "t", code: -1)
+
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels == nil)
+        #expect(vm.modelCatalogLoadFailed)
+
+        fake.errorMap["models.list"] = nil
+        await vm.refreshSelectableModels()
+        #expect(vm.selectableModels?.map(\.id) == ["sonnet4.5"])
+        #expect(!vm.modelCatalogLoadFailed)
+    }
+
+    /// A catalog load superseded by a reconnect is neither a success nor a
+    /// failure: the flag stays clear and the generation-keyed task reloads.
+    @Test func catalogLoadSupersededByReconnectDoesNotFlagFailure() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        await vm.fetchCurrentModel()
+        fake.pendingMethods = ["models.list"]
+        let load = Task { await vm.refreshSelectableModels() }
+        try await waitFor("cold models.list") { fake.didCallMethod("models.list") }
+
+        store.invalidate()
+        fake.resolvePending("models.list", with: ["models": []])
+        await load.value
+        #expect(vm.selectableModels == nil)
+        #expect(!vm.modelCatalogLoadFailed)
+    }
+
     private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {
         let set = try #require(vm.pendingQuestions)
         return [

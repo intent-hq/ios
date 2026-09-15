@@ -413,6 +413,31 @@ struct CreateWorkspaceParamsTests {
             storeIsLoading: false, storeHasLoaded: true, settled: false))
     }
 
+    // MARK: - showsModelCatalogLoading (Create waits for the first catalog; warm catalog is instant)
+
+    @Test func modelCatalogLoadingGatesCreateUntilFirstCatalogSettles() {
+        // Selected provider, catalog not cached, sheet's first load not
+        // settled: the catalog is still resolving, Create stays disabled.
+        #expect(CreateWorkspaceView.showsModelCatalogLoading(catalogCached: false, settled: false))
+        // Warm catalog (cached reopen / provider already loaded): instant.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: true, settled: false))
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: true, settled: true))
+        // No selected provider: nothing to wait on.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: nil, settled: false))
+        // Settled with the catalog still missing (the load failed): the
+        // daemon default applies, not an indefinite gate.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: false, settled: true))
+    }
+
+    @Test func createDisabledWhileFirstModelCatalogResolves() {
+        let catalogLoading = CreateWorkspaceView.showsModelCatalogLoading(
+            catalogCached: false, settled: false)
+        #expect(isCreateDisabled(isLoadingProviders: catalogLoading, providers: [makeProvider()]))
+        let catalogWarm = CreateWorkspaceView.showsModelCatalogLoading(
+            catalogCached: true, settled: false)
+        #expect(!isCreateDisabled(isLoadingProviders: catalogWarm, providers: [makeProvider()]))
+    }
+
     // MARK: - preselectedProvider
 
     @Test func preselectedProviderPrefersSelectableAuggieThenFirstSelectable() {
