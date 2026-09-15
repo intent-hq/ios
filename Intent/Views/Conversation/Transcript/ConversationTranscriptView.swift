@@ -762,6 +762,12 @@ struct ConversationTranscriptView: View {
     /// rule, and the live distance is applied once as the gesture's sample in
     /// case its edge was dropped — and on the timeout, leaving the pin as it
     /// is. Bails out silently when the follow is restarted (task cancelled).
+    ///
+    /// Each correction is judged from two fresh reads taken after its scroll
+    /// has had its animation's duration to move: a poll that reused the
+    /// pre-correction rest as `previous` before a frame rendered read the
+    /// same geometry twice, spent the next correction on it and gave up with
+    /// the viewport still on its way (#305).
     private func awaitForcedFollowLanding(proxy: ScrollViewProxy, animated: Bool) async {
         let deadline = ContinuousClock.now
             + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
@@ -787,10 +793,16 @@ struct ConversationTranscriptView: View {
                 correctionsLeft -= 1
                 AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
                 issueScrollToBottom(proxy: proxy, animated: animated)
+                previous = nil
+                if animated {
+                    try? await Task.sleep(for: .seconds(Constants.Conversation.Transcript.scrollAnimationDuration))
+                    guard !Task.isCancelled else { return }
+                }
             case .clampPastEnd:
                 correctionsLeft -= 1
                 AppLog.ui.debug("[SCROLL] Forced follow landed past the end, clamping")
                 _ = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: geometry)
+                previous = nil
             case .yieldToUser:
                 applyLiveScrolledAwayEdge(isInteracting: true, proxy: proxy)
                 return

@@ -986,6 +986,12 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 600), correctionsLeft: 0) == .giveUp)
         #expect(landing(geometry(offsetY: 300), correctionsLeft: 0) == .landed)
         #expect(Constants.Conversation.Transcript.followLandingRetries > 0)
+        // The timeout leaves room for the first scroll and every correction
+        // to animate and then settle over two reads (#305).
+        let rounds = Double(Constants.Conversation.Transcript.followLandingRetries + 1)
+        let roundMilliseconds = Constants.Conversation.Transcript.scrollAnimationDuration * 1_000
+            + Double(2 * Constants.Conversation.Transcript.followLandingPollMilliseconds)
+        #expect(rounds * roundMilliseconds < Double(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds))
     }
 
     @Test func followLandingYieldsToTheUserAndToTheTimeout() {

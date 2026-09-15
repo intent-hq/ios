@@ -42,13 +42,17 @@ enum Constants {
             static let scrollCompletionMilliseconds = 300
             /// How many corrections (a scroll again from short of the bottom,
             /// a clamp from past the end) a forced follow issues while its
-            /// landing reads off the bottom before it gives up.
-            static let followLandingRetries = 2
+            /// landing reads off the bottom before it gives up. From the top
+            /// of a long lazy transcript each scroll lands by the stack's
+            /// estimate of the rows it realizes on the way, so landing within
+            /// `followLandingTolerance` can take a few rounds.
+            static let followLandingRetries = 3
             /// Spacing between the live geometry reads that verify a forced
             /// follow's landing; two identical reads mean it is at rest.
             static let followLandingPollMilliseconds = 50
-            /// Longest a forced follow keeps verifying its landing.
-            static let followLandingTimeoutMilliseconds = 1_500
+            /// Longest a forced follow keeps verifying its landing: room for
+            /// every correction's scroll animation plus its two settling reads.
+            static let followLandingTimeoutMilliseconds = 3_000
             /// Distance from the bottom (points) at or under which a forced
             /// follow at rest has landed. Tighter than `atBottomThreshold`: a
             /// rest anywhere inside that band reads "at bottom" and hides Go
