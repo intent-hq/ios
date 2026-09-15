@@ -290,19 +290,26 @@ struct CreateWorkspaceParamsTests {
             makeCatalogSpecialist(id: "implementor", name: "Implementor"),
         ]
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: nil, specialists: withOrchestrator)?.id == "coordinator")
-        let plain = [makeSpecialist(id: "verifier"), makeSpecialist(id: "implementor")]
+            current: nil, catalog: withOrchestrator)?.id == "coordinator")
+        let plain = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: nil, specialists: plain)?.id == "verifier")
+            current: nil, catalog: plain)?.id == "implementor")
     }
 
     @Test func preselectedSpecialistKeepsStillListedSelectionAndRedefaultsWhenGone() {
-        let specialists = [makeSpecialist(id: "verifier"), makeSpecialist(id: "implementor")]
+        let specialists = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: makeSpecialist(id: "implementor"), specialists: specialists)?.id == "implementor")
-        // A background refresh dropped the selected specialist: re-default.
+            current: makeSpecialist(id: "verifier"), catalog: specialists)?.id == "verifier")
+        // A background refresh dropped the selected specialist: re-default
+        // to the first pickable entry (name order).
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: makeSpecialist(id: "retired"), specialists: specialists)?.id == "verifier")
+            current: makeSpecialist(id: "retired"), catalog: specialists)?.id == "implementor")
     }
 
     @Test func preselectedSpecialistRebindsSurvivingSelectionToFreshMetadata() {
@@ -313,7 +320,7 @@ struct CreateWorkspaceParamsTests {
             makeSpecialist(id: "verifier"),
             makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie"),
         ]
-        let kept = CreateWorkspaceView.preselectedSpecialist(current: stale, specialists: refreshed)
+        let kept = CreateWorkspaceView.preselectedSpecialist(current: stale, catalog: refreshed)
         #expect(kept?.id == "implementor")
         #expect(kept?.resolvedModel == "opus4.6")
         #expect(kept == refreshed[1])
@@ -329,16 +336,28 @@ struct CreateWorkspaceParamsTests {
         ]
         #expect(refreshed.map(\.id) == ["coordinator", "implementor"])
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: selected, specialists: CreateWorkspaceView.pickerSpecialists(refreshed))?.id
-            == "coordinator")
+            current: selected, catalog: refreshed)?.id == "coordinator")
         // The same catalog with the role flipped to internal behaves alike.
         let internalised = [
             makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
             makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal"),
         ]
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: selected, specialists: CreateWorkspaceView.pickerSpecialists(internalised))?.id
-            == "coordinator")
+            current: selected, catalog: internalised)?.id == "coordinator")
+    }
+
+    @Test func preselectedSpecialistClearsWhenSolePickableSpecialistTurnsHidden() {
+        // The selected specialist was the only pickable one; a background
+        // refresh marks it hidden. The catalog is authoritative (non-empty)
+        // yet lists nothing pickable, so the selection clears rather than
+        // letting a hidden id reach buildCreateWorkspaceParams.
+        let selected = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        let hiddenOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true)]
+        #expect(CreateWorkspaceView.pickerSpecialists(hiddenOnly).isEmpty)
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: hiddenOnly) == nil)
+        let internalOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")]
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: internalOnly) == nil)
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: hiddenOnly) == nil)
     }
 
     @Test func specialistCatalogEqualityTracksMetadataNotJustIds() {
@@ -352,12 +371,46 @@ struct CreateWorkspaceParamsTests {
         #expect([base] != [makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie")])
     }
 
-    @Test func preselectedSpecialistKeepsSelectionAcrossAnEmptyList() {
+    @Test func preselectedSpecialistKeepsSelectionAcrossAnEmptyCatalog() {
         // A reconnect clears the cache before reloading it: the selection
-        // survives the empty interim (and nil stays nil).
+        // survives the empty interim (and nil stays nil). Only an empty
+        // catalog is transient — a non-empty one is authoritative.
         #expect(CreateWorkspaceView.preselectedSpecialist(
-            current: makeSpecialist(id: "implementor"), specialists: [])?.id == "implementor")
-        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, specialists: []) == nil)
+            current: makeSpecialist(id: "implementor"), catalog: [])?.id == "implementor")
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: []) == nil)
+    }
+
+    // MARK: - showsOptionsLoading (cached reopen never spins; warm-before-load clears)
+
+    @Test func showsOptionsLoadingOnlyWhileColdOrStoreLoading() {
+        // Cold cache, sheet's load not yet settled: loading.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: false))
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: true, storeHasLoaded: false, settled: false))
+        // Warm cache (cached reopen): never loading, even during an SWR
+        // revalidation, which the store runs without touching isLoading.
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: false))
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: true))
+        // A settled cold load that failed shows the empty state, not a spinner.
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: true))
+        // A reconnect hard-clear reloads cold: loading drives back on.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: true, storeHasLoaded: false, settled: true))
+    }
+
+    @Test func showsOptionsLoadingClearsWhenCacheWarmsBetweenConstructionAndLoad() {
+        // The sheet was constructed over a cold cache (loading), then another
+        // sheet / the reconnect reload warmed the shared store before this
+        // sheet's specialist step ran its load: the state is derived from
+        // the store, so it clears without the sheet's own load settling.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: false))
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: false))
     }
 
     // MARK: - preselectedProvider

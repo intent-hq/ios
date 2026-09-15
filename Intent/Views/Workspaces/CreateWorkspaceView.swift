@@ -32,11 +32,10 @@ struct CreateWorkspaceView: View {
     @State private var completedBranchQuery: String?
     @State private var branchSearchResults: [String] = []
     @State private var branchSearchTask: Task<Void, Never>?
-    /// True only during a cold specialist/provider load (nothing cached);
-    /// a reopen over a warm cache never shows the loading state.
-    @State private var isLoadingSpecialists: Bool
+    /// Set once this sheet's own options load has settled, so a cold load
+    /// that failed shows the empty state rather than loading forever.
+    @State private var hasSettledOptionsLoad = false
     @State private var selectedSpecialist: SpecialistInfo?
-    @State private var isLoadingProviders: Bool
     @State private var selectedProvider: ProviderInfo?
     @State private var selectedModel: ModelInfo?
     @State private var messageText = ""
@@ -47,9 +46,6 @@ struct CreateWorkspaceView: View {
 
     init(session: BackendSession) {
         self.session = session
-        let cached = session.creationOptionsStore.hasLoaded
-        _isLoadingSpecialists = State(initialValue: !cached)
-        _isLoadingProviders = State(initialValue: !cached)
     }
 
     /// The session-owned repo cache: it outlives this sheet so a reopen
@@ -69,6 +65,15 @@ struct CreateWorkspaceView: View {
     /// hides the model row (the daemon default applies).
     private var models: [ModelInfo] {
         selectedProvider.flatMap { optionsStore.models(for: $0.id) } ?? []
+    }
+    /// Derived from the store, never a local snapshot: a cache that warms
+    /// between construction and the step's load (another sheet, a reconnect
+    /// reload) drops the loading state on its own, and a reconnect clear
+    /// drives it back on while the store reloads cold.
+    private var isLoadingOptions: Bool {
+        Self.showsOptionsLoading(
+            storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
+            settled: hasSettledOptionsLoad)
     }
 
     var body: some View {
@@ -97,9 +102,9 @@ struct CreateWorkspaceView: View {
                         CreateWorkspaceSpecialistStepView(
                             repositoryFullName: selectedRepo?.fullName ?? "",
                             branch: selectedBranch ?? "",
-                            specialists: specialists, isLoadingSpecialists: isLoadingSpecialists,
+                            specialists: specialists, isLoadingSpecialists: isLoadingOptions,
                             selectedSpecialist: $selectedSpecialist,
-                            providers: providers, isLoadingProviders: isLoadingProviders,
+                            providers: providers, isLoadingProviders: isLoadingOptions,
                             selectedProvider: $selectedProvider,
                             models: models, selectedModel: $selectedModel,
                             messageText: $messageText,
@@ -193,27 +198,22 @@ struct CreateWorkspaceView: View {
     }
 
     /// Cold (nothing cached): awaits the specialist/provider load and the
-    /// selected provider's model catalog with the loading state shown.
+    /// selected provider's model catalog while `isLoadingOptions` shows.
     /// Cached: the pickers already render the cached lists — the store
     /// revalidates in the background and the loading state never shows.
     private func fetchCreationOptions() async {
-        let cold = !optionsStore.hasLoaded
-        if cold {
-            isLoadingSpecialists = true
-            isLoadingProviders = true
-        }
         await optionsStore.loadIfNeeded()
+        hasSettledOptionsLoad = true
         reconcileSpecialistSelection()
-        if cold { isLoadingSpecialists = false }
         await reconcileProviderSelection()
-        if cold { isLoadingProviders = false }
     }
 
     /// Defaults the specialist selection (orchestrator, else first) and
-    /// re-defaults it when the selected specialist left the catalog.
+    /// re-defaults or clears it when the selected specialist left the
+    /// pickable set.
     private func reconcileSpecialistSelection() {
         selectedSpecialist = Self.preselectedSpecialist(
-            current: selectedSpecialist, specialists: specialists)
+            current: selectedSpecialist, catalog: optionsStore.specialists)
     }
 
     /// Defaults the provider selection to a selectable provider (auggie
@@ -256,19 +256,32 @@ struct CreateWorkspaceView: View {
         }
     }
 
-    /// Keeps the selection while `current`'s id is still in `specialists`,
-    /// rebound to the fresh entry so refreshed metadata (default-model
-    /// preview) is what the picker shows; otherwise the orchestrator, else
-    /// the first specialist. An empty list (cold load or reconnect clear)
-    /// keeps `current` so the selection survives the reload.
+    /// Keeps the selection while `current`'s id is still pickable in the
+    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
+    /// metadata (default-model preview) is what the picker shows; otherwise
+    /// the orchestrator, else the first pickable specialist, else nil when
+    /// the catalog lists nothing pickable (a hidden id must never be
+    /// submitted). An empty catalog (cold load or reconnect clear) keeps
+    /// `current` so the selection survives the reload.
     static func preselectedSpecialist(
-        current: SpecialistInfo?, specialists: [SpecialistInfo]
+        current: SpecialistInfo?, catalog: [SpecialistInfo]
     ) -> SpecialistInfo? {
-        guard !specialists.isEmpty else { return current }
+        guard !catalog.isEmpty else { return current }
+        let specialists = pickerSpecialists(catalog)
         if let current, let fresh = specialists.first(where: { $0.id == current.id }) {
             return fresh
         }
         return specialists.orchestrator ?? specialists.first
+    }
+
+    /// The pickers' loading state: shown while the store runs a cold load
+    /// (first load or reconnect reload) and before this sheet's first load
+    /// has settled on an empty cache; never for a warm cache revalidating,
+    /// and not after a settled load that failed (empty state instead).
+    static func showsOptionsLoading(
+        storeIsLoading: Bool, storeHasLoaded: Bool, settled: Bool
+    ) -> Bool {
+        storeIsLoading || (!storeHasLoaded && !settled)
     }
 
     /// Keeps the selection while `current`'s id is still selectable, rebound
