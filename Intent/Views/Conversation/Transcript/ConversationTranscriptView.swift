@@ -132,10 +132,22 @@ struct ConversationTranscriptView: View {
         let containerHeight: CGFloat
     }
 
+    /// The message rows are lazy; the rows under the last message (suggested
+    /// prompts, thinking indicator, the `scroll-bottom` target) are not. A
+    /// lazy tail is sized by LazyVStack's estimate until it is realized, and
+    /// on a long cold-laid-out transcript that estimate left the content end
+    /// at the last message: the viewport rested there reading "at bottom"
+    /// with Go to End hidden while the prompt rows — or the indicator of a
+    /// just-sent message — were never laid out (#304, #305). Laid out
+    /// eagerly, the tail is inside the content end the geometry reports, so
+    /// a follow landed at the bottom has reached the true end.
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
-                transcriptRows(dividerAnchorId: dividerAnchorId)
+            VStack(spacing: 16) {
+                LazyVStack(spacing: 16) {
+                    transcriptMessageRows(dividerAnchorId: dividerAnchorId)
+                }
+                transcriptTailRows
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
@@ -403,7 +415,7 @@ struct ConversationTranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRows(dividerAnchorId: String?) -> some View {
+    private func transcriptMessageRows(dividerAnchorId: String?) -> some View {
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
@@ -432,7 +444,11 @@ struct ConversationTranscriptView: View {
                     .id("new-messages-divider")
             }
         }
+    }
 
+    /// Rows under the last message; eager, see `transcriptScrollBase`.
+    @ViewBuilder
+    private var transcriptTailRows: some View {
         #if !os(visionOS)
         // On visionOS the composer renders these as large chips above the
         // field instead (MessageInputView).
