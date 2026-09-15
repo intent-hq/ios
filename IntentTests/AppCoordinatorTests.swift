@@ -1888,6 +1888,62 @@ final class AppCoordinatorTests {
         #expect(!RootView.needsConversationRepush(agentChanged: false, isNewRequest: true, isRegularWidth: false))
     }
 
+    @Test @MainActor func changedAgentSelection_secondSyncTriggerDoesNotRepushBeforeDeferredTick() {
+        // iPad: selecting a different agent changes both currentScreenDescription
+        // and conversationRequestId, so syncNavigationState() runs twice in one
+        // update pass. Model the view state across both runs and check that the
+        // second run cannot undo the tear-down started by the first.
+        let wsId = "test-coord-double-trigger-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectAgent("agent-A", workspaceId: wsId, agentName: "A")
+        var showingConversation = true
+        var programmaticConversationDismiss = false
+        var conversationAgentId = "agent-A"
+        var handledRequestId = coordinator.conversationRequestId
+        let screenBefore = coordinator.currentScreenDescription
+
+        coordinator.onSelectAgent("agent-B", workspaceId: wsId, agentName: "B")
+        #expect(coordinator.currentScreenDescription != screenBefore,
+                "Changed-agent select fires the currentScreenDescription observer")
+        #expect(coordinator.conversationRequestId != handledRequestId,
+                "Changed-agent select fires the conversationRequestId observer too")
+
+        // First trigger (currentScreenDescription changed): tear-down branch.
+        let firstAgentChanged = conversationAgentId != "agent-B"
+        let firstIsNewRequest = handledRequestId != coordinator.conversationRequestId
+        handledRequestId = coordinator.conversationRequestId
+        conversationAgentId = "agent-B"
+        #expect(showingConversation)
+        #expect(RootView.needsConversationRepush(
+            agentChanged: firstAgentChanged, isNewRequest: firstIsNewRequest, isRegularWidth: true))
+        programmaticConversationDismiss = true
+        showingConversation = false
+
+        // Second trigger (conversationRequestId changed) in the same pass sees
+        // showingConversation == false but must not push before the deferred tick.
+        let secondAgentChanged = conversationAgentId != "agent-B"
+        let secondIsNewRequest = handledRequestId != coordinator.conversationRequestId
+        #expect(!secondAgentChanged)
+        #expect(!secondIsNewRequest)
+        #expect(!showingConversation)
+        #expect(!RootView.canPushConversationNow(repushInFlight: programmaticConversationDismiss),
+                "Second sync run must leave the tear-down in place")
+
+        // Once the tear-down has been consumed (flag cleared), an immediate push is allowed again.
+        programmaticConversationDismiss = false
+        #expect(RootView.canPushConversationNow(repushInFlight: programmaticConversationDismiss))
+    }
+
+    @Test @MainActor func canPushConversationNow_trueWhenNoRepushInFlight() {
+        // The normal restore/select path pushes immediately.
+        #expect(RootView.canPushConversationNow(repushInFlight: false))
+    }
+
     // MARK: - Fetch-driven workspace validation (lastUpdated race)
 
     private static func makeWorkspace(id: String, status: String? = nil,

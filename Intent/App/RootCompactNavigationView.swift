@@ -93,7 +93,7 @@ extension RootView {
                 // and conversationRequestId, so this runs twice in one update
                 // pass. If the first pass started the tear-down below, do not
                 // undo it here; the deferred block re-pushes on the next tick.
-                if !programmaticConversationDismiss {
+                if RootView.canPushConversationNow(repushInFlight: programmaticConversationDismiss) {
                     showingConversation = true
                 }
             } else if RootView.needsConversationRepush(
@@ -191,6 +191,16 @@ extension RootView {
         isRegularWidth: Bool
     ) -> Bool {
         isRegularWidth && (agentChanged || isNewRequest)
+    }
+
+    /// Whether `syncNavigationState()` may set `showingConversation = true`
+    /// immediately when it is currently false. It must not while the iPad
+    /// tear-down/re-push is in flight (`programmaticConversationDismiss` set):
+    /// a changed-agent selection triggers the sync twice in one update pass,
+    /// and the second run would otherwise undo the tear-down the first run
+    /// started, before the deferred re-push tick.
+    static func canPushConversationNow(repushInFlight: Bool) -> Bool {
+        !repushInFlight
     }
 
     /// Guard for the deferred iPad conversation re-push scheduled by the
