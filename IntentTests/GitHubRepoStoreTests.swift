@@ -740,4 +740,176 @@ struct GitHubRepoStoreTests {
             _ = try await store.fetchRemoteBranches(owner: "o", repo: "r")
         }
     }
+
+    // MARK: - fetchCachedBranches (github.branches.listCached)
+
+    @Test func fetchCachedBranchesReadsListCached() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.listCached"] = [
+            "cached": true, "source": "cache",
+            "branches": ["dev", "main"], "defaultBranch": "main",
+        ]
+        let listing = await store.fetchCachedBranches(owner: "intent-hq", repo: "intentd")
+        #expect(listing == GitHubBranchListing(branches: ["dev", "main"], defaultBranch: "main"))
+        let calls = fake.paramsForMethod("github.branches.listCached")
+        #expect(calls.count == 1)
+        #expect(calls[0]["owner"] as? String == "intent-hq")
+        #expect(calls[0]["repo"] as? String == "intentd")
+        // A first paint only: never promoted to the authoritative cache.
+        #expect(store.cachedBranchListing(owner: "intent-hq", repo: "intentd") == nil)
+    }
+
+    @Test func fetchCachedBranchesOmittedDefaultBranchIsNil() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.listCached"] = [
+            "cached": false, "source": "ls-remote", "branches": ["main"],
+        ]
+        let listing = await store.fetchCachedBranches(owner: "o", repo: "r")
+        #expect(listing == GitHubBranchListing(branches: ["main"], defaultBranch: nil))
+    }
+
+    @Test func fetchCachedBranchesColdMissIsNil() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.listCached"] = ["cached": false, "branches": [String]()]
+        let listing = await store.fetchCachedBranches(owner: "o", repo: "r")
+        #expect(listing == nil)
+    }
+
+    @Test func fetchCachedBranchesMethodNotFoundIsMiss() async {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        // Older daemon without the method (-32601) — a miss, never an error.
+        fake.errorMap["github.branches.listCached"] = NSError(
+            domain: "WebSocket", code: -32601,
+            userInfo: [NSLocalizedDescriptionKey: "Method not found"])
+        let listing = await store.fetchCachedBranches(owner: "o", repo: "r")
+        #expect(listing == nil)
+        #expect(store.lastError == nil)
+    }
+
+    // MARK: - loadBranchListing (per-session branch cache)
+
+    @Test func loadBranchListingCachesAuthoritativeListing() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.list"] = ["branches": ["main", "dev"]]
+
+        let listing = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+
+        #expect(listing == GitHubBranchListing(branches: ["main", "dev"], defaultBranch: "main"))
+        #expect(store.cachedBranchListing(owner: "o", repo: "other") == nil)
+        // A known default branch skips the github.repos.get round-trip.
+        #expect(!fake.didCallMethod("github.repos.get"))
+        // The cache hit is synchronous: no request behind it.
+        fake.clearRequestLog()
+        #expect(store.cachedBranchListing(owner: "o", repo: "r") == listing)
+        #expect(fake.requestLog.isEmpty)
+    }
+
+    @Test func loadBranchListingResolvesUnknownDefaultBranch() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.repos.get"] = ["repo": makeRepoDict(defaultBranch: "develop")]
+        fake.responseMap["github.branches.list"] = ["branches": ["develop", "main"]]
+
+        let listing = try await store.loadBranchListing(owner: "o", repo: "r")
+
+        #expect(listing.defaultBranch == "develop")
+        #expect(fake.paramsForMethod("github.repos.get").count == 1)
+    }
+
+    @Test func loadBranchListingFailureKeepsCachedListingAndThrows() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.list"] = ["branches": ["main"]]
+        let cached = try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+        fake.errorMap["github.branches.list"] = NSError(domain: "t", code: -1)
+
+        await #expect(throws: (any Error).self) {
+            try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+        }
+        #expect(store.cachedBranchListing(owner: "o", repo: "r") == cached)
+    }
+
+    @Test func concurrentBranchLoadsShareOneFlight() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.pendingMethods = ["github.branches.list"]
+
+        async let first = store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+        async let second = store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+        try await waitFor("branch read") { fake.paramsForMethod("github.branches.list").count == 1 }
+        fake.resolvePending("github.branches.list", with: ["branches": ["main"]])
+
+        let (a, b) = try await (first, second)
+        #expect(a == b)
+        #expect(fake.paramsForMethod("github.branches.list").count == 1)
+    }
+
+    @Test func invalidateClearsBranchCacheAndDropsInFlightCompletion() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["github.branches.list"] = ["branches": ["main"]]
+        try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main")
+        fake.pendingMethods = ["github.branches.list"]
+        let inFlight = Task { try await store.loadBranchListing(owner: "o", repo: "r", defaultBranch: "main") }
+        try await waitFor("refresh read") { fake.paramsForMethod("github.branches.list").count == 2 }
+
+        store.invalidate()
+        #expect(store.cachedBranchListing(owner: "o", repo: "r") == nil)
+
+        fake.resolvePending("github.branches.list", with: ["branches": ["stale"]])
+        _ = try await inFlight.value
+        // The pre-invalidate completion is answered but never re-cached.
+        #expect(store.cachedBranchListing(owner: "o", repo: "r") == nil)
+    }
+
+    // MARK: - warmRepoCache (repo.warmCache)
+
+    @Test func warmRepoCacheSendsGithubUrlOncePerRepo() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["repo.warmCache"] = ["started": true, "owner": "intent-hq", "repo": "intentd"]
+
+        store.warmRepoCache(owner: "intent-hq", repo: "intentd")
+        store.warmRepoCache(owner: "intent-hq", repo: "intentd")
+        store.warmRepoCache(owner: "intent-hq", repo: "ios")
+        try await waitFor("warm requests") { fake.paramsForMethod("repo.warmCache").count == 2 }
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        let calls = fake.paramsForMethod("repo.warmCache")
+        #expect(calls.count == 2)
+        #expect(calls[0]["githubUrl"] as? String == "https://github.com/intent-hq/intentd")
+        #expect(calls[1]["githubUrl"] as? String == "https://github.com/intent-hq/ios")
+        #expect(calls[0].count == 1)
+    }
+
+    @Test func warmRepoCacheErrorIsSwallowed() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.errorMap["repo.warmCache"] = NSError(
+            domain: "WebSocket", code: -32603,
+            userInfo: [NSLocalizedDescriptionKey: "repo cache warm already in flight for o/r"])
+
+        store.warmRepoCache(owner: "o", repo: "r")
+        try await waitFor("warm request") { fake.didCallMethod("repo.warmCache") }
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        #expect(store.lastError == nil)
+    }
+
+    @Test func warmRepoCacheRearmsAfterInvalidate() async throws {
+        let fake = FakeConnectionManager()
+        let store = GitHubRepoStore(connectionManager: fake)
+        fake.responseMap["repo.warmCache"] = ["started": true, "owner": "o", "repo": "r"]
+
+        store.warmRepoCache(owner: "o", repo: "r")
+        try await waitFor("first warm") { fake.paramsForMethod("repo.warmCache").count == 1 }
+        store.invalidate()
+        store.warmRepoCache(owner: "o", repo: "r")
+        try await waitFor("second warm") { fake.paramsForMethod("repo.warmCache").count == 2 }
+    }
 }

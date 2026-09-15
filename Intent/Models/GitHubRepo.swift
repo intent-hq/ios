@@ -29,3 +29,12 @@ struct GitHubRepo: Identifiable, Equatable {
         )
     }
 }
+
+/// One repo's branch names plus its default branch, as the branch picker
+/// renders them. Produced both by the authoritative `github.branches.list`
+/// read and by the cached-first `github.branches.listCached` paint
+/// (PROTOCOL §5.27); `defaultBranch` is nil when unresolvable.
+struct GitHubBranchListing: Equatable {
+    let branches: [String]
+    let defaultBranch: String?
+}

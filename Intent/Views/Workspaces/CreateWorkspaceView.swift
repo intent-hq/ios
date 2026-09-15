@@ -23,10 +23,13 @@ struct CreateWorkspaceView: View {
     private let session: BackendSession
     @State private var navigationPath: [Route] = []
     @State private var selectedRepo: GitHubRepo?
-    @State private var remoteBranches: [String] = []
-    @State private var defaultBranch: String?
-    @State private var isLoadingBranches = true
+    /// The cached-first paint (`github.branches.listCached`) for the
+    /// selected repo, shown only until the store holds the authoritative
+    /// listing; cleared once it does so a later reconnect clear cannot
+    /// resurrect it.
+    @State private var cachedBranchListing: GitHubBranchListing?
     @State private var branchLoadError: String?
+    @State private var branchLoadTask: Task<Void, Never>?
     @State private var selectedBranch: String?
     @State private var branchSearchText = ""
     @State private var completedBranchQuery: String?
@@ -75,6 +78,18 @@ struct CreateWorkspaceView: View {
             storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
             settled: hasSettledOptionsLoad)
     }
+    /// The listing the branch step renders: the store's authoritative
+    /// per-repo cache first (synchronous on a revisit), else this sheet's
+    /// cached-first paint. Derived from the store, never a local snapshot, so
+    /// the loading state follows the cache: a reconnect clear drives it back
+    /// on and triggers a reload (see `onChange(of: branchListing)`).
+    private var branchListing: GitHubBranchListing? {
+        guard let repo = selectedRepo else { return nil }
+        return githubStore.cachedBranchListing(owner: repo.owner, repo: repo.name) ?? cachedBranchListing
+    }
+    private var isLoadingBranches: Bool {
+        branchListing == nil && branchLoadError == nil
+    }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
@@ -89,7 +104,7 @@ struct CreateWorkspaceView: View {
                     case .branches:
                         CreateWorkspaceBranchStepView(
                             repositoryFullName: selectedRepo?.fullName ?? "",
-                            displayedBranches: displayedBranches, defaultBranch: defaultBranch,
+                            displayedBranches: displayedBranches, defaultBranch: branchListing?.defaultBranch,
                             isLoading: isLoadingBranches, loadError: branchLoadError,
                             selectedBranch: $selectedBranch, searchText: $branchSearchText,
                             colorScheme: colorScheme,
@@ -132,11 +147,33 @@ struct CreateWorkspaceView: View {
         .onChange(of: models) { _, models in
             selectedModel = Self.reconciledModel(current: selectedModel, models: models)
         }
+        // The cached-first paint, the authoritative listing replacing it and
+        // a background revalidation all land here: keep the selection if the
+        // new listing still has it, else fall back to default → first. A
+        // listing that vanishes while the branch step is open is a reconnect
+        // clear, so reload it (the store only re-warms what is asked for).
+        .onChange(of: branchListing) { _, listing in
+            guard let listing else {
+                if navigationPath.contains(.branches) {
+                    Task { await fetchBranches() }
+                }
+                return
+            }
+            reconcileBranchSelection(with: listing)
+        }
+    }
+
+    private func reconcileBranchSelection(with listing: GitHubBranchListing) {
+        selectedBranch = Self.preselectedBranch(
+            current: selectedBranch,
+            branches: Self.orderedBranches(listing.branches, defaultBranch: listing.defaultBranch),
+            defaultBranch: listing.defaultBranch
+        )
     }
 
     private var displayedBranches: [String] {
         Self.displayedBranches(
-            loaded: remoteBranches, defaultBranch: defaultBranch,
+            loaded: branchListing?.branches ?? [], defaultBranch: branchListing?.defaultBranch,
             query: branchSearchText, searchResults: branchSearchResults,
             completedQuery: completedBranchQuery
         )
@@ -144,36 +181,60 @@ struct CreateWorkspaceView: View {
     private func resetRepositoryState() {
         idempotencyKey = UUID().uuidString
         selectedBranch = nil
-        remoteBranches = []
-        defaultBranch = nil
-        isLoadingBranches = true
+        branchLoadTask?.cancel()
+        cachedBranchListing = nil
+        branchLoadError = nil
         branchSearchTask?.cancel()
         branchSearchText = ""
         completedBranchQuery = nil
         branchSearchResults = []
+        // Warm the daemon's repo cache now so the branch step's cached-first
+        // paint and the later workspace.create find it fresh (FE parity).
+        if let repo = selectedRepo {
+            githubStore.warmRepoCache(owner: repo.owner, repo: repo.name)
+        }
     }
+    /// One branch load per call; a still-running earlier load (a retry
+    /// while loading, a repo change) is cancelled so its outcome is dropped.
     private func fetchBranches() async {
         guard let repo = selectedRepo else { return }
-        isLoadingBranches = true
-        branchLoadError = nil
-        do {
-            var resolvedDefault = repo.defaultBranch
-            if resolvedDefault == nil {
-                resolvedDefault = await githubStore.fetchDefaultBranch(owner: repo.owner, repo: repo.name)
-            }
-            let branches = try await githubStore.fetchRemoteBranches(owner: repo.owner, repo: repo.name)
-            defaultBranch = resolvedDefault
-            remoteBranches = branches
-            selectedBranch = Self.preselectedBranch(
-                current: selectedBranch,
-                branches: Self.orderedBranches(branches, defaultBranch: resolvedDefault),
-                defaultBranch: resolvedDefault
+        branchLoadTask?.cancel()
+        let task = Task { await loadBranches(for: repo) }
+        branchLoadTask = task
+        await task.value
+    }
+    /// Cached in the store: render synchronously and revalidate silently (a
+    /// failed refresh keeps the cached listing). Otherwise paint the daemon's
+    /// local cache (`github.branches.listCached`) as soon as it answers while
+    /// the authoritative `github.branches.list` loads in parallel; the
+    /// authoritative result — or its error — wins once it settles.
+    private func loadBranches(for repo: GitHubRepo) async {
+        if let cached = githubStore.cachedBranchListing(owner: repo.owner, repo: repo.name) {
+            // Explicit, not only via onChange: an equal listing for another
+            // repo (two repos with just `main`) never fires the observer.
+            reconcileBranchSelection(with: cached)
+            _ = try? await githubStore.loadBranchListing(
+                owner: repo.owner, repo: repo.name, defaultBranch: repo.defaultBranch
             )
+            return
+        }
+        branchLoadError = nil
+        let paint = Task {
+            guard let listing = await githubStore.fetchCachedBranches(owner: repo.owner, repo: repo.name),
+                  !Task.isCancelled, selectedRepo?.id == repo.id else { return }
+            cachedBranchListing = listing
+        }
+        defer { paint.cancel() }
+        do {
+            try await githubStore.loadBranchListing(
+                owner: repo.owner, repo: repo.name, defaultBranch: repo.defaultBranch
+            )
+            guard !Task.isCancelled, selectedRepo?.id == repo.id else { return }
+            cachedBranchListing = nil
         } catch {
-            remoteBranches = []
+            guard !Task.isCancelled, selectedRepo?.id == repo.id else { return }
             branchLoadError = error.localizedDescription
         }
-        isLoadingBranches = false
     }
 
     private func scheduleBranchSearch(for text: String) {

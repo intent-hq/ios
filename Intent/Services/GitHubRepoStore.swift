@@ -5,21 +5,27 @@ import Observation
 /// GitHub repo data layer for the repo picker (PROTOCOL §5.27).
 ///
 /// Reads via `repo.list`, `github.authStatus`, `github.repos.list`,
-/// `github.repos.search` and `github.branches.list` over the shared JSON-RPC
-/// connection. All reads are single-page so the pickers render after one
-/// round-trip; server-side search covers anything beyond the first page.
+/// `github.repos.search`, `github.branches.list` and
+/// `github.branches.listCached` over the shared JSON-RPC connection. All
+/// reads are single-page so the pickers render after one round-trip;
+/// server-side search covers anything beyond the first page.
 ///
 /// Session-lifetime cache (owned by `BackendSession`): the first
 /// `loadIfNeeded()` blocks with `isLoading`; later calls return immediately
 /// with the cached lists and revalidate silently in the background
-/// (stale-while-revalidate, FE github-repos slice parity). A reconnect
-/// hard-clears the cache and reloads cold: stale lists never survive a
-/// connection flap.
+/// (stale-while-revalidate, FE github-repos slice parity). Branch listings
+/// are cached per repo under the same contract (`branchListings`). A
+/// reconnect hard-clears the cache and reloads cold: stale lists never
+/// survive a connection flap.
 @MainActor
 @Observable class GitHubRepoStore {
     var isConfigured = false
     var recentRepos: [GitHubRepo] = []
     var ownRepos: [GitHubRepo] = []
+    /// Authoritative branch listings keyed by `owner/repo`, filled only by
+    /// `loadBranchListing` (never by the cached-first paint), so a repo the
+    /// picker has already visited renders synchronously on the next visit.
+    private(set) var branchListings: [String: GitHubBranchListing] = [:]
     /// True only while a cold (uncached) load is in flight, or during a
     /// search; background revalidation never sets it.
     var isLoading = false
@@ -43,6 +49,11 @@ import Observation
     /// that load is in flight, succeeded or failed — a reconnect re-warms
     /// only a cache the picker has asked for.
     @ObservationIgnored private var hasAttemptedLoad = false
+    /// Single-flight per repo: a branch load already in flight is joined.
+    @ObservationIgnored private var branchLoadTasks: [String: Task<GitHubBranchListing, Error>] = [:]
+    /// Repos already warmed this session (FE `RepoCacheWarmer` parity: each
+    /// repo fires `repo.warmCache` at most once per warmer lifetime).
+    @ObservationIgnored private var warmedRepos: Set<String> = []
     @ObservationIgnored private var connectionObserver: AnyCancellable?
 
     /// Page size for `github.repos.search` (§5.27 default 50, max 200).
@@ -89,14 +100,18 @@ import Observation
     /// Drops every cached list and the auth/loaded markers so the next
     /// `loadIfNeeded()` runs as a cold load. A load in flight is superseded:
     /// its completion is dropped (see `loadGeneration`) and it is no longer
-    /// joined, so the next call starts a fresh flight.
+    /// joined, so the next call starts a fresh flight. Branch listings and
+    /// their in-flight loads are dropped the same way.
     func invalidate() {
         loadGeneration &+= 1
         loadTask = nil
+        branchLoadTasks = [:]
+        warmedRepos = []
         hasAttemptedLoad = false
         isLoading = false
         recentRepos = []
         ownRepos = []
+        branchListings = [:]
         isConfigured = false
         lastError = nil
         hasCheckedAuth = false
@@ -279,6 +294,96 @@ import Observation
     }
 
     // MARK: - Branches
+
+    /// The authoritative listing cached for `owner/repo`, if this session
+    /// has loaded one; nil means the branch step must load.
+    func cachedBranchListing(owner: String, repo: String) -> GitHubBranchListing? {
+        branchListings[Self.branchKey(owner: owner, repo: repo)]
+    }
+
+    /// Loads the authoritative listing for one repo — the repo's default
+    /// branch (`defaultBranch` when the picker already knows it, else
+    /// `github.repos.get`) plus the first page of `github.branches.list` —
+    /// and caches it in `branchListings`. Single-flight per repo; a
+    /// completion from before an `invalidate()` is returned but not cached.
+    /// Throws on transport failure so callers can show an error; a cached
+    /// listing is left untouched by a failed refresh.
+    @discardableResult
+    func loadBranchListing(
+        owner: String, repo: String, defaultBranch: String? = nil
+    ) async throws -> GitHubBranchListing {
+        let key = Self.branchKey(owner: owner, repo: repo)
+        if let inFlight = branchLoadTasks[key] {
+            return try await inFlight.value
+        }
+        let generation = loadGeneration
+        let task = Task<GitHubBranchListing, Error> { [self] in
+            var resolvedDefault = defaultBranch
+            if resolvedDefault == nil {
+                resolvedDefault = await fetchDefaultBranch(owner: owner, repo: repo)
+            }
+            let branches = try await fetchRemoteBranches(owner: owner, repo: repo)
+            return GitHubBranchListing(branches: branches, defaultBranch: resolvedDefault)
+        }
+        branchLoadTasks[key] = task
+        defer {
+            if generation == loadGeneration, branchLoadTasks[key] == task {
+                branchLoadTasks[key] = nil
+            }
+        }
+        let listing = try await task.value
+        if generation == loadGeneration {
+            branchListings[key] = listing
+        }
+        return listing
+    }
+
+    /// `github.branches.listCached` — the daemon's local repo cache (or its
+    /// one-shot `ls-remote` fallback), for a first paint before the
+    /// authoritative read lands. Never an error authority: a transport
+    /// failure, a `-32601` from an older daemon, or an empty listing all
+    /// read as a cache miss (nil). Deliberately not stored in
+    /// `branchListings`.
+    func fetchCachedBranches(owner: String, repo: String) async -> GitHubBranchListing? {
+        do {
+            let result = try await connectionManager.request("github.branches.listCached", params: [
+                "owner": owner,
+                "repo": repo
+            ])
+            guard let branches = (result as? [String: Any])?["branches"] as? [String],
+                  !branches.isEmpty else { return nil }
+            let defaultBranch = (result as? [String: Any])?["defaultBranch"] as? String
+            return GitHubBranchListing(
+                branches: branches,
+                defaultBranch: defaultBranch.flatMap { $0.isEmpty ? nil : $0 }
+            )
+        } catch {
+            AppLog.github.info("[GitHubRepoStore] github.branches.listCached miss: \(error)")
+            return nil
+        }
+    }
+
+    /// `repo.warmCache` — fire-and-forget refresh of the daemon's repo cache
+    /// so the later `workspace.create` hydrates from a fresh cache (PROTOCOL
+    /// §5.11). Best-effort: every failure (warm already in flight, `-32601`
+    /// on an older daemon, offline) is logged only. At most one request per
+    /// repo per session.
+    func warmRepoCache(owner: String, repo: String) {
+        guard warmedRepos.insert(Self.branchKey(owner: owner, repo: repo)).inserted else { return }
+        Task { [self] in
+            do {
+                _ = try await connectionManager.request("repo.warmCache", params: [
+                    "githubUrl": "https://github.com/\(owner)/\(repo)"
+                ])
+            } catch {
+                AppLog.github.info("[GitHubRepoStore] repo.warmCache failed (ignored): \(error)")
+            }
+        }
+    }
+
+    private static func branchKey(owner: String, repo: String) -> String {
+        "\(owner)/\(repo)"
+    }
 
     /// `github.branches.list` — a single page (`branchesLimit`) of remote
     /// branch names, optionally narrowed server-side by `prefix` (omitted
