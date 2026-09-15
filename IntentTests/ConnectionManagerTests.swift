@@ -2436,6 +2436,8 @@ struct ConnectionManagerTests {
     /// success is ignored — it neither counts for B nor spares B its own
     /// probe, which still times out when B never answers.
     @Test @MainActor func latePongOfRetiredGenerationIsIgnored() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let clock = ManualHeartbeatClock()
         let serverA = try await LoopbackWebSocketServer.start(pongs: .replied)
@@ -2507,6 +2509,8 @@ struct ConnectionManagerTests {
     /// retired loop finally wakes after the reconnect, probe the replacement
     /// from a cancelled task and tear the healthy replacement down.
     @Test @MainActor func lateCadenceWakeAfterAutomaticReconnectDoesNotProbe() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let clock = ManualHeartbeatClock()
         let server = try await LoopbackWebSocketServer.start(pongs: .replied)
