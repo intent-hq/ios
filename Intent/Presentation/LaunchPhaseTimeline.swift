@@ -7,9 +7,12 @@ import Foundation
 /// reaches the coordinator callback that follows the delay (ios#230).
 enum LaunchPhaseTimeline {
     /// Sleeps for `duration`, propagating cancellation instead of swallowing
-    /// it.
+    /// it. Cancellation that lands after the sleep completed but before the
+    /// caller resumes is surfaced as well, so a completed beat never advances
+    /// a task that was cancelled meanwhile.
     static func delay(for duration: Duration) async throws {
         try await Task.sleep(for: duration)
+        try Task.checkCancellation()
     }
 
     /// Polls `condition` every `interval` until it holds or `timeout`
