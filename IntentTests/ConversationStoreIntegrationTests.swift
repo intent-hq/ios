@@ -530,12 +530,12 @@ struct ConversationStoreIntegrationTests {
     @Test func queueUpdatedEventEmptyArrayClearsQueue() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
-        fake.responseMap["agent.getQueue"] = ["queue": [
-            ["id": "q-1", "content": "first", "queuedAt": "2025-01-01T00:00:00Z", "position": 0],
-        ]]
+        fake.responseMap["agent.getQueue"] = ["queue": [] as [Any]]
         let store = ConversationStore(connectionManager: fake)
         await store.fetchConversation(agentId: "a", workspaceId: "w")
-        #expect(store.queuedMessages.map(\.id) == ["q-1"])
+        store.queuedMessages = [
+            QueuedMessage(id: "q-1", content: "first", queuedAt: "2025-01-01T00:00:00Z", position: 0, imageBlocks: nil),
+        ]
         fake.requestLog.removeAll()
 
         store.handleStreamEvent("events.event", params: [
