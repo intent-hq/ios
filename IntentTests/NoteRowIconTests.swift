@@ -142,13 +142,25 @@ struct NoteRowLayoutTests {
         #expect(NoteRowLayout.indentation(for: 2, usesAccessibilityLayout: true) == 16)
     }
 
-    @Test func accessibilityLeafDoesNotReserveEmptyDisclosureSpace() {
-        #expect(NoteRowLayout.reservesDisclosureSpace(
-            depth: 1, hasChildren: false, usesAccessibilityLayout: false))
-        #expect(!NoteRowLayout.reservesDisclosureSpace(
-            depth: 1, hasChildren: false, usesAccessibilityLayout: true))
-        #expect(!NoteRowLayout.reservesDisclosureSpace(
-            depth: 1, hasChildren: true, usesAccessibilityLayout: false))
+    @Test func onlyNestedLeavesReserveDisclosureSpace() {
+        #expect(NoteRowLayout.reservesDisclosureSpace(depth: 1, hasChildren: false))
+        #expect(!NoteRowLayout.reservesDisclosureSpace(depth: 1, hasChildren: true))
+        #expect(!NoteRowLayout.reservesDisclosureSpace(depth: 0, hasChildren: false))
+    }
+
+    @Test(arguments: [false, true])
+    func nestedRowsStartRightOfTheirParentAtEveryDepth(usesAccessibilityLayout: Bool) {
+        for depth in 1...4 {
+            let parent = NoteRowLayout.contentLeadingOffset(
+                depth: depth - 1, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+            let leaf = NoteRowLayout.contentLeadingOffset(
+                depth: depth, hasChildren: false, usesAccessibilityLayout: usesAccessibilityLayout)
+            let branch = NoteRowLayout.contentLeadingOffset(
+                depth: depth, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+            #expect(leaf > parent, "depth \(depth) leaf sits left of its parent")
+            #expect(branch > parent, "depth \(depth) branch sits left of its parent")
+            #expect(leaf == branch, "depth \(depth) leaf and branch siblings misalign")
+        }
     }
 
     @Test func accessibilityTitlesCanUseAsManyLinesAsNeeded() {
