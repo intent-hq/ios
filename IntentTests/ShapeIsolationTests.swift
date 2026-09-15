@@ -6,10 +6,11 @@ import Testing
 /// declares `Shape` and `path(in:)` nonisolated, so under the app's MainActor
 /// default isolation an implicitly isolated conformer no longer compiles.
 ///
-/// This suite is itself `nonisolated`, so it only compiles when the shapes
-/// can be built and evaluated off the main actor — on the old code the calls
-/// below are rejected as main-actor-isolated — and it pins the geometry so
-/// the isolation change cannot silently alter rendering.
+/// This suite is itself `nonisolated`, so it builds and evaluates the shapes
+/// off the main actor — the calling convention SDK 27 requires of a `Shape` —
+/// and pins their geometry so the isolation change cannot silently alter
+/// rendering. Xcode 26.x accepts these calls against the isolated conformers
+/// too, so the suite is a geometry pin, not a toolchain-independent guard.
 nonisolated struct ShapeIsolationTests {
     private static let tolerance: CGFloat = 0.01
 
