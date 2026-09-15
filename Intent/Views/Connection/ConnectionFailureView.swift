@@ -220,9 +220,88 @@ struct ConnectionFailureView: View {
         .buttonStyle(.plain)
     }
 
+    /// Whether the failure screen may dial the saved record on its own. A
+    /// failed Log Off (`.manualLogOff`) never does: the user asked to
+    /// disconnect, so re-establishing the session must be an explicit
+    /// action — "Retry Log Off" retries forgetting the record, it does not
+    /// reconnect (ios#235). Certificate failures route to re-pairing.
+    static func shouldAutoRetry(
+        retryPolicy: ConnectionFailureRetryPolicy, isCertMismatch: Bool
+    ) -> Bool {
+        retryPolicy == .automaticConnection && !isCertMismatch
+    }
+
+    /// Exponential backoff: 2s, 4s, 8s, 16s, max 30s.
+    static func retryBackoff(attempt: Int) -> Duration {
+        .seconds(min(
+            Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
+            Constants.ConnectionFailure.retryBackoffMaximum))
+    }
+
+    /// The auto-retry lifecycle behind the failure screen, independent of
+    /// the view so it can be driven against a coordinator and a fake
+    /// connection. Returns without dialing when `shouldAutoRetry` is false;
+    /// otherwise loops until a dial succeeds (routes via
+    /// `onConnectionSuccess`), the bound record disappears (routes to
+    /// pairing), or the task is cancelled.
+    static func runAutoRetry(
+        retryPolicy: ConnectionFailureRetryPolicy,
+        isCertMismatch: Bool,
+        coordinator: AppCoordinator,
+        connection: any SessionConnectionManaging,
+        loadConnections: () -> [StoredConnection],
+        backoff: (Int) -> Duration = { retryBackoff(attempt: $0) },
+        onAttempt: (Int) -> Void = { _ in }
+    ) async {
+        guard shouldAutoRetry(retryPolicy: retryPolicy, isCertMismatch: isCertMismatch) else {
+            return
+        }
+        var attempt = 0
+        while !Task.isCancelled {
+            attempt += 1
+            onAttempt(attempt)
+
+            try? await Task.sleep(for: backoff(attempt))
+            if Task.isCancelled { break }
+
+            // Dial this window's own bound record (re-read each
+            // attempt so rotated tokens synced mid-retry are used);
+            // a missing record routes to pairing instead of dialing
+            // another backend's.
+            guard let record = autoRetryConnection(
+                connections: loadConnections(),
+                windowConnectionID: coordinator.backendID?.connectionID)
+            else {
+                coordinator.onReconnect()
+                return
+            }
+
+            do {
+                try await connection.connect(
+                    hosts: record.server.hosts,
+                    port: record.server.port,
+                    token: record.token,
+                    certFingerprint: record.server.certFingerprint,
+                    tcAddress: record.server.tcAddress
+                )
+                // A cancelled retry must never route: the user may have
+                // switched to another saved connection while this connect
+                // was in flight, and a stale success would restore the
+                // failing daemon over the selected one.
+                guard !Task.isCancelled else { return }
+                coordinator.onConnectionSuccess()
+                return
+            } catch {
+                // Continue retrying
+                AppLog.connection.warning("[ConnectionFailureView] Retry \(attempt) failed: \(error)")
+            }
+        }
+    }
+
     private func applyRetryPolicy() {
         stopAutoRetry()
-        if retryPolicy == .automaticConnection && !isCertMismatch {
+        if ConnectionFailureView.shouldAutoRetry(
+            retryPolicy: retryPolicy, isCertMismatch: isCertMismatch) {
             startAutoRetry()
         }
     }
@@ -235,52 +314,19 @@ struct ConnectionFailureView: View {
     }
 
     private func startAutoRetry() {
+        let retryPolicy = retryPolicy
+        let isCertMismatch = isCertMismatch
         retryTask = Task {
-            var attempt = 0
-            while !Task.isCancelled {
-                attempt += 1
-                attemptNumber = attempt
-                isRetrying = true
-
-                // Exponential backoff: 2s, 4s, 8s, 16s, max 30s
-                let delay = min(
-                    Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
-                    Constants.ConnectionFailure.retryBackoffMaximum)
-                try? await Task.sleep(for: .seconds(delay))
-                if Task.isCancelled { break }
-
-                // Dial this window's own bound record (re-read each
-                // attempt so rotated tokens synced mid-retry are used);
-                // a missing record routes to pairing instead of dialing
-                // another backend's.
-                guard let record = ConnectionFailureView.autoRetryConnection(
-                    connections: PersistenceManager.shared.loadConnections(),
-                    windowConnectionID: coordinator.backendID?.connectionID)
-                else {
-                    coordinator.onReconnect()
-                    return
-                }
-
-                do {
-                    try await session.connection.connect(
-                        hosts: record.server.hosts,
-                        port: record.server.port,
-                        token: record.token,
-                        certFingerprint: record.server.certFingerprint,
-                        tcAddress: record.server.tcAddress
-                    )
-                    // A cancelled retry must never route: the user may have
-                    // switched to another saved connection while this connect
-                    // was in flight, and a stale success would restore the
-                    // failing daemon over the selected one.
-                    guard !Task.isCancelled else { return }
-                    coordinator.onConnectionSuccess()
-                    return
-                } catch {
-                    // Continue retrying
-                    AppLog.connection.warning("[ConnectionFailureView] Retry \(attempt) failed: \(error)")
-                }
-            }
+            await ConnectionFailureView.runAutoRetry(
+                retryPolicy: retryPolicy,
+                isCertMismatch: isCertMismatch,
+                coordinator: coordinator,
+                connection: session.connection,
+                loadConnections: { PersistenceManager.shared.loadConnections() },
+                onAttempt: { attempt in
+                    attemptNumber = attempt
+                    isRetrying = true
+                })
         }
     }
 }

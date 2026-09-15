@@ -581,7 +581,11 @@ final class AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func failedLogOffDisconnectsButKeepsSavedStateAndShowsFailure() {
+    /// ios#235: a failed Log Off must stay disconnected. The failure screen's
+    /// auto-retry lifecycle, driven with the coordinator's `.manualLogOff`
+    /// policy, never dials the saved record; "Retry Log Off" retries
+    /// forgetting it instead of reconnecting.
+    @Test @MainActor func failedLogOffDisconnectsButKeepsSavedStateAndShowsFailure() async {
         resetConnectionState()
         defer { resetConnectionState() }
         let storage = InMemoryKeychainStorage()
@@ -606,10 +610,71 @@ final class AppCoordinatorTests {
         #expect(persistence.loadLastScreen(for: stored.id) != nil)
         #expect(!registry.isBackendRemoved(BackendID(stored.id)))
         #expect(fake.disconnectCallCount == 1)
+        #expect(coordinator.connectionFailureRetryPolicy == .manualLogOff)
         if case .connectionFailed(let message) = coordinator.currentScreen {
             #expect(message == "Could not forget this connection. Please try again.")
         } else {
             Issue.record("Expected persistence failure screen")
+        }
+
+        // The failure screen's retry lifecycle under the failed-log-off
+        // policy: no automatic dial of the saved record, screen unchanged.
+        var attempts = 0
+        await ConnectionFailureView.runAutoRetry(
+            retryPolicy: coordinator.connectionFailureRetryPolicy,
+            isCertMismatch: false,
+            coordinator: coordinator,
+            connection: fake,
+            loadConnections: { [persistence] in persistence.loadConnections() },
+            backoff: { _ in .zero },
+            onAttempt: { _ in attempts += 1 })
+        #expect(attempts == 0)
+        #expect(fake.connectLog.isEmpty, "A failed Log Off must not auto-reconnect")
+        #expect(persistence.loadConnections() == [stored])
+        if case .connectionFailed = coordinator.currentScreen {} else {
+            Issue.record("Retry lifecycle changed the failed-log-off screen")
+        }
+
+        // "Retry Log Off" retries forgetting the record — never reconnects.
+        storage.setSaveFailure(false)
+        #expect(coordinator.onLogOff())
+        #expect(persistence.loadConnections().isEmpty)
+        #expect(registry.isBackendRemoved(BackendID(stored.id)))
+        #expect(fake.connectLog.isEmpty)
+    }
+
+    /// Positive control for the retry lifecycle: an ordinary (non-certificate)
+    /// connection failure still auto-dials the window's saved record.
+    @Test @MainActor func ordinaryConnectionFailureStillAutoRetries() async {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        let stored = persistence.upsertConnection(Self.makeConnection(port: 1))
+        persistence.setActiveConnection(id: stored.id)
+        let fake = FakeConnectionManager()
+        let coordinator = AppCoordinator(
+            workspaceStore: WorkspaceStore.shared, connection: fake,
+            backendID: BackendID(stored.id), persistence: persistence,
+            syncedRegistry: Self.syncedRegistry(payloads: []))
+
+        coordinator.onConnectionFailed(error: "Connection to 10.0.0.1 timed out")
+        #expect(coordinator.connectionFailureRetryPolicy == .automaticConnection)
+
+        var attempts = 0
+        await ConnectionFailureView.runAutoRetry(
+            retryPolicy: coordinator.connectionFailureRetryPolicy,
+            isCertMismatch: false,
+            coordinator: coordinator,
+            connection: fake,
+            loadConnections: { [persistence] in persistence.loadConnections() },
+            backoff: { _ in .zero },
+            onAttempt: { _ in attempts += 1 })
+
+        #expect(attempts == 1)
+        #expect(fake.connectLog.count == 1)
+        #expect(fake.connectLog.first?.port == 1)
+        #expect(fake.connectLog.first?.token == stored.token)
+        if case .connectionFailed = coordinator.currentScreen {
+            Issue.record("A successful auto-retry must route off the failure screen")
         }
     }
 
