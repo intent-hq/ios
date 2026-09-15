@@ -22,8 +22,8 @@ import Observation
     private var resnapshotInProgress = false
     private var connectionObserver: AnyCancellable?
 
-    /// Optional callback invoked when a note event is received (for detail view refresh)
-    var onNoteChanged: (() -> Void)?
+    /// Live `noteChanges()` streams, keyed per consumer; see `noteChanges()`.
+    @ObservationIgnored private var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -31,6 +31,9 @@ import Observation
     }
 
     isolated deinit {
+        for continuation in noteChangeContinuations.values {
+            continuation.finish()
+        }
         // Remove handlers directly while deinit is isolated to MainActor.
         guard eventHandlerId != nil || noteSubscriptionId != nil else { return }
         if let handlerId = eventHandlerId {
@@ -293,7 +296,10 @@ import Observation
             // Cancelled fetch: nothing to publish, nothing to log.
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
-            return .notFound
+            // A not-found that races the caller's cancellation (the response
+            // resumed the request before the transport's cancellation cleanup
+            // ran) must not navigate a dismissed screen away.
+            return Task.isCancelled ? .transientError : .notFound
         } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
@@ -469,16 +475,38 @@ import Observation
                 guard let workspaceId = workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
             }
-            // `onNoteChanged` re-reads the note currently open in
+            // `noteChanges()` re-reads the note currently open in
             // `NoteDetailView` (`refreshNote`, which also navigates away on a
             // definitive not-found), so only an update or deletion is
             // relevant — a newly created note can never be the open one.
             if eventType != "note:created" {
-                onNoteChanged?()
+                for continuation in noteChangeContinuations.values {
+                    continuation.yield()
+                }
             }
         case .patchInPlace, .ignore, nil:
             break
         }
+    }
+
+    /// Note-change notifications for the detail view: one element per note
+    /// update/deletion event (`note:created` excluded, see `handleEvent`).
+    /// The consuming task owns the subscription — cancelling it (SwiftUI's
+    /// `.task` on disappearance) terminates the stream and drops the
+    /// continuation, so the store never holds a closure that captures the
+    /// view and no refresh runs after teardown. Events arriving while the
+    /// consumer is busy coalesce into a single pending element.
+    func noteChanges() -> AsyncStream<Void> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Void.self, bufferingPolicy: .bufferingNewest(1))
+        noteChangeContinuations[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.noteChangeContinuations[id] = nil
+            }
+        }
+        return stream
     }
 
     // MARK: - Event classification
