@@ -123,6 +123,8 @@ extension Constants.Conversation.QuestionWizard {
     static let progressSegmentCornerRadius: CGFloat = 2
     static let checkboxSide: CGFloat = 15
     static let checkboxCornerRadius: CGFloat = 4
+    // Free-text answer grows from one line up to this many, then scrolls.
+    static let freeTextMaximumLineCount = 6
 }
 
 extension Constants.Conversation.ResponseGroup {

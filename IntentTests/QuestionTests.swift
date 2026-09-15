@@ -709,3 +709,45 @@ struct AnswerFlatteningTests {
         #expect(QuestionAnswer.flattenToMessage([]) == "")
     }
 }
+
+// MARK: - Free-text field auto-grow clamp
+
+struct QuestionStepFreeTextHeightTests {
+    private let insets = Constants.Conversation.Composer.textContainerInset * 2
+    private let lineHeight: CGFloat = 20
+
+    @Test func emptyFieldIsOneLineTall() {
+        #expect(QuestionStepView.clampedFreeTextHeight(0, lineHeight: lineHeight)
+            == lineHeight + insets)
+    }
+
+    @Test func wrappedContentGrowsWithItsHeight() {
+        let twoLines = lineHeight * 2 + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(twoLines, lineHeight: lineHeight) == twoLines)
+    }
+
+    @Test func growthCapsAtMaximumLineCount() {
+        let cap = lineHeight * CGFloat(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount)
+            + insets
+        #expect(QuestionStepView.clampedFreeTextHeight(cap * 4, lineHeight: lineHeight) == cap)
+        #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
+    }
+}
+
+// MARK: - Wizard footer Next button visibility
+
+struct QuestionWizardShowsNextTests {
+    @Test func intermediateSingleSelectWithoutFreeTextHidesNext() {
+        #expect(!QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: false))
+    }
+
+    @Test func intermediateSingleSelectWithFreeTextShowsNext() {
+        // Return inserts a newline on iPhone, so Next is the only submit path.
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: true))
+    }
+
+    @Test func multiSelectAndLastStepsAlwaysShowNext() {
+        #expect(QuestionWizardView.showsNext(isMulti: true, isLast: false, hasFreeText: false))
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: true, hasFreeText: false))
+    }
+}

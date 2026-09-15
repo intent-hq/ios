@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct QuestionStepView: View {
     let step: Int
@@ -17,6 +18,9 @@ struct QuestionStepView: View {
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @ScaledMetric(relativeTo: .caption) private var checkboxSide =
         Constants.Conversation.QuestionWizard.checkboxSide
+    @State private var freeTextFocused = false
+    @State private var freeTextHeight: CGFloat = QuestionStepView.clampedFreeTextHeight(
+        0, lineHeight: QuestionStepView.freeTextLineHeight)
 
     var body: some View {
         ScrollView {
@@ -142,20 +146,67 @@ struct QuestionStepView: View {
             }
     }
 
+    private static let freeTextPlaceholder = "Type your own answer…"
+
+    /// One body line of the free-text field, measured with the font
+    /// `SubmittableTextView` installs.
+    static var freeTextLineHeight: CGFloat {
+        UIFont.preferredFont(forTextStyle: .body).lineHeight
+    }
+
+    /// Clamps the free-text field's reported content height between one
+    /// line and `freeTextMaximumLineCount` lines (plus the text container
+    /// insets); past the cap the text view scrolls.
+    static func clampedFreeTextHeight(_ contentHeight: CGFloat, lineHeight: CGFloat) -> CGFloat {
+        let insets = Constants.Conversation.Composer.textContainerInset * 2
+        let minimum = lineHeight + insets
+        let maximum = lineHeight
+            * CGFloat(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount) + insets
+        return min(max(contentHeight, minimum), maximum)
+    }
+
+    /// Multiline free-text answer. Reuses the composer's `SubmittableTextView`
+    /// so hardware Return submits and Shift+Return inserts a newline under
+    /// the same `ComposerSubmitPolicy` as the composer; the return-key hint
+    /// is shown only where bare Return actually submits.
     private var otherField: some View {
         HStack(spacing: 8) {
             Image(systemName: "pencil")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
-            TextField("Type your own answer…", text: $freeText)
-                .font(.body)
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .frame(minHeight: Constants.Accessibility.minimumTapTarget)
-                .onSubmit(onSubmit)
-                .onChange(of: freeText) { _, _ in onTextChange() }
-            Image(systemName: "return")
-                .font(.caption)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.5))
+            ZStack(alignment: .leading) {
+                SubmittableTextView(
+                    text: $freeText,
+                    isFocused: $freeTextFocused,
+                    onSubmit: onSubmit,
+                    onHeightChange: { height in
+                        freeTextHeight = Self.clampedFreeTextHeight(
+                            height, lineHeight: Self.freeTextLineHeight)
+                    },
+                    hoverCornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius,
+                    accessibilityLabel: Self.freeTextPlaceholder
+                )
+                .frame(height: freeTextHeight)
+                // UITextView has no built-in placeholder; offset by the
+                // container inset plus UITextView's default lineFragmentPadding.
+                if freeText.isEmpty {
+                    Text(Self.freeTextPlaceholder)
+                        .font(.body)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .padding(.leading, Constants.Conversation.Composer.textContainerInset + 5)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
+            .contentShape(Rectangle())
+            .onTapGesture { freeTextFocused = true }
+            .onChange(of: freeText) { _, _ in onTextChange() }
+            if KeyCommandTextView.returnSubmitsNow {
+                Image(systemName: "return")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.5))
+            }
         }
         .padding(.horizontal, Constants.Conversation.QuestionWizard.optionHorizontalPadding)
         .padding(.vertical, Constants.Conversation.QuestionWizard.optionVerticalPadding)
