@@ -47,12 +47,19 @@ struct QuestionWizardView: View {
     private var hasFreeText: Bool {
         !drafts[idx].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-    // Free text on a single-select step has no advancing option tap, and
-    // Return inserts a newline where ComposerSubmitPolicy says so (iPhone),
-    // so the Next button is the submit path there.
-    private var showNext: Bool { isMulti || isLast || hasFreeText }
+    private var showNext: Bool {
+        Self.showsNext(isMulti: isMulti, isLast: isLast, hasFreeText: hasFreeText)
+    }
     private var nextDisabled: Bool {
         (isMulti || isLast) && drafts[idx].sel.isEmpty && !hasFreeText
+    }
+
+    /// Whether the footer Next/Send button is visible. Free text on a
+    /// single-select step has no advancing option tap, and Return inserts a
+    /// newline where ComposerSubmitPolicy says so (iPhone), so the button is
+    /// the submit path there.
+    static func showsNext(isMulti: Bool, isLast: Bool, hasFreeText: Bool) -> Bool {
+        isMulti || isLast || hasFreeText
     }
 
     var body: some View {

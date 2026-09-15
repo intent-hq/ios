@@ -733,3 +733,21 @@ struct QuestionStepFreeTextHeightTests {
         #expect(Constants.Conversation.QuestionWizard.freeTextMaximumLineCount == 6)
     }
 }
+
+// MARK: - Wizard footer Next button visibility
+
+struct QuestionWizardShowsNextTests {
+    @Test func intermediateSingleSelectWithoutFreeTextHidesNext() {
+        #expect(!QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: false))
+    }
+
+    @Test func intermediateSingleSelectWithFreeTextShowsNext() {
+        // Return inserts a newline on iPhone, so Next is the only submit path.
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: false, hasFreeText: true))
+    }
+
+    @Test func multiSelectAndLastStepsAlwaysShowNext() {
+        #expect(QuestionWizardView.showsNext(isMulti: true, isLast: false, hasFreeText: false))
+        #expect(QuestionWizardView.showsNext(isMulti: false, isLast: true, hasFreeText: false))
+    }
+}
