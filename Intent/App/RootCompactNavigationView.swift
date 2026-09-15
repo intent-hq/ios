@@ -89,7 +89,13 @@ extension RootView {
                 showingWorkspaceDetail = true
                 pendingConversationPush = true
             } else if !showingConversation {
-                showingConversation = true
+                // A changed-agent selection updates both currentScreenDescription
+                // and conversationRequestId, so this runs twice in one update
+                // pass. If the first pass started the tear-down below, do not
+                // undo it here; the deferred block re-pushes on the next tick.
+                if !programmaticConversationDismiss {
+                    showingConversation = true
+                }
             } else if RootView.needsConversationRepush(
                 agentChanged: agentChanged,
                 isNewRequest: isNewRequest,
