@@ -154,12 +154,8 @@ struct NoteRowView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Child notes for \(note.title)")
                 .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
-            } else if NoteRowLayout.reservesDisclosureSpace(
-                depth: depth,
-                hasChildren: hasChildren,
-                usesAccessibilityLayout: usesAccessibilityLayout
-            ) {
-                // Leaf node at non-root level: small spacer for alignment
+            } else if NoteRowLayout.reservesDisclosureSpace(depth: depth, hasChildren: hasChildren) {
+                // Leaf node at non-root level: spacer keeps content right of the parent's
                 Spacer()
                     .frame(width: NoteRowLayout.disclosureTargetSize)
             }
@@ -257,12 +253,11 @@ enum NoteRowLayout {
         return CGFloat(max(0, depth)) * width
     }
 
-    static func reservesDisclosureSpace(
-        depth: Int,
-        hasChildren: Bool,
-        usesAccessibilityLayout: Bool
-    ) -> Bool {
-        depth > 0 && !hasChildren && !usesAccessibilityLayout
+    /// Nested leaves keep the disclosure slot at every text size so their
+    /// content never starts left of the parent's (which sits after its own
+    /// disclosure button).
+    static func reservesDisclosureSpace(depth: Int, hasChildren: Bool) -> Bool {
+        depth > 0 && !hasChildren
     }
 
     /// Leading edge of the row's content button, mirroring the spacers and
@@ -277,9 +272,7 @@ enum NoteRowLayout {
             offset += indentation(for: depth, usesAccessibilityLayout: usesAccessibilityLayout)
                 + Constants.Notes.List.rowSpacing
         }
-        if hasChildren || reservesDisclosureSpace(
-            depth: depth, hasChildren: hasChildren, usesAccessibilityLayout: usesAccessibilityLayout
-        ) {
+        if hasChildren || reservesDisclosureSpace(depth: depth, hasChildren: hasChildren) {
             offset += disclosureTargetSize + Constants.Notes.List.rowSpacing
         }
         return offset
