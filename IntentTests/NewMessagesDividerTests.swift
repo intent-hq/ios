@@ -626,12 +626,27 @@ struct ConversationTranscriptScrollPolicyTests {
 
     /// #280: a geometry edge clearing the flag (the viewport already at the
     /// bottom, or a transient mid-drag reading) must not start a forced scroll;
-    /// only the Go to End tap, which raises `isScrollingToBottom` first, does.
+    /// only the Go to End tap, which records its request first, does.
     @Test func scrolledAwayClearedFollowsOnlyFromGoToEnd() {
         #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
-            isScrollingToBottom: true))
+            goToEndRequested: true))
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
-            isScrollingToBottom: false))
+            goToEndRequested: false))
+    }
+
+    /// Ordered regression: a user append raises a forced follow; during its
+    /// debounce the user drags away (edge with gesture → away), then a row
+    /// re-measures and reads at-bottom for one pass (edge → pinned, #280).
+    /// The cleared flag is not a Go to End request, so no second forced
+    /// follow is queued, and the one in flight yields at execution instead of
+    /// scrolling against the pan.
+    @Test func transientAtBottomEdgeMidDragDoesNotRequeueOrExecuteForcedFollow() {
+        #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
+        #expect(!transition(current: true, distanceToBottom: 10, isInteracting: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
+            goToEndRequested: false))
+        #expect(!executeFollow(forced: true, userIsScrolledAway: false, distanceToBottom: 10, isInteracting: true))
+        #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
     }
 
     @Test func streamingStartScrollsOnlyWhileFollowing() {
@@ -706,12 +721,14 @@ struct ConversationTranscriptScrollPolicyTests {
     private func executeFollow(
         forced: Bool = false,
         userIsScrolledAway: Bool = false,
-        distanceToBottom: CGFloat? = 20
+        distanceToBottom: CGFloat? = 20,
+        isInteracting: Bool = false
     ) -> Bool {
         ConversationTranscriptScrollPolicy.shouldExecuteFollow(
             forced: forced,
             userIsScrolledAway: userIsScrolledAway,
             distanceToBottom: distanceToBottom,
+            isInteracting: isInteracting,
             driftTolerance: 1,
             atBottomThreshold: 50
         )
@@ -743,10 +760,28 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(executeFollow(distanceToBottom: nil))
     }
 
-    @Test func forcedFollowAlwaysExecutes() {
+    @Test func forcedFollowExecutesUnlessUserIsInteracting() {
         #expect(executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 400))
         #expect(executeFollow(forced: true, distanceToBottom: 0))
         #expect(executeFollow(forced: true, distanceToBottom: nil))
+        #expect(!executeFollow(forced: true, distanceToBottom: 400, isInteracting: true))
+        #expect(!executeFollow(forced: true, distanceToBottom: 0, isInteracting: true))
+    }
+
+    /// Ordered regression: pinned, a streaming delta at distance 20 queues an
+    /// automatic follow; during its debounce content grows to distance 100
+    /// with no gesture. The growth edge keeps the pin but is not re-pinned
+    /// while the follow is in flight; the follow is then dropped as outside
+    /// the band. Reconciling the live distance once the follow has drained
+    /// must re-pin, so the viewport does not rest short with Go to End hidden.
+    @Test func pinnedGrowthDuringAutomaticFollowDebounceRePinsWhenTheFollowDrains() {
+        #expect(streamingDelta(distanceToBottom: 20))
+        #expect(!transition(current: false, distanceToBottom: 100, isInteracting: false))
+        #expect(!rePinAfterGrowth(isFollowing: true))
+        #expect(!executeFollow(distanceToBottom: 100))
+        #expect(rePinAfterGrowth(isFollowing: false))
+        #expect(!rePinAfterGrowth(geometryAway: false, isFollowing: false))
+        #expect(!rePinAfterGrowth(isInteracting: true, isFollowing: false))
     }
 
     private typealias ViewportGeometry = ConversationTranscriptScrollPolicy.ViewportGeometry

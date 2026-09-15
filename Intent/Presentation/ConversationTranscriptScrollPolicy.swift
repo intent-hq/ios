@@ -235,16 +235,19 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     /// `userIsScrolledAway` clearing is a follow only when Go to End cleared
-    /// it: the button sits outside the `ScrollViewReader`, so it raises
-    /// `isScrollingToBottom` and clears the flag for the `onChange` to scroll.
-    /// A geometry edge clearing the flag means the viewport already rests
-    /// within `atBottomThreshold` and nothing is to be scrolled. Such an edge
-    /// can also be a transient mid-drag reading (a lazily realized row
+    /// it: the button sits outside the `ScrollViewReader`, so it records the
+    /// request and clears the flag for the `onChange` to scroll. A geometry
+    /// edge clearing the flag means the viewport already rests within
+    /// `atBottomThreshold` and nothing is to be scrolled. Such an edge can
+    /// also be a transient mid-drag reading (a lazily realized row
     /// re-measuring), and a forced scroll then fights the user's pan: the
     /// interrupted animation left the geometry observer silent, so the next
-    /// swipes reached far up the transcript without Go to End (#280).
-    static func shouldFollowOnScrolledAwayCleared(isScrollingToBottom: Bool) -> Bool {
-        isScrollingToBottom
+    /// swipes reached far up the transcript without Go to End (#280). The
+    /// request is its own flag, not the follow-in-flight state, so an edge
+    /// clearing the flag while another forced follow is in flight does not
+    /// queue a second one.
+    static func shouldFollowOnScrolledAwayCleared(goToEndRequested: Bool) -> Bool {
+        goToEndRequested
     }
 
     /// The band an automatic follow may re-pin from: drifted past
@@ -295,19 +298,25 @@ enum ConversationTranscriptScrollPolicy {
 
     /// Re-validated when a debounced follow finally runs. Forced follows (Go to
     /// End, a new user message, the entry scroll, the thinking indicator
-    /// appearing) always land. An automatic follow is dropped when the user
-    /// scrolled away during the debounce — by the flag or by the live distance
-    /// having left the at-bottom band — or when the viewport is already pinned;
-    /// an unknown distance (scroll view not found yet) proves neither, so the
-    /// follow still runs.
+    /// appearing) land unless the user's finger is on the transcript (or it is
+    /// decelerating after it) at that moment: the gesture wins, and the
+    /// geometry edges it produces carry the scrolled-away rule. An automatic
+    /// follow is dropped when the user scrolled away during the debounce — by
+    /// the flag or by the live distance having left the at-bottom band — or
+    /// when the viewport is already pinned; an unknown distance (scroll view
+    /// not found yet) proves neither, so the follow still runs. A dropped
+    /// automatic follow is reconciled by its caller against the live geometry
+    /// (see `shouldRePinAfterContentGrowth`): a distance past the band with no
+    /// gesture is content that grew during the debounce, not the user.
     static func shouldExecuteFollow(
         forced: Bool,
         userIsScrolledAway: Bool,
         distanceToBottom: CGFloat?,
+        isInteracting: Bool = false,
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
     ) -> Bool {
-        if forced { return true }
+        if forced { return !isInteracting }
         if userIsScrolledAway { return false }
         guard let distanceToBottom else { return true }
         return isDriftedWithinBottomBand(

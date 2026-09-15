@@ -21,6 +21,10 @@ final class ConversationTranscriptScrollState {
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
     var isScrollingToBottom = false
+    /// Set by the Go to End tap for the `userIsScrolledAway` change handler to
+    /// consume; separate from `isScrollingToBottom` so a geometry edge
+    /// clearing the flag during a forced follow does not queue another one.
+    @ObservationIgnored var goToEndRequested = false
     /// Uptime of the last follow-to-bottom request; rate-limits streaming follows.
     var lastFollowToBottomAt: TimeInterval?
     /// True while `debounceTask` carries a forced follow, which automatic
