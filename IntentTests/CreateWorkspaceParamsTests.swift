@@ -544,14 +544,18 @@ struct CreateWorkspaceParamsTests {
         // Create stays disabled on the still-pending fresh load.
         fake.resolvePending("models.list", with: ["models": [["id": "stale", "name": "stale", "provider": "auggie"]]])
         await oldLoad.value
-        #expect(!settled.settleModels(for: "auggie", startedAt: oldGeneration, current: store.loadGeneration))
+        let oldPublished = settled.settleModels(
+            for: "auggie", startedAt: oldGeneration, current: store.loadGeneration)
+        #expect(!oldPublished)
         #expect(store.models(for: "auggie") == nil)
         #expect(catalogGate("auggie", store: store, settled: settled))
 
         // A failed fresh load still settles (daemon default), a success too.
         fake.resolvePending("models.list", with: ["models": [["id": "fresh", "name": "fresh", "provider": "auggie"]]])
         await freshLoad.value
-        #expect(settled.settleModels(for: "auggie", startedAt: freshGeneration, current: store.loadGeneration))
+        let freshPublished = settled.settleModels(
+            for: "auggie", startedAt: freshGeneration, current: store.loadGeneration)
+        #expect(freshPublished)
         #expect(store.models(for: "auggie")?.map(\.id) == ["fresh"])
         #expect(!catalogGate("auggie", store: store, settled: settled))
     }
