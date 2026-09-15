@@ -113,13 +113,17 @@ struct SpecialistPickerSelectionTests {
 
     @Test func settledLoadsPublishOnlyForTheGenerationTheLoadStartedIn() {
         var settled = SpecialistPickerView.SettledLoads()
-        #expect(!settled.settleOptions(startedAt: 0, current: 1))
-        #expect(!settled.settleModels(for: "auggie", startedAt: 0, current: 1))
+        let staleOptions = settled.settleOptions(startedAt: 0, current: 1)
+        let staleModels = settled.settleModels(for: "auggie", startedAt: 0, current: 1)
+        #expect(!staleOptions)
+        #expect(!staleModels)
         #expect(!settled.options)
         #expect(settled.modelProviders.isEmpty)
 
-        #expect(settled.settleOptions(startedAt: 1, current: 1))
-        #expect(settled.settleModels(for: "auggie", startedAt: 1, current: 1))
+        let currentOptions = settled.settleOptions(startedAt: 1, current: 1)
+        let currentModels = settled.settleModels(for: "auggie", startedAt: 1, current: 1)
+        #expect(currentOptions)
+        #expect(currentModels)
         #expect(settled.options)
         #expect(settled.modelProviders == ["auggie"])
 
@@ -297,7 +301,9 @@ struct SpecialistPickerSelectionTests {
             ["id": "stale", "name": "stale", "provider": "auggie"],
         ]])
         await oldLoad.value
-        #expect(!settled.settleModels(for: "auggie", startedAt: oldGeneration, current: store.loadGeneration))
+        let oldPublished = settled.settleModels(
+            for: "auggie", startedAt: oldGeneration, current: store.loadGeneration)
+        #expect(!oldPublished)
         #expect(store.models(for: "auggie") == nil)
         let loadingAfterOld = SpecialistPickerView.showsModelsLoading(
             catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie"))
@@ -310,7 +316,9 @@ struct SpecialistPickerSelectionTests {
             ["id": "sonnet4.5", "name": "sonnet4.5", "provider": "auggie", "isDefault": true],
         ]])
         await freshLoad.value
-        #expect(settled.settleModels(for: "auggie", startedAt: freshGeneration, current: store.loadGeneration))
+        let freshPublished = settled.settleModels(
+            for: "auggie", startedAt: freshGeneration, current: store.loadGeneration)
+        #expect(freshPublished)
         #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
         #expect(!SpecialistPickerView.showsModelsLoading(
             catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie")))
@@ -332,7 +340,9 @@ struct SpecialistPickerSelectionTests {
         fake.errorMap["models.list"] = URLError(.notConnectedToInternet)
         let freshGeneration = store.loadGeneration
         await store.loadModelsIfNeeded(providerId: "auggie")
-        #expect(settled.settleModels(for: "auggie", startedAt: freshGeneration, current: store.loadGeneration))
+        let freshPublished = settled.settleModels(
+            for: "auggie", startedAt: freshGeneration, current: store.loadGeneration)
+        #expect(freshPublished)
         #expect(store.models(for: "auggie") == nil)
         #expect(!SpecialistPickerView.showsModelsLoading(
             catalog: store.models(for: "auggie"), settled: settled.modelProviders.contains("auggie")))
@@ -343,7 +353,9 @@ struct SpecialistPickerSelectionTests {
             ["id": "stale", "name": "stale", "provider": "auggie"],
         ]])
         await oldLoad.value
-        #expect(!settled.settleModels(for: "auggie", startedAt: oldGeneration, current: store.loadGeneration))
+        let oldPublished = settled.settleModels(
+            for: "auggie", startedAt: oldGeneration, current: store.loadGeneration)
+        #expect(!oldPublished)
         #expect(store.models(for: "auggie") == nil)
     }
 
