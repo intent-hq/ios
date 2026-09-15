@@ -141,7 +141,7 @@ enum Constants {
     enum Root {}
 
     enum Connecting {
-        static let workspaceLoadTimeout: TimeInterval = 5
+        static let workspaceLoadTimeout: Duration = .seconds(5)
         static let workspacePollInterval: Duration = .milliseconds(100)
     }
 
