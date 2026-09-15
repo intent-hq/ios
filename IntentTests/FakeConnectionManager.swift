@@ -114,6 +114,14 @@ class FakeConnectionManager: SessionConnectionManaging {
         pending.continuation.resume(returning: response)
     }
 
+    /// Fail the oldest suspended request for `method` with `error`.
+    func failPending(_ method: String, with error: Error) {
+        guard var queue = pendingContinuations[method], !queue.isEmpty else { return }
+        let pending = queue.removeFirst()
+        pendingContinuations[method] = queue
+        pending.continuation.resume(throwing: error)
+    }
+
     func request(_ method: String, params: [String: Any] = [:],
                  timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
         requestLog.append((method, params, Date()))
