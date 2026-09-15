@@ -407,34 +407,131 @@ struct ConversationViewModelTests {
                 == "opus")
     }
 
-    /// The menu label reads the session's shared per-provider cache once the
-    /// provider is known, so a warm cache renders the name with no request.
-    @Test func currentModelDisplayNameReadsSharedProviderCatalog() async {
+    private func makeCatalogVM() -> (vm: ConversationViewModel, store: CreationOptionsStore, fake: FakeConnectionManager) {
         let fake = FakeConnectionManager()
         fake.responseMap["models.list"] = ["models": [
             ["id": "sonnet4.5", "name": "Sonnet 4.5 (balanced)", "provider": "auggie"],
         ]]
+        fake.responseMap["agent.get"] = ["agent": ["model": "sonnet4.5", "provider": "auggie"]]
         let store = CreationOptionsStore(connectionManager: fake)
         let vm = ConversationViewModel(
             agentId: "test-agent", workspaceId: "test-ws", agentName: "Test",
             connection: fake, uploadService: AttachmentUploadService(connection: fake),
             optionsStore: store)
+        return (vm, store, fake)
+    }
+
+    /// Bounded poll; records a failure on timeout so a missed update cannot
+    /// pass silently.
+    private func waitFor(_ description: String, _ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        Issue.record("Timed out waiting for \(description)")
+    }
+
+    /// The menu label reads the session's shared per-provider cache once the
+    /// provider is known, so a warm cache renders the name with no request.
+    @Test func currentModelDisplayNameReadsSharedProviderCatalog() async {
+        let (vm, _, fake) = makeCatalogVM()
         vm.currentModelId = "sonnet4.5"
         vm.currentProviderId = "auggie"
 
         #expect(vm.selectableModels == nil)
         #expect(vm.currentModelDisplayName == "sonnet4.5")
-        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: false))
+        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: false, loadGeneration: 0))
 
         await vm.loadModelCatalogIfNeeded()
 
         #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
         #expect(vm.selectableModels?.map(\.id) == ["sonnet4.5"])
-        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: true))
+        #expect(vm.modelCatalogKey == .init(providerId: "auggie", isCached: true, loadGeneration: 0))
 
         let requestsAfterLoad = fake.requestLog.count
         await vm.loadModelCatalogIfNeeded()
         #expect(fake.requestLog.count == requestsAfterLoad)
+    }
+
+    /// A reconnect during the cold catalog load never flips `isCached`, so
+    /// the task identity must move on the generation alone: the stale
+    /// completion is dropped (nil before, nil after) and the next task run
+    /// starts a fresh flight.
+    @Test func reconnectDuringColdCatalogLoadBumpsKeyAndReloadsFresh() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        await vm.fetchCurrentModel()
+        fake.pendingMethods = ["models.list"]
+        let load = Task { await vm.loadModelCatalogIfNeeded() }
+        try await waitFor("cold models.list") { fake.didCallMethod("models.list") }
+        let keyBefore = vm.modelCatalogKey
+
+        store.invalidate()
+        #expect(vm.modelCatalogKey != keyBefore)
+        #expect(vm.modelCatalogKey.isCached == false)
+        fake.resolvePending("models.list", with: ["models": [
+            ["id": "sonnet4.5", "name": "Stale", "provider": "auggie"],
+        ]])
+        await load.value
+        #expect(vm.selectableModels == nil)
+        #expect(vm.currentModelDisplayName == "sonnet4.5")
+
+        fake.pendingMethods = []
+        await vm.loadModelCatalogIfNeeded()
+        #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
+        #expect(fake.paramsForMethod("models.list").count == 2)
+    }
+
+    /// An `agent.get` response from before a reconnect is stale: it never
+    /// installs its model/provider; the read repeats under the new
+    /// generation and only that answer lands.
+    @Test func staleAgentGetFromBeforeReconnectNeverInstallsMetadata() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        fake.pendingMethods = ["agent.get"]
+        let read = Task { await vm.fetchCurrentModel() }
+        try await waitFor("agent.get") { fake.didCallMethod("agent.get") }
+
+        store.invalidate()
+        fake.resolvePending("agent.get", with: ["agent": ["model": "old-model", "provider": "grok"]])
+        try await waitFor("re-read under the new generation") {
+            fake.paramsForMethod("agent.get").count == 2
+        }
+        #expect(vm.currentModelId == nil)
+        #expect(vm.currentProviderId == nil)
+        #expect(vm.modelMetadataGeneration == nil)
+
+        fake.resolvePending("agent.get", with: ["agent": ["model": "sonnet4.5", "provider": "auggie"]])
+        await read.value
+        #expect(vm.currentModelId == "sonnet4.5")
+        #expect(vm.currentProviderId == "auggie")
+        #expect(vm.modelMetadataGeneration == store.loadGeneration)
+    }
+
+    /// After a reconnect the catalog task re-reads the agent's metadata
+    /// (the model may have changed while offline) before reloading the
+    /// catalog, so the label shows the authoritative post-reconnect model.
+    @Test func reconnectRereadsAgentMetadataThenReloadsCatalog() async throws {
+        let (vm, store, fake) = makeCatalogVM()
+        await vm.fetchCurrentModel()
+        await vm.loadModelCatalogIfNeeded()
+        #expect(vm.currentModelDisplayName == "Sonnet 4.5 (balanced)")
+        #expect(fake.paramsForMethod("agent.get").count == 1)
+
+        fake.responseMap["agent.get"] = ["agent": ["model": "opus", "provider": "auggie"]]
+        fake.responseMap["models.list"] = ["models": [
+            ["id": "opus", "name": "Opus", "provider": "auggie"],
+        ]]
+        store.invalidate()
+        #expect(vm.selectableModels == nil)
+
+        await vm.loadModelCatalogIfNeeded()
+        #expect(fake.paramsForMethod("agent.get").count == 2)
+        #expect(fake.paramsForMethod("models.list").count == 2)
+        #expect(vm.currentModelId == "opus")
+        #expect(vm.currentModelDisplayName == "Opus")
+
+        let requestsAfterReload = fake.requestLog.count
+        await vm.loadModelCatalogIfNeeded()
+        #expect(fake.requestLog.count == requestsAfterReload)
     }
 
     private func firstAnswer(_ vm: ConversationViewModel) throws -> [QuestionAnswer] {

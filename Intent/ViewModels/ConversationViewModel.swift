@@ -91,6 +91,10 @@ import SwiftUI
     /// The agent's provider id from `agent.get`; keys the shared
     /// `models.list` cache in `optionsStore`.
     var currentProviderId: String?
+    /// The `optionsStore.loadGeneration` the model/provider were last read
+    /// under (nil until the first `agent.get` lands). A reconnect bumps the
+    /// store generation, so a mismatch means the metadata must be re-read.
+    @ObservationIgnored private(set) var modelMetadataGeneration: Int?
 
     /// The session-wide creation options cache (specialists, providers,
     /// per-provider model catalogs).
@@ -334,12 +338,25 @@ import SwiftUI
     }
 
     /// Fetch the agent's current model and specialist from the backend.
-    private func fetchCurrentModel() async {
+    ///
+    /// Generation-gated: a response from before a reconnect (store
+    /// generation bump while the read was in flight) is stale and is never
+    /// installed; the read is repeated under the new generation instead.
+    func fetchCurrentModel() async {
         do {
-            let result = try await connection.request(
+            var generation = optionsStore.loadGeneration
+            var result = try await connection.request(
                 "agent.get",
                 params: ["agentId": agentId]
             )
+            while generation != optionsStore.loadGeneration {
+                generation = optionsStore.loadGeneration
+                result = try await connection.request(
+                    "agent.get",
+                    params: ["agentId": agentId]
+                )
+            }
+            modelMetadataGeneration = generation
             if let dict = result as? [String: Any],
                let agent = dict["agent"] as? [String: Any] {
                 if let model = agent["model"] as? String {
@@ -523,22 +540,34 @@ import SwiftUI
     }
 
     /// Identity for the view's `.task(id:)`: changes when the provider
-    /// becomes known and when its catalog flips between cached and cleared
-    /// (reconnect invalidation), so the catalog reloads exactly then.
+    /// becomes known, when its catalog flips between cached and cleared, and
+    /// on every store generation bump (reconnect invalidation — including
+    /// one that lands while a cold load is still in flight and so never
+    /// flips `isCached`), so the catalog reloads exactly then.
     struct ModelCatalogKey: Equatable {
         let providerId: String?
         let isCached: Bool
+        let loadGeneration: Int
     }
 
     var modelCatalogKey: ModelCatalogKey {
         ModelCatalogKey(
             providerId: currentProviderId,
-            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false)
+            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false,
+            loadGeneration: optionsStore.loadGeneration)
     }
 
     /// Cold-loads the provider's catalog when it is not cached; a cached
-    /// catalog issues no request.
+    /// catalog issues no request. After a reconnect (store generation moved
+    /// past the one the metadata was read under) the agent's model and
+    /// provider are re-read first, so the label never keeps pre-reconnect
+    /// metadata.
     func loadModelCatalogIfNeeded() async {
+        let generation = optionsStore.loadGeneration
+        if let readUnder = modelMetadataGeneration, readUnder != generation {
+            await fetchCurrentModel()
+            guard generation == optionsStore.loadGeneration else { return }
+        }
         guard let providerId = currentProviderId,
               optionsStore.models(for: providerId) == nil else { return }
         await optionsStore.loadModelsIfNeeded(providerId: providerId)

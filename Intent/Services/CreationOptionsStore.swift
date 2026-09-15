@@ -41,6 +41,11 @@ import Observation
     /// that load is in flight, succeeded or failed — a reconnect re-warms
     /// only a cache the picker has asked for.
     @ObservationIgnored private var hasAttemptedLoad = false
+    /// True from the first `loadModelsIfNeeded(providerId:)` until
+    /// `invalidate()`: a models-only consumer (the conversation menu) still
+    /// needs a reconnect to clear its catalog, which it then reloads on
+    /// demand.
+    @ObservationIgnored private var hasAttemptedModelLoad = false
     @ObservationIgnored private var connectionObserver: AnyCancellable?
 
     private let connectionManager: ConnectionManagerRouting
@@ -84,6 +89,7 @@ import Observation
         loadTask = nil
         modelLoadTasks = [:]
         hasAttemptedLoad = false
+        hasAttemptedModelLoad = false
         isLoading = false
         specialists = []
         providers = []
@@ -123,11 +129,14 @@ import Observation
     /// A reconnect hard-clears the cache (the daemon's providers or
     /// specialists may have changed underneath it) and reloads cold. With
     /// no load ever requested there is nothing to re-warm until the picker
-    /// asks.
+    /// asks; a models-only cache is cleared but reloaded by its consumer.
     private func onConnected() async {
-        guard hasAttemptedLoad else { return }
+        guard hasAttemptedLoad || hasAttemptedModelLoad else { return }
+        let reloadOptions = hasAttemptedLoad
         invalidate()
-        await loadIfNeeded()
+        if reloadOptions {
+            await loadIfNeeded()
+        }
     }
 
     /// `specialist.list` (PROTOCOL §5.11). Returns false on transport
@@ -187,6 +196,7 @@ import Observation
     }
 
     private func startModelLoad(providerId: String) {
+        hasAttemptedModelLoad = true
         guard modelLoadTasks[providerId] == nil else { return }
         let generation = loadGeneration
         modelLoadTasks[providerId] = Task { [weak self] in

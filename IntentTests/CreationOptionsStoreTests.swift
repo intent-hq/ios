@@ -408,6 +408,26 @@ struct CreationOptionsStoreTests {
         #expect(store.isLoading == false)
     }
 
+    /// A models-only consumer (the conversation menu, before any creation
+    /// picker ran `loadIfNeeded`) still gets its catalog cleared on
+    /// reconnect; the options lists are not fetched on its behalf.
+    @Test func reconnectClearsModelsOnlyCacheWithoutLoadingOptions() async throws {
+        let fake = FakeConnectionManager()
+        configureLoadResponses(fake)
+        let store = CreationOptionsStore(connectionManager: fake)
+        await store.loadModelsIfNeeded(providerId: "auggie")
+        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
+        fake.clearRequestLog()
+
+        fake.simulateConnect()
+        try await waitFor("model cache clear") { store.models(for: "auggie") == nil }
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        #expect(store.loadGeneration == 1)
+        #expect(fake.requestLog.isEmpty)
+        #expect(store.hasLoaded == false)
+    }
+
     @Test func reconnectWithoutCacheDoesNotFetch() async throws {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
