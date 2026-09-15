@@ -15,7 +15,14 @@ struct LoadingView: View {
                 // shared SplashArtView mounted across loading → connecting,
                 // so GIF playback continues uninterrupted. Don't lengthen the
                 // 1.2-second phase to wait for a complete GIF cycle.
-                try? await Task.sleep(for: Constants.Loading.phaseDuration)
+                do {
+                    try await LaunchPhaseTimeline.delay(for: Constants.Loading.phaseDuration)
+                } catch {
+                    // Cancelled: the view went away before the beat ended, so
+                    // its timeline must not advance the coordinator behind
+                    // whatever replaced it (ios#230).
+                    return
+                }
                 coordinator.onLoadComplete()
             }
     }
