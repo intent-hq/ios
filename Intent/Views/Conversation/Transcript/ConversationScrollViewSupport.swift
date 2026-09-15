@@ -41,21 +41,14 @@ class ScrollViewMomentumProxy {
     /// `.unavailable` when the scroll view has not been found, so the caller
     /// can fall back.
     func rePinIfRestingPastEnd(confirming: RestingGeometry?, isFollowing: Bool = false) -> RePinOutcome {
-        guard let scrollView else { return .unavailable }
-        let insets = scrollView.adjustedContentInset
+        guard let scrollView, let geometry = restingGeometry else { return .unavailable }
         let decision = ConversationTranscriptScrollPolicy.rePinDecision(
-            contentOffsetY: scrollView.contentOffset.y,
-            distanceToBottom: ConversationTranscriptScrollPolicy.distanceToBottom(
-                contentHeight: scrollView.contentSize.height,
-                contentOffsetY: scrollView.contentOffset.y,
-                containerHeight: scrollView.bounds.height,
-                bottomInset: insets.bottom
-            ),
-            isInteracting: isFollowing
-                || scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating,
-            contentHeight: scrollView.contentSize.height,
-            containerHeight: scrollView.bounds.height,
-            verticalInsets: insets.top + insets.bottom
+            contentOffsetY: geometry.contentOffsetY,
+            distanceToBottom: geometry.distanceToBottom,
+            isInteracting: isFollowing || isInteracting,
+            contentHeight: geometry.contentHeight,
+            containerHeight: geometry.containerHeight,
+            verticalInsets: geometry.verticalInsets
         )
         switch decision {
         case .none:
@@ -63,13 +56,6 @@ class ScrollViewMomentumProxy {
         case .deferred:
             return .deferred(nil)
         case .rePin(let offsetY):
-            let geometry = RestingGeometry(
-                contentOffsetY: scrollView.contentOffset.y,
-                contentHeight: scrollView.contentSize.height,
-                boundsHeight: scrollView.bounds.height,
-                topInset: insets.top,
-                bottomInset: insets.bottom
-            )
             guard geometry == confirming else { return .deferred(geometry) }
             AppLog.ui.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
             scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
@@ -85,15 +71,20 @@ class ScrollViewMomentumProxy {
         return scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating
     }
 
-    /// Everything the re-pin decision reads: the adjusted insets are part of
-    /// it because the keyboard or safe area can change them between the two
-    /// confirming reads while offset, content size and bounds stay the same.
-    struct RestingGeometry: Equatable {
-        let contentOffsetY: CGFloat
-        let contentHeight: CGFloat
-        let boundsHeight: CGFloat
-        let topInset: CGFloat
-        let bottomInset: CGFloat
+    typealias RestingGeometry = ConversationTranscriptScrollPolicy.ViewportGeometry
+
+    /// One read of everything the landing and re-pin decisions compare, or
+    /// nil before the scroll view has been found.
+    var restingGeometry: RestingGeometry? {
+        guard let scrollView else { return nil }
+        let insets = scrollView.adjustedContentInset
+        return RestingGeometry(
+            contentOffsetY: scrollView.contentOffset.y,
+            contentHeight: scrollView.contentSize.height,
+            containerHeight: scrollView.bounds.height,
+            topInset: insets.top,
+            bottomInset: insets.bottom
+        )
     }
 
     enum RePinOutcome: Equatable {

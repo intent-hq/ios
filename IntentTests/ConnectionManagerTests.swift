@@ -407,11 +407,53 @@ struct ConnectionManagerTests {
         }
     }
 
-    @Test func webSocketURLUsesPlainSchemeWithoutFingerprint() throws {
-        let url = try WebSocketConnection.makeURL(
-            host: "daemon.local", port: 4242, certFingerprint: nil)
+    /// ios#251: a record without a trusted pin must never select ws:// — the
+    /// URL builder refuses instead of downgrading, so no socket carrying the
+    /// bearer header can open in the clear. Empty/blank pins (legacy and
+    /// synced records) count as missing.
+    @Test func webSocketURLRefusesMissingOrBlankFingerprint() {
+        for fingerprint in [nil, "", "   "] as [String?] {
+            #expect(throws: WebSocketTransportError.self) {
+                _ = try WebSocketConnection.makeURL(
+                    host: "daemon.local", port: 4242, certFingerprint: fingerprint)
+            }
+            do {
+                _ = try WebSocketConnection.makeURL(
+                    host: "daemon.local", port: 4242, certFingerprint: fingerprint)
+            } catch let error as WebSocketTransportError {
+                #expect(error.isMissingCertificatePin)
+                #expect(!error.isCertificateMismatch)
+            } catch {
+                Issue.record("unexpected error: \(error)")
+            }
+        }
+    }
 
-        #expect(url.absoluteString == "ws://daemon.local:4242/ws")
+    /// The plaintext test override is loopback-only: even when enabled it
+    /// never lets a pin-less URL reach a non-loopback host.
+    @Test func plaintextLoopbackOverrideNeverReachesRemoteHosts() throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
+
+        let loopback = try WebSocketConnection.makeURL(
+            host: "127.0.0.1", port: 4242, certFingerprint: nil)
+        #expect(loopback.absoluteString == "ws://127.0.0.1:4242/ws")
+
+        #expect(throws: WebSocketTransportError.self) {
+            _ = try WebSocketConnection.makeURL(
+                host: "daemon.local", port: 4242, certFingerprint: nil)
+        }
+        #expect(throws: WebSocketTransportError.self) {
+            _ = try WebSocketConnection.makeURL(
+                host: "10.0.0.7", port: 4242, certFingerprint: nil)
+        }
+    }
+
+    @Test func trustedPinNormalizesBlankToNil() {
+        #expect(WebSocketConnection.trustedPin(nil) == nil)
+        #expect(WebSocketConnection.trustedPin("") == nil)
+        #expect(WebSocketConnection.trustedPin(" \n") == nil)
+        #expect(WebSocketConnection.trustedPin(" aa:bb ") == "aa:bb")
     }
 
     @Test func pinnedWebSocketURLUsesSecureScheme() throws {
@@ -1544,12 +1586,36 @@ struct ConnectionManagerTests {
     /// the session must be closed (no leaked tunnel from a dead candidate).
     @Test func tunnelClosedWhenSocketHandshakeFails() async {
         // Port 1 on loopback: connection refused, fast deterministic failure.
+        // Pinned so the failure is the handshake itself, not pin admission.
         let tunnel = FakeTunnelSession(localPort: 1)
         let dialer = FakeTunnelDialer(result: .success(tunnel))
         await #expect(throws: (any Error).self) {
             _ = try await ConnectionManager.connectViaTunnel(
                 dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
+                token: "t", certFingerprint: "aa:bb")
+        }
+        #expect(tunnel.isClosed)
+    }
+
+    /// ios#251: a pin-less tunnel candidate is refused before its WSS
+    /// handshake, the tunnel is released, and the error is labeled to the
+    /// tunnel route like every other tunnel failure.
+    @Test func tunnelRefusesPinlessSocketAndCloses() async {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        do {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer, tcAddress: "tc-x", remotePort: 5181,
                 token: "t", certFingerprint: nil)
+            Issue.record("expected connectViaTunnel to refuse a pin-less record")
+        } catch let error as WebSocketTransportError {
+            guard case .missingCertificatePin(let host) = error else {
+                Issue.record("unexpected transport error: \(error)")
+                return
+            }
+            #expect(host == ConnectionManager.tunnelCandidateLabel)
+        } catch {
+            Issue.record("unexpected error: \(error)")
         }
         #expect(tunnel.isClosed)
     }
@@ -1624,6 +1690,14 @@ struct ConnectionManagerTests {
     /// reason as ManualTokenEntryViewTests' TLS listener: the handlers run
     /// on the listener queue and must not inherit MainActor isolation.
     private nonisolated final class LoopbackWebSocketServer: @unchecked Sendable {
+        /// How the server answers websocket pings. `.automatic` lets the
+        /// framework reply; `.replied` and `.withheld` deliver pings to the
+        /// server loop (counted in `pingsReceived`), which pongs back or
+        /// stays silent respectively — the heartbeat tests' seam.
+        enum PongPolicy {
+            case automatic, replied, withheld
+        }
+
         private struct State {
             var accepted: [NWConnection] = []
             // Connections held back by a gated server: accepted but not
@@ -1632,32 +1706,44 @@ struct ConnectionManagerTests {
             // racing connect() calls completes first.
             var pendingStart: [NWConnection] = []
             var isOpen: Bool
+            var acceptedTotal = 0
+            var pingsReceived = 0
         }
 
         private let listener: NWListener
         private let queue = DispatchQueue(label: "ConnectionManagerTests.ws-server")
+        private let pongs: PongPolicy
         // Retain accepted connections for the listener's lifetime (an
         // unreferenced NWConnection deallocates and drops the socket).
         private let state: OSAllocatedUnfairLock<State>
 
         var port: Int { Int(listener.port?.rawValue ?? 0) }
+        var pingsReceived: Int { state.withLock { $0.pingsReceived } }
 
-        private init(listener: NWListener, gated: Bool) {
+        /// Sockets the listener has accepted so far (including ones cancelled
+        /// since): non-zero proves a client reached this plaintext server.
+        var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
+
+        private init(listener: NWListener, gated: Bool, pongs: PongPolicy) {
             self.listener = listener
+            self.pongs = pongs
             self.state = OSAllocatedUnfairLock(initialState: State(isOpen: !gated))
         }
 
-        static func start(gated: Bool = false) async throws -> LoopbackWebSocketServer {
+        static func start(
+            gated: Bool = false, pongs: PongPolicy = .automatic
+        ) async throws -> LoopbackWebSocketServer {
             let parameters = NWParameters.tcp
             let wsOptions = NWProtocolWebSocket.Options()
-            wsOptions.autoReplyPing = true
+            wsOptions.autoReplyPing = pongs == .automatic
             parameters.defaultProtocolStack.applicationProtocols.insert(wsOptions, at: 0)
             let server = LoopbackWebSocketServer(
-                listener: try NWListener(using: parameters, on: .any), gated: gated)
+                listener: try NWListener(using: parameters, on: .any), gated: gated, pongs: pongs)
             server.listener.newConnectionHandler = { [weak server] connection in
                 guard let server else { return }
                 let startNow = server.state.withLock { state in
                     state.accepted.append(connection)
+                    state.acceptedTotal += 1
                     if !state.isOpen { state.pendingStart.append(connection) }
                     return state.isOpen
                 }
@@ -1710,10 +1796,32 @@ struct ConnectionManagerTests {
             }
         }
 
+        /// Drops every accepted client socket but keeps listening, so the
+        /// client's automatic reconnect can re-establish against this server.
+        func dropClients() {
+            let dropped = state.withLock { state in
+                defer { state.accepted.removeAll() }
+                return state.accepted
+            }
+            for connection in dropped { connection.cancel() }
+        }
+
         private func receiveNext(on connection: NWConnection) {
-            connection.receiveMessage { [weak self] data, _, _, error in
+            connection.receiveMessage { [weak self] data, context, _, error in
                 guard let self, error == nil else { return }
-                if let data,
+                let metadata = context?.protocolMetadata(definition: NWProtocolWebSocket.definition)
+                    as? NWProtocolWebSocket.Metadata
+                if metadata?.opcode == .ping {
+                    self.state.withLock { $0.pingsReceived += 1 }
+                    if self.pongs == .replied {
+                        let pong = NWProtocolWebSocket.Metadata(opcode: .pong)
+                        let pongContext = NWConnection.ContentContext(
+                            identifier: "pong", metadata: [pong])
+                        connection.send(
+                            content: data, contentContext: pongContext,
+                            isComplete: true, completion: .idempotent)
+                    }
+                } else if let data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
                     let response: [String: Any] = [
@@ -1742,11 +1850,78 @@ struct ConnectionManagerTests {
         return port
     }
 
+    /// The socket tests below dial the plaintext `LoopbackWebSocketServer`
+    /// without a pin, so they opt into the loopback-only override explicitly
+    /// and restore the fail-closed default on exit (the suite is serialized).
+    private static func enablePlaintextLoopback() -> Bool {
+        WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { state in
+            let was = state
+            state = true
+            return was
+        }
+    }
+
+    private static func restorePlaintextLoopback(_ previous: Bool) {
+        WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous }
+    }
+
+    /// The enable/restore pair is registered before any throwing setup, so a
+    /// failed server start cannot leak the plaintext override into later tests.
+    @Test func plaintextLoopbackOverrideRestoredWhenSetupThrows() {
+        struct SetupFailed: Error {}
+        func failingSetup() throws {
+            let previous = Self.enablePlaintextLoopback()
+            defer { Self.restorePlaintextLoopback(previous) }
+            #expect(WebSocketConnection.plaintextLoopbackOverrideActive)
+            throw SetupFailed()
+        }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+        #expect(throws: SetupFailed.self) { try failingSetup() }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+    }
+
+    /// ios#251 (RED on origin/main): a saved record without a certificate
+    /// pin must fail closed — `connect()` refuses before any socket opens,
+    /// so the bearer token is never sent over plain ws://. The plaintext
+    /// server listening on the target port proves no connection reached it.
+    @Test @MainActor func pinlessConnectNeverOpensPlaintextSocket() async throws {
+        let manager = ConnectionManager.shared
+        let server = try await LoopbackWebSocketServer.start()
+        defer {
+            manager.disconnect()
+            server.stop()
+        }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+        let stateBefore = manager.connectionState
+
+        for fingerprint in [nil, "", "  "] as [String?] {
+            do {
+                try await manager.connect(
+                    hosts: ["127.0.0.1"], port: server.port, token: "secret-token",
+                    certFingerprint: fingerprint)
+                Issue.record("expected connect() to refuse a pin-less record")
+            } catch let error as WebSocketTransportError {
+                #expect(error.isMissingCertificatePin)
+                #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
+            } catch {
+                Issue.record("unexpected error: \(error)")
+            }
+        }
+
+        // Admission fails before the race: no state adopted, no socket dialed.
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(server.acceptedCount == 0)
+        #expect(manager.connectionState == stateBefore)
+        #expect(manager.token != "secret-token")
+    }
+
     /// Regression for monorepo#4185: a pairing attempt (QR / manual token /
     /// intent:// link all funnel into `connect()`) that fails while a live
     /// connection is active must NOT strand the app in `.connecting` on a
     /// dead socket — the existing connection keeps serving.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsItServing() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
@@ -1778,6 +1953,8 @@ struct ConnectionManagerTests {
     /// reset (different target) must not wipe it, and mismatches observed by
     /// the failed race must not stick to the preserved connection.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsCertMismatches() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
@@ -1804,6 +1981,8 @@ struct ConnectionManagerTests {
     /// adopts the new target only once the replacement socket is
     /// established, and the new connection serves round-trips.
     @Test @MainActor func successfulPairingOverLiveConnectionAdoptsNewTarget() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -1846,6 +2025,8 @@ struct ConnectionManagerTests {
     /// candidate's certificate mismatch, reported by the background drain,
     /// must still reach `certMismatches`: the race was not superseded.
     @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -1885,6 +2066,8 @@ struct ConnectionManagerTests {
     /// connect-attempt counter: the older attempt is superseded, the newer
     /// one adopts its target.
     @Test @MainActor func olderOverlappingPairingAttemptDoesNotWin() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let liveServer = try await LoopbackWebSocketServer.start()
         let olderTarget = try await LoopbackWebSocketServer.start(gated: true)
@@ -1932,6 +2115,8 @@ struct ConnectionManagerTests {
     /// the reconnect loop (and its target) alive instead of cancelling it
     /// and stranding the app in `.connecting`.
     @Test @MainActor func failedPairingWhileReconnectingKeepsReconnectLoop() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
@@ -1970,6 +2155,457 @@ struct ConnectionManagerTests {
         }
         #expect(manager.port == livePort)
         #expect(manager.token == "live-token")
+    }
+
+    // MARK: - Heartbeat (ios#253)
+
+    /// Manual `HeartbeatClock`: sleepers park until `advance(by:)` moves the
+    /// clock past their deadline; cancellation removes them. Tests observe
+    /// what is parked via `pendingDurations`.
+    ///
+    /// While `holdsCancelledSleepers` is set, a cancelled sleeper is moved to
+    /// a held list instead of being resumed, and `releaseHeld(asCompleted:)`
+    /// finishes it later — either as a sleep that had already completed
+    /// when the cancellation arrived, or as the cancellation itself. That
+    /// pins the wake of a retired heartbeat task to a chosen point in the
+    /// test.
+    private nonisolated final class ManualHeartbeatClock: HeartbeatClock, @unchecked Sendable {
+        private struct Sleeper {
+            let id: Int
+            let duration: Duration
+            let deadline: Duration
+            let continuation: CheckedContinuation<Void, any Error>
+        }
+        private struct State {
+            var now: Duration = .zero
+            var nextID = 0
+            var sleepers: [Sleeper] = []
+            var held: [Sleeper] = []
+            var holdsCancelledSleepers = false
+        }
+
+        private let lock = OSAllocatedUnfairLock(initialState: State())
+
+        /// Requested durations of the parked sleepers, in registration order.
+        var pendingDurations: [Duration] { lock.withLock { $0.sleepers.map(\.duration) } }
+        /// Requested durations of the cancelled-but-held sleepers.
+        var heldDurations: [Duration] { lock.withLock { $0.held.map(\.duration) } }
+        var holdsCancelledSleepers: Bool {
+            get { lock.withLock { $0.holdsCancelledSleepers } }
+            set { lock.withLock { $0.holdsCancelledSleepers = newValue } }
+        }
+
+        func sleep(for duration: Duration) async throws {
+            let id = lock.withLock { state in
+                state.nextID += 1
+                return state.nextID
+            }
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, any Error>) in
+                    let parked = lock.withLock { state in
+                        let sleeper = Sleeper(
+                            id: id, duration: duration, deadline: state.now + duration,
+                            continuation: continuation)
+                        if Task.isCancelled {
+                            guard state.holdsCancelledSleepers else { return false }
+                            state.held.append(sleeper)
+                        } else {
+                            state.sleepers.append(sleeper)
+                        }
+                        return true
+                    }
+                    if !parked { continuation.resume(throwing: CancellationError()) }
+                }
+            } onCancel: {
+                let cancelled = lock.withLock { state -> Sleeper? in
+                    guard let index = state.sleepers.firstIndex(where: { $0.id == id }) else {
+                        return nil
+                    }
+                    let sleeper = state.sleepers.remove(at: index)
+                    if state.holdsCancelledSleepers {
+                        state.held.append(sleeper)
+                        return nil
+                    }
+                    return sleeper
+                }
+                cancelled?.continuation.resume(throwing: CancellationError())
+            }
+        }
+
+        /// Finishes every held sleeper: as a normally completed sleep when
+        /// `completed`, otherwise as the cancellation that was held back.
+        func releaseHeld(asCompleted completed: Bool) {
+            let released = lock.withLock { state in
+                defer { state.held.removeAll() }
+                return state.held
+            }
+            for sleeper in released {
+                if completed {
+                    sleeper.continuation.resume()
+                } else {
+                    sleeper.continuation.resume(throwing: CancellationError())
+                }
+            }
+        }
+
+        func advance(by duration: Duration) {
+            let fired = lock.withLock { state in
+                state.now += duration
+                let now = state.now
+                let due = state.sleepers.filter { $0.deadline <= now }
+                state.sleepers.removeAll { $0.deadline <= now }
+                return due
+            }
+            for sleeper in fired { sleeper.continuation.resume() }
+        }
+    }
+
+    /// Counts connection teardowns — entries into `.reconnecting` from any
+    /// other state — for the duration of a test.
+    @MainActor private final class DisconnectCounter {
+        private(set) var count = 0
+        private var wasReconnecting: Bool
+        private var cancellable: AnyCancellable?
+
+        init(_ manager: ConnectionManager) {
+            if case .reconnecting = manager.connectionState {
+                wasReconnecting = true
+            } else {
+                wasReconnecting = false
+            }
+            cancellable = manager.connectionStatePublisher.sink { [weak self] state in
+                guard let self else { return }
+                let isReconnecting: Bool
+                if case .reconnecting = state { isReconnecting = true } else { isReconnecting = false }
+                if isReconnecting, !self.wasReconnecting { self.count += 1 }
+                self.wasReconnecting = isReconnecting
+            }
+        }
+    }
+
+    /// Polls `condition` (real time) until it holds or `timeout` elapses;
+    /// the caller asserts afterwards so a miss reports the actual values.
+    @MainActor private static func settle(
+        timeout: Duration = .seconds(3), until condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    /// ios#253: after the app was suspended in the background the heartbeat
+    /// wakes with a gap far beyond the pong timeout. That must trigger a
+    /// probe, not a disconnect: the socket is alive, the pong arrives, and
+    /// the connection keeps serving.
+    @Test @MainActor func heartbeatGapBeyondTimeoutProbesInsteadOfDisconnecting() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // Suspended for two minutes: the cadence sleep resumes long after
+        // the probe timeout would have elapsed since the last pong.
+        clock.advance(by: .seconds(120))
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        let result = try await manager.request("system.status")
+        #expect(result is [String: Any])
+    }
+
+    /// A probe the daemon never answers is the only thing that may tear the
+    /// connection down: once the probe deadline passes, exactly one
+    /// disconnect follows (and the reconnect loop takes over).
+    @Test @MainActor func unansweredProbeDisconnectsOnce() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout])
+        // Probe in flight, deadline not reached: still connected.
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        // The reconnect loop re-establishes against the same server and
+        // arms a fresh heartbeat; no second teardown follows.
+        try await Self.settle(timeout: .seconds(5)) {
+            manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+    }
+
+    /// A probe in flight when its connection is retired (pairing a new
+    /// daemon over the live connection advances the generation) belongs to
+    /// the old generation: its outcome neither tears down nor vouches for
+    /// the replacement, whose own heartbeat runs undisturbed.
+    @Test @MainActor func probeOfRetiredGenerationIsIgnored() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let serverA = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let serverB = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverA.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(serverA.pingsReceived == 1)
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        // The retired probe is gone; only the replacement's cadence is armed.
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+
+        // Passing the retired probe's deadline changes nothing for the
+        // replacement: its own probe goes out and is answered.
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        try await Self.settle {
+            serverB.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(serverA.pingsReceived == 1)
+        #expect(serverB.pingsReceived == 1)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+    }
+
+    /// The retired generation's pong may also arrive late as a SUCCESS: A's
+    /// probe is answered but completes only after B has been adopted. That
+    /// success is ignored — it neither counts for B nor spares B its own
+    /// probe, which still times out when B never answers.
+    @Test @MainActor func latePongOfRetiredGenerationIsIgnored() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let serverA = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let serverB = try await LoopbackWebSocketServer.start(pongs: .withheld)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            clock.holdsCancelledSleepers = false
+            manager.disconnect()
+            clock.releaseHeld(asCompleted: false)
+            manager.heartbeatClock = originalClock
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverA.port, token: "token-a")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // A answers the ping, which cancels the probe's deadline sleeper;
+        // holding that sleeper keeps the probe from completing, parking A's
+        // success until released.
+        clock.holdsCancelledSleepers = true
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverA.pingsReceived == 1
+                && clock.heldDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(clock.heldDurations == [ConnectionManager.heartbeatProbeTimeout])
+        #expect(clock.pendingDurations.isEmpty)
+        let retiredHeartbeat = try #require(manager.heartbeatTask)
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+        clock.holdsCancelledSleepers = false
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        // A's success lands now, after B's adoption; join the retired
+        // heartbeat so its outcome has been processed before asserting.
+        clock.releaseHeld(asCompleted: false)
+        await retiredHeartbeat.value
+        #expect(clock.heldDurations.isEmpty)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+        #expect(manager.port == serverB.port)
+
+        // B still has to answer its own probe, and does not.
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            serverB.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatProbeTimeout]
+        }
+        #expect(serverB.pingsReceived == 1)
+        clock.advance(by: ConnectionManager.heartbeatProbeTimeout)
+        try await Self.settle(timeout: .seconds(5)) {
+            manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(disconnects.count == 1)
+        #expect(serverA.pingsReceived == 1)
+        #expect(serverB.pingsReceived == 1)
+        #expect(manager.port == serverB.port)
+    }
+
+    /// The automatic reconnect keeps the connection generation. A cadence
+    /// sleep that completed just as the socket dropped must not, when its
+    /// retired loop finally wakes after the reconnect, probe the replacement
+    /// from a cancelled task and tear the healthy replacement down.
+    @Test @MainActor func lateCadenceWakeAfterAutomaticReconnectDoesNotProbe() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            clock.holdsCancelledSleepers = false
+            manager.disconnect()
+            clock.releaseHeld(asCompleted: false)
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+        let retiredHeartbeat = try #require(manager.heartbeatTask)
+
+        // Drop the socket server-side while the cadence sleep is parked; the
+        // teardown cancels the heartbeat, and the clock holds that wake back
+        // until the automatic reconnect has armed the replacement's heartbeat.
+        clock.holdsCancelledSleepers = true
+        server.dropClients()
+        try await Self.settle(timeout: .seconds(5)) {
+            clock.heldDurations == [ConnectionManager.heartbeatInterval]
+                && manager.connectionState == .connected
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        clock.holdsCancelledSleepers = false
+        #expect(clock.heldDurations == [ConnectionManager.heartbeatInterval])
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+        #expect(server.pingsReceived == 0)
+
+        // The retired loop's sleep had completed before the cancellation:
+        // release it as such and join it. It must have done nothing.
+        clock.releaseHeld(asCompleted: true)
+        await retiredHeartbeat.value
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
+        #expect(server.pingsReceived == 0)
+
+        // Only the replacement's own heartbeat probes.
+        clock.advance(by: ConnectionManager.heartbeatInterval)
+        try await Self.settle {
+            server.pingsReceived == 1
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 1)
+        #expect(disconnects.count == 1)
+        #expect(manager.connectionState == .connected)
+    }
+
+    /// Normal operation: one answered probe per interval, none early.
+    @Test @MainActor func heartbeatProbesOncePerInterval() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start(pongs: .replied)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+        try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+
+        for expected in 1...2 {
+            clock.advance(by: ConnectionManager.heartbeatInterval)
+            try await Self.settle {
+                server.pingsReceived == expected
+                    && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+            }
+            #expect(server.pingsReceived == expected)
+        }
+
+        clock.advance(by: ConnectionManager.heartbeatInterval - .seconds(1))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(server.pingsReceived == 2)
+
+        clock.advance(by: .seconds(1))
+        try await Self.settle {
+            server.pingsReceived == 3
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(server.pingsReceived == 3)
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
     }
 }
 

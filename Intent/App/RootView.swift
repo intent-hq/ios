@@ -28,6 +28,10 @@ struct RootView: View {
     /// True while syncNavigationState() tears down the conversation for the iPad
     /// re-push dance, so the user-back onChange handler doesn't misfire.
     @State var programmaticConversationDismiss = false
+    /// Last `coordinator.conversationRequestId` consumed by syncNavigationState(),
+    /// so a same-agent re-select (which leaves currentScreen unchanged) is still
+    /// recognised as a new request exactly once.
+    @State var handledConversationRequestId = 0
     @State var noteStack = NavigationPath()
 
     /// The pushed conversation page. The target is resolved in the page's own

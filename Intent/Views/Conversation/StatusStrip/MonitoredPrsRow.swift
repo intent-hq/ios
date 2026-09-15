@@ -67,7 +67,7 @@ struct MonitoredPrsRow: View {
                 Label("Check and flush", systemImage: "arrow.triangle.2.circlepath")
             }
             Button {
-                if let url = URL(string: Self.prUrl(monitor)) {
+                if let url = ExternalLink.url(from: Self.prUrl(monitor)) {
                     openURL(url)
                 }
             } label: {
@@ -130,6 +130,8 @@ struct MonitoredPrsRow: View {
     }
 
     /// PR web URL: the wire `url` when present, else the canonical GitHub form.
+    /// The Open PR action only opens it once it passes the `ExternalLink`
+    /// http/https allowlist.
     static func prUrl(_ monitor: MonitoredPr) -> String {
         monitor.url ?? "https://github.com/\(monitor.repo)/pull/\(monitor.prNumber)"
     }

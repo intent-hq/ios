@@ -27,6 +27,9 @@ extension RootView {
             .onChange(of: coordinator.currentScreenDescription) {
                 syncNavigationState()
             }
+            .onChange(of: coordinator.conversationRequestId) {
+                syncNavigationState()
+            }
             .onChange(of: showingWorkspaceDetail) { _, newValue in
                 if newValue {
                     if pendingConversationPush {

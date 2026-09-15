@@ -104,7 +104,9 @@ final class ConversationLiveTranscript {
         // Both awaits (RPC and off-main decode) yield MainActor; a rebind to
         // another agent in either window makes this page stale, so it must
         // not touch the new agent's transcript or streaming state. The error
-        // is carried as a value so a stale failure is recognised as stale too.
+        // is carried as a value so a stale failure is dropped with a stale
+        // page: a not-found for the previous agent says nothing about the
+        // current one and must not reach `onFetchError`.
         let outcome: Result<ConversationPage?, Error>? = await whileBound {
             do {
                 let result = try await connectionManager.request(
@@ -116,9 +118,9 @@ final class ConversationLiveTranscript {
                 return .failure(error)
             }
         } onStale: { outcome in
-            // A stale failure still surfaces (intent-hq/ios#283 tracks gating it).
             if case .failure(let error) = outcome {
-                reportFetchError(error)
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped stale fetch failure for a previous binding: \(error)")
             }
         }
 

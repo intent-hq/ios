@@ -153,12 +153,18 @@ nonisolated enum InboundFrame: Sendable {
     /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
-    @ObservationIgnored private var pingTimer: Timer?
-    @ObservationIgnored private var lastPongReceived: Date = Date()
+    /// Read by tests as a completion barrier for a retired heartbeat.
+    @ObservationIgnored private(set) var heartbeatTask: Task<Void, Never>?
+    /// Time source for the heartbeat cadence and probe deadline. Injectable
+    /// so tests step the heartbeat deterministically; defaults to the
+    /// monotonic `ContinuousClock` (never wall-clock `Date`, see ios#253).
+    @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
     @ObservationIgnored private var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored private var lastReconnectAttempt = 0
-    private static let pingInterval: TimeInterval = 15  // Send ping every 15s
-    private static let pongTimeout: TimeInterval = 30   // Dead if no pong in 30s
+    /// One liveness probe (websocket ping) per interval.
+    nonisolated static let heartbeatInterval: Duration = .seconds(15)
+    /// A probe unanswered for this long means the connection is dead.
+    nonisolated static let heartbeatProbeTimeout: Duration = .seconds(30)
     private static let stableConnectionThreshold: TimeInterval = 10
     @ObservationIgnored private(set) var hosts: [String] = []
     @ObservationIgnored private var host: String?
@@ -216,6 +222,15 @@ nonisolated enum InboundFrame: Sendable {
         hosts: [String], port: Int, token: String, certFingerprint: String? = nil,
         tcAddress: String? = nil
     ) async throws {
+        // Fail closed before touching any state or socket: a record without
+        // a trusted pin would otherwise dial plain ws:// carrying the bearer
+        // token (ios#251). Only the loopback test override may pass here;
+        // per-host admission in WebSocketConnection.makeURL still applies.
+        guard WebSocketConnection.trustedPin(certFingerprint) != nil
+            || WebSocketConnection.plaintextLoopbackOverrideActive
+        else {
+            throw WebSocketTransportError.missingCertificatePin(host: hosts.first ?? "unknown")
+        }
         let connectStart = CFAbsoluteTimeGetCurrent()
         // Snapshot before the reset: a preserving connect (below) that fails
         // must leave `certMismatches` exactly as the live connection had it —
@@ -322,7 +337,7 @@ nonisolated enum InboundFrame: Sendable {
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
         subscribeToAllEvents()
-        startPingTimer()
+        startHeartbeat()
         scheduleHostRoutesRefresh()
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
@@ -356,7 +371,7 @@ nonisolated enum InboundFrame: Sendable {
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         connectionGeneration += 1
-        stopPingTimer()
+        stopHeartbeat()
         reconnectTask?.cancel()
         reconnectTask = nil
         lastSuccessfulConnectAt = nil
@@ -806,6 +821,8 @@ nonisolated enum InboundFrame: Sendable {
                         host: tunnelCandidateLabel, fingerprint: fingerprint)
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
+                case .missingCertificatePin:
+                    throw WebSocketTransportError.missingCertificatePin(host: tunnelCandidateLabel)
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
                 case .failed(_, let message):
@@ -1128,7 +1145,7 @@ nonisolated enum InboundFrame: Sendable {
             AppLog.connection.debug("[ConnectionManager] Already disconnected, ignoring")
             return
         }
-        stopPingTimer()
+        stopHeartbeat()
         let oldSocket = socket
         socket = nil
         let oldTunnel = activeTunnel
@@ -1225,7 +1242,7 @@ nonisolated enum InboundFrame: Sendable {
                         self.lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
                         self.lastReconnectAttempt = attempt
                         self.subscribeToAllEvents()
-                        self.startPingTimer()
+                        self.startHeartbeat()
                         self.scheduleHostRoutesRefresh()
                         genOk = true
                     } else {
@@ -1241,10 +1258,10 @@ nonisolated enum InboundFrame: Sendable {
                     return
                 } catch {
                     if let transportError = error as? WebSocketTransportError,
-                       transportError.isCertificateMismatch {
+                       transportError.isCertificateMismatch || transportError.isMissingCertificatePin {
                         guard !Task.isCancelled,
                               self?.connectionGeneration == myGeneration else { return }
-                        AppLog.connection.debug("[ConnectionManager] Certificate mismatch detected, stopping reconnection")
+                        AppLog.connection.debug("[ConnectionManager] Certificate trust failure (\(transportError.localizedDescription)), stopping reconnection")
                         self?.certMismatchDetected = true
                         self?.connectionState = .disconnected
                         return
@@ -1278,45 +1295,81 @@ nonisolated enum InboundFrame: Sendable {
 
     // MARK: - Heartbeat
 
-    private func startPingTimer() {
-        stopPingTimer()
-        lastPongReceived = Date()
-        let timer = Timer(timeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.sendPingAndCheckHealth()
+    /// Every `heartbeatInterval` the heartbeat sends ONE liveness probe and
+    /// tears the connection down only when that probe times out or fails —
+    /// never on elapsed time alone. Elapsed-since-last-pong accounting
+    /// misfires after the app is suspended in the background: the loop
+    /// wakes late on resume with a gap far beyond the timeout although the
+    /// socket may be perfectly healthy, so resume must be answered with a
+    /// fresh probe rather than a disconnect (ios#253). Probes run
+    /// sequentially (at most one in flight) and are bound to the connection
+    /// generation that started them, so the outcome of a probe whose
+    /// connection was retired while it was in flight is ignored.
+    ///
+    /// The loop's own cancellation is the other retirement signal: the
+    /// automatic reconnect keeps the generation, so a cadence sleep that
+    /// completed just before `stopHeartbeat()` cancelled the task would
+    /// otherwise wake to find the replacement socket connected and probe it
+    /// from a cancelled task.
+    private func startHeartbeat() {
+        stopHeartbeat()
+        let myGeneration = connectionGeneration
+        let clock = heartbeatClock
+        heartbeatTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await clock.sleep(for: Self.heartbeatInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let self else { return }
+                await self.probeConnectionHealth(generation: myGeneration)
             }
         }
-        timer.tolerance = 2
-        RunLoop.main.add(timer, forMode: .common)
-        pingTimer = timer
     }
 
-    private func stopPingTimer() {
-        pingTimer?.invalidate()
-        pingTimer = nil
+    private func stopHeartbeat() {
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
     }
 
-    private func sendPingAndCheckHealth() async {
-        guard connectionState == .connected, let currentSocket = socket else { return }
-
-        // Check if we've timed out
-        let timeSinceLastPong = Date().timeIntervalSince(lastPongReceived)
-        if timeSinceLastPong > Self.pongTimeout {
-            AppLog.connection.debug("[ConnectionManager] Ping timeout — no pong received in \(Int(timeSinceLastPong))s, triggering reconnection")
-            stopPingTimer()
-            handleDisconnection()
-            return
-        }
-
+    private func probeConnectionHealth(generation: Int) async {
+        guard !Task.isCancelled, connectionGeneration == generation, connectionState == .connected,
+              let currentSocket = socket else { return }
+        let clock = heartbeatClock
         do {
-            try await currentSocket.sendPing()
-            guard socket === currentSocket else { return }
-            lastPongReceived = Date()
+            try await Self.probe(currentSocket, timeout: Self.heartbeatProbeTimeout, clock: clock)
+            guard !Task.isCancelled, connectionGeneration == generation, socket === currentSocket else {
+                AppLog.connection.debug("[ConnectionManager] Ignoring late pong from retired heartbeat (generation \(generation))")
+                return
+            }
             AppLog.connection.debug("[ConnectionManager] Received pong")
         } catch {
-            guard socket === currentSocket else { return }
-            AppLog.connection.debug("[ConnectionManager] Ping failed: \(error.localizedDescription)")
+            // A cancelled probe was retired by `stopHeartbeat()`; its
+            // CancellationError says nothing about the socket's health.
+            guard !Task.isCancelled, !(error is CancellationError),
+                  connectionGeneration == generation, socket === currentSocket else {
+                AppLog.connection.debug("[ConnectionManager] Ignoring heartbeat probe outcome from retired generation \(generation)")
+                return
+            }
+            AppLog.connection.debug("[ConnectionManager] Heartbeat probe failed: \(error.localizedDescription), triggering reconnection")
             handleDisconnection()
+        }
+    }
+
+    /// Races the websocket ping against the clock-driven probe deadline;
+    /// whichever settles first cancels the other.
+    private nonisolated static func probe(
+        _ socket: WebSocketConnection, timeout: Duration, clock: any HeartbeatClock
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { try await socket.sendPing() }
+            group.addTask {
+                try await clock.sleep(for: timeout)
+                throw WebSocketTransportError.timedOut(host: socket.host)
+            }
+            defer { group.cancelAll() }
+            _ = try await group.next()
         }
     }
 
@@ -1328,5 +1381,19 @@ nonisolated enum InboundFrame: Sendable {
                 domain: "WebSocket", code: -3,
                 userInfo: [NSLocalizedDescriptionKey: message]))
         }
+    }
+}
+
+/// Time source behind `ConnectionManager`'s heartbeat: the cadence sleep and
+/// the probe deadline both go through it, so tests can drive the heartbeat
+/// with a manual clock instead of waiting real seconds.
+nonisolated protocol HeartbeatClock: Sendable {
+    func sleep(for duration: Duration) async throws
+}
+
+/// The production clock: monotonic, unaffected by wall-clock adjustments.
+nonisolated struct ContinuousHeartbeatClock: HeartbeatClock {
+    func sleep(for duration: Duration) async throws {
+        try await ContinuousClock().sleep(for: duration)
     }
 }

@@ -104,6 +104,39 @@ struct SyncedBackendConnectionMergeTests {
         #expect(result.connections[0].token == "tok-new")
     }
 
+    /// ios#251: merging a pin-less record into a pin-less legacy local keeps
+    /// the record (name, hosts, port intact) but never fabricates a pin, so
+    /// the connection stays refused by transport admission until re-paired.
+    @Test func fingerprintlessMergeNeverMakesLegacyLocalConnectable() throws {
+        let existing = local(fingerprint: nil)
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "  ", token: "tok-new", updatedAt: 200)],
+            into: [existing])
+        let merged = try #require(result.connections.first)
+        #expect(merged.id == existing.id)
+        #expect(merged.server.hosts == existing.server.hosts)
+        #expect(merged.server.port == existing.server.port)
+        #expect(merged.server.name == existing.server.name)
+        #expect(WebSocketConnection.trustedPin(merged.server.certFingerprint) == nil)
+        #expect(throws: WebSocketTransportError.self) {
+            _ = try WebSocketConnection.makeURL(
+                host: merged.server.hosts[0], port: merged.server.port,
+                certFingerprint: merged.server.certFingerprint)
+        }
+    }
+
+    /// A pinned local is never downgraded: a pin-less record at the same
+    /// address does not match it, so its pin (and connectability) survive.
+    @Test func fingerprintlessRecordNeverStripsPinFromPinnedLocal() {
+        let existing = local(fingerprint: "aa:bb")
+        let result = SyncedBackendConnectionMerge.merge(
+            records: [record(fingerprint: "", token: "tok-new", updatedAt: 200)],
+            into: [existing])
+        #expect(!result.changed)
+        #expect(result.connections[0].server.certFingerprint == "aa:bb")
+        #expect(result.connections[0].token == "tok-local")
+    }
+
     @Test func blankLabelFallsBackToHostnameThenHostPort() {
         #expect(
             SyncedBackendConnectionMerge.displayName(

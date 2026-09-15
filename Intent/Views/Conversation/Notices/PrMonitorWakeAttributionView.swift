@@ -4,8 +4,8 @@ import SwiftUI
 /// (`metadata.type == "pr_monitor_wake"`, PROTOCOL §5.42): pull-request icon
 /// + tappable PR chip + "woke the agent". Mirrors HookWakeAttributionView,
 /// but the chip opens the PR in the browser (metadata `url` first, GitHub
-/// fallback) — the iOS counterpart of cloudlands-fe's
-/// `PrMonitorWakeAttributionHeader`.
+/// fallback; gated by the `ExternalLink` http/https allowlist) — the iOS
+/// counterpart of cloudlands-fe's `PrMonitorWakeAttributionHeader`.
 struct PrMonitorWakeAttributionView: View {
     let attribution: PrMonitorWakeAttribution
     /// `<owner>/<repo>` of the conversation's workspace, or nil when unknown
@@ -20,7 +20,7 @@ struct PrMonitorWakeAttributionView: View {
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             Button {
-                if let url = URL(string: attribution.resolvedUrl) {
+                if let url = ExternalLink.url(from: attribution.resolvedUrl) {
                     openURL(url)
                 }
             } label: {

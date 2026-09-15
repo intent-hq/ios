@@ -1096,6 +1096,121 @@ struct ConnectionPersistenceTests {
         #expect(pm.loadConnections() == before)
     }
 
+    // MARK: - Undecodable registry (intent-hq/ios#265)
+
+    /// A blob that exists but is not a `[StoredConnection]` JSON array —
+    /// e.g. corrupt bytes or a future schema.
+    private let undecodableBlob = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)
+
+    private func seedUndecodableBlob() {
+        #expect(pm.saveDataToKeychain(data: undecodableBlob, account: pm.keychainAccountConnections))
+    }
+
+    private func storedBlob() -> Data? {
+        pm.loadDataFromKeychain(account: pm.keychainAccountConnections)
+    }
+
+    @Test func absentBlobIsNotReportedAsUndecodable() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        #expect(!pm.isConnectionRegistryUndecodable())
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        #expect(!pm.isConnectionRegistryUndecodable())
+    }
+
+    @Test func undecodableBlobReadsAsEmptyButIsFlagged() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+
+        #expect(pm.isConnectionRegistryUndecodable())
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.activeConnection() == nil)
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func upsertRefusesToOverwriteUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+
+        let outcome = pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok-new"))
+        #expect(!outcome.persisted)
+        #expect(outcome.registryUndecodable)
+        #expect(storedBlob() == undecodableBlob)
+        #expect(pm.isConnectionRegistryUndecodable())
+
+        // The pairing shim reports failure and leaves the pointer alone.
+        #expect(!pm.savePairing(server: makeServer(port: 1), token: "tok"))
+        #expect(pm.defaults.string(forKey: pm.activeConnectionIdKey) == nil)
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func syncedMergeRefusesToOverwriteUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let staleActive = UUID()
+        pm.setActiveConnection(id: staleActive)
+
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord()])
+        #expect(outcome.registryUndecodable)
+        #expect(!outcome.changed)
+        #expect(!outcome.removedActiveConnection)
+        #expect(storedBlob() == undecodableBlob)
+        // The pointer is not touched either: nothing was merged or removed.
+        #expect(pm.defaults.string(forKey: pm.activeConnectionIdKey) == staleActive.uuidString)
+    }
+
+    @Test func idKeyedWritesAndDeleteRefuseToTouchUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let id = UUID()
+
+        #expect(!pm.updateConnectionHosts(id: id, hosts: ["x.local"]))
+        #expect(!pm.updateConnectionTcAddress(id: id, tcAddress: "100.64.0.1"))
+        #expect(!pm.updateConnectionDisplayName(id: id, displayName: "Renamed"))
+        #expect(!pm.touchLastConnected(id: id))
+        // Delete reports failure (unlike an unknown id on a readable list,
+        // which is a successful no-op) so callers do not tear down state.
+        #expect(!pm.deleteConnection(id: id))
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func legacyMigrationDoesNotReplaceUndecodableBlob() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let legacy = makeServer(hosts: ["legacy.local"])
+        pm.saveDataToKeychain(data: try JSONEncoder().encode(legacy), account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("legacy-tok".utf8), account: pm.keychainAccountToken)
+
+        #expect(pm.loadConnections().isEmpty)
+        #expect(storedBlob() == undecodableBlob)
+        // Legacy entries survive too: nothing was migrated.
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) != nil)
+        #expect(pm.loadStringFromKeychain(account: pm.keychainAccountToken) == "legacy-tok")
+    }
+
+    @Test func writesResumeOnceBlobIsDecodableAgain() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        #expect(!pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok")).persisted)
+
+        // An explicit recovery (here: the user clearing the store) unblocks writes.
+        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
+        #expect(!pm.isConnectionRegistryUndecodable())
+        let outcome = pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok"))
+        #expect(outcome.persisted)
+        #expect(!outcome.registryUndecodable)
+        #expect(pm.loadConnections().count == 1)
+    }
+
     // MARK: - Compatibility shims
 
     @Test func pairingShimsRoundTripOverConnectionsAPI() {

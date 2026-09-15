@@ -42,6 +42,15 @@ class PersistenceManager {
         return loadConnectionsLocked()
     }
 
+    /// True when a saved-connections blob exists but cannot be decoded (corrupt
+    /// or written by a newer schema). Reads then behave as if the list were
+    /// empty, but every write path refuses to save from that empty base so the
+    /// original blob — and the tokens in it — survive until an explicit
+    /// recovery path is chosen.
+    func isConnectionRegistryUndecodable() -> Bool {
+        readConnectionsLocked() == nil
+    }
+
     /// Inserts the connection, or updates the existing entry in place (preserving its
     /// id) when one at the same port shares at least one host or carries the same
     /// tailcat tunnel address. Returns the stored value.
@@ -64,12 +73,16 @@ class PersistenceManager {
 
     /// Upserts a connection and reports whether the resulting registry was
     /// durably saved. Callers that publish pairing success must use this form.
+    /// `registryUndecodable` is true when nothing was written because the
+    /// existing blob could not be decoded (see `isConnectionRegistryUndecodable`).
     @discardableResult
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
-    ) -> (connection: StoredConnection, persisted: Bool) {
+    ) -> (connection: StoredConnection, persisted: Bool, registryUndecodable: Bool) {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else {
+            return (connection, false, true)
+        }
         let stored: StoredConnection
         if let index = connections.firstIndex(where: {
             $0.server.port == connection.server.port
@@ -106,7 +119,7 @@ class PersistenceManager {
             stored = connection
             connections.append(stored)
         }
-        return (stored, saveConnectionsLocked(connections))
+        return (stored, saveConnectionsLocked(connections), false)
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -128,7 +141,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -149,7 +162,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -170,7 +183,7 @@ class PersistenceManager {
     @discardableResult
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].displayName = displayName
         return saveConnectionsLocked(connections)
@@ -179,7 +192,7 @@ class PersistenceManager {
     @discardableResult
     func deleteConnection(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard connections.contains(where: { $0.id == id }) else { return true }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
@@ -215,7 +228,7 @@ class PersistenceManager {
     @discardableResult
     func touchLastConnected(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].lastConnectedAt = Date()
         return saveConnectionsLocked(connections)
@@ -229,10 +242,16 @@ class PersistenceManager {
     /// A failed keychain write reports a no-op outcome (pointer untouched) so
     /// the caller never disconnects while the saved list still holds the
     /// connection; the merge simply retries on the next registry read.
+    /// An undecodable existing blob also reports a no-op outcome (flagged
+    /// `registryUndecodable`) — merging into an empty base would overwrite it.
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
         migrateLegacyPairingIfNeeded()
-        let connections = loadConnectionsLocked()
+        guard let connections = readConnectionsLocked() else {
+            return SyncedBackendMergeOutcome(
+                addedIds: [], updatedIds: [], removedIds: [],
+                removedActiveConnection: false, registryUndecodable: true)
+        }
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
         var removedActive = false
         if result.changed {
@@ -255,12 +274,18 @@ class PersistenceManager {
             removedActiveConnection: removedActive)
     }
 
-    private func loadConnectionsLocked() -> [StoredConnection] {
-        guard let data = loadDataFromKeychain(account: keychainAccountConnections),
-              let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
+    /// Reads the saved list: an absent blob is an empty list; a blob that fails
+    /// to decode is nil. Write paths must go through this (not
+    /// `loadConnectionsLocked`) so they never save over an undecodable blob.
+    private func readConnectionsLocked() -> [StoredConnection]? {
+        guard let data = loadDataFromKeychain(account: keychainAccountConnections) else {
             return []
         }
-        return connections
+        return try? JSONDecoder().decode([StoredConnection].self, from: data)
+    }
+
+    private func loadConnectionsLocked() -> [StoredConnection] {
+        readConnectionsLocked() ?? []
     }
 
     @discardableResult
