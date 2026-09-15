@@ -586,8 +586,8 @@ struct ConversationStoreLiveStateTests {
     }
 
     /// Same as above, but A's stale initial fetch *fails* (cancellation, as
-    /// the real ConnectionManager throws on task cancellation): the error is
-    /// still reported, yet it must not finish B's in-flight initial load.
+    /// the real ConnectionManager throws on task cancellation): the stale
+    /// error is dropped, and it must not finish B's in-flight initial load.
     @Test func staleInitialFetchFailureDoesNotFinishNewAgentInFlightInitialLoad() async throws {
         let (store, fake) = makeStore()
         fake.pendingMethods = ["agent.getConversation"]
