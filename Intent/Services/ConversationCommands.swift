@@ -228,7 +228,7 @@ final class ConversationCommands {
     /// the valid siblings are returned in their original order with their
     /// identities intact. Only safe metadata (position in the array, error
     /// shape) is logged — never message content or metadata payloads.
-    nonisolated static func decodeQueueSnapshot(
+    static func decodeQueueSnapshot(
         _ queue: Any?, source: String
     ) -> [QueuedMessage]? {
         guard let items = queue as? [Any] else { return nil }
@@ -257,7 +257,7 @@ final class ConversationCommands {
     /// Content-free description of a queue element decoding failure: the
     /// `DecodingError` case and the coding path that failed, or the error
     /// type for anything else.
-    nonisolated private static func describeDecodingFailure(_ error: Error) -> String {
+    private static func describeDecodingFailure(_ error: Error) -> String {
         guard let decodingError = error as? DecodingError else {
             return String(describing: type(of: error))
         }
