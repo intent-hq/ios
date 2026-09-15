@@ -242,7 +242,7 @@ struct WorkspaceStatusIconView: View {
 }
 
 
-struct HalfCircle: Shape {
+nonisolated struct HalfCircle: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         path.addArc(center: CGPoint(x: rect.midX, y: rect.midY),
