@@ -122,10 +122,13 @@ actor WebSocketConnection {
     }
 
     /// Admission: a trusted pin selects `wss`; without one the connection is
-    /// refused (fail closed) unless the loopback test override applies.
+    /// refused (fail closed). Release builds have no other branch; DEBUG
+    /// builds honour the loopback-only test override.
     nonisolated static func transportScheme(host: String, certFingerprint: String?) throws -> String {
         if trustedPin(certFingerprint) != nil { return "wss" }
+        #if DEBUG
         if plaintextLoopbackOverrideActive, isLoopbackHost(host) { return "ws" }
+        #endif
         throw WebSocketTransportError.missingCertificatePin(host: host)
     }
 
