@@ -141,11 +141,15 @@ struct SubmittableTextView: UIViewRepresentable {
     /// Corner radius of the visionOS hover/highlight shape; defaults to the
     /// composer field's corners.
     var hoverCornerRadius: CGFloat = Constants.Conversation.Composer.fieldCornerRadius
+    /// VoiceOver label for the text view (UITextView has no placeholder to
+    /// announce, so a SwiftUI placeholder overlay does not label it).
+    var accessibilityLabel: String? = nil
 
     func makeUIView(context: Context) -> KeyCommandTextView {
         let textView = KeyCommandTextView()
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
+        textView.accessibilityLabel = accessibilityLabel
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
         #if os(visionOS)
@@ -180,6 +184,7 @@ struct SubmittableTextView: UIViewRepresentable {
 
         // Update onSubmit closure so it always captures current state
         textView.onSubmit = onSubmit
+        textView.accessibilityLabel = accessibilityLabel
 
         // Sync text from SwiftUI → UIKit (avoid cursor jump during editing)
         if textView.text != text {

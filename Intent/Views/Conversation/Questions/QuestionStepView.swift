@@ -146,6 +146,8 @@ struct QuestionStepView: View {
             }
     }
 
+    private static let freeTextPlaceholder = "Type your own answer…"
+
     /// One body line of the free-text field, measured with the font
     /// `SubmittableTextView` installs.
     static var freeTextLineHeight: CGFloat {
@@ -181,17 +183,19 @@ struct QuestionStepView: View {
                         freeTextHeight = Self.clampedFreeTextHeight(
                             height, lineHeight: Self.freeTextLineHeight)
                     },
-                    hoverCornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius
+                    hoverCornerRadius: Constants.Conversation.QuestionWizard.optionCornerRadius,
+                    accessibilityLabel: Self.freeTextPlaceholder
                 )
                 .frame(height: freeTextHeight)
                 // UITextView has no built-in placeholder; offset by the
                 // container inset plus UITextView's default lineFragmentPadding.
                 if freeText.isEmpty {
-                    Text("Type your own answer…")
+                    Text(Self.freeTextPlaceholder)
                         .font(.body)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .padding(.leading, Constants.Conversation.Composer.textContainerInset + 5)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: Constants.Accessibility.minimumTapTarget)
