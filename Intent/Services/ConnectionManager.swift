@@ -153,7 +153,8 @@ nonisolated enum InboundFrame: Sendable {
     /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
-    @ObservationIgnored private var heartbeatTask: Task<Void, Never>?
+    /// Read by tests as a completion barrier for a retired heartbeat.
+    @ObservationIgnored private(set) var heartbeatTask: Task<Void, Never>?
     /// Time source for the heartbeat cadence and probe deadline. Injectable
     /// so tests step the heartbeat deterministically; defaults to the
     /// monotonic `ContinuousClock` (never wall-clock `Date`, see ios#253).

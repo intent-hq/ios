@@ -2467,6 +2467,7 @@ struct ConnectionManagerTests {
         }
         #expect(clock.heldDurations == [ConnectionManager.heartbeatProbeTimeout])
         #expect(clock.pendingDurations.isEmpty)
+        let retiredHeartbeat = try #require(manager.heartbeatTask)
 
         try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
         #expect(manager.connectionState == .connected)
@@ -2474,9 +2475,10 @@ struct ConnectionManagerTests {
         clock.holdsCancelledSleepers = false
         try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
 
-        // A's success lands now, after B's adoption.
+        // A's success lands now, after B's adoption; join the retired
+        // heartbeat so its outcome has been processed before asserting.
         clock.releaseHeld(asCompleted: false)
-        try await Task.sleep(for: .milliseconds(100))
+        await retiredHeartbeat.value
         #expect(clock.heldDurations.isEmpty)
         #expect(disconnects.count == 0)
         #expect(manager.connectionState == .connected)
@@ -2522,6 +2524,7 @@ struct ConnectionManagerTests {
         #expect(manager.connectionState == .connected)
         let disconnects = DisconnectCounter(manager)
         try await Self.settle { clock.pendingDurations == [ConnectionManager.heartbeatInterval] }
+        let retiredHeartbeat = try #require(manager.heartbeatTask)
 
         // Drop the socket server-side while the cadence sleep is parked; the
         // teardown cancels the heartbeat, and the clock holds that wake back
@@ -2540,9 +2543,9 @@ struct ConnectionManagerTests {
         #expect(server.pingsReceived == 0)
 
         // The retired loop's sleep had completed before the cancellation:
-        // release it as such. It must do nothing.
+        // release it as such and join it. It must have done nothing.
         clock.releaseHeld(asCompleted: true)
-        try await Task.sleep(for: .milliseconds(100))
+        await retiredHeartbeat.value
         #expect(disconnects.count == 1)
         #expect(manager.connectionState == .connected)
         #expect(server.pingsReceived == 0)
