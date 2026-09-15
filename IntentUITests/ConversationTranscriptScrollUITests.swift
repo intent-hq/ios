@@ -77,6 +77,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // bottom of the 150+-message transcript; the loop exits as soon as
         // the first message is on screen.
         static let maxSwipesToTop = 150
+        // Walks of the visible band before an empty band is reported; rows
+        // (de)realizing between two queries can empty a single walk.
+        static let visibleBandAttempts = 3
     }
 
     /// The conversation's elements once the transcript has settled at the bottom.
@@ -300,7 +303,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// must show the last message inside the transcript at the very first
     /// settled sample, over a non-empty visible band, and must have reached
     /// the very end: the prompt rows under the last message — the
-    /// LazyVStack's final content rows — are realized and on screen too. A
+    /// transcript's final content rows — are laid out and on screen too. A
     /// transcript that rests on the last message with those rows never laid
     /// out is short of the end with Go to End hidden (the state the
     /// coordinator-shaped fixture reproduces on CI; intent-hq/ios#304).
@@ -468,14 +471,29 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     }
 
     /// The transcript's static-text rows whose frames intersect its own
-    /// frame: empty when the viewport rests over a blank band.
+    /// frame: empty when the viewport rests over a blank band. The hierarchy
+    /// is in flux while a cold entry (de)realizes rows, so each row is
+    /// re-resolved and skipped when it no longer exists rather than queried
+    /// from a stale index snapshot (`frame` on a vanished element fails the
+    /// test), and an empty walk is retried a few times.
     @MainActor
     private func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
-        let transcriptFrame = transcript.frame
-        return transcript.staticTexts.allElementsBoundByIndex.filter { row in
-            let frame = row.frame
-            return !frame.isEmpty && frame.intersects(transcriptFrame)
+        let rows = transcript.staticTexts
+        for _ in 0..<Fixture.visibleBandAttempts {
+            let transcriptFrame = transcript.frame
+            var intersecting: [XCUIElement] = []
+            for index in 0..<rows.count {
+                let row = rows.element(boundBy: index)
+                guard row.exists else { continue }
+                let frame = row.frame
+                if !frame.isEmpty && frame.intersects(transcriptFrame) {
+                    intersecting.append(row)
+                }
+            }
+            if !intersecting.isEmpty { return intersecting }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
         }
+        return []
     }
 
     /// Navigates back out of the transcript to the workspace list so the
