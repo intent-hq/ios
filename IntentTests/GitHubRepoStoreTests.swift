@@ -502,7 +502,78 @@ struct GitHubRepoStoreTests {
         #expect(fake.paramsForMethod("github.repos.list").count == 3)
     }
 
+    @Test func loadTaskStartingAfterInvalidateTouchesNothing() async throws {
+        let (store, fake) = await makeLoadedStore()
+        fake.clearRequestLog()
+        // The cached path spawns a silent refresh task and returns without
+        // suspending, so this invalidate() runs before that task's first
+        // line: the task must exit at entry instead of issuing reads.
+        await store.loadIfNeeded()
+        store.invalidate()
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        #expect(fake.requestLog.isEmpty)
+        #expect(store.isLoading == false)
+        #expect(store.hasLoaded == false)
+        #expect(store.hasCheckedAuth == false)
+        #expect(store.ownRepos.isEmpty)
+        #expect(store.recentRepos.isEmpty)
+
+        // The cache is not left in a stuck state: a fresh cold load runs.
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+        await store.loadIfNeeded()
+        #expect(store.hasLoaded)
+        #expect(store.isLoading == false)
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(fake.paramsForMethod("github.repos.list").count == 1)
+    }
+
     // MARK: - Reconnect
+
+    @Test func reconnectAfterFailedColdLoadClearsPartialCacheAndRetries() async throws {
+        let fake = FakeConnectionManager()
+        fake.errorMap["github.authStatus"] = NSError(domain: "t", code: -1)
+        fake.responseMap["repo.list"] = ["repos": [
+            ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+             "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
+        ]]
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict(name: "fresh")]]
+        let store = GitHubRepoStore(connectionManager: fake)
+        await store.loadIfNeeded()
+        // A failed cold load: recents landed, auth did not, nothing in flight.
+        #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo"])
+        #expect(store.hasLoaded == false)
+        #expect(store.lastError != nil)
+
+        fake.errorMap["github.authStatus"] = nil
+        fake.responseMap["github.authStatus"] = ["isConfigured": true]
+        fake.pendingMethods = ["github.authStatus", "repo.list"]
+        fake.clearRequestLog()
+
+        fake.simulateConnect()
+
+        // The reconnect still hard-clears the partial cache and retries.
+        try await waitFor("retry reads") {
+            fake.didCallMethod("github.authStatus") && fake.didCallMethod("repo.list")
+        }
+        #expect(store.recentRepos.isEmpty)
+        #expect(store.lastError == nil)
+        #expect(store.hasLoaded == false)
+        #expect(store.isLoading)
+
+        fake.resolvePending("github.authStatus", with: ["isConfigured": true])
+        fake.resolvePending("repo.list", with: ["repos": [
+            ["path": "/repos/monorepo", "name": "monorepo", "owner": "intent-hq",
+             "addedAt": "2026-08-01T10:00:00Z", "lastUsedAt": "2026-08-10T10:00:00Z"],
+        ]])
+        try await waitFor("retry completion") { store.hasLoaded }
+        #expect(store.hasCheckedAuth)
+        #expect(store.isConfigured)
+        #expect(store.ownRepos.map(\.name) == ["fresh"])
+        #expect(store.recentRepos.map(\.fullName) == ["intent-hq/monorepo"])
+        #expect(store.lastError == nil)
+        #expect(store.isLoading == false)
+    }
 
     @Test func reconnectHardClearsCacheThenReloadsCold() async throws {
         let (store, fake) = await makeLoadedStore()

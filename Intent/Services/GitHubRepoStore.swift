@@ -39,6 +39,10 @@ import Observation
     /// write after an await is dropped once it no longer matches, so a
     /// completion from before an invalidation cannot repopulate the cache.
     @ObservationIgnored private var loadGeneration = 0
+    /// True from the first `loadIfNeeded()` until `invalidate()`, whether
+    /// that load is in flight, succeeded or failed — a reconnect re-warms
+    /// only a cache the picker has asked for.
+    @ObservationIgnored private var hasAttemptedLoad = false
     @ObservationIgnored private var connectionObserver: AnyCancellable?
 
     /// Page size for `github.repos.search` (§5.27 default 50, max 200).
@@ -89,6 +93,7 @@ import Observation
     func invalidate() {
         loadGeneration &+= 1
         loadTask = nil
+        hasAttemptedLoad = false
         isLoading = false
         recentRepos = []
         ownRepos = []
@@ -101,6 +106,7 @@ import Observation
 
     /// Single-flight: a load already in flight is joined, not duplicated.
     private func startLoad(silent: Bool) {
+        hasAttemptedLoad = true
         guard loadTask == nil else { return }
         let generation = loadGeneration
         loadTask = Task { [weak self] in
@@ -111,6 +117,9 @@ import Observation
     }
 
     private func runLoad(silent: Bool, generation: Int) async {
+        // The task may first run after an invalidate() that superseded it:
+        // touch nothing (an `isLoading` set here would never be cleared).
+        guard generation == loadGeneration else { return }
         if !silent { isLoading = true }
         lastError = nil
         // Recents come from the daemon registry (no GitHub round-trip), so
@@ -137,10 +146,11 @@ import Observation
     /// A reconnect hard-clears the cache (the daemon may have changed
     /// underneath it) and reloads cold, so stale lists never stay visible
     /// across a connection flap and a pre-reconnect load is neither joined
-    /// nor applied. With nothing cached or in flight there is nothing to
+    /// nor applied. A failed load counts too (its recents and error are
+    /// stale as well). With no load ever requested there is nothing to
     /// re-warm until the picker asks.
     private func onConnected() async {
-        guard hasLoaded || loadTask != nil else { return }
+        guard hasAttemptedLoad else { return }
         invalidate()
         await loadIfNeeded()
     }
