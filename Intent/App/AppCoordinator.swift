@@ -47,6 +47,12 @@ class AppCoordinator {
     /// cold-start connect) restarts the attempt — SwiftUI would otherwise
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
+    /// Bumped by every onSelectAgent so a selection is observable even when
+    /// currentScreen does not change. On iPad, popping the conversation can
+    /// leave the view's isPresented binding stale and currentScreen on the
+    /// same .agentConversation; re-tapping that agent would otherwise be a
+    /// no-op because nothing the view observes changed.
+    private(set) var conversationRequestId = 0
     @ObservationIgnored private var hasEverConnected = false
     @ObservationIgnored private var hasLoadCompleted = false
     /// Pair payload from a URL that arrived before onLoadComplete (cold
@@ -803,6 +809,7 @@ class AppCoordinator {
         suppressWorkspaceNavigation = true
         selectedWorkspaceId = workspaceId
         suppressWorkspaceNavigation = false
+        conversationRequestId += 1
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
         // Save per-workspace sub-screen

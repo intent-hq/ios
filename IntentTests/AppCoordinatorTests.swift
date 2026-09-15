@@ -1809,6 +1809,85 @@ final class AppCoordinatorTests {
                 "Repeated onBackToWorkspaceDetail should still clear the per-workspace screen")
     }
 
+    // MARK: - Same-agent re-selection (iPad)
+
+    @Test @MainActor func onSelectAgent_bumpsConversationRequestId_afterBackAndReselect() {
+        // Regression: on iPad, popping the conversation can leave the view's
+        // isPresented binding stale, so the coordinator stayed on
+        // .agentConversation(A). Re-tapping A then produced no observable state
+        // change and nothing was pushed (tapping B first worked because the
+        // screen value changed). Every selection must be observable on its own.
+        let wsId = "test-coord-reselect-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        let initial = coordinator.conversationRequestId
+
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+        let afterFirst = coordinator.conversationRequestId
+        #expect(afterFirst != initial, "Selecting an agent must issue a navigation request")
+
+        coordinator.onBackToWorkspaceDetail()
+        #expect(coordinator.conversationRequestId == afterFirst, "Going back is not a conversation request")
+
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+        #expect(coordinator.conversationRequestId != afterFirst,
+                "Re-selecting the same agent after going back must issue a new navigation request")
+        if case .agentConversation(let agentId, let wId, _) = coordinator.currentScreen {
+            #expect(agentId == "agent-1")
+            #expect(wId == wsId)
+        } else {
+            Issue.record("Expected .agentConversation after re-selecting, got \(coordinator.currentScreen)")
+        }
+    }
+
+    @Test @MainActor func onSelectAgent_sameAgentWhileScreenUnchanged_stillBumpsConversationRequestId() {
+        // The stale-pop case: the coordinator never left .agentConversation(A)
+        // because the view failed to report the pop. The screen value does not
+        // change on re-select, so the request id is the only signal the view has.
+        let wsId = "test-coord-reselect-stale-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let coordinator = AppCoordinator(persistence: persistence)
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+        let before = coordinator.conversationRequestId
+        let screenBefore = coordinator.currentScreenDescription
+
+        coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
+
+        #expect(coordinator.currentScreenDescription == screenBefore,
+                "Same-target select leaves the screen value unchanged")
+        #expect(coordinator.conversationRequestId != before,
+                "Same-target select must still be observable through the request id")
+    }
+
+    @Test @MainActor func needsConversationRepush_trueForNewRequestOnRegularWidth() {
+        // iPad: a fresh request for the agent already recorded as shown must
+        // tear down and re-push, since the isPresented binding may be stale.
+        #expect(RootView.needsConversationRepush(agentChanged: false, isNewRequest: true, isRegularWidth: true))
+    }
+
+    @Test @MainActor func needsConversationRepush_trueForAgentChangeOnRegularWidth() {
+        // The pre-existing iPad rebuild-race branch must keep firing.
+        #expect(RootView.needsConversationRepush(agentChanged: true, isNewRequest: false, isRegularWidth: true))
+    }
+
+    @Test @MainActor func needsConversationRepush_falseWhenNothingChanged() {
+        #expect(!RootView.needsConversationRepush(agentChanged: false, isNewRequest: false, isRegularWidth: true))
+    }
+
+    @Test @MainActor func needsConversationRepush_falseOnCompactWidth() {
+        // iPhone pops reliably reset the binding; never tear down there.
+        #expect(!RootView.needsConversationRepush(agentChanged: true, isNewRequest: true, isRegularWidth: false))
+        #expect(!RootView.needsConversationRepush(agentChanged: false, isNewRequest: true, isRegularWidth: false))
+    }
+
     // MARK: - Fetch-driven workspace validation (lastUpdated race)
 
     private static func makeWorkspace(id: String, status: String? = nil,

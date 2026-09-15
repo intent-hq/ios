@@ -34,6 +34,9 @@ extension RootView {
         .onChange(of: coordinator.currentScreenDescription) {
             syncNavigationState()
         }
+        .onChange(of: coordinator.conversationRequestId) {
+            syncNavigationState()
+        }
         .onChange(of: showingWorkspaceDetail) { _, newValue in
             if newValue {
                 if pendingConversationPush {
@@ -74,6 +77,8 @@ extension RootView {
     func syncNavigationState() {
         if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
             let agentChanged = conversationAgentId != agentId
+            let isNewRequest = handledConversationRequestId != coordinator.conversationRequestId
+            handledConversationRequestId = coordinator.conversationRequestId
             conversationAgentId = agentId
             conversationWorkspaceId = workspaceId
             conversationAgentName = agentName
@@ -85,12 +90,19 @@ extension RootView {
                 pendingConversationPush = true
             } else if !showingConversation {
                 showingConversation = true
-            } else if agentChanged && sizeClass == .regular {
+            } else if RootView.needsConversationRepush(
+                agentChanged: agentChanged,
+                isNewRequest: isNewRequest,
+                isRegularWidth: sizeClass == .regular
+            ) {
                 // iPad NavigationStack rebuild race: when the workspace detail is
                 // rebuilt (different workspace) but showingConversation is still
                 // true, SwiftUI may not push the new conversation. Tear down
                 // first, then re-push on the next runloop tick so the rebuilt
                 // NavigationStack accepts the new destination.
+                // The same tear-down/re-push serves a same-agent re-select: a
+                // user pop can leave showingConversation stale at true, so the
+                // conversation is not on screen even though the state says so.
                 programmaticConversationDismiss = true
                 showingConversation = false
                 let pendingAgentId = agentId
@@ -158,6 +170,21 @@ extension RootView {
             if showingNoteDetail { showingNoteDetail = false }
             if !noteStack.isEmpty { noteStack = NavigationPath() }
         }
+    }
+
+    /// Whether `syncNavigationState()` must tear down and re-push a conversation
+    /// that `showingConversation` already reports as shown. Only on regular
+    /// width (iPad), where the NavigationStack may not honour a still-true
+    /// isPresented binding: after a workspace-detail rebuild with a different
+    /// agent, or when the user re-selects the agent recorded as shown (the
+    /// binding can stay true after a pop, so nothing is actually on screen).
+    /// Compact width pops reset the binding reliably, so it never tears down.
+    static func needsConversationRepush(
+        agentChanged: Bool,
+        isNewRequest: Bool,
+        isRegularWidth: Bool
+    ) -> Bool {
+        isRegularWidth && (agentChanged || isNewRequest)
     }
 
     /// Guard for the deferred iPad conversation re-push scheduled by the
