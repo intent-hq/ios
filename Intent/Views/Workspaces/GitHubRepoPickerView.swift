@@ -12,6 +12,8 @@ import SwiftUI
 ///
 /// `store` is the session-owned cache: on a reopen the cached lists render
 /// immediately (no spinner) while `loadIfNeeded` revalidates silently.
+/// Search state stays per-picker (the store is shared by every picker on
+/// the session, so one picker's search must not surface in another).
 struct GitHubRepoPickerView: View {
     var store: GitHubRepoStore
     @Binding var selectedRepo: GitHubRepo?
@@ -20,8 +22,9 @@ struct GitHubRepoPickerView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var searchText = ""
-    /// The trimmed query the current `store.searchResults` answer; nil until
-    /// a search completes, so stale results never surface.
+    @State private var searchResults: [GitHubRepo] = []
+    /// The trimmed query the current `searchResults` answer; nil until a
+    /// search completes, so stale results never surface.
     @State private var completedSearchQuery: String?
     /// The qualifying query currently in its debounce or remote-search phase.
     @State private var pendingSearchQuery: String?
@@ -31,7 +34,7 @@ struct GitHubRepoPickerView: View {
         GitHubRepoSuggestions.merged(
             recentRepos: store.recentRepos,
             ownRepos: store.ownRepos,
-            searchResults: store.searchResults,
+            searchResults: searchResults,
             searchQuery: completedSearchQuery,
             currentQuery: searchText
         )
@@ -42,8 +45,14 @@ struct GitHubRepoPickerView: View {
             Theme.background(for: colorScheme).ignoresSafeArea()
 
             if !store.hasCheckedAuth {
-                ProgressView("Checking GitHub connection...")
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                if store.lastError != nil {
+                    // The cold auth read itself failed: surface the error
+                    // rather than not-connected guidance or an endless spinner.
+                    emptyState
+                } else {
+                    ProgressView("Checking GitHub connection...")
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
             } else if !store.isConfigured {
                 notConnectedPlaceholder
             } else {
@@ -51,9 +60,6 @@ struct GitHubRepoPickerView: View {
             }
         }
         .task {
-            // Search results are per-view: drop any left by a previous sheet
-            // before the cached lists (or a cold load) render.
-            store.searchResults = []
             await store.loadIfNeeded()
         }
         .onChange(of: searchText) { _, newValue in
@@ -172,7 +178,7 @@ struct GitHubRepoPickerView: View {
         guard query.count >= GitHubRepoSuggestions.minSearchQueryLength else {
             pendingSearchQuery = nil
             completedSearchQuery = nil
-            store.searchResults = []
+            searchResults = []
             return
         }
         pendingSearchQuery = query
@@ -185,7 +191,7 @@ struct GitHubRepoPickerView: View {
             // overwrite a newer one's results.
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
             if let results {
-                store.searchResults = results
+                searchResults = results
                 completedSearchQuery = query
             }
             pendingSearchQuery = nil

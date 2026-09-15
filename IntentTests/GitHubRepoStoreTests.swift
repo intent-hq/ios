@@ -103,13 +103,18 @@ struct GitHubRepoStoreTests {
         #expect(fake.didCallMethod("github.authStatus"))
     }
 
-    @Test func fetchAuthStatusErrorLeavesUnconfigured() async {
+    @Test func fetchAuthStatusErrorReturnsNilAndKeepsIsConfigured() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        fake.errorMap["github.authStatus"] = NSError(domain: "t", code: -1)
+        store.isConfigured = true
+        fake.errorMap["github.authStatus"] = NSError(
+            domain: "t", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "socket closed"]
+        )
         let configured = await store.fetchAuthStatus()
-        #expect(configured == false)
-        #expect(store.isConfigured == false)
+        #expect(configured == nil)
+        #expect(store.isConfigured == true)
+        #expect(store.lastError == "socket closed")
     }
 
     // MARK: - fetchRecentRepos
@@ -225,17 +230,22 @@ struct GitHubRepoStoreTests {
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
-    @Test func searchReposDoesNotAssignPublishedResults() async {
-        // The debounced caller publishes results itself after its
-        // cancellation check, so an out-of-order older response can't
-        // overwrite a newer one's published results.
-        let fake = FakeConnectionManager()
-        let store = GitHubRepoStore(connectionManager: fake)
-        let existing = GitHubRepo.parseRepo(makeRepoDict())!
-        store.searchResults = [existing]
-        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "other")]]
-        _ = await store.searchRepos(query: "other")
-        #expect(store.searchResults == [existing])
+    @Test func searchReposReturnsPerCallerResultsWithoutTouchingSharedLists() async {
+        // The store is shared by every picker on the session, so search
+        // results are returned to the caller (per-view state) and never
+        // stored: two pickers searching different queries each get their
+        // own answer and the cached lists stay untouched.
+        let (store, fake) = await makeLoadedStore()
+        let cachedRecents = store.recentRepos
+        let cachedOwn = store.ownRepos
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "alpha")]]
+        let first = await store.searchRepos(query: "alpha")
+        fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "beta")]]
+        let second = await store.searchRepos(query: "beta")
+        #expect(first?.map(\.name) == ["alpha"])
+        #expect(second?.map(\.name) == ["beta"])
+        #expect(store.recentRepos == cachedRecents)
+        #expect(store.ownRepos == cachedOwn)
     }
 
     @Test func searchReposErrorSetsLastErrorAndReturnsNil() async {
@@ -368,15 +378,78 @@ struct GitHubRepoStoreTests {
         #expect(fake.paramsForMethod("github.repos.list").count == 2)
     }
 
+    @Test func coldAuthErrorIsNotLoadedAndKeepsAuthUnknown() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["github.authStatus"] = NSError(
+            domain: "t", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "socket closed"]
+        )
+        fake.responseMap["repo.list"] = ["repos": []]
+        fake.responseMap["github.repos.list"] = ["repos": [makeRepoDict()]]
+        let store = GitHubRepoStore(connectionManager: fake)
+
+        await store.loadIfNeeded()
+
+        // Auth is unknown, not "not configured": the picker must not show
+        // not-connected guidance, and the load is not treated as complete.
+        #expect(store.hasCheckedAuth == false)
+        #expect(store.isConfigured == false)
+        #expect(store.hasLoaded == false)
+        #expect(store.lastLoadedAt == nil)
+        #expect(store.lastError == "socket closed")
+        #expect(store.isLoading == false)
+        #expect(fake.didCallMethod("github.repos.list") == false)
+
+        // The next call retries as a cold load.
+        fake.errorMap.removeValue(forKey: "github.authStatus")
+        fake.responseMap["github.authStatus"] = ["isConfigured": true]
+        await store.loadIfNeeded()
+        #expect(store.hasCheckedAuth)
+        #expect(store.isConfigured)
+        #expect(store.hasLoaded)
+        #expect(store.lastError == nil)
+        #expect(store.ownRepos.count == 1)
+    }
+
+    @Test func cachedAuthErrorOnRefreshKeepsConnectedCache() async throws {
+        let (store, fake) = await makeLoadedStore()
+        let cachedRecents = store.recentRepos
+        let cachedOwn = store.ownRepos
+        fake.errorMap["github.authStatus"] = NSError(
+            domain: "t", code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "socket closed"]
+        )
+        fake.clearRequestLog()
+
+        await store.loadIfNeeded(force: true)
+
+        // A transport failure on the auth read must not flip the cached
+        // picker to not-connected guidance or drop its lists.
+        #expect(store.isConfigured == true)
+        #expect(store.hasCheckedAuth)
+        #expect(store.hasLoaded)
+        #expect(store.recentRepos == cachedRecents)
+        #expect(store.ownRepos == cachedOwn)
+        #expect(store.lastError == "socket closed")
+        #expect(store.isLoading == false)
+        #expect(fake.didCallMethod("github.repos.list") == false)
+
+        // The same holds for the silent revalidation on a cached reopen.
+        fake.clearRequestLog()
+        await store.loadIfNeeded()
+        try await waitFor { fake.didCallMethod("github.authStatus") }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.isConfigured == true)
+        #expect(store.ownRepos == cachedOwn)
+    }
+
     @Test func invalidateEmptiesListsAndResetsHasLoaded() async {
         let (store, _) = await makeLoadedStore()
-        store.searchResults = [GitHubRepo.parseRepo(makeRepoDict(name: "s"))!]
 
         store.invalidate()
 
         #expect(store.recentRepos.isEmpty)
         #expect(store.ownRepos.isEmpty)
-        #expect(store.searchResults.isEmpty)
         #expect(store.isConfigured == false)
         #expect(store.hasCheckedAuth == false)
         #expect(store.hasLoaded == false)

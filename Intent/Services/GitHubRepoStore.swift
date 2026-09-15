@@ -19,13 +19,13 @@ import Observation
     var isConfigured = false
     var recentRepos: [GitHubRepo] = []
     var ownRepos: [GitHubRepo] = []
-    var searchResults: [GitHubRepo] = []
     /// True only while a cold (uncached) load is in flight, or during a
     /// search; background revalidation never sets it.
     var isLoading = false
     var lastError: String?
-    /// True once the first `github.authStatus` read of a load completed, so
-    /// the picker doesn't flash not-connected guidance while auth is unknown.
+    /// True once a `github.authStatus` read succeeded, so the picker doesn't
+    /// flash not-connected guidance while auth is unknown; a transport error
+    /// never sets it (nor clears a cached value).
     private(set) var hasCheckedAuth = false
     /// True once a load completed without a transport error; a failed load
     /// leaves it false so the next `loadIfNeeded()` retries as a cold load
@@ -82,7 +82,6 @@ import Observation
     func invalidate() {
         recentRepos = []
         ownRepos = []
-        searchResults = []
         isConfigured = false
         lastError = nil
         hasCheckedAuth = false
@@ -101,13 +100,16 @@ import Observation
 
     private func runLoad(silent: Bool) async {
         if !silent { isLoading = true }
+        lastError = nil
         // Recents come from the daemon registry (no GitHub round-trip), so
         // fetch them concurrently with the auth-gated GitHub list.
         async let recents: Void = fetchRecentRepos()
         let configured = await fetchAuthStatus()
-        hasCheckedAuth = true
-        var succeeded = true
-        if configured {
+        // A transport error on the auth read fails the load: cached auth and
+        // lists stay as they were, and a cold load is retried next time.
+        var succeeded = configured != nil
+        if configured != nil { hasCheckedAuth = true }
+        if configured == true {
             succeeded = await fetchOwnRepos()
         }
         await recents
@@ -128,9 +130,11 @@ import Observation
     // MARK: - Auth
 
     /// `github.authStatus` — the picker only needs `isConfigured`.
-    /// Returns the fetched value; errors leave `isConfigured` false.
+    /// Returns the fetched value, or nil on transport error — which leaves
+    /// `isConfigured` untouched so a failed background refresh cannot turn a
+    /// cached, connected picker into not-connected guidance.
     @discardableResult
-    func fetchAuthStatus() async -> Bool {
+    func fetchAuthStatus() async -> Bool? {
         do {
             let result = try await connectionManager.request("github.authStatus")
             let configured = (result as? [String: Any])?["isConfigured"] as? Bool ?? false
@@ -138,8 +142,8 @@ import Observation
             return configured
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.authStatus failed: \(error)")
-            isConfigured = false
-            return false
+            lastError = error.localizedDescription
+            return nil
         }
     }
 
@@ -186,8 +190,9 @@ import Observation
 
     /// `github.repos.search` — one page of global repo search, with the
     /// FE-parity query rewrite (`owner/name` → `name user:owner`). Returns
-    /// the parsed results instead of assigning `searchResults`, so the
-    /// debounced caller can publish results and the query they answer
+    /// the parsed results rather than storing them: search results are
+    /// per-picker view state (this store is shared session-wide), and the
+    /// debounced caller publishes results and the query they answer
     /// together after its own cancellation check (out-of-order responses
     /// would otherwise let an older request overwrite a newer one's
     /// results). Returns nil on error.
