@@ -254,6 +254,35 @@ struct NoteStoreIntegrationTests {
         }
     }
 
+    @Test func cancelledFetchNoteIgnoresLateNotFound() async throws {
+        let fake = FakeConnectionManager()
+        let store = NoteStore(connectionManager: fake)
+        fake.pendingMethods.insert("note.get")
+
+        let fetch = Task { await store.fetchNote(noteId: "note-1", workspaceId: "ws-1") }
+        for _ in 0..<40 {
+            if fake.didCallMethod("note.get") { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        #expect(fake.didCallMethod("note.get"))
+
+        // The consuming task is cancelled (screen dismissed) and the daemon's
+        // not-found answer resumes the request in the same MainActor turn,
+        // before the transport's cancellation cleanup task runs (ios#250).
+        fetch.cancel()
+        fake.failPending("note.get", with: NSError(
+            domain: "WebSocket", code: -32602,
+            userInfo: [NSLocalizedDescriptionKey: "not found (-32602)",
+                       NSError.intentErrorDataCodeKey: "not-found"]))
+
+        let result = await fetch.value
+        if case .transientError = result {
+            // pass
+        } else {
+            Issue.record("A not-found racing cancellation must not report .notFound, got \(result)")
+        }
+    }
+
     @Test func fetchNoteTransientOnBare32602() async {
         let fake = FakeConnectionManager()
         let store = NoteStore(connectionManager: fake)

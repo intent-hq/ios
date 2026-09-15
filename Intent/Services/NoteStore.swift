@@ -296,7 +296,10 @@ import Observation
             // Cancelled fetch: nothing to publish, nothing to log.
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
-            return .notFound
+            // A not-found that races the caller's cancellation (the response
+            // resumed the request before the transport's cancellation cleanup
+            // ran) must not navigate a dismissed screen away.
+            return Task.isCancelled ? .transientError : .notFound
         } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
