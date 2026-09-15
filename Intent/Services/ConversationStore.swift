@@ -777,15 +777,17 @@ import SwiftUI
     }
 
     private func handleQueueUpdated(_ data: [String: Any]) {
-        // Try to use queue data from the event directly (avoids extra round-trip)
-        if let queueItems = data["queue"] as? [[String: Any]] {
-            if let jsonData = try? JSONSerialization.data(withJSONObject: queueItems),
-               let parsed = try? JSONDecoder().decode([QueuedMessage].self, from: jsonData) {
-                queuedMessages = parsed
-                return
-            }
+        // Use the event's queue snapshot directly (avoids an extra round-trip).
+        // Decoding is element-tolerant: one malformed entry drops only itself,
+        // never its valid siblings.
+        if let parsed = ConversationCommands.decodeQueueSnapshot(
+            data["queue"], source: "agent:queue:updated") {
+            queuedMessages = parsed
+            return
         }
-        // Fallback: re-fetch the queue
+        // Malformed envelope (no `queue` array): re-fetch the authoritative
+        // snapshot rather than guessing; `fetchQueue` keeps the previous state
+        // if that response is malformed too.
         if let agentId = agentId {
             Task { await fetchQueue(agentId: agentId) }
         }
