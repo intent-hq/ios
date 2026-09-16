@@ -174,6 +174,17 @@ nonisolated enum InboundFrame: Sendable {
     /// The last path the current monitor reported (nil until its first
     /// report); see `handlePathUpdate` for how the first report is read.
     @ObservationIgnored private var lastPathSnapshot: NetworkPathSnapshot?
+    /// Reads the path the live socket was established on, the baseline the
+    /// monitor's reports are checked against (ios#328). Injectable because
+    /// the loopback test server yields `lo0`, which seeds nothing; defaults
+    /// to the transport's `establishedPath`.
+    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> NetworkPathSnapshot? = {
+        $0.establishedPath
+    }
+    /// The physical interface under the live socket (`en0`, `pdp_ip0`), nil
+    /// when the socket runs over loopback or a virtual interface; set with
+    /// the monitor and cleared with it.
+    @ObservationIgnored private var socketInterface: String?
     @ObservationIgnored private var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored private var lastReconnectAttempt = 0
     /// One liveness probe (websocket ping) per interval.
@@ -1369,6 +1380,9 @@ nonisolated enum InboundFrame: Sendable {
         stopPathMonitor()
         pathMonitorID += 1
         let monitorID = pathMonitorID
+        if let socket, let path = readSocketPath(socket), path.isOnPhysicalInterface {
+            socketInterface = path.primaryInterface
+        }
         let monitor = makePathMonitor()
         pathMonitor = monitor
         monitor.start { [weak self] snapshot in
@@ -1380,6 +1394,7 @@ nonisolated enum InboundFrame: Sendable {
         pathMonitor?.cancel()
         pathMonitor = nil
         lastPathSnapshot = nil
+        socketInterface = nil
     }
 
     /// The first report describes the path the socket was established on:
@@ -1483,16 +1498,36 @@ nonisolated struct NetworkPathSnapshot: Equatable, Sendable {
     /// Name of the interface the path currently prefers (`en0`, `pdp_ip0`),
     /// nil when the path has none.
     let primaryInterface: String?
+    /// Names of every interface the path can use, `primaryInterface` first.
+    let availableInterfaces: [String]
+    /// Whether `primaryInterface` is a physical link the system path monitor
+    /// reports — Wi-Fi, cellular or wired — rather than loopback or a virtual
+    /// (VPN, tunnel forwarder) interface (ios#328).
+    let isOnPhysicalInterface: Bool
 
-    init(isSatisfied: Bool, primaryInterface: String?) {
+    init(
+        isSatisfied: Bool, primaryInterface: String?,
+        availableInterfaces: [String]? = nil, isOnPhysicalInterface: Bool? = nil
+    ) {
         self.isSatisfied = isSatisfied
         self.primaryInterface = primaryInterface
+        self.availableInterfaces = availableInterfaces ?? [primaryInterface].compactMap { $0 }
+        self.isOnPhysicalInterface = isOnPhysicalInterface ?? (primaryInterface != nil)
     }
 
     init(_ path: NWPath) {
+        let interfaces = path.availableInterfaces
+        let isPhysical: Bool
+        switch interfaces.first?.type {
+        case .wifi, .cellular, .wiredEthernet: isPhysical = true
+        case .loopback, .other, nil: isPhysical = false
+        @unknown default: isPhysical = false
+        }
         self.init(
             isSatisfied: path.status == .satisfied,
-            primaryInterface: path.availableInterfaces.first?.name)
+            primaryInterface: interfaces.first?.name,
+            availableInterfaces: interfaces.map(\.name),
+            isOnPhysicalInterface: isPhysical)
     }
 }
 

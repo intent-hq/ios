@@ -2819,5 +2819,107 @@ struct ConnectionManagerTests {
         #expect(manager.connectionState == .disconnected)
         #expect(disconnects.count == 0)
     }
+
+    // MARK: - Socket-path baseline (ios#328)
+
+    /// A satisfied path whose preferred interface is a VPN tunnel that still
+    /// carries Wi-Fi underneath; the monitor lists `en0` but not first.
+    private static let vpnOverWifiPath = NetworkPathSnapshot(
+        isSatisfied: true, primaryInterface: "utun3", availableInterfaces: ["utun3", "en0"])
+    private static let vpnOverCellularPath = NetworkPathSnapshot(
+        isSatisfied: true, primaryInterface: "utun3", availableInterfaces: ["utun3", "pdp_ip0"])
+
+    /// ios#328: the monitor starts after the handshake and reports
+    /// asynchronously, so a Wi-Fi → cellular switch can land before its first
+    /// report. The baseline is the socket's own interface, not that report: a
+    /// first report that no longer lists it reconnects at once. A report that
+    /// still lists it — even behind a VPN's preferred interface — is inert,
+    /// and a later report that drops it (with the preferred interface
+    /// unchanged) is again a dead path.
+    @Test @MainActor func interfaceSwitchBeforeFirstReportReconnectsImmediately() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        let originalReadSocketPath = manager.readSocketPath
+        manager.makePathMonitor = { monitors.make() }
+        manager.readSocketPath = { _ in Self.wifiPath }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            manager.readSocketPath = originalReadSocketPath
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.cellularPath)
+        #expect(Self.isReconnecting(manager.connectionState))
+        #expect(disconnects.count == 1)
+        #expect(monitor.cancelCount == 1)
+
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        let replacement = try #require(monitors.monitors.last)
+        #expect(monitors.monitors.count == 2)
+
+        replacement.report(Self.vpnOverWifiPath)
+        replacement.report(Self.vpnOverWifiPath)
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+        #expect(replacement.cancelCount == 0)
+
+        replacement.report(Self.vpnOverCellularPath)
+        #expect(Self.isReconnecting(manager.connectionState))
+        #expect(disconnects.count == 2)
+        #expect(replacement.cancelCount == 1)
+
+        // Second flap within the stable threshold: attempt 3 backs off 2 s.
+        try await Self.settle(timeout: .seconds(6)) { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        #expect(monitors.monitors.count == 3)
+    }
+
+    /// A socket over loopback (the Tailcat tunnel forwarder, this test
+    /// server) or a virtual interface says nothing about the physical link,
+    /// so it seeds no baseline: the monitor's first report is the baseline,
+    /// whatever interface it names.
+    @Test @MainActor func virtualSocketPathSeedsNoBaseline() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        let originalReadSocketPath = manager.readSocketPath
+        manager.makePathMonitor = { monitors.make() }
+        manager.readSocketPath = { _ in
+            NetworkPathSnapshot(isSatisfied: true, primaryInterface: "lo0", isOnPhysicalInterface: false)
+        }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            manager.readSocketPath = originalReadSocketPath
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.cellularPath)
+        monitor.report(Self.cellularPath)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 0)
+        #expect(monitor.cancelCount == 0)
+        #expect(monitors.monitors.count == 1)
+    }
 }
 

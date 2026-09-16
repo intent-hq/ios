@@ -65,6 +65,11 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
 /// below — the SHA-256 certificate fingerprint is the sole trust decision.
 actor WebSocketConnection {
     nonisolated let host: String
+    /// The path the socket was established on, read from the connection at
+    /// handshake completion (nil when the transport reported none). The
+    /// connection is bound to that interface for its lifetime, so this is the
+    /// baseline the path monitor compares against (ios#328).
+    nonisolated let establishedPath: NetworkPathSnapshot?
 
     private let connection: NWConnection
     private let queue: DispatchQueue
@@ -78,12 +83,14 @@ actor WebSocketConnection {
         host: String,
         connection: NWConnection,
         queue: DispatchQueue,
-        didOpen: OSAllocatedUnfairLock<Bool>
+        didOpen: OSAllocatedUnfairLock<Bool>,
+        establishedPath: NetworkPathSnapshot?
     ) {
         self.host = host
         self.connection = connection
         self.queue = queue
         self.didOpen = didOpen
+        self.establishedPath = establishedPath
     }
 
     deinit {
@@ -263,9 +270,6 @@ actor WebSocketConnection {
                 break
             }
         }
-        let connection = WebSocketConnection(
-            host: host, connection: nwConnection, queue: queue, didOpen: didOpen)
-
         do {
             try await withTaskCancellationHandler {
                 nwConnection.start(queue: queue)
@@ -294,7 +298,9 @@ actor WebSocketConnection {
                 Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             }
             try Task.checkCancellation()
-            return connection
+            return WebSocketConnection(
+                host: host, connection: nwConnection, queue: queue, didOpen: didOpen,
+                establishedPath: nwConnection.currentPath.map { NetworkPathSnapshot($0) })
         } catch {
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             if let fingerprint = mismatchFingerprint.withLock({ $0 }) {
