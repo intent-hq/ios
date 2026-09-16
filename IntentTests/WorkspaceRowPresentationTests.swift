@@ -238,6 +238,44 @@ struct WorkspaceRowPresentationTests {
             == "Idle, Active agent")
     }
 
+    @Test(arguments: [ColorScheme.light, .dark])
+    func sidebarSelectionBackgroundIsNeutralGreyOnlyWhenSelected(scheme: ColorScheme) throws {
+        #expect(WorkspaceListSidebar.rowSelectionBackground(
+            isSelected: false, colorScheme: scheme) == .clear)
+
+        let selected = try rgba(WorkspaceListSidebar.rowSelectionBackground(
+            isSelected: true, colorScheme: scheme))
+        let sidebar = try rgba(Theme.sidebar(for: scheme))
+        let neutralTolerance: CGFloat = 0.05
+        let minimumLuminanceGap: CGFloat = 0.05
+
+        #expect(selected.alpha == 1)
+        #expect(abs(selected.red - selected.green) < neutralTolerance)
+        #expect(abs(selected.blue - selected.green) < neutralTolerance)
+        if scheme == .light {
+            #expect(sidebar.luminance - selected.luminance > minimumLuminanceGap)
+        } else {
+            #expect(selected.luminance - sidebar.luminance > minimumLuminanceGap)
+        }
+    }
+
+    private struct RGBA {
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+        var luminance: CGFloat { 0.2126 * red + 0.7152 * green + 0.0722 * blue }
+    }
+
+    private func rgba(_ color: Color) throws -> RGBA {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        try #require(UIColor(color).getRed(&red, green: &green, blue: &blue, alpha: &alpha))
+        return RGBA(red: red, green: green, blue: blue, alpha: alpha)
+    }
+
     private func makeWorkspace(
         title: String = "Workspace",
         repositoryName: String? = nil,

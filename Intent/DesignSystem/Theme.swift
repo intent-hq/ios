@@ -18,6 +18,10 @@ struct Theme {
         resolvedColor(UIColor(resource: .themeSidebar), for: scheme)
     }
 
+    static func sidebarSelection(for scheme: ColorScheme) -> Color {
+        resolvedColor(UIColor(resource: .themeSidebarSelection), for: scheme)
+    }
+
     static func primary(for scheme: ColorScheme) -> Color {
         resolvedColor(UIColor(resource: .themePrimary), for: scheme)
     }
