@@ -642,8 +642,20 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// answer is always the initial load (delaying it only shows the
     /// loading spinner longer); the late hydration is the content-change
     /// path the fixture can stage after the follow has landed.
+    ///
+    /// Skipped unless `INTENT_UITEST_BLOCK_HYDRATION=1`: the row cannot be
+    /// expanded from the resting end position on the CI simulator. Opening
+    /// the last text message, the copy context-menu overlay claims the tap
+    /// (intent-hq/ios#344; CI run 35103923565); as a tool-only message right
+    /// before it, the row rests under the navigation bar (frame y ≈ 49 in a
+    /// transcript whose frame starts at 0; runs 35107741728, 35108439891,
+    /// 35108448945, 35108458017), so the tap never reaches it either.
     @MainActor
     func testLateBlockHydrationNearEndAfterEntryKeepsLastMessageOnScreen() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_BLOCK_HYDRATION"] == "1",
+            "the slim tool row cannot be tapped from the resting end position: intent-hq/ios#344 "
+                + "(overlay) with leading rows, under the navigation bar with standalone rows")
         let app = launchDemoApp(standaloneSlimToolRows: true)
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         for cycle in 1...Fixture.entryCycles {
