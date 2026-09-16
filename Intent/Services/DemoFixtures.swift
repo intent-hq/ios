@@ -35,19 +35,19 @@ enum DemoMode {
 enum DemoFixtures {
     // Numeric values below are intentional status-image fixture geometry and color data.
     // swiftlint:disable no_magic_numbers number_separator
-    private static let statusImageSize = CGSize(width: 640, height: 360)
-    private static let statusImageRowCount = 5
-    private static let statusImageRowStartY: CGFloat = 48
-    private static let statusImageRowStride: CGFloat = 60
-    private static let statusImageRowX: CGFloat = 32
-    private static let statusImageRowWidth: CGFloat = 576
-    private static let statusImageRowHeight: CGFloat = 44
-    private static let statusImageRowCornerRadius: CGFloat = 10
-    private static let statusImageToggleX: CGFloat = 548
-    private static let statusImageToggleYOffset: CGFloat = 10
-    private static let statusImageToggleWidth: CGFloat = 44
-    private static let statusImageToggleHeight: CGFloat = 24
-    private static let statusImageToggleCornerRadius: CGFloat = 12
+    nonisolated private static let statusImageSize = CGSize(width: 640, height: 360)
+    nonisolated private static let statusImageRowCount = 5
+    nonisolated private static let statusImageRowStartY: CGFloat = 48
+    nonisolated private static let statusImageRowStride: CGFloat = 60
+    nonisolated private static let statusImageRowX: CGFloat = 32
+    nonisolated private static let statusImageRowWidth: CGFloat = 576
+    nonisolated private static let statusImageRowHeight: CGFloat = 44
+    nonisolated private static let statusImageRowCornerRadius: CGFloat = 10
+    nonisolated private static let statusImageToggleX: CGFloat = 548
+    nonisolated private static let statusImageToggleYOffset: CGFloat = 10
+    nonisolated private static let statusImageToggleWidth: CGFloat = 44
+    nonisolated private static let statusImageToggleHeight: CGFloat = 24
+    nonisolated private static let statusImageToggleCornerRadius: CGFloat = 12
     private static let bytesPerKilobyte = 1_024.0
     private static let secondsPerMinute: TimeInterval = 60
     private static let defaultHookListDelaySeconds = 4
@@ -98,14 +98,10 @@ enum DemoFixtures {
     /// (16:9) so the fixture needs no bundled image file.
     static let statusImagePNG: Data = {
         let renderer = UIGraphicsImageRenderer(size: statusImageSize)
-        return renderer.pngData { context in
-            MainActor.assumeIsolated {
-                drawStatusImage(in: context)
-            }
-        }
+        return renderer.pngData(actions: drawStatusImage)
     }()
 
-    private static func drawStatusImage(in context: UIGraphicsImageRendererContext) {
+    nonisolated private static func drawStatusImage(in context: UIGraphicsImageRendererContext) {
         // swiftlint:disable no_magic_numbers
         let background = UIColor(
             cgColor: CGColor(srgbRed: 0.11, green: 0.11, blue: 0.13, alpha: 1)
