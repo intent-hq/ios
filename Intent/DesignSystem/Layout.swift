@@ -283,6 +283,7 @@ extension Constants.WorkspaceList {
     static let emptyStateSpacing: CGFloat = 12
     static let bottomContentMargin: CGFloat = 60
     static let sidebarRowInset: CGFloat = 8
+    static let sidebarSelectionCornerRadius: CGFloat = 10
     static let sidebarSectionSpacing: CGFloat = 6
     static let sidebarSectionAvatarSize: CGFloat = 16
     static let sidebarTopContentMargin: CGFloat = 4
