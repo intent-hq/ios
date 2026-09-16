@@ -160,6 +160,14 @@ struct ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1")
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
 
+        // simulateConnect also spawned an onReconnected task; let it finish
+        // before the request log is reset so its requests cannot masquerade
+        // as the reconnect below. Its last request is agent.getSubscriptions,
+        // which nothing else in this test issues.
+        try await waitFor("initial onReconnected flow") {
+            fake.didCallMethod("agent.getSubscriptions")
+        }
+
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
             ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
@@ -168,21 +176,25 @@ struct ConversationStoreIntegrationTests {
 
         // Disconnect, then reconnect (triggers onReconnected which calls
         // everything). The store ignores the disconnect itself, and the
-        // main-queue sink delivers both state values in order.
+        // main-queue sink delivers both state values in order. The reconnect's
+        // chat.subscribe answers with a fresh id so its handler registration
+        // is attributable to this flow alone.
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2", "seq": 0, "snapshot": []]
         fake.clearRequestLog()
         fake.simulateDisconnect()
         fake.simulateConnect()
 
         // onReconnected runs as a spawned task: prepareForReconnect drops the
         // old handler, then getConversation → subscribeToStreaming →
-        // subscribeLiveChat re-registers it after the chat.subscribe reply.
+        // subscribeLiveChat registers sub-2 after the chat.subscribe reply.
         try await waitFor("reconnect resubscribe") {
-            fake.didCallMethod("chat.subscribe") && fake.hasSubscriptionHandler(id: "sub-1")
+            fake.hasSubscriptionHandler(id: "sub-2")
         }
 
         // Verify fresh subscribe + getConversation (both called from onReconnected)
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.didCallMethod("agent.getConversation"))
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
 
     // MARK: - Agent Subscriptions with Top-Level actorIds
