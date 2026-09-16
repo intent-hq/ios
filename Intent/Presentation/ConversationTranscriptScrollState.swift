@@ -10,9 +10,6 @@ final class ConversationTranscriptScrollState {
     /// Pending settle re-check of a container re-pin deferred while the user
     /// was interacting with the scroll view.
     @ObservationIgnored var containerRePinTask: Task<Void, Never>?
-    /// Pending settle re-check of a pinned viewport that a geometry edge (or
-    /// streaming ending) read within the at-bottom band (#346).
-    @ObservationIgnored var bottomBandRePinTask: Task<Void, Never>?
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
