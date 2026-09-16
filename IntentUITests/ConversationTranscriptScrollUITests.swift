@@ -168,13 +168,20 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // hydration back the same way (DemoFixtures.longConversationBlockHydrationGate).
         static let blockHydrationTriggerFileArgumentPrefix = "--demo-block-hydration-trigger-file="
         static let blockHydrationTimeout: TimeInterval = 15
-        // File name of the `view` tool row of the tool-only assistant message
-        // right before the last message
+        // Where the fixture seats the slim tool rows
+        // (DemoFixtures.LongConversationSlimToolRowLayout). By default they
+        // open the last assistant text messages — the layout that reproduced
+        // #338 through the hooks-row tests (CI run 35100409278) — so every
+        // test but the hydration one runs against it. The hydration test
+        // needs to tap the row, which a text-bearing assistant row's copy
+        // context-menu overlay prevents (intent-hq/ios#344), so it asks for
+        // the rows as tool-only assistant messages right before the text.
+        static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
+        static let standaloneSlimToolRows = "standalone"
+        // File name of the `view` tool row that goes with the last message
         // (DemoFixtures.longConversationTruncatedToolCalls[0]): its header
         // reads "Read final_evidence_table.py tests/payments/evidence"
         // (ToolClassifier), and its result is a slim preview until hydrated.
-        // A tool-only message: a text-bearing assistant row's copy
-        // context-menu overlay claims taps meant for its SwiftUI buttons.
         static let truncatedToolFileName = "final_evidence_table.py"
         // ToolCallView's hydration hint under an expanded slim row: "Preview
         // — tap to load full content" until the fetch starts, "Loading full
@@ -615,8 +622,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// settled at the end — on a cold entry or a warm re-entry — and
     /// seconds later, on a slow network, a slim-truncated block near the end
     /// hydrates and its row re-measures under the resting viewport. Here a
-    /// tool-only assistant message right before the last one carries a
-    /// `view` tool row whose result the
+    /// tool-only assistant message right before the last one (the
+    /// `standalone` layout, see `Fixture.slimToolRowLayoutArgumentPrefix`)
+    /// carries a `view` tool row whose result the
     /// fixture serves as a bounded preview; the test expands it once the
     /// entry has settled (the row grows by its expanded preview and the
     /// hydration fetch starts, held by the trigger-file gate), lets the
@@ -636,7 +644,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// path the fixture can stage after the follow has landed.
     @MainActor
     func testLateBlockHydrationNearEndAfterEntryKeepsLastMessageOnScreen() throws {
-        let app = launchDemoApp()
+        let app = launchDemoApp(standaloneSlimToolRows: true)
         let endRow = EndRow.lastSuggestedPrompt(in: app)
         for cycle in 1...Fixture.entryCycles {
             let entry = cycle == 1 ? "cold entry" : "warm re-entry"
@@ -793,15 +801,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// Launches the demo app with the hooks row held back behind
     /// `hooksRowTriggerFile` (see the class comment) and the slim tool rows'
-    /// hydration behind `blockHydrationTriggerFile`.
+    /// hydration behind `blockHydrationTriggerFile`; `standaloneSlimToolRows`
+    /// seats those rows as tool-only messages (see `Fixture`).
     @MainActor
-    private func launchDemoApp() -> XCUIApplication {
+    private func launchDemoApp(standaloneSlimToolRows: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [
             "--demo-data",
             Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path,
             Fixture.blockHydrationTriggerFileArgumentPrefix + blockHydrationTriggerFile.path,
         ]
+        if standaloneSlimToolRows {
+            app.launchArguments.append(Fixture.slimToolRowLayoutArgumentPrefix + Fixture.standaloneSlimToolRows)
+        }
         app.launch()
         return app
     }
