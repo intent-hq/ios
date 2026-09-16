@@ -11,7 +11,8 @@ import UIKit
 /// Each cache is driven through a scripted long session of distinct keys
 /// shaped like production ids/paths/URLs. Entry counts are sampled at
 /// checkpoints so the growth curve is visible, and retained bytes are
-/// estimated from the hash-table geometry plus Swift native string storage
+/// estimated from each collection's observed table capacity plus Swift
+/// native string storage
 /// (malloc-level `mstats` deltas print alongside as an informational
 /// cross-check — process-wide, so concurrent suites add noise). Rows print
 /// with an `[ios#264]` prefix for the issue/PR table; the assertions pin the
@@ -116,17 +117,20 @@ struct SessionCacheBoundsMeasurementTests {
         return count <= 15 ? 0 : (32 + count + 1 + 15) / 16 * 16
     }
 
-    /// Native hash tables keep a power-of-two bucket count at ≤ 3/4 load.
-    private nonisolated static func bucketCount(forCount count: Int) -> Int {
+    /// Native hash tables keep a power-of-two bucket count and advertise
+    /// `capacity` as the ≤ 3/4-load fill of that table, so the table the
+    /// collection actually allocated (including any over-reservation) is
+    /// recovered from its observed `capacity`, never inferred from `count`.
+    private nonisolated static func bucketCount(forCapacity capacity: Int) -> Int {
         var buckets = 1
-        while buckets * 3 / 4 < count { buckets *= 2 }
+        while buckets * 3 / 4 < capacity { buckets *= 2 }
         return buckets
     }
 
     /// Storage header + one 16-byte slot per bucket + 1-bit occupancy map +
     /// heap storage of every key.
     private nonisolated static func retainedBytes(of set: Set<String>) -> Int {
-        let buckets = bucketCount(forCount: set.count)
+        let buckets = bucketCount(forCapacity: set.capacity)
         return 64 + buckets * MemoryLayout<String>.stride + buckets / 8
             + set.reduce(0) { $0 + heapBytes(of: $1) }
     }
@@ -134,7 +138,7 @@ struct SessionCacheBoundsMeasurementTests {
     /// As `retainedBytes(of: Set)` with a second 16-byte slot per bucket for
     /// values and their heap storage.
     private nonisolated static func retainedBytes(of dictionary: [String: String]) -> Int {
-        let buckets = bucketCount(forCount: dictionary.count)
+        let buckets = bucketCount(forCapacity: dictionary.capacity)
         return 64 + buckets * 2 * MemoryLayout<String>.stride + buckets / 8
             + dictionary.reduce(0) { $0 + heapBytes(of: $1.key) + heapBytes(of: $1.value) }
     }
@@ -218,6 +222,37 @@ struct SessionCacheBoundsMeasurementTests {
                 measurement.retainedBytes < realisticRetainedCeiling,
                 "\(label): retains \(formatBytes(measurement.retainedBytes))", sourceLocation: sourceLocation)
         }
+    }
+
+    // MARK: - Estimator sensitivity
+
+    /// The estimate must follow the allocated table, not the entry count:
+    /// a cache that starts over-reserving (e.g. `reserveCapacity(n * n)`)
+    /// with the same keys has to breach the per-entry ceiling and the
+    /// realistic footprint ceiling, or the guards above are inert.
+    @Test func overReservedCollectionsBreachFootprintGuards() {
+        let keys = (0..<Self.realistic.workspaces).flatMap { workspace in
+            (0..<Self.realistic.keysPerWorkspace).map { Self.filePath(workspace, $0) }
+        }
+        let superlinear = keys.count * keys.count
+
+        let set = Set(keys)
+        var overReservedSet = set
+        overReservedSet.reserveCapacity(superlinear)
+        #expect(overReservedSet.count == set.count)
+        #expect(Self.retainedBytes(of: set) / set.count <= Self.maxBytesPerEntry)
+        #expect(Self.retainedBytes(of: set) < Self.realisticRetainedCeiling)
+        #expect(Self.retainedBytes(of: overReservedSet) / set.count > Self.maxBytesPerEntry)
+        #expect(Self.retainedBytes(of: overReservedSet) >= Self.realisticRetainedCeiling)
+
+        let dictionary = Dictionary(uniqueKeysWithValues: keys.map { ($0, Self.attachmentPath($0)) })
+        var overReservedDictionary = dictionary
+        overReservedDictionary.reserveCapacity(superlinear)
+        #expect(overReservedDictionary.count == dictionary.count)
+        #expect(Self.retainedBytes(of: dictionary) / dictionary.count <= Self.maxBytesPerEntry)
+        #expect(Self.retainedBytes(of: dictionary) < Self.realisticRetainedCeiling)
+        #expect(Self.retainedBytes(of: overReservedDictionary) / dictionary.count > Self.maxBytesPerEntry)
+        #expect(Self.retainedBytes(of: overReservedDictionary) >= Self.realisticRetainedCeiling)
     }
 
     // MARK: - Per-cache scripted sessions
