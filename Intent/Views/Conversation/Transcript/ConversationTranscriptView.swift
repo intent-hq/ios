@@ -191,10 +191,16 @@ private extension ConversationTranscriptView {
             ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
                 outcome: scrollState.lastForcedFollowOutcome,
                 corrections: scrollState.lastForcedFollowCorrections,
-                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+                // Episodes and cancellation are not tracked yet: an episode
+                // is counted once it has recorded an outcome, and the end
+                // row's realization is read live.
+                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
                     outcome: scrollState.lastUnrealizedEndRecoveryOutcome,
-                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections
-                )
+                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections,
+                    episodes: scrollState.lastUnrealizedEndRecoveryOutcome == nil ? 0 : 1,
+                    endRealized: scrollState.isEndRealized,
+                    cancelled: false
+                ).summary
             )
         )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap

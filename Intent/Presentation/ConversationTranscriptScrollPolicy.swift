@@ -651,8 +651,8 @@ enum ConversationTranscriptScrollPolicy {
     /// first). Lets the XCUITests assert the follow landed rather than gave
     /// up with the pin kept, which the visible geometry alone cannot tell
     /// apart within the at-bottom band (#304, #305). `endRecovery` (see
-    /// `unrealizedEndRecoverySummary`) is appended once the follow has
-    /// reported, never to the pending report the tests compare whole.
+    /// `UnrealizedEndRecoveryReport.summary`) is appended once the follow
+    /// has reported, never to the pending report the tests compare whole.
     static func forcedFollowLandingSummary(
         outcome: FollowLandingStep?,
         corrections: Int,
@@ -673,21 +673,104 @@ enum ConversationTranscriptScrollPolicy {
         return "\(summary) \(endRecovery)"
     }
 
-    /// The last unrealized-end recovery that spent a correction, e.g.
-    /// `endRecovery=recovered corrections=1` or
-    /// `endRecovery=giveUp corrections=3`; nil before any recovery has
-    /// corrected the viewport, so the ordinary report is unchanged.
-    static func unrealizedEndRecoverySummary(outcome: UnrealizedEndRecoveryStep?, corrections: Int) -> String? {
-        guard let outcome, corrections > 0 else { return nil }
-        let name: String
-        switch outcome {
-        case .none: name = "recovered"
-        case .giveUp: name = "giveUp"
-        case .yieldToUser: name = "yieldToUser"
-        case .settling: name = "settling"
-        case .followToEnd, .recover: name = "recovering"
+    /// The unrealized-end recovery's demo-only report: how the last episode
+    /// resolved, with the evidence the label rests on. Reported by
+    /// `unrealizedEndRecoveryReport`, which alone decides the reason, so a
+    /// reader cannot be told `recovered` by a resolution that never
+    /// realized the end row.
+    struct UnrealizedEndRecoveryReport: Equatable {
+        enum Reason: String, Equatable {
+            /// No episode was ever armed on this transcript.
+            case notAttempted
+            /// An episode is armed and has not resolved.
+            case recovering
+            /// The last episode resolved without spending a correction.
+            case noCorrectionNeeded
+            /// The last episode corrected the viewport at least once and the
+            /// end row was realized when it resolved.
+            case recovered
+            /// The last episode corrected the viewport and resolved as
+            /// nothing left to do (not following, content short of the
+            /// container) with the end row still unrealized: not recovered,
+            /// and not a give-up either — the budget was not spent and Go
+            /// to End is not shown.
+            case unverified
+            /// The budget was spent or the timeout hit over an unrealized
+            /// end row; Go to End is shown.
+            case gaveUp
+            /// A gesture, a rest away or a follow claimed the viewport.
+            case yieldedToUser
+            /// The episode's task was cancelled (a takeover or the view
+            /// disappearing) before it resolved.
+            case cancelled
         }
-        return "endRecovery=\(name) corrections=\(corrections)"
+
+        let reason: Reason
+        /// Corrections the last episode spent.
+        let corrections: Int
+        /// Episodes armed on this transcript so far.
+        let episodes: Int
+        /// Whether the end row was realized when the last episode resolved.
+        let endRealized: Bool
+
+        /// `endRecovery=<reason> corrections=N episodes=N endRealized=<true|false>`.
+        var summary: String {
+            "endRecovery=\(reason.rawValue) corrections=\(corrections) episodes=\(episodes) endRealized=\(endRealized)"
+        }
+    }
+
+    /// Classifies the last recovery episode. `outcome` is the step the
+    /// episode resolved on, nil while it is still running (or, with no
+    /// episode armed, before the first); `cancelled` names an episode whose
+    /// task was cancelled and overrides whatever step it last took. No
+    /// episode is `notAttempted`. A cancelled, yielded or given-up episode
+    /// is never `recovered`, nor is a `.none` resolution that spent no
+    /// correction (`noCorrectionNeeded`) or left the end row unrealized
+    /// (`unverified`): `recovered` needs a correction and the end row
+    /// realized at the finish, both. A non-terminal step is `recovering`.
+    static func unrealizedEndRecoveryReport(
+        outcome: UnrealizedEndRecoveryStep?,
+        corrections: Int,
+        episodes: Int,
+        endRealized: Bool,
+        cancelled: Bool
+    ) -> UnrealizedEndRecoveryReport {
+        let reason = unrealizedEndRecoveryReason(
+            outcome: outcome,
+            corrections: corrections,
+            episodes: episodes,
+            endRealized: endRealized,
+            cancelled: cancelled
+        )
+        return UnrealizedEndRecoveryReport(
+            reason: reason,
+            corrections: corrections,
+            episodes: episodes,
+            endRealized: endRealized
+        )
+    }
+
+    private static func unrealizedEndRecoveryReason(
+        outcome: UnrealizedEndRecoveryStep?,
+        corrections: Int,
+        episodes: Int,
+        endRealized: Bool,
+        cancelled: Bool
+    ) -> UnrealizedEndRecoveryReport.Reason {
+        guard episodes > 0 else { return .notAttempted }
+        if cancelled { return .cancelled }
+        guard let outcome else { return .recovering }
+        switch outcome {
+        case .settling, .followToEnd, .recover:
+            return .recovering
+        case .giveUp:
+            return .gaveUp
+        case .yieldToUser:
+            return .yieldedToUser
+        case .none:
+            guard corrections > 0 else { return .noCorrectionNeeded }
+            return endRealized ? .recovered : .unverified
+        }
     }
 }
 // swiftlint:enable file_length type_body_length
