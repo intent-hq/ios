@@ -62,6 +62,13 @@ struct WorkspaceRowView: View {
         count == 1 ? "1 additional pull request" : "\(count) additional pull requests"
     }
 
+    /// Stable identifiers for the PR badges so tests and automation locate them
+    /// without depending on the spoken label or layout position.
+    enum BadgeIdentifier {
+        static let pullRequest = "workspaceRow.prBadge"
+        static let additionalPullRequests = "workspaceRow.prBadge.additional"
+    }
+
     @ViewBuilder
     private var title: some View {
         let isUntitled = workspace.title.trimmingCharacters(in: .whitespaces).isEmpty
@@ -173,6 +180,7 @@ struct WorkspaceRowView: View {
                 .accessibilityLabel(
                     "\(pill.status.rawValue.capitalized) pull request"
                         + (pill.number.map { " #\($0)" } ?? ""))
+                .accessibilityIdentifier(BadgeIdentifier.pullRequest)
             }
 
             if indicator.otherMonitorCount > 0 {
@@ -192,6 +200,7 @@ struct WorkspaceRowView: View {
                     }
                     .accessibilityLabel(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(
                         indicator.otherMonitorCount))
+                    .accessibilityIdentifier(BadgeIdentifier.additionalPullRequests)
             }
         }
     }

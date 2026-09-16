@@ -11,24 +11,112 @@ import os
 /// instead of falling back to an unpinned plain-WS connection.
 struct ManualTokenEntryViewTests {
 
+    private typealias ProbeResult = CertFingerprintProbe.ProbeResult
+    private typealias FailureCause = CertFingerprintProbe.FailureCause
+
     @Test @MainActor func probedFingerprintLeadsToConfirmation() {
         let fingerprint = "ab:cd:ef:01"
-        let outcome = CertFingerprintProbe.outcome(forFingerprint: fingerprint)
+        let outcome = CertFingerprintProbe.outcome(forProbe: .fingerprint(fingerprint))
         #expect(outcome == .confirmFingerprint(fingerprint))
     }
 
-    @Test @MainActor func nilFingerprintAbortsInsteadOfConnectingUnpinned() {
-        let outcome = CertFingerprintProbe.outcome(forFingerprint: nil)
-        #expect(outcome == .abort(message: CertFingerprintProbe.noCertErrorMessage))
+    @Test @MainActor func noCertificateAbortsInsteadOfConnectingUnpinned() {
+        let outcome = CertFingerprintProbe.outcome(forProbe: .noCertificate)
+        #expect(outcome == .abort(message: ProbeResult.noCertificate.abortMessage))
     }
 
     @Test @MainActor func emptyFingerprintAbortsInsteadOfConnectingUnpinned() {
-        let outcome = CertFingerprintProbe.outcome(forFingerprint: "")
-        #expect(outcome == .abort(message: CertFingerprintProbe.noCertErrorMessage))
+        let outcome = CertFingerprintProbe.outcome(forProbe: .fingerprint(""))
+        #expect(outcome == .abort(message: ProbeResult.noCertificate.abortMessage))
     }
 
-    @Test @MainActor func abortMessageIsUserActionable() {
-        #expect(CertFingerprintProbe.noCertErrorMessage.contains("TLS certificate"))
+    // MARK: - Failure stage and cause (ios#233): each failure names the
+    // stage it failed at instead of collapsing to one generic message.
+
+    @Test @MainActor func everyFailureStageAbortsWithADistinctMessage() {
+        let refused = FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)
+        let tls = FailureCause(domain: .tls, code: -9836)
+        let failures: [ProbeResult] = [
+            .invalidPort, .noHosts, .unreachable(cause: refused), .timeout,
+            .tlsFailed(cause: tls), .noCertificate, .cancelled,
+        ]
+        var messages = Set<String>()
+        for failure in failures {
+            let outcome = CertFingerprintProbe.outcome(forProbe: failure)
+            #expect(outcome == .abort(message: failure.abortMessage))
+            messages.insert(failure.abortMessage)
+        }
+        #expect(messages.count == failures.count, "Each failure stage needs its own message")
+    }
+
+    @Test func failureMessagesNameTheStageAndCause() {
+        let refused = FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)
+        let unreachable = ProbeResult.unreachable(cause: refused).abortMessage
+        #expect(unreachable.contains("Could not reach the server"))
+        #expect(unreachable.contains("POSIX error 61, connection refused"))
+
+        let tls = ProbeResult.tlsFailed(cause: FailureCause(domain: .tls, code: -9836)).abortMessage
+        #expect(tls.contains("TLS handshake failed"))
+        #expect(tls.contains("TLS error -9836"))
+
+        #expect(ProbeResult.timeout.abortMessage.contains("Timed out"))
+        #expect(ProbeResult.noCertificate.abortMessage.contains("no certificate"))
+        #expect(ProbeResult.invalidPort.abortMessage.contains("1 and 65535"))
+    }
+
+    @Test func failureCauseRendersOnlyStaticDomainCodeAndLabel() {
+        #expect(FailureCause(domain: .posix, code: POSIXErrorCode.EHOSTUNREACH.rawValue).description
+            == "POSIX error 65, host unreachable")
+        #expect(FailureCause(domain: .posix, code: POSIXErrorCode.ETIMEDOUT.rawValue).description
+            == "POSIX error 60, connection timed out")
+        #expect(FailureCause(domain: .posix, code: 1).description == "POSIX error 1")
+        #expect(FailureCause(domain: .dns, code: -65554).description
+            == "DNS error -65554, host name lookup failed")
+        #expect(FailureCause(domain: .tls, code: -9806).description == "TLS error -9806")
+        #expect(FailureCause(.posix(.ECONNRESET)) == FailureCause(domain: .posix, code: 54))
+        #expect(FailureCause(.tls(-9836)) == FailureCause(domain: .tls, code: -9836))
+    }
+
+    @Test func classifyMapsObservationsToStages() {
+        let refused = FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue)
+        let dns = FailureCause(domain: .dns, code: -65554)
+        let tls = FailureCause(domain: .tls, code: -9836)
+        #expect(CertFingerprintProbe.classify(
+            captured: "ab:cd", settled: .failed(tls), cancelled: false) == .fingerprint("ab:cd"))
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: nil, cancelled: false) == .timeout)
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: .handshakeCompleted, cancelled: false) == .noCertificate)
+        #expect(CertFingerprintProbe.classify(
+            captured: "", settled: .handshakeCompleted, cancelled: false) == .noCertificate)
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: .failed(refused), cancelled: false) == .unreachable(cause: refused))
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: .failed(dns), cancelled: false) == .unreachable(cause: dns))
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: .failed(tls), cancelled: false) == .tlsFailed(cause: tls))
+        #expect(CertFingerprintProbe.classify(
+            captured: nil, settled: nil, cancelled: true) == .cancelled)
+    }
+
+    @Test func probeFirstReturnsFirstFingerprintOrLastFailure() async {
+        let refused = ProbeResult.unreachable(
+            cause: FailureCause(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue))
+        let tried = OSAllocatedUnfairLock<[String]>(initialState: [])
+
+        let found = await CertFingerprintProbe.probeFirst(hosts: ["a", "b", "c"], port: 1) { host, _ in
+            tried.withLock { $0.append(host) }
+            return host == "b" ? .fingerprint("ab:cd") : refused
+        }
+        #expect(found == .fingerprint("ab:cd"))
+        #expect(tried.withLock { $0 } == ["a", "b"])
+
+        let allFailed = await CertFingerprintProbe.probeFirst(hosts: ["a", "b"], port: 1) { host, _ in
+            host == "a" ? .timeout : refused
+        }
+        #expect(allFailed == refused, "The last host's failure stage must survive")
+
+        #expect(await CertFingerprintProbe.probeFirst(hosts: [], port: 1) { _, _ in .timeout } == .noHosts)
     }
 
     @Test func endpointPortAcceptsValidRange() {
@@ -43,8 +131,9 @@ struct ManualTokenEntryViewTests {
         #expect(CertFingerprintProbe.endpointPort(65536) == nil)
     }
 
-    @Test func probeReturnsNilForInvalidPortWithoutConnecting() async {
-        #expect(await CertFingerprintProbe.probe(host: "192.0.2.1", port: 0) == nil)
+    @Test func probeReportsInvalidPortWithoutConnecting() async {
+        #expect(await CertFingerprintProbe.probe(host: "192.0.2.1", port: 0) == .invalidPort)
+        #expect(await CertFingerprintProbe.probe(host: "192.0.2.1", port: 65536) == .invalidPort)
     }
 
     @Test func probeTimeoutMatchesPerHostWebSocketTimeout() {
@@ -189,8 +278,108 @@ struct ManualTokenEntryViewTests {
         let listener = try await Self.startTLSListener()
         defer { listener.cancel() }
         let port = try #require(listener.port?.rawValue)
-        let fingerprint = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
-        #expect(fingerprint == Self.fixtureIdentityFingerprint)
+        let result = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
+        #expect(result == .fingerprint(Self.fixtureIdentityFingerprint))
+    }
+
+    /// Starts a plain-TCP loopback listener and waits until it is ready. Each
+    /// accepted connection is handed to `onAccept` on the listener queue.
+    private nonisolated static func startTCPListener(
+        onAccept: @escaping @Sendable (NWConnection) -> Void
+    ) async throws -> NWListener {
+        let listener = try NWListener(using: .tcp, on: .any)
+        let queue = DispatchQueue(label: "ManualTokenEntryViewTests.tcp-listener")
+        let accepted = OSAllocatedUnfairLock(initialState: [NWConnection]())
+        listener.newConnectionHandler = { connection in
+            accepted.withLock { $0.append(connection) }
+            connection.start(queue: queue)
+            onAccept(connection)
+        }
+        let resumed = OSAllocatedUnfairLock(initialState: false)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready, .failed, .cancelled:
+                    let alreadyResumed = resumed.withLock { (done: inout Bool) -> Bool in
+                        let was = done
+                        done = true
+                        return was
+                    }
+                    if !alreadyResumed { continuation.resume() }
+                default:
+                    break
+                }
+            }
+            listener.start(queue: queue)
+        }
+        return listener
+    }
+
+    /// Nothing listening on the port: the TCP connect is refused, which must
+    /// surface as unreachable (with the POSIX cause) — not as "no certificate".
+    @Test func probeReportsUnreachableWhenConnectionIsRefused() async throws {
+        let listener = try await Self.startTCPListener { _ in }
+        let port = try #require(listener.port?.rawValue)
+        listener.cancel()
+        try await Task.sleep(for: .milliseconds(100))
+
+        let result = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
+        guard case .unreachable(let cause) = result else {
+            Issue.record("Expected .unreachable, got \(result)")
+            return
+        }
+        #expect(cause.domain == .posix)
+        #expect(cause.code == POSIXErrorCode.ECONNREFUSED.rawValue)
+    }
+
+    /// A listener that accepts TCP but never answers the ClientHello: neither
+    /// a handshake nor an error settles the connection, so the probe must
+    /// report a timeout — not "no certificate".
+    @Test func probeReportsTimeoutWhenServerNeverAnswersHandshake() async throws {
+        let listener = try await Self.startTCPListener { _ in }
+        defer { listener.cancel() }
+        let port = try #require(listener.port?.rawValue)
+
+        let result = await CertFingerprintProbe.probe(
+            host: "127.0.0.1", port: Int(port), timeout: .milliseconds(500))
+        #expect(result == .timeout)
+    }
+
+    /// A plain-TCP listener answering with non-TLS bytes (an HTTP server on
+    /// the wrong port): TCP connects, the handshake fails, and the probe must
+    /// report a TLS failure with the cause — not "no certificate".
+    @Test func probeReportsTLSFailureWhenServerSpeaksPlainText() async throws {
+        let listener = try await Self.startTCPListener { connection in
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { _, _, _, _ in
+                connection.send(
+                    content: Data("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n".utf8),
+                    completion: .contentProcessed { _ in })
+            }
+        }
+        defer { listener.cancel() }
+        let port = try #require(listener.port?.rawValue)
+
+        let result = await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
+        guard case .tlsFailed(let cause) = result else {
+            Issue.record("Expected .tlsFailed, got \(result)")
+            return
+        }
+        #expect(cause.domain == .tls)
+    }
+
+    /// Cancelling the probing task (the user hit Cancel) reports `.cancelled`
+    /// rather than a misleading timeout or certificate error.
+    @Test func probeReportsCancellationWhenTaskIsCancelled() async throws {
+        let listener = try await Self.startTCPListener { _ in }
+        defer { listener.cancel() }
+        let port = try #require(listener.port?.rawValue)
+
+        let task = Task {
+            await CertFingerprintProbe.probe(host: "127.0.0.1", port: Int(port))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        task.cancel()
+        #expect(await task.value == .cancelled)
     }
 
     // MARK: - Input classification (direct host vs Tailcat connection blob)
@@ -281,31 +470,54 @@ struct ManualTokenEntryViewTests {
         let dialer = FakeTunnelDialer(result: .success(tunnel))
         let probed = OSAllocatedUnfairLock<[String]>(initialState: [])
 
-        let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+        let result = try await CertFingerprintProbe.probeViaTunnel(
             dialer: dialer, tcAddress: Self.syntheticSDKConnBlob, remotePort: 5181
         ) { host, port in
             probed.withLock { $0.append("\(host):\(port)") }
-            return "ab:cd:ef"
+            return .fingerprint("ab:cd:ef")
         }
 
-        #expect(fingerprint == "ab:cd:ef")
+        #expect(result == .fingerprint("ab:cd:ef"))
         #expect(dialer.observed.withLock { $0 } == [Self.syntheticSDKConnBlob: 5181])
         #expect(probed.withLock { $0 } == ["127.0.0.1:45678"])
         #expect(tunnel.isClosed)
     }
 
-    /// A tunnel that comes up but yields no certificate still returns nil
-    /// (the caller aborts unpinned) and never leaks the session.
+    /// A tunnel that comes up but whose probe fails still returns that
+    /// failure's stage (the caller aborts unpinned) and never leaks the
+    /// session.
     @Test func probeViaTunnelClosesTunnelWhenNoCertificateCaptured() async throws {
         let tunnel = FakeTunnelSession(localPort: 1)
         let dialer = FakeTunnelDialer(result: .success(tunnel))
 
-        let fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+        let result = try await CertFingerprintProbe.probeViaTunnel(
             dialer: dialer, tcAddress: "tc-key-abc123", remotePort: 5180
-        ) { _, _ in nil }
+        ) { _, _ in .noCertificate }
 
-        #expect(fingerprint == nil)
+        #expect(result == .noCertificate)
         #expect(tunnel.isClosed)
+    }
+
+    /// An out-of-range remote port is rejected as `.invalidPort` before the
+    /// tunnel is dialed — the manual Tailcat path gets the same classification
+    /// as the direct path instead of burning the tunnel establishment timeout
+    /// and surfacing a dial failure.
+    @Test(arguments: [0, -1, 65_536]) func probeViaTunnelRejectsInvalidPortWithoutDialing(port: Int) async throws {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        let probed = OSAllocatedUnfairLock(initialState: false)
+
+        let result = try await CertFingerprintProbe.probeViaTunnel(
+            dialer: dialer, tcAddress: Self.syntheticSDKConnBlob, remotePort: port
+        ) { _, _ in
+            probed.withLock { $0 = true }
+            return .fingerprint("ab:cd:ef")
+        }
+
+        #expect(result == .invalidPort)
+        #expect(dialer.observed.withLock { $0 }.isEmpty)
+        #expect(!probed.withLock { $0 })
+        #expect(!tunnel.isClosed)
     }
 
     /// A failed tunnel dial (invalid or unreachable tc address) throws so the
@@ -317,7 +529,7 @@ struct ManualTokenEntryViewTests {
         await #expect(throws: WebSocketTransportError.self) {
             _ = try await CertFingerprintProbe.probeViaTunnel(
                 dialer: dialer, tcAddress: "tc-nonsense", remotePort: 5180
-            ) { _, _ in nil }
+            ) { _, _ in .noCertificate }
         }
     }
 }

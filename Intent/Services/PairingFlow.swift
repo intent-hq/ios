@@ -14,7 +14,9 @@ enum PairingFlow {
         /// The payload carried no fingerprint: the server certificate was
         /// probed; the user must confirm trust before connecting pinned.
         case needsUserConfirmation(String)
-        /// No payload fingerprint and the probe found no certificate — abort.
+        /// No payload fingerprint and the probe failed — abort. The message
+        /// names the stage the probe failed at (unreachable, timeout, TLS
+        /// handshake, no certificate).
         case failed(message: String)
     }
 
@@ -23,7 +25,7 @@ enum PairingFlow {
     /// the payload's hosts.
     static func resolveFingerprint(
         for payload: PairingPayload,
-        probe: ([String], Int) async -> String? = { hosts, port in
+        probe: ([String], Int) async -> CertFingerprintProbe.ProbeResult = { hosts, port in
             await CertFingerprintProbe.probeFirst(hosts: hosts, port: port)
         }
     ) async -> FingerprintResolution {
@@ -31,7 +33,7 @@ enum PairingFlow {
             return .pinned(fingerprint)
         }
         let probed = await probe(payload.hosts, payload.port)
-        switch CertFingerprintProbe.outcome(forFingerprint: probed) {
+        switch CertFingerprintProbe.outcome(forProbe: probed) {
         case .confirmFingerprint(let fingerprint):
             return .needsUserConfirmation(fingerprint)
         case .abort(let message):
