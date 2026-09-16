@@ -47,6 +47,7 @@ struct PlatformGuardAllowlistTests {
         "Intent/Services/ConnectionManager.swift",
         "Intent/Services/TailcatTunnel.swift",
         "IntentTests/TailcatKitSmokeTests.swift",
+        "IntentTests/TailcatTunnelSessionTests.swift",
     ]
 
     /// Repo-relative paths of .swift files under Intent/ and IntentTests/
