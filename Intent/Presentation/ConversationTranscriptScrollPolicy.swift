@@ -181,14 +181,20 @@ enum ConversationTranscriptScrollPolicy {
     /// any kind (a row re-measuring, a footer row, the keyboard, streaming,
     /// an append) reads the same "away" geometry without a gesture and keeps
     /// the current flag; #272, #280 and #281 each patched one such instance.
-    /// Geometry reading within the threshold always re-pins, gesture or not
-    /// (the user dragged back, or Go to End landed).
+    /// Geometry reading within the threshold re-pins, gesture or not (the
+    /// user dragged back, or Go to End landed) — provided the end row is
+    /// realized: a viewport resting over an unrealized end row reads "at
+    /// bottom" geometrically while showing nothing (#338), so that edge
+    /// keeps the current flag, and Go to End raised over the blank (see
+    /// `unrealizedEndRecoveryDrain`) stays until the row realizes and the
+    /// ordinary rule applies.
     static func scrolledAwayTransition(
         current: Bool,
         geometryAway: Bool,
-        isInteracting: Bool
+        isInteracting: Bool,
+        isEndRealized: Bool
     ) -> Bool {
-        guard geometryAway else { return false }
+        guard geometryAway else { return isEndRealized ? false : current }
         return isInteracting ? true : current
     }
 
@@ -563,6 +569,10 @@ enum ConversationTranscriptScrollPolicy {
         /// Show Go to End: the viewport is treated as scrolled away, with no
         /// further scroll issued over it.
         case showGoToEnd
+        /// A follow in flight owns the viewport: the give-up is deferred to
+        /// that follow's drain (see `shouldShowGoToEndAfterFollow`), and the
+        /// live edge is replayed meanwhile.
+        case deferToFollow
     }
 
     /// How the recovery drains. Its follow flag suppressed the growth re-pin
@@ -574,19 +584,37 @@ enum ConversationTranscriptScrollPolicy {
     /// short with Go to End hidden, the blank it set out to fix. It surfaces
     /// Go to End instead: the tap follows through `scrollToBottom`, whose
     /// drain verifies the landing and re-arms the recovery from the level.
-    /// A follow already in flight at the give-up owns the viewport and
-    /// re-arms from its own drain; flagging the viewport away would cancel
-    /// it as a takeover, so that give-up replays the edge like the rest.
+    /// A follow already in flight at the give-up owns the viewport; flagging
+    /// it away now would cancel that follow as a takeover, so the give-up is
+    /// deferred to the follow's drain, which re-arms the recovery if the
+    /// follow executed and shows Go to End if it did not.
     static func unrealizedEndRecoveryDrain(
         outcome: UnrealizedEndRecoveryStep,
         isFollowing: Bool
     ) -> UnrealizedEndRecoveryDrain {
         switch outcome {
         case .giveUp:
-            return isFollowing ? .replayEdge : .showGoToEnd
+            return isFollowing ? .deferToFollow : .showGoToEnd
         case .none, .yieldToUser, .settling, .followToEnd, .recover:
             return .replayEdge
         }
+    }
+
+    /// A give-up deferred to a follow in flight must not depend on that
+    /// follow executing: an automatic follow is dropped when the live
+    /// distance has left the band (see `shouldExecuteFollow`), a forced one
+    /// yields to a gesture, and a gesture cancels either — and a follow that
+    /// executed re-arms the recovery instead (see
+    /// `shouldArmUnrealizedEndRecoveryAfterFollow`). So a deferred give-up
+    /// whose follow did not execute, with the end row still unrealized,
+    /// shows Go to End as the undeferred give-up would have; a realized end
+    /// row needs nothing.
+    static func shouldShowGoToEndAfterFollow(
+        executed: Bool,
+        isEndRealized: Bool,
+        giveUpDeferred: Bool
+    ) -> Bool {
+        giveUpDeferred && !executed && !isEndRealized
     }
 
     /// The recovery is armed by the end row derealizing — an edge — and an

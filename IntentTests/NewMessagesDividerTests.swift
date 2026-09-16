@@ -279,12 +279,18 @@ struct ConversationTranscriptScrollPolicyTests {
             contentHeight: 1_000, contentOffsetY: 100, containerHeight: 700) == 200)
     }
 
-    private func transition(current: Bool, distanceToBottom: CGFloat, isInteracting: Bool) -> Bool {
+    private func transition(
+        current: Bool,
+        distanceToBottom: CGFloat,
+        isInteracting: Bool,
+        isEndRealized: Bool = true
+    ) -> Bool {
         ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: current,
             geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(
                 distanceToBottom: distanceToBottom, atBottomThreshold: 50),
-            isInteracting: isInteracting)
+            isInteracting: isInteracting,
+            isEndRealized: isEndRealized)
     }
 
     /// The rule behind #272, #280 and #281: content growing under a pinned
@@ -328,6 +334,27 @@ struct ConversationTranscriptScrollPolicyTests {
     @Test func bouncePastEndWhilePinnedStaysPinned() {
         #expect(!transition(current: false, distanceToBottom: -60, isInteracting: true))
         #expect(!transition(current: false, distanceToBottom: -60, isInteracting: false))
+    }
+
+    /// A viewport over an unrealized end row reads "at bottom" while showing
+    /// nothing (#338), so that edge — a layout settle, a content update, a
+    /// gesture ending there — clears nothing: Go to End raised over the
+    /// blank stays until the row realizes, when the ordinary rule applies.
+    /// The pinned flag is kept the same way, and the away edges are as
+    /// before whether the row is realized or not.
+    @Test func atBottomEdgeOverAnUnrealizedEndRowClearsNothing() {
+        #expect(transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 40, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 0, isInteracting: true, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: -30, isInteracting: false, isEndRealized: false))
+        #expect(!transition(current: false, distanceToBottom: 0, isInteracting: false, isEndRealized: false))
+        // The row realizing: the same edge clears the flag.
+        #expect(!transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: true))
+        #expect(!transition(current: true, distanceToBottom: 40, isInteracting: true, isEndRealized: true))
+        // Away edges are unchanged by realization.
+        #expect(transition(current: false, distanceToBottom: 120, isInteracting: true, isEndRealized: false))
+        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 120, isInteracting: false, isEndRealized: false))
     }
 
     private func rePinAfterGrowth(
@@ -1233,8 +1260,9 @@ struct ConversationTranscriptScrollPolicyTests {
     /// The give-up shows Go to End instead, whether the viewport reads
     /// short of the end or at the bottom: the tap follows through the
     /// verified path and re-arms the recovery from the level. A follow in
-    /// flight at the give-up owns the viewport and re-arms from its own
-    /// drain; flagging the viewport away would cancel it as a takeover.
+    /// flight at the give-up owns the viewport; flagging it away would
+    /// cancel that follow as a takeover, so the give-up is deferred to the
+    /// follow's drain (see `deferredGiveUpShowsGoToEndWhenTheFollowIsDropped`).
     @Test func recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind() {
         // Budget spent short of the end inside the band, and timed out at
         // the bottom over the blank: both give up.
@@ -1253,11 +1281,54 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(goToEndRequested: true))
         #expect(ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
             executed: true, isEndRealized: false))
-        // A follow in flight owns the viewport: its drain re-arms.
-        #expect(drain(.giveUp, isFollowing: true) == .replayEdge)
+        // A follow in flight owns the viewport: the give-up is deferred to
+        // its drain, and the edge replayed meanwhile re-pins nothing.
+        #expect(drain(.giveUp, isFollowing: true) == .deferToFollow)
         #expect(!rePinAfterGrowth(isFollowing: true))
         #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
             outcome: .giveUp, corrections: 2) == "endRecovery=giveUp corrections=2")
+    }
+
+    /// The give-up deferred to a follow in flight must not depend on that
+    /// follow executing: an automatic follow pending at the give-up is
+    /// dropped when the live distance has left the band (> 50pt short, no
+    /// gesture), its drain would otherwise replay the edge as a raw re-pin
+    /// and arm nothing, and the viewport would rest blank with Go to End
+    /// hidden. The drain of a follow that did not execute over the still
+    /// unrealized end row shows Go to End instead; a follow that executed
+    /// re-arms the recovery, and a realized end row needs nothing either
+    /// way. The same rule resolves a forced follow that yielded and a
+    /// follow a gesture cancelled.
+    @Test func deferredGiveUpShowsGoToEndWhenTheFollowIsDropped() {
+        let policy = ConversationTranscriptScrollPolicy.self
+        #expect(drain(.giveUp, isFollowing: true) == .deferToFollow)
+        // The pending automatic follow comes due 120pt short: dropped.
+        let dropped = executeFollow(distanceToBottom: 120)
+        #expect(!dropped)
+        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(executed: dropped, isEndRealized: false))
+        // Without the deferral its drain would re-pin raw and clear nothing.
+        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false, isEndRealized: false))
+        #expect(rePinAfterGrowth(isFollowing: false))
+        // With it, the button is shown and nothing scrolls over it.
+        #expect(policy.shouldShowGoToEndAfterFollow(executed: dropped, isEndRealized: false, giveUpDeferred: true))
+        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
+        // An executed follow re-arms the recovery instead.
+        let executed = executeFollow(distanceToBottom: 30)
+        #expect(executed)
+        #expect(!policy.shouldShowGoToEndAfterFollow(executed: executed, isEndRealized: false, giveUpDeferred: true))
+        #expect(policy.shouldArmUnrealizedEndRecoveryAfterFollow(executed: executed, isEndRealized: false))
+        // A yielded forced follow and a cancelled one resolve the same way.
+        let yielded = executeFollow(forced: true, distanceToBottom: 0, isInteracting: true)
+        #expect(!yielded)
+        #expect(policy.shouldShowGoToEndAfterFollow(executed: yielded, isEndRealized: false, giveUpDeferred: true))
+        #expect(policy.shouldShowGoToEndAfterFollow(executed: false, isEndRealized: false, giveUpDeferred: true))
+        // A realized end row, or no deferred give-up: nothing to show.
+        #expect(!policy.shouldShowGoToEndAfterFollow(executed: false, isEndRealized: true, giveUpDeferred: true))
+        #expect(!policy.shouldShowGoToEndAfterFollow(executed: false, isEndRealized: false, giveUpDeferred: false))
+        // The button shown over the blank survives the at-bottom edges the
+        // blank reads, until the row realizes.
+        #expect(transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: false))
+        #expect(!transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: true))
     }
 
     /// An explicit follow cancels a recovery in flight, and the recovery is

@@ -21,6 +21,10 @@ final class ConversationTranscriptScrollState {
     /// True from an unrealized-end correction being issued until the
     /// recovery resolves; counts as a follow in flight for the other paths.
     @ObservationIgnored var isRecoveringUnrealizedEnd = false
+    /// Set when the recovery gave up while a follow was in flight; that
+    /// follow's drain (or its cancellation) resolves it (see
+    /// `ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow`).
+    @ObservationIgnored var unrealizedEndGiveUpDeferredToFollow = false
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
