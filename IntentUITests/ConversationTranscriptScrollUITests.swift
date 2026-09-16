@@ -9,7 +9,9 @@ import XCTest
 /// hidden on every one of several consecutive entries into the conversation,
 /// hidden — with the last message on screen, no blank band, and the prompt
 /// rows under it on screen — once a cold entry has settled
-/// (intent-hq/ios#304), and hidden after a single tap from the very top of
+/// (intent-hq/ios#304), hidden — with the last message still on screen —
+/// when the hooks row lands right after a cold entry has settled
+/// (intent-hq/ios#338), and hidden after a single tap from the very top of
 /// the transcript (intent-hq/ios#305).
 ///
 /// Every wait is settlement polling on the app's own state, never a guessed
@@ -47,13 +49,14 @@ import XCTest
 /// already under it. That workspace's `hook.list` fixture waits on
 /// `DemoFixtures.longConversationHookListGate` — a delay by default, or a
 /// trigger file — and every test here launches with the trigger file, so
-/// the hooks row never lands on its own clock: only the footer test
-/// releases it, once the transcript has been observed settled. On its
+/// the hooks row never lands on its own clock: only the two footer tests
+/// release it, once the transcript has been observed settled. On its
 /// default clock the row lands ~4 s after entry, inside every test's
 /// settle and quiet windows, and a row landing right after an entry had
 /// settled left the transcript blank with Go to End hidden on CI
 /// (intent-hq/ios#338) — a second event, a container resize, with its own
-/// outcome, in tests that measure the entry, a tap or a send.
+/// outcome, in tests that measure the entry, a tap or a send. The cold-entry
+/// footer test reproduces exactly that event on purpose.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// The file the fixture's hooks-row gate waits on (see
@@ -142,8 +145,8 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let hookName = "Wait for CI on flake fix"
         // Holds the hooks row back: the fixture waits for this file to exist
         // (polled every 100 ms). Every launch passes `hooksRowTriggerFile`;
-        // only the footer test creates it, once it has recorded a steady
-        // baseline, so in every other test the row cannot land inside the
+        // only the two footer tests create it, once the transcript has
+        // settled, so in every other test the row cannot land inside the
         // windows (#338). The runner and the app share the simulator
         // filesystem, so a temporary-directory path works. A clock-based
         // delay raced the CI simulator's render time (#285).
@@ -173,6 +176,10 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // failure messages.
         static let followReportPrefix = "lastForcedFollow="
         static let pendingFollowReport = "lastForcedFollow=pending"
+        // The entry follow's report in #338: it had landed, and the
+        // container re-pin that blanked the transcript is not a forced
+        // follow, so the report never changes while the viewport is blank.
+        static let landedFollowReportPrefix = "lastForcedFollow=landed"
         // Cadence of every poll.
         static let pollInterval: TimeInterval = 0.25
     }
@@ -489,6 +496,88 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             XCTAssertFalse(
                 app.staticTexts[Fixture.hooksRowLabel].exists,
                 "\(context): the hooks row landed during the cold entry; the fixture trigger file did not hold it back")
+            app.terminate()
+        }
+    }
+
+    /// The hooks row landing right after a cold entry has settled — the
+    /// timing of intent-hq/ios#338 — must leave the transcript populated:
+    /// the row shrinks the container by its height and the re-pin that
+    /// follows must keep the last message realized inside the transcript,
+    /// with Go to End hidden and the entry follow's report untouched
+    /// (`lastForcedFollow=landed`: the re-pin is not a forced follow). On CI
+    /// the row landed on its default clock a couple of seconds after the
+    /// entry follow had reported, and from that moment the scroll view's
+    /// content container realized no rows at all — a blank viewport, no Go
+    /// to End, no recovery — while the report still read `landed`. Here the
+    /// row is released through the trigger-file gate the instant
+    /// `waitUntilSettled` returns, so the sequence is reproduced on the
+    /// fixture's own settlement signal rather than on a clock. The symptom
+    /// showed on the second launch of the process in a run, so the cold
+    /// entry is repeated with a fresh launch each cycle; the gate is closed
+    /// again before every launch.
+    @MainActor
+    func testHooksRowLandingRightAfterColdEntryKeepsLastMessageOnScreen() throws {
+        for cycle in 1...Fixture.entryCycles {
+            let context = "cold entry \(cycle)/\(Fixture.entryCycles) with the hooks row released on settle"
+            try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+            let app = launchDemoApp()
+            let opened = enterLongConversation(in: app, context: context)
+            let lastMessage = opened.lastMessage
+            let transcript = opened.transcript
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
+            let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
+
+            // 1. Settled exactly as a cold entry does: the entry follow has
+            //    reported and the last message rests inside the transcript,
+            //    with the row still held back.
+            guard waitUntilSettled(
+                on: lastMessage, named: "last assistant paragraph",
+                in: opened, context: context,
+                alsoReporting: (endRow.element, endRow.name)
+            ) else {
+                app.terminate()
+                continue
+            }
+            XCTAssertFalse(
+                hooksRow.exists,
+                "\(context): the hooks row was already present when the transcript settled; the fixture trigger file did not hold it back")
+            let bottomBeforeRow = transcript.frame.maxY
+
+            // 2. Release the row right away; it lands and shrinks the
+            //    transcript from below.
+            try Data().write(to: hooksRowTriggerFile)
+            XCTAssertTrue(
+                hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
+                "\(context): hooks row never appeared under the transcript after the trigger file was created")
+            XCTAssertTrue(
+                waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow },
+                "\(context): transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
+
+            // 3. Still populated: the last message is realized inside the
+            //    shrunk transcript once the re-pin has run (a blank viewport
+            //    leaves it out of the accessibility hierarchy for good), Go
+            //    to End is absent, the entry follow still reports `landed`,
+            //    and the end row rests at the end over the quiet window.
+            let repopulated = waitUntil(timeout: 5) { isInside(lastMessage, transcript) }
+            let visibleBand = rows(intersecting: transcript)
+            XCTAssertTrue(
+                repopulated,
+                "\(context): the last assistant paragraph is not inside the transcript after the hooks row landed "
+                    + "(\(visibleBand.count) row(s) in the visible band) — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertFalse(
+                opened.goToEnd.exists,
+                "\(context): Go to End appeared after the hooks row landed — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            let report = followReport(in: opened)
+            XCTAssertTrue(
+                report.hasPrefix(Fixture.landedFollowReportPrefix),
+                "\(context): the entry follow does not report landed after the hooks row landed — \(report)")
+            assertAtEnd(endRow, in: opened, context: "\(context), after the hooks row shrank the transcript")
+            assertStaysAtBottom(
+                lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
+                in: opened, context: "\(context), after the hooks row shrank the transcript")
             app.terminate()
         }
     }
