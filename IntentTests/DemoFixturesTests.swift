@@ -347,14 +347,100 @@ struct DemoFixturesTests {
         await #expect(throws: CancellationError.self) { try await gate.value }
     }
 
-    @Test func onlyTheLongConversationHookListIsGated() {
+    @Test func onlyTheLongConversationHookListAndBlockHydrationAreGated() {
         let long = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
         #expect(DemoFixtures.responseGate(for: "hook.list", params: long)
             == DemoFixtures.longConversationHookListGate)
         #expect(DemoFixtures.responseGate(for: "hook.list", params: [:]) == nil)
         #expect(DemoFixtures.responseGate(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
         #expect(DemoFixtures.responseGate(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.responseGate(
+            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]) == nil)
         #expect(DemoFixtures.responseGate(for: "prMonitor.list", params: long) == nil)
+
+        let hydration = ["agentId": DemoFixtures.longConversationAgentId, "messageId": "m", "blockId": "b"]
+        #expect(DemoFixtures.responseGate(for: "agent.getMessageBlock", params: hydration)
+            == DemoFixtures.longConversationBlockHydrationGate)
+        #expect(DemoFixtures.responseGate(for: "agent.getMessageBlock", params: [:]) == nil)
+        #expect(DemoFixtures.responseGate(
+            for: "agent.getMessageBlock", params: ["agentId": "demo-agent-implementor"]) == nil)
+    }
+
+    // MARK: - Slim-truncated tool rows near the end of the long conversation
+
+    @Test func blockHydrationGateComesFromTheLaunchArguments() {
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data"])
+            == .delay(DemoFixtures.defaultBlockHydrationDelay))
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data", "--demo-block-hydration-delay-ms=9000"])
+            == .delay(.milliseconds(9_000)))
+        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=0"]) == .zero)
+        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=abc"])
+            == DemoFixtures.defaultBlockHydrationDelay)
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
+            == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
+        #expect(DemoFixtures.blockHydrationGate(from: [
+            "--demo-block-hydration-delay-ms=9000",
+            "--demo-block-hydration-trigger-file=/tmp/a.trigger",
+            "--demo-block-hydration-trigger-file=",
+        ]) == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
+        // The two gates read their own arguments only.
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
+            == .delay(DemoFixtures.defaultBlockHydrationDelay))
+        #expect(DemoFixtures.hookListGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
+            == .delay(DemoFixtures.defaultHookListDelay))
+    }
+
+    @Test func lastAssistantMessagesCarrySlimTruncatedToolRowsThatHydrateInFull() throws {
+        let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
+        let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
+        let calls = DemoFixtures.longConversationTruncatedToolCalls
+        #expect(calls.count == 2)
+
+        // The last message carries the first call, the assistant message of
+        // the exchange before it the second; no other row is truncated.
+        let truncatedMessages = messages.filter { message in
+            message.contentBlocks?.contains { $0.isSlimTruncated } == true
+        }
+        #expect(truncatedMessages.count == calls.count)
+        #expect(truncatedMessages.allSatisfy { $0.role == .assistant })
+        let last = try #require(messages.last)
+        #expect(truncatedMessages.last?.id == last.id)
+
+        for (call, message) in zip(calls, truncatedMessages.reversed()) {
+            let blocks = try #require(message.contentBlocks)
+            let toolUse = try #require(blocks.first { $0.id == call.id })
+            #expect(toolUse.type == .toolUse)
+            #expect(toolUse.inputTruncated != true)
+            #expect(toolUse.input?["path"]?.value as? String == call.file)
+            let slimResult = try #require(blocks.first { $0.resolvedToolUseId == call.id })
+            #expect(slimResult.type == .toolResult)
+            #expect(slimResult.outputTruncated == true)
+            let preview = try #require(slimResult.output?.value as? String)
+            #expect(preview.count == DemoFixtures.longConversationTruncatedOutputPreviewLength)
+
+            let hydrated = DemoFixtures.response(for: "agent.getMessageBlock", params: [
+                "agentId": DemoFixtures.longConversationAgentId,
+                "messageId": message.id,
+                "blockId": slimResult.id,
+            ])
+            let dict = try #require(hydrated as? [String: Any])
+            let blockDict = try #require(dict["block"] as? [String: Any])
+            let full = try #require(ContentBlock.decode(blockDict))
+            #expect(full.id == slimResult.id)
+            #expect(full.type == .toolResult)
+            #expect(full.resolvedToolUseId == call.id)
+            #expect(full.outputTruncated != true)
+            let fullOutput = try #require(full.output?.value as? String)
+            #expect(fullOutput.hasPrefix(preview))
+            #expect(fullOutput.utf8.count == slimResult.outputBytes)
+            #expect(fullOutput.split(separator: "\n").count >= 50)
+            #expect(fullOutput.contains(call.symbol))
+        }
+
+        let unknown = DemoFixtures.response(
+            for: "agent.getMessageBlock",
+            params: ["agentId": DemoFixtures.longConversationAgentId, "blockId": "demo-long-tool-1-view-result"])
+        #expect(try #require(unknown as? [String: Any]).isEmpty)
     }
 
     @Test func taskListFixtureParses() throws {
