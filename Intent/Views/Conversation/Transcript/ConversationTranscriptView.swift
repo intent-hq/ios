@@ -135,7 +135,7 @@ struct ConversationTranscriptView: View {
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                transcriptRows(dividerAnchorId: dividerAnchorId)
+                transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
@@ -150,7 +150,11 @@ struct ConversationTranscriptView: View {
         .demoAccessibilityValue(
             ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
                 outcome: scrollState.lastForcedFollowOutcome,
-                corrections: scrollState.lastForcedFollowCorrections
+                corrections: scrollState.lastForcedFollowCorrections,
+                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+                    outcome: scrollState.lastUnrealizedEndRecoveryOutcome,
+                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections
+                )
             )
         )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
@@ -227,7 +231,162 @@ struct ConversationTranscriptView: View {
         .onDisappear {
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
+            cancelUnrealizedEndRecovery()
         }
+    }
+
+    /// Verifies, once the geometry has settled, that a following viewport
+    /// rests on realized rows, and recovers a blank one (#338): the lazy
+    /// stack can realize no rows at all under an offset that still reads
+    /// "at bottom" — the container re-pin's `scrollTo` after a footer row
+    /// landed did exactly that on a transcript whose last rows re-measure —
+    /// so every geometry-driven path stays silent. Armed when the end row
+    /// derealizes; each correction pages the live scroll view up a viewport
+    /// so rows realize above, then follows back to the end, and the loop
+    /// re-verifies from two fresh reads, a bounded number of times (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep`). A
+    /// gesture or a follow in flight is waited out; a user who rests away
+    /// ends it; a gesture or a follow that claims the viewport while a
+    /// correction has it paged up cancels it (see
+    /// `cancelPendingFollowOnTakeover`, `claimViewportForExplicitFollow`),
+    /// and the follow back re-checks the claim once the rows have realized
+    /// rather than scroll over it. A follow that drains with the end row
+    /// still unrealized arms it again from the level (see `scrollToBottom`),
+    /// since the row it cancelled the recovery over yields no new edge. A
+    /// correction in flight suppresses the
+    /// growth re-pin as a follow does, so the drain replays the live edge
+    /// the way the automatic follow's does. It is not a forced follow, so
+    /// the follow's report is left as it is; the recovery reports next to it
+    /// under `--demo-data`. A verification already running keeps its budget:
+    /// it reads the end row's current state at every poll, so re-arming it
+    /// would only reset the bound.
+    private func scheduleUnrealizedEndRecovery(proxy: ScrollViewProxy) {
+        guard scrollState.unrealizedEndRecoveryTask == nil else { return }
+        scrollState.unrealizedEndRecoveryTask = Task { @MainActor in
+            let deadline = ContinuousClock.now
+                + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
+            var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
+            var corrections = 0
+            var previous: ScrollViewMomentumProxy.RestingGeometry?
+            while true {
+                try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+                guard !Task.isCancelled else { return }
+                let geometry = scrollMomentumProxy.restingGeometry
+                let step = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep(
+                    geometry: geometry,
+                    previous: previous,
+                    isEndRealized: scrollState.isEndRealized,
+                    isInteracting: isUserInteracting,
+                    isFollowing: scrollDebounceTask != nil || isScrollingToBottom,
+                    hasInitiallyScrolled: hasInitiallyScrolled,
+                    userIsScrolledAway: userIsScrolledAway,
+                    correctionsLeft: correctionsLeft,
+                    correctionsSpent: corrections,
+                    timedOut: ContinuousClock.now >= deadline
+                )
+                previous = geometry
+                switch step {
+                case .settling:
+                    continue
+                case .followToEnd:
+                    correctionsLeft -= 1
+                    corrections += 1
+                    scrollState.isRecoveringUnrealizedEnd = true
+                    AppLog.ui.debug("[SCROLL] End row off screen short of the bottom; following to the end")
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    previous = nil
+                case .recover(let pageOffsetY):
+                    correctionsLeft -= 1
+                    corrections += 1
+                    scrollState.isRecoveringUnrealizedEnd = true
+                    AppLog.ui.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
+                    if scrollMomentumProxy.pageTo(offsetY: pageOffsetY) {
+                        try? await Task.sleep(
+                            for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+                        guard !Task.isCancelled else { return }
+                        guard ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
+                            isInteracting: isUserInteracting,
+                            userIsScrolledAway: userIsScrolledAway,
+                            isFollowing: scrollDebounceTask != nil
+                        ) else {
+                            AppLog.ui.debug("[SCROLL] End recovery yielded the paged-up viewport to the user")
+                            finishUnrealizedEndRecovery(outcome: .yieldToUser, corrections: corrections, proxy: proxy)
+                            return
+                        }
+                    }
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    previous = nil
+                case .none, .giveUp, .yieldToUser:
+                    finishUnrealizedEndRecovery(outcome: step, corrections: corrections, proxy: proxy)
+                    return
+                }
+            }
+        }
+    }
+
+    /// Drains the recovery: records the outcome once it has corrected the
+    /// viewport, releases the follow flag, and either replays the live edge
+    /// the flag suppressed while a correction was in flight (a viewport the
+    /// correction left short of a realized end row is re-pinned by the
+    /// growth path; under the finger it is read as the gesture it is) or,
+    /// once the budget is spent over a still-unrealized row, shows Go to
+    /// End rather than scroll blind (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain`) —
+    /// or, with a follow in flight, defers that to the follow's drain (see
+    /// `resolveDeferredUnrealizedEndGiveUp`).
+    private func finishUnrealizedEndRecovery(
+        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep,
+        corrections: Int,
+        proxy: ScrollViewProxy
+    ) {
+        if corrections > 0 {
+            scrollState.lastUnrealizedEndRecoveryOutcome = outcome
+            scrollState.lastUnrealizedEndRecoveryCorrections = corrections
+        }
+        scrollState.isRecoveringUnrealizedEnd = false
+        scrollState.unrealizedEndRecoveryTask = nil
+        switch ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(
+            outcome: outcome,
+            isFollowing: scrollDebounceTask != nil || isScrollingToBottom
+        ) {
+        case .replayEdge:
+            applyLiveScrolledAwayEdge(proxy: proxy)
+        case .showGoToEnd:
+            AppLog.ui.debug("[SCROLL] End recovery gave up over an unrealized end row; showing Go to End")
+            userIsScrolledAway = true
+        case .deferToFollow:
+            scrollState.unrealizedEndGiveUpDeferredToFollow = true
+            applyLiveScrolledAwayEdge(proxy: proxy)
+        }
+    }
+
+    /// Resolves a give-up the recovery deferred to the follow that was in
+    /// flight, when that follow drains — executed, dropped or yielded — or
+    /// is cancelled by a gesture. A follow that executed re-arms the
+    /// recovery from its drain; one that did not, over an end row still
+    /// unrealized, shows Go to End as the undeferred give-up would have (see
+    /// `ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow`).
+    /// Returns true when Go to End was shown, so the caller replays no edge
+    /// over it.
+    @discardableResult
+    private func resolveDeferredUnrealizedEndGiveUp(followExecuted: Bool) -> Bool {
+        let showGoToEnd = ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow(
+            executed: followExecuted,
+            isEndRealized: scrollState.isEndRealized,
+            giveUpDeferred: scrollState.unrealizedEndGiveUpDeferredToFollow
+        )
+        scrollState.unrealizedEndGiveUpDeferredToFollow = false
+        if showGoToEnd {
+            AppLog.ui.debug("[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End")
+            userIsScrolledAway = true
+        }
+        return showGoToEnd
+    }
+
+    private func cancelUnrealizedEndRecovery() {
+        scrollState.unrealizedEndRecoveryTask?.cancel()
+        scrollState.unrealizedEndRecoveryTask = nil
+        scrollState.isRecoveringUnrealizedEnd = false
     }
 
     /// Re-checks the live scroll view once the geometry has had time to
@@ -265,9 +424,10 @@ struct ConversationTranscriptView: View {
         }
     }
 
-    /// A follow is in flight from its request until its landing is verified.
+    /// A follow is in flight from its request until its landing is verified;
+    /// an unrealized-end correction on its way back to the end counts too.
     private var isFollowing: Bool {
-        scrollDebounceTask != nil || isScrollingToBottom
+        scrollDebounceTask != nil || isScrollingToBottom || scrollState.isRecoveringUnrealizedEnd
     }
 
     private func cancelPastEndRePin() {
@@ -358,13 +518,16 @@ struct ConversationTranscriptView: View {
     /// content yet when this runs. `isInteracting` defaults to the live
     /// gesture state; a phase ending passes true for its final sample. The
     /// takeover latch is released against the live state, so the phase
-    /// ending pinned releases it at once.
+    /// ending pinned releases it at once. An at-bottom edge over an
+    /// unrealized end row clears nothing (#338): the row realizing replays
+    /// the live edge (see the marker's `onAppear`).
     private func applyScrolledAwayEdge(geometryAway: Bool, isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
         let isInteracting = isInteracting ?? isUserInteracting
         let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: userIsScrolledAway,
             geometryAway: geometryAway,
-            isInteracting: isInteracting
+            isInteracting: isInteracting,
+            isEndRealized: scrollState.isEndRealized
         )
         if next != userIsScrolledAway {
             userIsScrolledAway = next
@@ -408,7 +571,7 @@ struct ConversationTranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRows(dividerAnchorId: String?) -> some View {
+    private func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
@@ -456,10 +619,23 @@ struct ConversationTranscriptView: View {
         // The stack's bottom padding lives on the marker so that
         // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
         // of the content, not a point 12 points above it that a landing
-        // judged against `followLandingTolerance` could never reach.
+        // judged against `followLandingTolerance` could never reach. Its
+        // realization is the end-row signal the unrealized-end recovery
+        // reads (#338): the lazy stack appears and disappears the marker as
+        // it realizes and drops it.
         Color.clear.frame(height: 8)
             .padding(.bottom, 12)
             .id("scroll-bottom")
+            .onAppear {
+                scrollState.isEndRealized = true
+                if userIsScrolledAway {
+                    applyLiveScrolledAwayEdge(proxy: proxy)
+                }
+            }
+            .onDisappear {
+                scrollState.isEndRealized = false
+                scheduleUnrealizedEndRecovery(proxy: proxy)
+            }
     }
 
     private var goToEndButton: some View {
@@ -663,8 +839,9 @@ struct ConversationTranscriptView: View {
     }
 
     /// The user taking over consumes whatever follow is still pending: an
-    /// automatic one in its debounce, or a forced one in its debounce or its
-    /// landing loop. Every forced follow is requested from a pinned viewport,
+    /// automatic one in its debounce, a forced one in its debounce or its
+    /// landing loop, or an unrealized-end correction between its page up and
+    /// its follow back. Every forced follow is requested from a pinned viewport,
     /// so the gesture came after the request and wins — the request is not
     /// kept for after the gesture ends, and its takeover is latched so a
     /// forced follow content raises meanwhile does not revive it. A cancelled
@@ -680,6 +857,8 @@ struct ConversationTranscriptView: View {
         scrollDebounceTask = nil
         scrollState.pendingFollowIsForced = false
         isScrollingToBottom = false
+        cancelUnrealizedEndRecovery()
+        resolveDeferredUnrealizedEndGiveUp(followExecuted: false)
     }
 
     /// An explicit request — Go to End, or the user's own message — takes
@@ -687,10 +866,12 @@ struct ConversationTranscriptView: View {
     /// and the SwiftUI phase is no longer the gesture's, so a phase ending
     /// delivered after the request (the fling it stopped, the tap that sent
     /// the message lifting) is not applied as the gesture's final sample and
-    /// does not take the request's follow over.
+    /// does not take the request's follow over. An unrealized-end correction
+    /// in flight is cancelled too: the request's follow owns the viewport.
     private func claimViewportForExplicitFollow() {
         scrollState.forcedFollowTakenOverByGesture = false
         scrollState.isUserScrollPhase = false
+        cancelUnrealizedEndRecovery()
     }
 
     /// Stamps the request time up front so deltas arriving inside the debounce
@@ -709,7 +890,10 @@ struct ConversationTranscriptView: View {
     /// flight, so when it drains — executed or dropped — the live distance is
     /// applied once as the edge it may have swallowed: content that grew past
     /// the band during the debounce with no gesture is re-pinned, not left
-    /// short with Go to End hidden.
+    /// short with Go to End hidden. A give-up the end recovery deferred to
+    /// this follow is resolved first (see
+    /// `resolveDeferredUnrealizedEndGiveUp`): dropped or yielded over an
+    /// unrealized end row, the follow shows Go to End and replays no edge.
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
         if forced, !ConversationTranscriptScrollPolicy.shouldHonorForcedFollow(
             takenOverByGesture: scrollState.forcedFollowTakenOverByGesture
@@ -751,8 +935,15 @@ struct ConversationTranscriptView: View {
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
             scrollDebounceTask = nil
-            if !forced {
+            let showedGoToEnd = resolveDeferredUnrealizedEndGiveUp(followExecuted: shouldExecute)
+            if !forced, !showedGoToEnd {
                 applyLiveScrolledAwayEdge(proxy: proxy)
+            }
+            if ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+                executed: shouldExecute,
+                isEndRealized: scrollState.isEndRealized
+            ) {
+                scheduleUnrealizedEndRecovery(proxy: proxy)
             }
         }
     }

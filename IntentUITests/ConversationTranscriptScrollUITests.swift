@@ -9,8 +9,13 @@ import XCTest
 /// hidden on every one of several consecutive entries into the conversation,
 /// hidden — with the last message on screen, no blank band, and the prompt
 /// rows under it on screen — once a cold entry has settled
-/// (intent-hq/ios#304), and hidden after a single tap from the very top of
-/// the transcript (intent-hq/ios#305).
+/// (intent-hq/ios#304), hidden — with the last message still on screen —
+/// when the hooks row lands right after a cold entry has settled
+/// (intent-hq/ios#338), still hidden — with the last message still on
+/// screen — when a slim-truncated tool row near the end hydrates seconds
+/// after a cold or warm entry has settled (intent-hq/ios#338, device
+/// evidence), and hidden after a single tap from the very top of the
+/// transcript (intent-hq/ios#305).
 ///
 /// Every wait is settlement polling on the app's own state, never a guessed
 /// idle delay: a forced follow (entry, Go to End, a send) reports its
@@ -47,13 +52,14 @@ import XCTest
 /// already under it. That workspace's `hook.list` fixture waits on
 /// `DemoFixtures.longConversationHookListGate` — a delay by default, or a
 /// trigger file — and every test here launches with the trigger file, so
-/// the hooks row never lands on its own clock: only the footer test
-/// releases it, once the transcript has been observed settled. On its
+/// the hooks row never lands on its own clock: only the two footer tests
+/// release it, once the transcript has been observed settled. On its
 /// default clock the row lands ~4 s after entry, inside every test's
 /// settle and quiet windows, and a row landing right after an entry had
 /// settled left the transcript blank with Go to End hidden on CI
 /// (intent-hq/ios#338) — a second event, a container resize, with its own
-/// outcome, in tests that measure the entry, a tap or a send.
+/// outcome, in tests that measure the entry, a tap or a send. The cold-entry
+/// footer test reproduces exactly that event on purpose.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// The file the fixture's hooks-row gate waits on (see
@@ -63,14 +69,23 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     private let hooksRowTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
 
+    /// The file the fixture's block-hydration gate waits on (see
+    /// `Fixture.blockHydrationTriggerFileArgumentPrefix`): every launch
+    /// passes it, so a slim-truncated tool row a test expands hydrates only
+    /// once the test creates the file.
+    private let blockHydrationTriggerFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("transcript-block-hydration-\(UUID().uuidString).trigger")
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
     }
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
         try super.tearDownWithError()
     }
 
@@ -142,13 +157,37 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let hookName = "Wait for CI on flake fix"
         // Holds the hooks row back: the fixture waits for this file to exist
         // (polled every 100 ms). Every launch passes `hooksRowTriggerFile`;
-        // only the footer test creates it, once it has recorded a steady
-        // baseline, so in every other test the row cannot land inside the
+        // only the two footer tests create it, once the transcript has
+        // settled, so in every other test the row cannot land inside the
         // windows (#338). The runner and the app share the simulator
         // filesystem, so a temporary-directory path works. A clock-based
         // delay raced the CI simulator's render time (#285).
         static let hooksRowTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
         static let hooksRowTimeout: TimeInterval = 15
+        // Holds the slim-truncated tool rows' `agent.getMessageBlock`
+        // hydration back the same way (DemoFixtures.longConversationBlockHydrationGate).
+        static let blockHydrationTriggerFileArgumentPrefix = "--demo-block-hydration-trigger-file="
+        static let blockHydrationTimeout: TimeInterval = 15
+        // Where the fixture seats the slim tool rows
+        // (DemoFixtures.LongConversationSlimToolRowLayout). By default they
+        // open the last assistant text messages — the layout that reproduced
+        // #338 through the hooks-row tests (CI run 35100409278) — so every
+        // test but the hydration one runs against it. The hydration test
+        // needs to tap the row, which a text-bearing assistant row's copy
+        // context-menu overlay prevents (intent-hq/ios#344), so it asks for
+        // the rows as tool-only assistant messages right before the text.
+        static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
+        static let standaloneSlimToolRows = "standalone"
+        // File name of the `view` tool row that goes with the last message
+        // (DemoFixtures.longConversationTruncatedToolCalls[0]): its header
+        // reads "Read final_evidence_table.py tests/payments/evidence"
+        // (ToolClassifier), and its result is a slim preview until hydrated.
+        static let truncatedToolFileName = "final_evidence_table.py"
+        // ToolCallView's hydration hint under an expanded slim row: "Preview
+        // — tap to load full content" until the fetch starts, "Loading full
+        // content…" while it is held by the gate, gone once the full block
+        // has merged in.
+        static let hydrationHintFragment = "full content"
         // Slack for the last message to sit at the same distance from the
         // transcript's bottom edge after the re-pin as before the row (an
         // unpinned transcript is off by the row's full height, ~36 pt).
@@ -173,6 +212,10 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // failure messages.
         static let followReportPrefix = "lastForcedFollow="
         static let pendingFollowReport = "lastForcedFollow=pending"
+        // The entry follow's report in #338: it had landed, and the
+        // container re-pin that blanked the transcript is not a forced
+        // follow, so the report never changes while the viewport is blank.
+        static let landedFollowReportPrefix = "lastForcedFollow=landed"
         // Cadence of every poll.
         static let pollInterval: TimeInterval = 0.25
     }
@@ -493,6 +536,225 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         }
     }
 
+    /// The hooks row landing right after a cold entry has settled — the
+    /// timing of intent-hq/ios#338 — must leave the transcript populated:
+    /// the row shrinks the container by its height and the re-pin that
+    /// follows must keep the last message realized inside the transcript,
+    /// with Go to End hidden and the entry follow's report untouched
+    /// (`lastForcedFollow=landed`: the re-pin is not a forced follow). On CI
+    /// the row landed on its default clock a couple of seconds after the
+    /// entry follow had reported, and from that moment the scroll view's
+    /// content container realized no rows at all — a blank viewport, no Go
+    /// to End, no recovery — while the report still read `landed`. Here the
+    /// row is released through the trigger-file gate the instant
+    /// `waitUntilSettled` returns, so the sequence is reproduced on the
+    /// fixture's own settlement signal rather than on a clock. The symptom
+    /// showed on the second launch of the process in a run, so the cold
+    /// entry is repeated with a fresh launch each cycle; the gate is closed
+    /// again before every launch.
+    @MainActor
+    func testHooksRowLandingRightAfterColdEntryKeepsLastMessageOnScreen() throws {
+        for cycle in 1...Fixture.entryCycles {
+            let context = "cold entry \(cycle)/\(Fixture.entryCycles) with the hooks row released on settle"
+            try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+            let app = launchDemoApp()
+            let opened = enterLongConversation(in: app, context: context)
+            let lastMessage = opened.lastMessage
+            let transcript = opened.transcript
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
+            let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
+
+            // 1. Settled exactly as a cold entry does: the entry follow has
+            //    reported and the last message rests inside the transcript,
+            //    with the row still held back.
+            guard waitUntilSettled(
+                on: lastMessage, named: "last assistant paragraph",
+                in: opened, context: context,
+                alsoReporting: (endRow.element, endRow.name)
+            ) else {
+                app.terminate()
+                continue
+            }
+            XCTAssertFalse(
+                hooksRow.exists,
+                "\(context): the hooks row was already present when the transcript settled; the fixture trigger file did not hold it back")
+            let bottomBeforeRow = transcript.frame.maxY
+
+            // 2. Release the row right away; it lands and shrinks the
+            //    transcript from below.
+            try Data().write(to: hooksRowTriggerFile)
+            XCTAssertTrue(
+                hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
+                "\(context): hooks row never appeared under the transcript after the trigger file was created")
+            XCTAssertTrue(
+                waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow },
+                "\(context): transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
+
+            // 3. Still populated: the last message is realized inside the
+            //    shrunk transcript once the re-pin has run (a blank viewport
+            //    leaves it out of the accessibility hierarchy for good), Go
+            //    to End is absent, the entry follow still reports `landed`,
+            //    and the end row rests at the end over the quiet window.
+            let repopulated = waitUntil(timeout: 5) { isInside(lastMessage, transcript) }
+            let visibleBand = rows(intersecting: transcript)
+            XCTAssertTrue(
+                repopulated,
+                "\(context): the last assistant paragraph is not inside the transcript after the hooks row landed "
+                    + "(\(visibleBand.count) row(s) in the visible band) — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertFalse(
+                opened.goToEnd.exists,
+                "\(context): Go to End appeared after the hooks row landed — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            let report = followReport(in: opened)
+            XCTAssertTrue(
+                report.hasPrefix(Fixture.landedFollowReportPrefix),
+                "\(context): the entry follow does not report landed after the hooks row landed — \(report)")
+            assertAtEnd(endRow, in: opened, context: "\(context), after the hooks row shrank the transcript")
+            assertStaysAtBottom(
+                lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
+                in: opened, context: "\(context), after the hooks row shrank the transcript")
+            app.terminate()
+        }
+    }
+
+    /// The device reproduction of intent-hq/ios#338: the transcript has
+    /// settled at the end — on a cold entry or a warm re-entry — and
+    /// seconds later, on a slow network, a slim-truncated block near the end
+    /// hydrates and its row re-measures under the resting viewport. Here a
+    /// tool-only assistant message right before the last one (the
+    /// `standalone` layout, see `Fixture.slimToolRowLayoutArgumentPrefix`)
+    /// carries a `view` tool row whose result the
+    /// fixture serves as a bounded preview; the test expands it once the
+    /// entry has settled (the row grows by its expanded preview and the
+    /// hydration fetch starts, held by the trigger-file gate), lets the
+    /// transcript come to rest again, then releases the hydration: the full
+    /// listing merges in (`remergeHydratedBlocks`) and the row grows to its
+    /// output cap while the loading hint disappears. Afterwards the last
+    /// paragraph must still be realized inside the transcript, Go to End
+    /// absent, the follow report `landed`, and the end row at the end over
+    /// the quiet window. The first cycle is a cold entry; each later cycle
+    /// leaves through the workspace list and re-enters, the warm path the
+    /// device reproduces on; the gate is closed again before every entry.
+    ///
+    /// Under `--demo-data` the store is rebuilt on every entry and there is
+    /// no chat channel or reconnect, so the slim `agent.getConversation`
+    /// answer is always the initial load (delaying it only shows the
+    /// loading spinner longer); the late hydration is the content-change
+    /// path the fixture can stage after the follow has landed.
+    ///
+    /// Skipped unless `INTENT_UITEST_BLOCK_HYDRATION=1`: the row cannot be
+    /// expanded from the resting end position on the CI simulator. Opening
+    /// the last text message, the copy context-menu overlay claims the tap
+    /// (intent-hq/ios#344; CI run 35103923565); as a tool-only message right
+    /// before it, the row rests under the navigation bar (frame y ≈ 49 in a
+    /// transcript whose frame starts at 0; runs 35107741728, 35108439891,
+    /// 35108448945, 35108458017), so the tap never reaches it either.
+    @MainActor
+    func testLateBlockHydrationNearEndAfterEntryKeepsLastMessageOnScreen() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["INTENT_UITEST_BLOCK_HYDRATION"] == "1",
+            "the slim tool row cannot be tapped from the resting end position: intent-hq/ios#344 "
+                + "(overlay) with leading rows, under the navigation bar with standalone rows")
+        let app = launchDemoApp(standaloneSlimToolRows: true)
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
+        for cycle in 1...Fixture.entryCycles {
+            let entry = cycle == 1 ? "cold entry" : "warm re-entry"
+            let context = "\(entry) \(cycle)/\(Fixture.entryCycles) with a late hydration near the end"
+            try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
+            let opened = openLongConversation(in: app, context: context)
+            let lastMessage = opened.lastMessage
+            let transcript = opened.transcript
+            let hydrationHint = app.descendants(matching: .any)
+                .containing(NSPredicate(format: "label CONTAINS %@", Fixture.hydrationHintFragment))
+                .firstMatch
+
+            // 1. Settled at the end with the hydration gate closed and the
+            //    tool row still collapsed.
+            guard waitUntilSettled(
+                on: lastMessage, named: "last assistant paragraph",
+                in: opened, context: context,
+                alsoReporting: (endRow.element, endRow.name)
+            ) else {
+                leaveConversation(in: app)
+                continue
+            }
+            assertAtEnd(endRow, in: opened, context: context)
+            XCTAssertFalse(
+                hydrationHint.exists,
+                "\(context): the slim tool row was already expanded when the transcript settled")
+
+            // 2. Expand the slim tool row right above the last message: the row grows
+            //    by its expanded preview and its hydration starts, held back
+            //    by the trigger file. Let the transcript rest again so the
+            //    hydration lands on a settled viewport, as on the device.
+            //    The scroll view extends under the navigation bar, so the
+            //    row must also clear the bar's bottom edge to be tappable.
+            let toolRow = app.buttons
+                .containing(NSPredicate(format: "label CONTAINS %@", Fixture.truncatedToolFileName))
+                .firstMatch
+            let navigationBarBottom = app.navigationBars.firstMatch.frame.maxY
+            XCTAssertTrue(
+                waitUntil(timeout: 5) {
+                    isVisible(toolRow, in: transcript) && (frame(of: toolRow)?.minY ?? -.infinity) >= navigationBarBottom
+                },
+                "\(context): the slim tool row above the last message is not tappable while the transcript rests at the end "
+                    + "(navigation bar bottom \(navigationBarBottom)) — "
+                    + restingState(of: toolRow, named: "slim tool row", in: opened))
+            toolRow.tap()
+            XCTAssertTrue(
+                hydrationHint.waitForExistence(timeout: 5),
+                "\(context): the hydration hint never appeared under the expanded slim tool row — "
+                    + restingState(of: toolRow, named: "slim tool row", in: opened))
+            guard waitUntilSettled(
+                on: lastMessage, named: "last assistant paragraph",
+                in: opened, context: "\(context), after expanding the slim tool row",
+                alsoReporting: (endRow.element, endRow.name)
+            ) else {
+                leaveConversation(in: app)
+                continue
+            }
+            assertAtEnd(endRow, in: opened, context: "\(context), after expanding the slim tool row")
+            XCTAssertTrue(
+                hydrationHint.exists,
+                "\(context): the hydration completed before the trigger file was created; the fixture gate did not hold it back")
+
+            // 3. Release the hydration: the full listing merges in, the hint
+            //    disappears and the row re-measures under the resting viewport.
+            try Data().write(to: blockHydrationTriggerFile)
+            XCTAssertTrue(
+                waitUntil(timeout: Fixture.blockHydrationTimeout) { !hydrationHint.exists },
+                "\(context): the hydration hint stayed after the trigger file was created; the full block never merged in")
+
+            // 4. Still populated: the last paragraph is realized inside the
+            //    transcript (a blank viewport leaves it out of the
+            //    accessibility hierarchy for good), Go to End is absent, the
+            //    follow still reports `landed`, and the end row rests at the
+            //    end over the quiet window.
+            let hydrated = "\(context), after the hydration re-measured the row"
+            let repopulated = waitUntil(timeout: 5) { isInside(lastMessage, transcript) }
+            let visibleBand = rows(intersecting: transcript)
+            XCTAssertTrue(
+                repopulated,
+                "\(hydrated): the last assistant paragraph is not inside the transcript "
+                    + "(\(visibleBand.count) row(s) in the visible band) — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            XCTAssertFalse(
+                opened.goToEnd.exists,
+                "\(hydrated): Go to End appeared — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            assertAtEnd(endRow, in: opened, context: hydrated)
+            let report = followReport(in: opened)
+            XCTAssertTrue(
+                report.hasPrefix(Fixture.landedFollowReportPrefix),
+                "\(hydrated): the follow does not report landed — \(report)")
+            assertStaysAtBottom(
+                lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
+                in: opened, context: hydrated)
+            leaveConversation(in: app)
+        }
+    }
+
     /// From the very top of the long transcript a single tap on Go to End
     /// must land at the very end: the last message and the prompt rows under
     /// it come on screen with the end row `Fixture.endRowGap` above the
@@ -550,14 +812,20 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     // MARK: - Helpers
 
     /// Launches the demo app with the hooks row held back behind
-    /// `hooksRowTriggerFile` (see the class comment).
+    /// `hooksRowTriggerFile` (see the class comment) and the slim tool rows'
+    /// hydration behind `blockHydrationTriggerFile`; `standaloneSlimToolRows`
+    /// seats those rows as tool-only messages (see `Fixture`).
     @MainActor
-    private func launchDemoApp() -> XCUIApplication {
+    private func launchDemoApp(standaloneSlimToolRows: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [
             "--demo-data",
             Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path,
+            Fixture.blockHydrationTriggerFileArgumentPrefix + blockHydrationTriggerFile.path,
         ]
+        if standaloneSlimToolRows {
+            app.launchArguments.append(Fixture.slimToolRowLayoutArgumentPrefix + Fixture.standaloneSlimToolRows)
+        }
         app.launch()
         return app
     }

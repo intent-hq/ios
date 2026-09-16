@@ -10,6 +10,21 @@ final class ConversationTranscriptScrollState {
     /// Pending settle re-check of a container re-pin deferred while the user
     /// was interacting with the scroll view.
     @ObservationIgnored var containerRePinTask: Task<Void, Never>?
+    /// Pending verification that a following viewport rests on realized
+    /// rows, armed when the end row derealizes (#338).
+    @ObservationIgnored var unrealizedEndRecoveryTask: Task<Void, Never>?
+    /// True while the transcript's end row (the `scroll-bottom` marker) is
+    /// realized by the lazy stack; a following viewport at rest at the
+    /// bottom with this false is blank (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep`).
+    @ObservationIgnored var isEndRealized = false
+    /// True from an unrealized-end correction being issued until the
+    /// recovery resolves; counts as a follow in flight for the other paths.
+    @ObservationIgnored var isRecoveringUnrealizedEnd = false
+    /// Set when the recovery gave up while a follow was in flight; that
+    /// follow's drain (or its cancellation) resolves it (see
+    /// `ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow`).
+    @ObservationIgnored var unrealizedEndGiveUpDeferredToFollow = false
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
@@ -45,4 +60,9 @@ final class ConversationTranscriptScrollState {
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingStep?
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
+    /// How the last unrealized-end recovery that corrected the viewport
+    /// resolved, and the corrections it spent (#338); demo-only diagnostics
+    /// like the forced follow's.
+    var lastUnrealizedEndRecoveryOutcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?
+    var lastUnrealizedEndRecoveryCorrections = 0
 }

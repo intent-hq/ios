@@ -102,7 +102,9 @@ enum DemoFixtures {
     /// answering, so the hooks row appears under an already-settled
     /// transcript — the container-resize path of #272 under `--demo-data`
     /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately. The default delay suits the screenshot flows; a UI test
+    /// immediately, apart from `agent.getMessageBlock` behind
+    /// `longConversationBlockHydrationGate`. The default delay suits the
+    /// screenshot flows; a UI test
     /// that must observe the transcript before the row lands passes
     /// `--demo-hook-list-trigger-file=<path>` and creates that file when it
     /// is ready — a clock cannot be made robust against the render time of a
@@ -114,6 +116,22 @@ enum DemoFixtures {
     static let hookListDelayArgumentPrefix = "--demo-hook-list-delay-ms="
 
     static let hookListTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
+
+    /// What `agent.getMessageBlock` for `longConversationAgentId` waits on
+    /// before answering: the slow-network hydration of the slim-truncated
+    /// tool rows near the end of the long transcript
+    /// (`longConversationTruncatedToolCalls`), so a row re-measures seconds
+    /// after the entry follow has landed (intent-hq/ios#338). Same shape as
+    /// the hooks-row gate: a delay by default, or
+    /// `--demo-block-hydration-trigger-file=<path>` for a UI test that
+    /// releases the hydration itself.
+    static let longConversationBlockHydrationGate = blockHydrationGate(from: ProcessInfo.processInfo.arguments)
+
+    static let defaultBlockHydrationDelay: Duration = .seconds(4)
+
+    static let blockHydrationDelayArgumentPrefix = "--demo-block-hydration-delay-ms="
+
+    static let blockHydrationTriggerFileArgumentPrefix = "--demo-block-hydration-trigger-file="
 
     /// Polling cadence for `ResponseGate.triggerFile`.
     static let triggerFilePollInterval: Duration = .milliseconds(100)
@@ -129,31 +147,65 @@ enum DemoFixtures {
     /// `--demo-hook-list-trigger-file=<path>` (the last one wins);
     /// otherwise `.delay` of `hookListDelay(from:)`.
     static func hookListGate(from arguments: [String]) -> ResponseGate {
-        let path = arguments
-            .filter { $0.hasPrefix(hookListTriggerFileArgumentPrefix) }
-            .map { String($0.dropFirst(hookListTriggerFileArgumentPrefix.count)) }
-            .last { !$0.isEmpty }
-        if let path { return .triggerFile(URL(fileURLWithPath: path)) }
-        return .delay(hookListDelay(from: arguments))
+        gate(from: arguments,
+             triggerFilePrefix: hookListTriggerFileArgumentPrefix,
+             delayPrefix: hookListDelayArgumentPrefix,
+             defaultDelay: defaultHookListDelay)
     }
 
     /// `defaultHookListDelay` unless the arguments carry a well-formed
     /// `--demo-hook-list-delay-ms=<milliseconds>`; the last one wins.
     static func hookListDelay(from arguments: [String]) -> Duration {
+        delay(from: arguments, prefix: hookListDelayArgumentPrefix, defaultDelay: defaultHookListDelay)
+    }
+
+    /// `.triggerFile` when the arguments carry a non-empty
+    /// `--demo-block-hydration-trigger-file=<path>` (the last one wins);
+    /// otherwise `.delay` of `blockHydrationDelay(from:)`.
+    static func blockHydrationGate(from arguments: [String]) -> ResponseGate {
+        gate(from: arguments,
+             triggerFilePrefix: blockHydrationTriggerFileArgumentPrefix,
+             delayPrefix: blockHydrationDelayArgumentPrefix,
+             defaultDelay: defaultBlockHydrationDelay)
+    }
+
+    /// `defaultBlockHydrationDelay` unless the arguments carry a well-formed
+    /// `--demo-block-hydration-delay-ms=<milliseconds>`; the last one wins.
+    static func blockHydrationDelay(from arguments: [String]) -> Duration {
+        delay(from: arguments, prefix: blockHydrationDelayArgumentPrefix, defaultDelay: defaultBlockHydrationDelay)
+    }
+
+    private static func gate(
+        from arguments: [String], triggerFilePrefix: String, delayPrefix: String, defaultDelay: Duration
+    ) -> ResponseGate {
+        let path = arguments
+            .filter { $0.hasPrefix(triggerFilePrefix) }
+            .map { String($0.dropFirst(triggerFilePrefix.count)) }
+            .last { !$0.isEmpty }
+        if let path { return .triggerFile(URL(fileURLWithPath: path)) }
+        return .delay(delay(from: arguments, prefix: delayPrefix, defaultDelay: defaultDelay))
+    }
+
+    private static func delay(from arguments: [String], prefix: String, defaultDelay: Duration) -> Duration {
         let milliseconds = arguments
-            .filter { $0.hasPrefix(hookListDelayArgumentPrefix) }
-            .compactMap { Int($0.dropFirst(hookListDelayArgumentPrefix.count)) }
+            .filter { $0.hasPrefix(prefix) }
+            .compactMap { Int($0.dropFirst(prefix.count)) }
             .last { $0 >= 0 }
-        guard let milliseconds else { return defaultHookListDelay }
+        guard let milliseconds else { return defaultDelay }
         return .milliseconds(milliseconds)
     }
 
     /// Gate to wait on before serving `response(for:params:)`, or nil for an
     /// immediate answer.
     static func responseGate(for method: String, params: [String: Any]) -> ResponseGate? {
-        guard method == "hook.list",
-              params["workspaceId"] as? String == longConversationWorkspaceId else { return nil }
-        return longConversationHookListGate
+        switch method {
+        case "hook.list" where params["workspaceId"] as? String == longConversationWorkspaceId:
+            return longConversationHookListGate
+        case "agent.getMessageBlock" where params["agentId"] as? String == longConversationAgentId:
+            return longConversationBlockHydrationGate
+        default:
+            return nil
+        }
     }
 
     /// Suspends until `gate` opens; cancellation propagates from `Task.sleep`.
@@ -208,6 +260,10 @@ enum DemoFixtures {
                 "truncated": false,
                 "totalMessages": messages.count,
             ] as [String: Any]
+        case "agent.getMessageBlock":
+            let blockId = params["blockId"] as? String
+            guard let block = longConversationFullBlock(id: blockId) else { return [String: Any]() }
+            return ["block": block]
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
         case "agent.getSubscriptions":
@@ -655,6 +711,118 @@ enum DemoFixtures {
         "Schedule the worker scaling follow-up",
     ]
 
+    /// Tool rows the slim projection truncates (PROTOCOL §5.5) near the end
+    /// of `longConversationMessages`, seated per
+    /// `longConversationSlimToolRowLayout` — the first entry with the very
+    /// last assistant text message, the second with the assistant text
+    /// message of the exchange before it: a `view` of `file` whose
+    /// `tool_result` is served as a bounded preview with `outputTruncated`,
+    /// and whose full listing `agent.getMessageBlock` returns through
+    /// `longConversationBlockHydrationGate`. Expanding the row re-measures
+    /// it once the full body merges in — the late re-layout near the end of
+    /// an already-settled transcript of intent-hq/ios#338.
+    static let longConversationTruncatedToolCalls: [(id: String, file: String, symbol: String)] = [
+        ("demo-long-slim-tool-1", "tests/payments/evidence/final_evidence_table.py", "render_final_evidence"),
+        ("demo-long-slim-tool-2", "tests/payments/evidence/repro_loop_report.py", "summarize_repro_loop"),
+    ]
+
+    /// Characters of the full `tool_result` output the slim row keeps.
+    static let longConversationTruncatedOutputPreviewLength = 160
+
+    /// Where `longConversationMessages` seats each of
+    /// `longConversationTruncatedToolCalls` relative to its assistant text
+    /// message.
+    enum LongConversationSlimToolRowLayout: String, CaseIterable {
+        /// Opening the text message: the row is its first block, the
+        /// paragraphs follow — the shape of a coordinator turn on the
+        /// daemon. The default reproducing layout for intent-hq/ios#338
+        /// (run 35100409278, through the hooks-row tests of
+        /// `ConversationTranscriptScrollUITests`), not the only one.
+        case leading
+        /// Its own tool-only assistant message right before the text
+        /// message; reproduced the footer blank as well (run 35107741728
+        /// at 87b44f6, `testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden`).
+        /// A text-bearing assistant row sits under the message copy
+        /// context-menu overlay, which claims taps meant for plain SwiftUI
+        /// content such as the row's header (intent-hq/ios#344), so a UI test
+        /// that expands the row needs this layout.
+        case standalone
+    }
+
+    /// `--demo-long-slim-tool-rows=<leading|standalone>`; the last
+    /// well-formed one wins, `.leading` otherwise.
+    static let longConversationSlimToolRowLayout = slimToolRowLayout(from: ProcessInfo.processInfo.arguments)
+
+    static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
+
+    static func slimToolRowLayout(from arguments: [String]) -> LongConversationSlimToolRowLayout {
+        arguments
+            .filter { $0.hasPrefix(slimToolRowLayoutArgumentPrefix) }
+            .compactMap {
+                LongConversationSlimToolRowLayout(rawValue: String($0.dropFirst(slimToolRowLayoutArgumentPrefix.count)))
+            }
+            .last ?? .leading
+    }
+
+    /// The full `tool_result` block (no truncation flags) for one of
+    /// `longConversationTruncatedToolCalls` by its result block id, or nil.
+    static func longConversationFullBlock(id blockId: String?) -> [String: Any]? {
+        guard let call = longConversationTruncatedToolCalls.first(where: { "\($0.id)-result" == blockId }) else {
+            return nil
+        }
+        return toolResultBlock(toolUseId: call.id, output: longConversationFullOutput(for: call))
+    }
+
+    /// The slim `tool_use` / `tool_result` pair for `call`: the full input,
+    /// and the first `longConversationTruncatedOutputPreviewLength`
+    /// characters of the listing flagged `outputTruncated`.
+    private static func truncatedToolBlocks(_ call: (id: String, file: String, symbol: String)) -> [[String: Any]] {
+        let output = longConversationFullOutput(for: call)
+        var result = toolResultBlock(
+            toolUseId: call.id, output: String(output.prefix(longConversationTruncatedOutputPreviewLength)))
+        result["outputTruncated"] = true
+        result["outputBytes"] = output.utf8.count
+        return [
+            toolUseBlock(id: call.id, name: "view", input: ["path": call.file]),
+            result,
+        ]
+    }
+
+    /// A ~60-line numbered listing of `call.file`, several screens of
+    /// monospaced output once hydrated.
+    private static func longConversationFullOutput(for call: (id: String, file: String, symbol: String)) -> String {
+        var lines = [
+            "\(call.file)",
+            "   1 | \"\"\"Evidence rendering for the flake investigation.\"\"\"",
+            "   2 | from dataclasses import dataclass",
+            "   3 | from statistics import quantiles",
+            "   4 | ",
+            "   5 | ",
+            "   6 | @dataclass(frozen=True)",
+            "   7 | class RunSample:",
+            "   8 |     workers: int",
+            "   9 |     duration_seconds: float",
+            "  10 |     failures: int",
+            "  11 | ",
+            "  12 | ",
+            "  13 | def \(call.symbol)(samples: list[RunSample]) -> str:",
+            "  14 |     rows = [\"| Run | Workers | Duration | Failures |\", \"|-----|---------|----------|----------|\"]",
+        ]
+        for run in 1...40 {
+            let line = 14 + run
+            let index = run - 1
+            lines.append("  \(line) |     rows.append(f\"| \(run) | {samples[\(index)].workers} | "
+                + "{samples[\(index)].duration_seconds:.1f}s | {samples[\(index)].failures} |\")")
+        }
+        lines += [
+            "  55 |     p50, p90 = quantiles([s.duration_seconds for s in samples], n=10)[4], quantiles([s.duration_seconds for s in samples], n=10)[8]",
+            "  56 |     rows.append(f\"| p50 | — | {p50:.1f}s | — |\")",
+            "  57 |     rows.append(f\"| p90 | — | {p90:.1f}s | — |\")",
+            "  58 |     return \"\\n\".join(rows)",
+        ]
+        return lines.joined(separator: "\n")
+    }
+
     /// A coordinator-shaped transcript many screens tall on an iPhone, so
     /// scroll-position UI (the "Go to End" button) and the LazyVStack
     /// cold-layout paths (intent-hq/ios#304, #305) can be exercised against
@@ -666,8 +834,13 @@ enum DemoFixtures {
     /// heights. The first message begins with `longConversationFirstSentence`
     /// and the last one's rendered text ends with
     /// `longConversationLastSentence`, followed only by the stripped
-    /// `longConversationSuggestedPrompts` block.
+    /// `longConversationSuggestedPrompts` block. The slim-truncated tool
+    /// rows near the end sit per `longConversationSlimToolRowLayout`.
     static var longConversationMessages: [[String: Any]] {
+        longConversationMessages(slimToolRows: longConversationSlimToolRowLayout)
+    }
+
+    static func longConversationMessages(slimToolRows layout: LongConversationSlimToolRowLayout) -> [[String: Any]] {
         let suggestedPromptsBlock = (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"])
             .joined(separator: "\n")
         let exchanges: [(user: String, assistant: String)] = [
@@ -924,7 +1097,23 @@ enum DemoFixtures {
         var rows: [LongConversationRow] = []
         for (index, exchange) in exchanges.enumerated() {
             rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
-            rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
+            // The last assistant text messages each carry a slim-truncated
+            // tool row (see `longConversationTruncatedToolCalls`): opening
+            // the message, or as a tool-only message right before it.
+            let truncatedCallIndex = exchanges.count - 1 - index
+            let truncatedBlocks = truncatedCallIndex < longConversationTruncatedToolCalls.count
+                ? truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
+                : []
+            switch layout {
+            case .leading:
+                rows.append(LongConversationRow(
+                    role: "assistant", contentBlocks: truncatedBlocks + [textBlock(exchange.assistant)]))
+            case .standalone:
+                if !truncatedBlocks.isEmpty {
+                    rows.append(LongConversationRow(role: "assistant", contentBlocks: truncatedBlocks))
+                }
+                rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
+            }
             if index < exchanges.count - 1 {
                 rows += longConversationRound(index)
             }
