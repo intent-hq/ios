@@ -186,18 +186,22 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
         // The short conversation (intent-hq/ios#346): DemoFixtures.
         // shortConversationWorkspaceTitle, a distinctive substring of
-        // shortConversationLastSentence, and its three suggested prompts —
-        // the same `endRowIdentifier` is its final content row.
+        // shortConversationLastSentence, and its single suggested prompt —
+        // its final content row.
         static let shortWorkspaceTitle = "Rename the nightly billing cron"
         static let shortLastMessageFragment = "End of the cron rename"
+        static let shortEndRowIdentifier = "transcript.suggestedPrompt.0"
         // Sets the reply's code block line count: the fixture reads the
         // file's contents on every conversation fetch and polls it (every
         // 100 ms); a change is streamed to the open conversation the way a
         // live reply is — one chat delta per added line, a terminal delta,
-        // then the stream's end. Every launch passes `growthFile`; only the
-        // growth test writes it (see the class comment on the hooks row
-        // trigger file for why a file, not a clock).
+        // then the stream's end. `<count> burst=<lines>` paces the last
+        // `lines` deltas against the automatic follow (see
+        // DemoFixtures.shortConversationGrowthBurstInterval). Every launch
+        // passes `growthFile`; only the growth test writes it (see the class
+        // comment on the hooks row trigger file for why a file, not a clock).
         static let growthFileArgumentPrefix = "--demo-short-conversation-growth-file="
+        static let growthBurstToken = "burst="
         // DemoFixtures.shortConversationBaselineLineCount: the code block's
         // lines while the file is absent.
         static let shortBaselineLineCount = 2
@@ -216,12 +220,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // Constants.Conversation.Transcript.atBottomThreshold: the growth
         // past one page must stay under it (no Go to End, no away edge) and
         // over `endGapTolerance` (a rest that far short must fail
-        // `isAtEnd`), so it aims for the middle of the band.
+        // `isAtEnd`).
         static let atBottomThreshold: CGFloat = 50
-        static let targetOvershoot: CGFloat = 25
+        // Code lines streamed past the fold as the growth's burst, one line
+        // fewer when that many would leave the band. The first crosses the
+        // fold; its delta's follow check still reads the geometry laid out
+        // before it, so the second's requests the automatic follow, and the
+        // third lands while that follow is in flight — the line the pre-fix
+        // viewport rested short by (#346). Two lines can only show the
+        // footer swap that ends the stream landing in flight.
+        static let pastFoldLines = 3
         // Upper bound on a written line count reaching the transcript: the
-        // fixture's 100 ms poll, the deltas streaming in 80 ms apart, and the
-        // grown row re-laying out.
+        // fixture's 100 ms poll, the deltas streaming in 80 ms apart, the
+        // burst's lead pause, and the grown row re-laying out.
         static let growthTimeout: TimeInterval = 15
     }
 
@@ -246,6 +257,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             EndRow(
                 element: app.buttons[Fixture.endRowIdentifier].firstMatch,
                 name: "last suggested prompt", labelInset: 0)
+        }
+
+        /// The short conversation's single suggested prompt.
+        @MainActor
+        static func onlySuggestedPrompt(in app: XCUIApplication) -> EndRow {
+            EndRow(
+                element: app.buttons[Fixture.shortEndRowIdentifier].firstMatch,
+                name: "suggested prompt", labelInset: 0)
         }
 
         @MainActor
@@ -609,15 +628,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// far past one page it lands is aimed, not guessed: the free room below the
     /// end row is measured on the settled short transcript, a first growth
     /// that keeps it short measures one code line's height on this
-    /// simulator, and the final line count is chosen from both to overshoot
-    /// the fold by `Fixture.targetOvershoot`.
+    /// simulator, and the final line count is chosen from both so that the
+    /// lines still fitting stream first and `Fixture.pastFoldLines` cross
+    /// the fold as the burst the fixture paces against the automatic follow.
     @MainActor
     func testShortConversationGrowingPastOnePageRestsAtBottomWithGoToEndHidden() throws {
         let app = launchDemoApp()
         let opened = openShortConversation(in: app)
         let lastMessage = opened.lastMessage
         let transcript = opened.transcript
-        let endRow = EndRow.lastSuggestedPrompt(in: app)
+        let endRow = EndRow.onlySuggestedPrompt(in: app)
         let roomBelowEndRow = { self.freeRoom(below: endRow, in: transcript) }
 
         // 1. Settle short of one page: the entry follow has reported and the
@@ -660,17 +680,25 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 + restingState(of: endRow.element, named: endRow.name, in: opened))
         }
 
-        // 3. Grow past one page by about `targetOvershoot`: inside the
-        //    at-bottom band, well past `isAtEnd`'s tolerance.
-        let extraLines = Int(((calibratedRoom + Fixture.targetOvershoot) / lineHeight).rounded())
-        let overshoot = CGFloat(extraLines) * lineHeight - calibratedRoom
+        // 3. Grow past one page: the lines that still fit, then
+        //    `pastFoldLines` as the burst — inside the at-bottom band, well
+        //    past `isAtEnd`'s tolerance — or one fewer when the band has no
+        //    room for that many.
+        let fittingLines = Int((calibratedRoom / lineHeight).rounded(.down))
+        var burstLines = Fixture.pastFoldLines
+        var overshoot = CGFloat(fittingLines + burstLines) * lineHeight - calibratedRoom
+        if overshoot >= Fixture.atBottomThreshold - Fixture.rePinTolerance {
+            burstLines -= 1
+            overshoot -= lineHeight
+        }
+        let extraLines = fittingLines + burstLines
         guard overshoot > Fixture.endGapTolerance + Fixture.rePinTolerance,
               overshoot < Fixture.atBottomThreshold - Fixture.rePinTolerance else {
             return XCTFail("\(extraLines) more code lines of \(lineHeight) pt would grow the transcript \(overshoot) pt past "
                 + "one page, outside the at-bottom band this scenario needs")
         }
         lineCount += extraLines
-        try grow(to: lineCount)
+        try grow(to: lineCount, burst: burstLines)
 
         // 4. Rests at the end, then stays: the growth's within-band edge
         //    re-pins the viewport, so the end row comes to its end gap with
@@ -678,7 +706,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         //    is an automatic follow, not a forced one, so it is polled on
         //    the geometry it restores rather than on a report.
         let context = "after the reply grew the transcript \(Int(overshoot.rounded())) pt past one page "
-            + "(\(lineCount) code lines of \(lineHeight) pt)"
+            + "(\(lineCount) code lines of \(lineHeight) pt, the last \(burstLines) as the burst)"
         XCTAssertTrue(
             waitUntil(timeout: Fixture.settleTimeout) { isAtEnd(endRow, in: transcript) },
             "\(context): the transcript did not come to rest at the end within \(Int(Fixture.settleTimeout)) s — "
@@ -766,11 +794,14 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
     }
 
-    /// Sets the short conversation's code block line count: the fixture
-    /// picks the change up within its poll interval and the open transcript
-    /// refetches. Written atomically so the fixture never reads a half-written count.
-    private func grow(to lineCount: Int) throws {
-        try Data(String(lineCount).utf8).write(to: growthFile, options: .atomic)
+    /// Sets the short conversation's code block line count, the last `burst`
+    /// lines paced as the burst: the fixture picks the change up within its
+    /// poll interval and streams it to the open transcript. Written
+    /// atomically so the fixture never reads a half-written count.
+    private func grow(to lineCount: Int, burst: Int = 0) throws {
+        let contents = burst > 0
+            ? "\(lineCount) \(Fixture.growthBurstToken)\(burst)" : String(lineCount)
+        try Data(contents.utf8).write(to: growthFile, options: .atomic)
     }
 
     /// Points between the end of the content — `endRow`'s frame bottom plus

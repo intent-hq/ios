@@ -191,8 +191,9 @@ enum DemoFixtures {
     static let shortConversationBaselineLineCount = 2
 
     /// `--demo-short-conversation-growth-file=<path>`: the file whose
-    /// contents (an integer) set the code block's line count. The fixture
-    /// reads it on every `agent.getConversation` for
+    /// contents (`<lineCount>`, optionally `<lineCount> burst=<lines>`; see
+    /// `shortConversationGrowth(parsing:)`) set the code block's line count.
+    /// The fixture reads it on every `agent.getConversation` for
     /// `shortConversationAgentId`, and `startShortConversationGrowthWatcher`
     /// polls it: a change in its contents is streamed to an open conversation
     /// the way a live reply is — the agent's `chat.subscribe` channel
@@ -218,6 +219,35 @@ enum DemoFixtures {
     /// Pause between one line's delta and the next while a growth streams.
     static let shortConversationGrowthDeltaInterval: Duration = .milliseconds(80)
 
+    /// A growth's last `burst=<lines>` deltas are paced against the
+    /// transcript's automatic follow instead (#346). The reply first pauses
+    /// `shortConversationGrowthBurstLead` — longer than
+    /// `Constants.Conversation.Transcript.streamingFollowMinimumInterval`, so
+    /// the follow the stream's start forced no longer rate-limits the burst.
+    /// Each burst delta, and the terminal step after the last, then comes
+    /// `shortConversationGrowthBurstInterval` after the previous one: past
+    /// the follow's `scrollDebounceMilliseconds` and inside its
+    /// `scrollAnimationDuration`, so the line after the one whose delta
+    /// requested a follow lands while that follow is still in flight, and the
+    /// stream ends before the rate limit would allow the next follow.
+    static let shortConversationGrowthBurstLead: Duration = .milliseconds(600)
+    static let shortConversationGrowthBurstInterval: Duration = .milliseconds(170)
+    static let shortConversationGrowthBurstToken = "burst="
+
+    /// What a growth file asks for: the code block's line count, and how
+    /// many of the growth's last deltas form the burst (0: none).
+    struct ShortConversationGrowth: Equatable {
+        var lineCount: Int
+        var burstCount: Int
+    }
+
+    /// One delta of a growth and the pauses around it.
+    struct ShortConversationGrowthStep: Equatable {
+        let lineCount: Int
+        let pauseBefore: Duration
+        let pauseAfter: Duration
+    }
+
     static let shortConversationGrowthFile = shortConversationGrowthFile(from: ProcessInfo.processInfo.arguments)
 
     /// The last non-empty `--demo-short-conversation-growth-file=<path>`, or nil.
@@ -229,14 +259,28 @@ enum DemoFixtures {
             .map { URL(fileURLWithPath: $0) }
     }
 
-    /// The line count a growth file's contents ask for: a positive integer
-    /// (surrounding whitespace ignored); anything else, including no file,
-    /// is `shortConversationBaselineLineCount`.
+    /// The growth a file's contents ask for: a positive integer line count
+    /// (surrounding whitespace ignored), optionally followed by
+    /// `burst=<lines>`; anything else, including no file, is
+    /// `shortConversationBaselineLineCount` with no burst.
+    static func shortConversationGrowth(parsing contents: String?) -> ShortConversationGrowth {
+        let tokens = (contents ?? "").split(whereSeparator: \.isWhitespace)
+        guard let first = tokens.first, let count = Int(first), count > 0 else {
+            return ShortConversationGrowth(lineCount: shortConversationBaselineLineCount, burstCount: 0)
+        }
+        let burst = tokens.dropFirst()
+            .compactMap { token -> Int? in
+                guard token.hasPrefix(shortConversationGrowthBurstToken) else { return nil }
+                return Int(token.dropFirst(shortConversationGrowthBurstToken.count))
+            }
+            .last ?? 0
+        return ShortConversationGrowth(lineCount: count, burstCount: max(burst, 0))
+    }
+
+    /// The line count a growth file's contents ask for
+    /// (`shortConversationGrowth(parsing:)`).
     static func shortConversationLineCount(parsing contents: String?) -> Int {
-        guard let contents,
-              let count = Int(contents.trimmingCharacters(in: .whitespacesAndNewlines)),
-              count > 0 else { return shortConversationBaselineLineCount }
-        return count
+        shortConversationGrowth(parsing: contents).lineCount
     }
 
     /// The current line count from `shortConversationGrowthFile`.
@@ -312,6 +356,25 @@ enum DemoFixtures {
         target > current ? Array((current + 1)...target) : [target]
     }
 
+    /// `shortConversationGrowthSteps` with the pauses around each delta:
+    /// `shortConversationGrowthDeltaInterval` after an ordinary step; the
+    /// last `burstCount` steps form the burst — `shortConversationGrowthBurstLead`
+    /// before its first delta, `shortConversationGrowthBurstInterval` after
+    /// each (the last one's pause is the terminal step's).
+    static func shortConversationGrowthSchedule(
+        from current: Int, to target: Int, burstCount: Int
+    ) -> [ShortConversationGrowthStep] {
+        let steps = shortConversationGrowthSteps(from: current, to: target)
+        let burstStart = burstCount > 0 ? max(steps.count - burstCount, 0) : steps.count
+        return steps.enumerated().map { index, lineCount in
+            ShortConversationGrowthStep(
+                lineCount: lineCount,
+                pauseBefore: index == burstStart ? shortConversationGrowthBurstLead : .zero,
+                pauseAfter: index >= burstStart
+                    ? shortConversationGrowthBurstInterval : shortConversationGrowthDeltaInterval)
+        }
+    }
+
     /// Notifications the fixture pushes right after answering `method`, as the
     /// daemon does: the chat snapshot follows the short conversation's
     /// `chat.subscribe` reply (the router buffers it until the store registers
@@ -335,8 +398,8 @@ enum DemoFixtures {
     /// `triggerFilePollInterval`) once per process; no-op without the launch
     /// argument. Each change of the file's contents is streamed into
     /// `connection` as if the daemon had sent it: one delta per
-    /// `shortConversationGrowthSteps` step, `shortConversationGrowthDeltaInterval`
-    /// apart, a terminal delta, then `shortConversationGrowthNotification`.
+    /// `shortConversationGrowthSchedule` step, paced by its pauses, a terminal
+    /// delta, then `shortConversationGrowthNotification`.
     @MainActor
     static func startShortConversationGrowthWatcher(dispatchingTo connection: ConnectionManager) {
         guard let file = shortConversationGrowthFile, shortConversationGrowthWatcher == nil else { return }
@@ -347,17 +410,20 @@ enum DemoFixtures {
                 let contents = try? String(contentsOf: file, encoding: .utf8)
                 guard contents != lastContents else { continue }
                 lastContents = contents
-                let target = shortConversationLineCount(parsing: contents)
-                for lineCount in shortConversationGrowthSteps(from: shortConversationStreamedLineCount, to: target) {
+                let growth = shortConversationGrowth(parsing: contents)
+                let schedule = shortConversationGrowthSchedule(
+                    from: shortConversationStreamedLineCount, to: growth.lineCount, burstCount: growth.burstCount)
+                for step in schedule {
+                    if step.pauseBefore > .zero { try? await Task.sleep(for: step.pauseBefore) }
                     shortConversationChatSeq += 1
-                    shortConversationStreamedLineCount = lineCount
+                    shortConversationStreamedLineCount = step.lineCount
                     connection.dispatchMessage(shortConversationChatDeltaNotification(
-                        seq: shortConversationChatSeq, lineCount: lineCount, streamingComplete: false))
-                    try? await Task.sleep(for: shortConversationGrowthDeltaInterval)
+                        seq: shortConversationChatSeq, lineCount: step.lineCount, streamingComplete: false))
+                    try? await Task.sleep(for: step.pauseAfter)
                 }
                 shortConversationChatSeq += 1
                 connection.dispatchMessage(shortConversationChatDeltaNotification(
-                    seq: shortConversationChatSeq, lineCount: target, streamingComplete: true))
+                    seq: shortConversationChatSeq, lineCount: growth.lineCount, streamingComplete: true))
                 connection.dispatchMessage(shortConversationGrowthNotification)
             }
         }
@@ -895,13 +961,14 @@ enum DemoFixtures {
         "End of the cron rename: the runbook carries the new name."
 
     /// Suggested prompts carried by the last (assistant) message of
-    /// `shortConversationMessages(lineCount:)` — three, like
-    /// `longConversationSuggestedPrompts`, so the same prompt row is the
-    /// transcript's final content row in both fixtures.
+    /// `shortConversationMessages(lineCount:)`: one, so the prompt row is the
+    /// transcript's final content row (as in the long fixture) while the
+    /// footer swap that ends a stream — the thinking indicator leaving, the
+    /// prompt row returning — grows the content by a few points, inside the
+    /// at-bottom band a #346 growth must rest in, not by the height of three
+    /// prompt rows.
     static let shortConversationSuggestedPrompts = [
         "Open a PR for the cron rename",
-        "Show the runbook diff",
-        "Check the alert routes",
     ]
 
     /// One line of the reply's code block: short enough never to wrap on an

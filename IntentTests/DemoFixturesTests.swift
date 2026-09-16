@@ -195,7 +195,7 @@ struct DemoFixturesTests {
         let last = try #require(short.items.last)
         let lastText = text(of: last)
         #expect(SuggestedPrompts.parse(lastText) == DemoFixtures.shortConversationSuggestedPrompts)
-        #expect(DemoFixtures.shortConversationSuggestedPrompts.count == 3)
+        #expect(DemoFixtures.shortConversationSuggestedPrompts.count == 1)
         #expect(SuggestedPrompts.stripBlocks(from: lastText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .hasSuffix(DemoFixtures.shortConversationLastSentence))
@@ -237,6 +237,18 @@ struct DemoFixturesTests {
         #expect(DemoFixtures.shortConversationLineCount(parsing: "many") == baseline)
         #expect(DemoFixtures.shortConversationLineCount(parsing: "12") == 12)
         #expect(DemoFixtures.shortConversationLineCount(parsing: " 12\n") == 12)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "12 burst=3") == 12)
+    }
+
+    @Test func shortConversationGrowthParsesAnOptionalBurst() {
+        typealias Growth = DemoFixtures.ShortConversationGrowth
+        let baseline = DemoFixtures.shortConversationBaselineLineCount
+        #expect(DemoFixtures.shortConversationGrowth(parsing: "12") == Growth(lineCount: 12, burstCount: 0))
+        #expect(DemoFixtures.shortConversationGrowth(parsing: "12 burst=3\n") == Growth(lineCount: 12, burstCount: 3))
+        #expect(DemoFixtures.shortConversationGrowth(parsing: "12 burst=x") == Growth(lineCount: 12, burstCount: 0))
+        #expect(DemoFixtures.shortConversationGrowth(parsing: "12 burst=-2") == Growth(lineCount: 12, burstCount: 0))
+        #expect(DemoFixtures.shortConversationGrowth(parsing: "burst=3") == Growth(lineCount: baseline, burstCount: 0))
+        #expect(DemoFixtures.shortConversationGrowth(parsing: nil) == Growth(lineCount: baseline, burstCount: 0))
     }
 
     @Test func shortConversationGrowthNotificationIsATerminalStreamEndForItsAgent() throws {
@@ -308,6 +320,34 @@ struct DemoFixturesTests {
         #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 6) == [6])
         #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 5) == [5])
         #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 3) == [3])
+    }
+
+    /// The burst is the growth's last deltas: a lead pause before its first,
+    /// the burst interval after each (the last one's pause is the terminal
+    /// step's); the deltas before it keep the ordinary interval, and no burst
+    /// leaves every step ordinary.
+    @Test func shortConversationGrowthScheduleGathersTheLastDeltasIntoTheBurst() {
+        typealias Step = DemoFixtures.ShortConversationGrowthStep
+        let ordinary = DemoFixtures.shortConversationGrowthDeltaInterval
+        let lead = DemoFixtures.shortConversationGrowthBurstLead
+        let burst = DemoFixtures.shortConversationGrowthBurstInterval
+        #expect(DemoFixtures.shortConversationGrowthSchedule(from: 2, to: 6, burstCount: 2) == [
+            Step(lineCount: 3, pauseBefore: .zero, pauseAfter: ordinary),
+            Step(lineCount: 4, pauseBefore: .zero, pauseAfter: ordinary),
+            Step(lineCount: 5, pauseBefore: lead, pauseAfter: burst),
+            Step(lineCount: 6, pauseBefore: .zero, pauseAfter: burst),
+        ])
+        #expect(DemoFixtures.shortConversationGrowthSchedule(from: 2, to: 4, burstCount: 0) == [
+            Step(lineCount: 3, pauseBefore: .zero, pauseAfter: ordinary),
+            Step(lineCount: 4, pauseBefore: .zero, pauseAfter: ordinary),
+        ])
+        #expect(DemoFixtures.shortConversationGrowthSchedule(from: 2, to: 3, burstCount: 5) == [
+            Step(lineCount: 3, pauseBefore: lead, pauseAfter: burst),
+        ])
+        #expect(lead > .seconds(Constants.Conversation.Transcript.streamingFollowMinimumInterval))
+        #expect(burst > .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
+        #expect(burst < .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds)
+            + .seconds(Constants.Conversation.Transcript.scrollAnimationDuration))
     }
 
     private func envelope(of notification: String) throws -> [String: Any] {
