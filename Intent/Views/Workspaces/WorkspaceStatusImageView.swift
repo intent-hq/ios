@@ -4,8 +4,8 @@ import SwiftUI
 /// `statusImageAssetId`; FE parity: WorkspaceProgressCard.svelte): which
 /// workspaces render one, how the fetch is keyed, and how each placement
 /// degrades when the asset cannot be loaded.
-enum WorkspaceStatusImageLayout {
-    enum Style {
+nonisolated enum WorkspaceStatusImageLayout {
+    enum Style: Equatable {
         /// Workspace list row: small square thumbnail trailing the text.
         case card
         /// Workspace detail header: full-width banner that opens the lightbox.
@@ -13,46 +13,46 @@ enum WorkspaceStatusImageLayout {
     }
 
     /// Row thumbnail side (matches the list's status-icon scale).
-    nonisolated static let cardThumbnailSide: CGFloat = 44
+    static let cardThumbnailSide: CGFloat = 44
     /// Detail banner cap — the desktop card's `max-h-48`.
-    nonisolated static let detailMaxHeight: CGFloat = 192
-    nonisolated static let cornerRadius: CGFloat = 8
-    nonisolated static let borderWidth: CGFloat = 0.5
-    nonisolated static let detailPlaceholderHeight: CGFloat = 44
+    static let detailMaxHeight: CGFloat = 192
+    static let cornerRadius: CGFloat = 8
+    static let borderWidth: CGFloat = 0.5
+    static let detailPlaceholderHeight: CGFloat = 44
 
     /// The daemon omits the field until set and folds blanks to a clear;
     /// mirror that so an empty id never reaches the loader.
-    nonisolated static func normalizedAssetId(_ raw: String?) -> String? {
+    static func normalizedAssetId(_ raw: String?) -> String? {
         guard let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
         return trimmed
     }
 
-    nonisolated static func assetId(for workspace: Workspace?) -> String? {
+    static func assetId(for workspace: Workspace?) -> String? {
         normalizedAssetId(workspace?.statusImageAssetId)
     }
 
     /// `.task(id:)` key: a replaced asset (new content-addressed id) or a
     /// retry tap re-runs the fetch; a removal unmounts the view entirely.
-    nonisolated static func loadKey(workspaceId: String, assetId: String, attempt: Int) -> String {
+    static func loadKey(workspaceId: String, assetId: String, attempt: Int) -> String {
         "\(workspaceId)|\(assetId)|\(attempt)"
     }
 
     /// The row has no room for an error affordance, so a broken asset
     /// collapses to the plain row (desktop parity); the detail header keeps
     /// a non-broken placeholder with a retry.
-    nonisolated static func hidesOnFailure(_ style: Style) -> Bool {
+    static func hidesOnFailure(_ style: Style) -> Bool {
         style == .card
     }
 
-    nonisolated static func accessibilityIdentifier(for style: Style) -> String {
+    static func accessibilityIdentifier(for style: Style) -> String {
         switch style {
         case .card: "workspaceRow.statusImage"
         case .detail: "workspaceDetail.statusImage"
         }
     }
 
-    nonisolated static func accessibilityLabel(for style: Style) -> String {
+    static func accessibilityLabel(for style: Style) -> String {
         "Workspace status image"
     }
 }
