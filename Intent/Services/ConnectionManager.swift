@@ -171,8 +171,8 @@ nonisolated enum InboundFrame: Sendable {
     /// Identifies the monitor whose updates are current, so a late callback
     /// from a cancelled monitor cannot act on its replacement's socket.
     @ObservationIgnored private var pathMonitorID = 0
-    /// The last path the current monitor reported; its first report is the
-    /// baseline the socket was established on, never a trigger by itself.
+    /// The last path the current monitor reported (nil until its first
+    /// report); see `handlePathUpdate` for how the first report is read.
     @ObservationIgnored private var lastPathSnapshot: NetworkPathSnapshot?
     @ObservationIgnored private var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored private var lastReconnectAttempt = 0
@@ -1382,25 +1382,31 @@ nonisolated enum InboundFrame: Sendable {
         lastPathSnapshot = nil
     }
 
-    /// The first report is the baseline the socket was established on — not
-    /// acted upon, since the monitor is started right after a successful
-    /// handshake and its initial callback is not a transition. From then on,
-    /// a path that stops being satisfied or moves to a different interface
-    /// (Wi-Fi → cellular) tears the socket down and enters the normal
-    /// reconnect path; a satisfied → satisfied report on the same interface
-    /// is a no-op.
+    /// The first report describes the path the socket was established on:
+    /// satisfied is the baseline (the monitor starts right after a
+    /// successful handshake, so that report is not a transition), while
+    /// unsatisfied means the path already died between the handshake and the
+    /// monitor's asynchronous first callback — as much a dead path as a
+    /// later transition. From then on, a path that stops being satisfied or
+    /// moves to a different interface (Wi-Fi → cellular) tears the socket
+    /// down and enters the normal reconnect path; a satisfied → satisfied
+    /// report on the same interface is a no-op.
     private func handlePathUpdate(_ snapshot: NetworkPathSnapshot, monitorID: Int) {
         guard pathMonitorID == monitorID, pathMonitor != nil else { return }
-        guard let previous = lastPathSnapshot else {
-            lastPathSnapshot = snapshot
-            return
-        }
+        let previous = lastPathSnapshot
         lastPathSnapshot = snapshot
         guard connectionState == .connected, socket != nil else { return }
-        let lostConnectivity = previous.isSatisfied && !snapshot.isSatisfied
-        let interfaceChanged = snapshot.isSatisfied
-            && snapshot.primaryInterface != previous.primaryInterface
-        guard lostConnectivity || interfaceChanged else { return }
+        let pathDied: Bool
+        let interfaceChanged: Bool
+        if let previous {
+            pathDied = previous.isSatisfied && !snapshot.isSatisfied
+            interfaceChanged = snapshot.isSatisfied
+                && snapshot.primaryInterface != previous.primaryInterface
+        } else {
+            pathDied = !snapshot.isSatisfied
+            interfaceChanged = false
+        }
+        guard pathDied || interfaceChanged else { return }
         AppLog.connection.debug("[ConnectionManager] Network path changed (\(String(describing: previous)) -> \(String(describing: snapshot))), reconnecting")
         handleDisconnection()
     }

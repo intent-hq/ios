@@ -2698,6 +2698,45 @@ struct ConnectionManagerTests {
         #expect(disconnects.count == 1)
     }
 
+    /// The monitor starts after the handshake and reports asynchronously, so
+    /// the path can die before its first report. That first report being
+    /// unsatisfied is a dead path, not a baseline: reconnect at once. The
+    /// reconnected socket's monitor then baselines on a satisfied path.
+    @Test @MainActor func pathDeadAtFirstReportReconnectsImmediately() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        manager.makePathMonitor = { monitors.make() }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.deadPath)
+        #expect(manager.connectionState == .reconnecting(attempt: 1))
+        #expect(disconnects.count == 1)
+        #expect(monitor.cancelCount == 1)
+
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        let replacement = try #require(monitors.monitors.last)
+        #expect(monitors.monitors.count == 2)
+        replacement.report(Self.wifiPath)
+        replacement.report(Self.wifiPath)
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+        #expect(replacement.cancelCount == 0)
+    }
+
     /// A satisfied path that moves to another interface (Wi-Fi → cellular)
     /// is a dead path for the established socket: reconnect at once.
     @Test @MainActor func pathInterfaceChangeReconnectsImmediately() async throws {
