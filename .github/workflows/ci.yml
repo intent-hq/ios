@@ -233,14 +233,21 @@ jobs:
 
       # See the job comment: turns a go-test failure into a failure of this
       # (the only ruleset-required) job. go-test normally finishes minutes
-      # before this step runs, so the wait is usually zero.
+      # before this step runs, so the wait is usually zero. A failing
+      # `gh api` call (transient network/API error) is retried like an
+      # empty conclusion rather than aborting under `set -e`; the 20-minute
+      # timeout below is the only hard failure besides a failed Go job.
       - name: Require Go unit tests
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           for i in $(seq 1 80); do
-            c=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)") | .conclusion // empty')
+            if ! c=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Go unit tests (TailcatKit)") | .conclusion // empty'); then
+              echo "gh api failed (attempt $i/80); retrying in 15s" >&2
+              sleep 15
+              continue
+            fi
             case "$c" in
               success) echo "Go unit tests passed"; exit 0 ;;
               "") sleep 15 ;;
