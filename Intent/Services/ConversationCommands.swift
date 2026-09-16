@@ -282,7 +282,8 @@ extension ConversationCommands {
         else {
             AppLog.conversation.error(
                 "[ConversationStore] agent.getQueue returned a malformed envelope; keeping the "
-                    + "previous queue (\(queuedMessages.count) entries)")
+                    + "previous queue (\(queuedMessages.count) entries)"
+            )
             return
         }
         queuedMessages = decoded
@@ -297,7 +298,7 @@ extension ConversationCommands {
     /// shape) is logged — never message content or metadata payloads.
     static func decodeQueueSnapshot(
         _ queue: Any?, source: String
-    ) -> [QueuedMessage]? {
+    ) -> [QueuedMessage]? { // swiftlint:disable:this discouraged_optional_collection
         guard let items = queue as? [Any] else { return nil }
         let decoder = JSONDecoder()
         var messages: [QueuedMessage] = []
@@ -308,14 +309,18 @@ extension ConversationCommands {
                     throw DecodingError.typeMismatch(
                         [String: Any].self,
                         DecodingError.Context(
-                            codingPath: [], debugDescription: "element is not an object"))
+                            codingPath: [],
+                            debugDescription: "element is not an object"
+                        )
+                    )
                 }
                 let data = try JSONSerialization.data(withJSONObject: dictionary)
                 messages.append(try decoder.decode(QueuedMessage.self, from: data))
             } catch {
                 AppLog.conversation.error(
                     "[ConversationStore] Dropping undecodable queue element \(index + 1)/"
-                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))")
+                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))"
+                )
             }
         }
         return messages
@@ -331,13 +336,13 @@ extension ConversationCommands {
         let path: (DecodingError.Context) -> String = { context in
             context.codingPath.map(\.stringValue).joined(separator: ".")
         }
-        if case .keyNotFound(let key, let context) = decodingError {
+        if case let .keyNotFound(key, context) = decodingError {
             return "keyNotFound(\(key.stringValue)) at [\(path(context))]"
         }
-        if case .typeMismatch(_, let context) = decodingError {
+        if case let .typeMismatch(_, context) = decodingError {
             return "typeMismatch at [\(path(context))]"
         }
-        if case .valueNotFound(_, let context) = decodingError {
+        if case let .valueNotFound(_, context) = decodingError {
             return "valueNotFound at [\(path(context))]"
         }
         if case .dataCorrupted(let context) = decodingError {

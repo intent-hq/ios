@@ -27,7 +27,7 @@ import Observation
 
     /// Optional callback invoked when a note event is received (for detail view refresh)
     var onNoteChanged: (() -> Void)?
-    @ObservationIgnored private var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
+    @ObservationIgnored var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -400,15 +400,7 @@ extension NoteStore {
             return
         }
 
-        guard let dict = params as? [String: Any] else { return }
-
-        let event: [String: Any]
-        if let innerEvent = dict["event"] as? [String: Any] {
-            event = innerEvent
-        } else {
-            event = dict
-        }
-
+        guard let event = Self.event(from: params) else { return }
         guard let eventType = event["type"] as? String else { return }
 
         let eventWorkspaceId = event["workspaceId"] as? String
@@ -430,31 +422,6 @@ extension NoteStore {
         case .patchInPlace, .ignore, nil:
             break
         }
-    }
-
-    func noteChanges() -> AsyncStream<Void> {
-        let id = UUID()
-        let (stream, continuation) = AsyncStream.makeStream(
-            of: Void.self, bufferingPolicy: .bufferingNewest(1))
-        noteChangeContinuations[id] = continuation
-        continuation.onTermination = { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.noteChangeContinuations[id] = nil
-            }
-        }
-        return stream
-    }
-
-    nonisolated static let handledChannels = ["note:"]
-    nonisolated static let refetchEventTypes: Set<String> = [
-        "note:created", "note:updated", "note:deleted"
-    ]
-    nonisolated static let ignoredEventTypes: Set<String> = []
-
-    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
-        if refetchEventTypes.contains(type) { return .refetch }
-        if ignoredEventTypes.contains(type) { return .ignore }
-        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
