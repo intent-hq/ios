@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Network
 import Observation
 import os
 
@@ -159,6 +160,20 @@ nonisolated enum InboundFrame: Sendable {
     /// so tests step the heartbeat deterministically; defaults to the
     /// monotonic `ContinuousClock` (never wall-clock `Date`, see ios#253).
     @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
+    /// Produces the network-path monitor that watches the live socket's path
+    /// (intent#3765). Injectable so tests drive path transitions with a fake;
+    /// defaults to `NWPathMonitor`. A fresh monitor is made per connection
+    /// because `NWPathMonitor` cannot be restarted once cancelled.
+    @ObservationIgnored var makePathMonitor: () -> any NetworkPathMonitoring = {
+        NWPathMonitorAdapter()
+    }
+    @ObservationIgnored private var pathMonitor: (any NetworkPathMonitoring)?
+    /// Identifies the monitor whose updates are current, so a late callback
+    /// from a cancelled monitor cannot act on its replacement's socket.
+    @ObservationIgnored private var pathMonitorID = 0
+    /// The last path the current monitor reported; its first report is the
+    /// baseline the socket was established on, never a trigger by itself.
+    @ObservationIgnored private var lastPathSnapshot: NetworkPathSnapshot?
     @ObservationIgnored private var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored private var lastReconnectAttempt = 0
     /// One liveness probe (websocket ping) per interval.
@@ -199,6 +214,10 @@ nonisolated enum InboundFrame: Sendable {
         connectionStateSubject = CurrentValueSubject(connectionState)
         certMismatchSubject = CurrentValueSubject(certMismatchDetected)
         certMismatchesSubject = CurrentValueSubject(certMismatches)
+    }
+
+    isolated deinit {
+        stopPathMonitor()
     }
 
     /// Combine compatibility for stores that depend on ConnectionManagerRouting.
@@ -338,6 +357,7 @@ nonisolated enum InboundFrame: Sendable {
         lastReconnectAttempt = 0
         subscribeToAllEvents()
         startHeartbeat()
+        startPathMonitor()
         scheduleHostRoutesRefresh()
 
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
@@ -372,6 +392,7 @@ nonisolated enum InboundFrame: Sendable {
     private func teardownConnection() {
         connectionGeneration += 1
         stopHeartbeat()
+        stopPathMonitor()
         reconnectTask?.cancel()
         reconnectTask = nil
         lastSuccessfulConnectAt = nil
@@ -1146,6 +1167,7 @@ nonisolated enum InboundFrame: Sendable {
             return
         }
         stopHeartbeat()
+        stopPathMonitor()
         let oldSocket = socket
         socket = nil
         let oldTunnel = activeTunnel
@@ -1243,6 +1265,7 @@ nonisolated enum InboundFrame: Sendable {
                         self.lastReconnectAttempt = attempt
                         self.subscribeToAllEvents()
                         self.startHeartbeat()
+                        self.startPathMonitor()
                         self.scheduleHostRoutesRefresh()
                         genOk = true
                     } else {
@@ -1333,6 +1356,55 @@ nonisolated enum InboundFrame: Sendable {
         heartbeatTask = nil
     }
 
+    // MARK: - Network path monitoring (intent#3765)
+
+    /// Watches the network path under the live socket. The native transport
+    /// has no viability signal (Starscream's `viabilityChanged` used to nudge
+    /// `handleDisconnection()` at once), so without this a dead path is only
+    /// noticed when `receive()` errors or a heartbeat probe times out — up to
+    /// 30–45 s of `.connected` UI on a dead link. The monitor's lifetime is
+    /// the socket's: started when the socket comes up, cancelled on every
+    /// teardown, and the handler holds `self` weakly.
+    private func startPathMonitor() {
+        stopPathMonitor()
+        pathMonitorID += 1
+        let monitorID = pathMonitorID
+        let monitor = makePathMonitor()
+        pathMonitor = monitor
+        monitor.start { [weak self] snapshot in
+            self?.handlePathUpdate(snapshot, monitorID: monitorID)
+        }
+    }
+
+    private func stopPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        lastPathSnapshot = nil
+    }
+
+    /// The first report is the baseline the socket was established on — not
+    /// acted upon, since the monitor is started right after a successful
+    /// handshake and its initial callback is not a transition. From then on,
+    /// a path that stops being satisfied or moves to a different interface
+    /// (Wi-Fi → cellular) tears the socket down and enters the normal
+    /// reconnect path; a satisfied → satisfied report on the same interface
+    /// is a no-op.
+    private func handlePathUpdate(_ snapshot: NetworkPathSnapshot, monitorID: Int) {
+        guard pathMonitorID == monitorID, pathMonitor != nil else { return }
+        guard let previous = lastPathSnapshot else {
+            lastPathSnapshot = snapshot
+            return
+        }
+        lastPathSnapshot = snapshot
+        guard connectionState == .connected, socket != nil else { return }
+        let lostConnectivity = previous.isSatisfied && !snapshot.isSatisfied
+        let interfaceChanged = snapshot.isSatisfied
+            && snapshot.primaryInterface != previous.primaryInterface
+        guard lostConnectivity || interfaceChanged else { return }
+        AppLog.connection.debug("[ConnectionManager] Network path changed (\(String(describing: previous)) -> \(String(describing: snapshot))), reconnecting")
+        handleDisconnection()
+    }
+
     private func probeConnectionHealth(generation: Int) async {
         guard !Task.isCancelled, connectionGeneration == generation, connectionState == .connected,
               let currentSocket = socket else { return }
@@ -1395,5 +1467,57 @@ nonisolated protocol HeartbeatClock: Sendable {
 nonisolated struct ContinuousHeartbeatClock: HeartbeatClock {
     func sleep(for duration: Duration) async throws {
         try await ContinuousClock().sleep(for: duration)
+    }
+}
+
+/// What `ConnectionManager` needs to know about a network path: whether it
+/// can carry traffic and which interface it prefers (intent#3765).
+nonisolated struct NetworkPathSnapshot: Equatable, Sendable {
+    let isSatisfied: Bool
+    /// Name of the interface the path currently prefers (`en0`, `pdp_ip0`),
+    /// nil when the path has none.
+    let primaryInterface: String?
+
+    init(isSatisfied: Bool, primaryInterface: String?) {
+        self.isSatisfied = isSatisfied
+        self.primaryInterface = primaryInterface
+    }
+
+    init(_ path: NWPath) {
+        self.init(
+            isSatisfied: path.status == .satisfied,
+            primaryInterface: path.availableInterfaces.first?.name)
+    }
+}
+
+/// Source of network-path updates for the live socket. Production wraps
+/// `NWPathMonitor`; tests inject a fake and drive transitions directly. The
+/// first update after `start` describes the current path (the baseline);
+/// updates are delivered on the main actor.
+protocol NetworkPathMonitoring: AnyObject {
+    func start(onUpdate: @escaping @MainActor @Sendable (NetworkPathSnapshot) -> Void)
+    func cancel()
+}
+
+/// `NWPathMonitor` behind `NetworkPathMonitoring`. One-shot, like the
+/// monitor it wraps: cancelled instances are not restarted.
+final class NWPathMonitorAdapter: NetworkPathMonitoring {
+    private let monitor = NWPathMonitor()
+    private let queue = DispatchQueue(label: "ConnectionManager.pathMonitor")
+
+    isolated deinit {
+        monitor.cancel()
+    }
+
+    func start(onUpdate: @escaping @MainActor @Sendable (NetworkPathSnapshot) -> Void) {
+        monitor.pathUpdateHandler = { @Sendable path in
+            let snapshot = NetworkPathSnapshot(path)
+            Task { @MainActor in onUpdate(snapshot) }
+        }
+        monitor.start(queue: queue)
+    }
+
+    func cancel() {
+        monitor.cancel()
     }
 }
