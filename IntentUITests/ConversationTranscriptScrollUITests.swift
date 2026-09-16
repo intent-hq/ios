@@ -93,11 +93,13 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // BackgroundHooksRow's fixed label, and DemoFixtures.longConversationHookName.
         static let hooksRowLabel = "Running hooks"
         static let hookName = "Wait for CI on flake fix"
-        // The footer test holds the hooks row back until it has recorded a
-        // steady baseline: the fixture waits for this file to exist (polled
-        // every 100 ms) and the test creates it. The runner and the app share
-        // the simulator filesystem, so a temporary-directory path works. A
-        // clock-based delay raced the CI simulator's render time (#285).
+        // Holds the hooks row back: the fixture waits for this file to exist
+        // (polled every 100 ms). The footer test creates it once it has
+        // recorded a steady baseline; the cold-entry test never does, so the
+        // row cannot land inside its windows (#338). The runner and the app
+        // share the simulator filesystem, so a temporary-directory path
+        // works. A clock-based delay raced the CI simulator's render time
+        // (#285).
         static let hooksRowTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
         static let hooksRowTimeout: TimeInterval = 15
         // Slack for the last message to sit at the same distance from the
@@ -361,11 +363,25 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// and only after a send in the next), so the cold entry is repeated — a
     /// fresh launch each cycle, as a return through the workspace list would
     /// mount the cached transcript.
+    ///
+    /// The hooks row is held back for the whole test (trigger file never
+    /// created): on its default clock it lands ~4 s after entry, inside this
+    /// test's settle and quiet windows, and that landing is a second event —
+    /// a container resize — with its own outcome. Landing right after a cold
+    /// entry had settled it left the transcript blank with Go to End hidden
+    /// on CI (intent-hq/ios#338; the "last paragraph not in the accessibility
+    /// hierarchy" failure of intent-hq/ios#313 attempt 1). The row's re-pin
+    /// on a settled transcript is `testFooterRowAppearance…`'s subject.
     @MainActor
     func testFirstOpenOfLongConversationShowsLastMessageWithNoBlankBand() throws {
+        let triggerFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("transcript-cold-entry-\(UUID().uuidString).trigger")
+        try? FileManager.default.removeItem(at: triggerFile)
+        defer { try? FileManager.default.removeItem(at: triggerFile) }
+
         for cycle in 1...Fixture.entryCycles {
             let context = "cold entry \(cycle)/\(Fixture.entryCycles)"
-            let app = launchDemoApp()
+            let app = launchDemoApp(extraArguments: [Fixture.hooksRowTriggerFileArgumentPrefix + triggerFile.path])
             let opened = enterLongConversation(in: app, context: context)
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
@@ -403,6 +419,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 isInside(endRow, transcript),
                 "\(context): the transcript is short of the end after the quiet window — "
                     + restingState(of: endRow, named: "last suggested prompt", in: opened))
+            XCTAssertFalse(
+                app.staticTexts[Fixture.hooksRowLabel].exists,
+                "\(context): the hooks row landed during the cold entry; the fixture trigger file did not hold it back")
             app.terminate()
         }
     }
