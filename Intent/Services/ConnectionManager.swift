@@ -468,7 +468,11 @@ nonisolated enum InboundFrame: Sendable {
             if let gate = DemoFixtures.responseGate(for: method, params: params) {
                 try await DemoFixtures.wait(for: gate)
             }
-            return DemoFixtures.response(for: method, params: params)
+            let response = DemoFixtures.response(for: method, params: params)
+            for notification in DemoFixtures.notifications(following: method, params: params) {
+                dispatchMessage(notification)
+            }
+            return response
         }
         guard let currentSocket = socket else {
             throw NSError(domain: "WebSocket", code: -4,

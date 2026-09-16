@@ -32,6 +32,8 @@ enum DemoMode {
 /// Subscribe methods intentionally fall through to the empty-dictionary
 /// default: a response without a `subscriptionId` makes every store fall
 /// back to its legacy fetch path, which is exactly right for static data.
+/// The one exception is the short conversation's `chat.subscribe`
+/// (`shortConversationChatSubscriptionId`), whose reply streams on demand.
 enum DemoFixtures {
 
     /// Workspace whose `agent.list` returns `longConversationAgents` instead
@@ -192,14 +194,29 @@ enum DemoFixtures {
     /// contents (an integer) set the code block's line count. The fixture
     /// reads it on every `agent.getConversation` for
     /// `shortConversationAgentId`, and `startShortConversationGrowthWatcher`
-    /// polls it: a change in its contents is delivered as an
-    /// `agent:stream:end` event for that agent, which makes an open
-    /// conversation refetch — the legacy path a streamed reply ending takes
-    /// when no chat channel is live (`ConversationStore.handleStreamEnd`), so
-    /// the growth reaches the transcript the way a live reply's does. A UI
-    /// test writes the file when it has observed the short transcript settled,
-    /// for the same reason the hooks row waits on a trigger file.
+    /// polls it: a change in its contents is streamed to an open conversation
+    /// the way a live reply is — the agent's `chat.subscribe` channel
+    /// (`shortConversationChatSubscriptionId`) carries one block delta per
+    /// added line, then a terminal delta, then the `agent:stream:end` event
+    /// (PROTOCOL §7.1) — so the transcript sees the same streaming deltas,
+    /// streaming flag and streaming end a daemon reply produces. A UI test
+    /// writes the file when it has observed the short transcript settled, for
+    /// the same reason the hooks row waits on a trigger file.
     static let shortConversationGrowthFileArgumentPrefix = "--demo-short-conversation-growth-file="
+
+    /// `chat.subscribe` for `shortConversationAgentId` answers with this
+    /// subscription id (every other agent keeps the legacy fallback), and the
+    /// snapshot for it is pushed straight after the reply.
+    static let shortConversationChatSubscriptionId = "demo-chat-cron-rename"
+
+    static let shortConversationReplyMessageId = "demo-short-msg-2"
+
+    /// Id of the reply's single text block: stable across line counts, so a
+    /// growth delta updates the block in place instead of appending one.
+    static let shortConversationReplyBlockId = "demo-short-msg-2-text"
+
+    /// Pause between one line's delta and the next while a growth streams.
+    static let shortConversationGrowthDeltaInterval: Duration = .milliseconds(80)
 
     static let shortConversationGrowthFile = shortConversationGrowthFile(from: ProcessInfo.processInfo.arguments)
 
@@ -229,21 +246,97 @@ enum DemoFixtures {
         })
     }
 
-    /// The `events.event` notification the growth watcher dispatches: a
-    /// terminal `agent:stream:end` for `shortConversationAgentId` in the
-    /// daemon's envelope (PROTOCOL §6, §7).
+    /// The `events.event` notification that ends a growth: a terminal
+    /// `agent:stream:end` for `shortConversationAgentId` in the daemon's
+    /// envelope (PROTOCOL §6, §7).
     static let shortConversationGrowthNotification = """
         {"jsonrpc":"2.0","method":"events.event","params":{"event":{"type":"agent:stream:end",\
         "data":{"agentId":"\(shortConversationAgentId)","workspaceId":"\(shortConversationWorkspaceId)"}}}}
         """
 
+    /// A JSON-RPC notification in the daemon's envelope, for `dispatchMessage`.
+    static func notification(method: String, params: [String: Any]) -> String {
+        let envelope: [String: Any] = ["jsonrpc": "2.0", "method": method, "params": params]
+        guard let data = try? JSONSerialization.data(withJSONObject: envelope),
+              let text = String(data: data, encoding: .utf8) else { return "" }
+        return text
+    }
+
+    /// The chat-channel snapshot (seq 0) of the short conversation at
+    /// `lineCount` lines, idle (PROTOCOL §7.1).
+    static func shortConversationChatSnapshotNotification(lineCount: Int) -> String {
+        let messages = shortConversationMessages(lineCount: lineCount)
+        return notification(method: "subscription.push", params: [
+            "subscriptionId": shortConversationChatSubscriptionId,
+            "kind": "snapshot",
+            "seq": 0,
+            "snapshot": [
+                "agentId": shortConversationAgentId,
+                "messages": messages,
+                "truncated": false,
+                "totalMessages": messages.count,
+                "isResponding": false,
+                "turnInFlight": false,
+            ] as [String: Any],
+        ])
+    }
+
+    /// A chat-channel delta updating the reply's text block to `lineCount`
+    /// lines: streaming while `streamingComplete` is false, terminal once true.
+    static func shortConversationChatDeltaNotification(
+        seq: Int, lineCount: Int, streamingComplete: Bool
+    ) -> String {
+        notification(method: "subscription.push", params: [
+            "subscriptionId": shortConversationChatSubscriptionId,
+            "kind": "delta",
+            "seq": seq,
+            "delta": [
+                "added": [[String: Any]](),
+                "updated": [
+                    [
+                        "messageId": shortConversationReplyMessageId,
+                        "role": "assistant",
+                        "streamingComplete": streamingComplete,
+                        "block": shortConversationReplyBlock(lineCount: lineCount),
+                    ] as [String: Any],
+                ],
+                "removedIds": [String](),
+            ] as [String: Any],
+        ])
+    }
+
+    /// The line counts a growth from `current` to `target` streams, one delta
+    /// each: every count in between and `target` itself when growing; just
+    /// `target` when it does not grow (a shrink or a rewrite arrives whole).
+    static func shortConversationGrowthSteps(from current: Int, to target: Int) -> [Int] {
+        target > current ? Array((current + 1)...target) : [target]
+    }
+
+    /// Notifications the fixture pushes right after answering `method`, as the
+    /// daemon does: the chat snapshot follows the short conversation's
+    /// `chat.subscribe` reply (the router buffers it until the store registers
+    /// its handler). Resets the channel's delta sequence.
+    @MainActor
+    static func notifications(following method: String, params: [String: Any]) -> [String] {
+        guard method == "chat.subscribe",
+              params["agentId"] as? String == shortConversationAgentId else { return [] }
+        shortConversationChatSeq = 0
+        shortConversationStreamedLineCount = shortConversationLineCount()
+        return [shortConversationChatSnapshotNotification(lineCount: shortConversationStreamedLineCount)]
+    }
+
     @MainActor private static var shortConversationGrowthWatcher: Task<Void, Never>?
+    /// Sequence of the last delta pushed on the short conversation's channel.
+    @MainActor private static var shortConversationChatSeq = 0
+    /// Line count the last snapshot or delta carried.
+    @MainActor private static var shortConversationStreamedLineCount = shortConversationBaselineLineCount
 
     /// Starts polling `shortConversationGrowthFile` (every
     /// `triggerFilePollInterval`) once per process; no-op without the launch
-    /// argument. Each change of the file's contents dispatches
-    /// `shortConversationGrowthNotification` into `connection` as if the
-    /// daemon had sent it.
+    /// argument. Each change of the file's contents is streamed into
+    /// `connection` as if the daemon had sent it: one delta per
+    /// `shortConversationGrowthSteps` step, `shortConversationGrowthDeltaInterval`
+    /// apart, a terminal delta, then `shortConversationGrowthNotification`.
     @MainActor
     static func startShortConversationGrowthWatcher(dispatchingTo connection: ConnectionManager) {
         guard let file = shortConversationGrowthFile, shortConversationGrowthWatcher == nil else { return }
@@ -254,6 +347,17 @@ enum DemoFixtures {
                 let contents = try? String(contentsOf: file, encoding: .utf8)
                 guard contents != lastContents else { continue }
                 lastContents = contents
+                let target = shortConversationLineCount(parsing: contents)
+                for lineCount in shortConversationGrowthSteps(from: shortConversationStreamedLineCount, to: target) {
+                    shortConversationChatSeq += 1
+                    shortConversationStreamedLineCount = lineCount
+                    connection.dispatchMessage(shortConversationChatDeltaNotification(
+                        seq: shortConversationChatSeq, lineCount: lineCount, streamingComplete: false))
+                    try? await Task.sleep(for: shortConversationGrowthDeltaInterval)
+                }
+                shortConversationChatSeq += 1
+                connection.dispatchMessage(shortConversationChatDeltaNotification(
+                    seq: shortConversationChatSeq, lineCount: target, streamingComplete: true))
                 connection.dispatchMessage(shortConversationGrowthNotification)
             }
         }
@@ -310,6 +414,9 @@ enum DemoFixtures {
             ] as [String: Any]
         case "agent.getQueue":
             return ["queue": [[String: Any]]()]
+        case "chat.subscribe":
+            guard params["agentId"] as? String == shortConversationAgentId else { return [String: Any]() }
+            return ["subscriptionId": shortConversationChatSubscriptionId]
         case "agent.getSubscriptions":
             let agentId = params["agentId"] as? String
             return agentId == longConversationAgentId ? longConversationSubscriptions : [String: Any]()
@@ -805,18 +912,36 @@ enum DemoFixtures {
         return "2026-09-\(day) 02:00  ok   \(seconds)s"
     }
 
-    /// A two-message conversation — a user request and one assistant reply —
-    /// whose reply carries a fenced code block of `lineCount` lines between
-    /// its opening paragraph and `shortConversationLastSentence`, followed
-    /// only by the stripped `shortConversationSuggestedPrompts` block. The
-    /// message ids do not change with `lineCount`, so a refetch merges the
-    /// grown reply into the open transcript's existing row.
-    static func shortConversationMessages(lineCount: Int) -> [[String: Any]] {
+    /// The reply's single text block at `lineCount` code lines: a fenced code
+    /// block between an opening paragraph and `shortConversationLastSentence`,
+    /// followed only by the stripped `shortConversationSuggestedPrompts` block,
+    /// under `shortConversationReplyBlockId`.
+    static func shortConversationReplyBlock(lineCount: Int) -> [String: Any] {
         let codeBlock = (["```"] + (0..<max(lineCount, 1)).map(shortConversationCodeLine) + ["```"])
             .joined(separator: "\n")
         let suggestedPromptsBlock = (["<!-- suggested-prompts"] + shortConversationSuggestedPrompts + ["-->"])
             .joined(separator: "\n")
         return [
+            "id": shortConversationReplyBlockId,
+            "type": "text",
+            "text": """
+            Renamed the job and its runbook. Recent runs under the new name:
+
+            \(codeBlock)
+
+            \(shortConversationLastSentence)
+
+            \(suggestedPromptsBlock)
+            """,
+        ]
+    }
+
+    /// A two-message conversation — a user request and one assistant reply
+    /// (`shortConversationReplyBlock(lineCount:)`). The message and block ids
+    /// do not change with `lineCount`, so a growth delta or a refetch merges
+    /// the grown reply into the open transcript's existing row.
+    static func shortConversationMessages(lineCount: Int) -> [[String: Any]] {
+        [
             [
                 "id": "demo-short-msg-1",
                 "role": "user",
@@ -829,23 +954,10 @@ enum DemoFixtures {
                 ],
             ],
             [
-                "id": "demo-short-msg-2",
+                "id": shortConversationReplyMessageId,
                 "role": "assistant",
                 "timestamp": iso(minutesAgo: 130),
-                "contentBlocks": [
-                    [
-                        "type": "text",
-                        "text": """
-                        Renamed the job and its runbook. Recent runs under the new name:
-
-                        \(codeBlock)
-
-                        \(shortConversationLastSentence)
-
-                        \(suggestedPromptsBlock)
-                        """,
-                    ],
-                ],
+                "contentBlocks": [shortConversationReplyBlock(lineCount: lineCount)],
             ],
         ]
     }

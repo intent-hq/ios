@@ -192,10 +192,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let shortLastMessageFragment = "End of the cron rename"
         // Sets the reply's code block line count: the fixture reads the
         // file's contents on every conversation fetch and polls it (every
-        // 100 ms); a change is delivered to the open conversation as the
-        // reply's streaming ending, which refetches. Every launch passes
-        // `growthFile`; only the growth test writes it (see the class
-        // comment on the hooks row trigger file for why a file, not a clock).
+        // 100 ms); a change is streamed to the open conversation the way a
+        // live reply is — one chat delta per added line, a terminal delta,
+        // then the stream's end. Every launch passes `growthFile`; only the
+        // growth test writes it (see the class comment on the hooks row
+        // trigger file for why a file, not a clock).
         static let growthFileArgumentPrefix = "--demo-short-conversation-growth-file="
         // DemoFixtures.shortConversationBaselineLineCount: the code block's
         // lines while the file is absent.
@@ -219,7 +220,8 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let atBottomThreshold: CGFloat = 50
         static let targetOvershoot: CGFloat = 25
         // Upper bound on a written line count reaching the transcript: the
-        // fixture's 100 ms poll, the refetch, and the grown row re-laying out.
+        // fixture's 100 ms poll, the deltas streaming in 80 ms apart, and the
+        // grown row re-laying out.
         static let growthTimeout: TimeInterval = 15
     }
 
@@ -602,9 +604,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// close the gap.
     ///
     /// The growth is the fixture's code block gaining lines through
-    /// `growthFile`, delivered to the store the way a streamed reply ending
-    /// is (a refetch that merges the grown message into its row). How far
-    /// past one page it lands is aimed, not guessed: the free room below the
+    /// `growthFile`, streamed to the store the way a live reply is: one chat
+    /// delta per line under the streaming flag, then the stream ending. How
+    /// far past one page it lands is aimed, not guessed: the free room below the
     /// end row is measured on the settled short transcript, a first growth
     /// that keeps it short measures one code line's height on this
     /// simulator, and the final line count is chosen from both to overshoot

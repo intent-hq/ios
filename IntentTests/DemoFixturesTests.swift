@@ -240,8 +240,7 @@ struct DemoFixturesTests {
     }
 
     @Test func shortConversationGrowthNotificationIsATerminalStreamEndForItsAgent() throws {
-        let data = try #require(DemoFixtures.shortConversationGrowthNotification.data(using: .utf8))
-        let envelope = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let envelope = try envelope(of: DemoFixtures.shortConversationGrowthNotification)
         #expect(envelope["method"] as? String == "events.event")
         let params = try #require(envelope["params"] as? [String: Any])
         let event = try #require(params["event"] as? [String: Any])
@@ -249,6 +248,78 @@ struct DemoFixturesTests {
         let payload = try #require(event["data"] as? [String: Any])
         #expect(payload["agentId"] as? String == DemoFixtures.shortConversationAgentId)
         #expect(payload["workspaceId"] as? String == DemoFixtures.shortConversationWorkspaceId)
+    }
+
+    /// Only the short conversation's agent gets a live chat channel; its
+    /// snapshot is pushed right after the `chat.subscribe` reply and parses
+    /// through the real push parser into the same two messages.
+    @Test func shortConversationChatSubscribeOpensAChannelAndPushesItsSnapshot() throws {
+        let shortParams: [String: Any] = ["agentId": DemoFixtures.shortConversationAgentId]
+        let reply = try #require(DemoFixtures.response(for: "chat.subscribe", params: shortParams) as? [String: Any])
+        #expect(reply["subscriptionId"] as? String == DemoFixtures.shortConversationChatSubscriptionId)
+        let otherParams: [String: Any] = ["agentId": DemoFixtures.longConversationAgentId]
+        let other = try #require(DemoFixtures.response(for: "chat.subscribe", params: otherParams) as? [String: Any])
+        #expect(other["subscriptionId"] == nil)
+        #expect(DemoFixtures.notifications(following: "chat.subscribe", params: otherParams).isEmpty)
+        #expect(DemoFixtures.notifications(following: "agent.getConversation", params: shortParams).isEmpty)
+
+        let following = DemoFixtures.notifications(following: "chat.subscribe", params: shortParams)
+        #expect(following.count == 1)
+        let snapshot = try subscriptionPush(of: #require(following.first))
+        #expect(snapshot.subscriptionId == DemoFixtures.shortConversationChatSubscriptionId)
+        #expect(snapshot.kind == .snapshot)
+        #expect(snapshot.seq == 0)
+        #expect(snapshot.snapshotMeta?["agentId"] as? String == DemoFixtures.shortConversationAgentId)
+        let messages = try #require(snapshot.snapshotMessages)
+        #expect(messages.map(\.id) == ["demo-short-msg-1", DemoFixtures.shortConversationReplyMessageId])
+        #expect(messages.last?.contentBlocks?.map(\.id) == [DemoFixtures.shortConversationReplyBlockId])
+        #expect(messages.last?.isStreaming != true)
+    }
+
+    /// A growth delta updates the reply's one block in place — same message
+    /// and block ids as the snapshot — carrying the code block at the step's
+    /// line count, streaming until the terminal delta.
+    @Test func shortConversationGrowthDeltaUpdatesTheReplyBlockInPlace() throws {
+        let streaming = try subscriptionPush(of: DemoFixtures.shortConversationChatDeltaNotification(
+            seq: 3, lineCount: 7, streamingComplete: false))
+        #expect(streaming.subscriptionId == DemoFixtures.shortConversationChatSubscriptionId)
+        #expect(streaming.kind == .delta)
+        #expect(streaming.seq == 3)
+        let blocks = try #require(streaming.delta?.chatBlocks)
+        #expect(blocks.count == 1)
+        let entity = try #require(blocks.first)
+        #expect(entity.messageId == DemoFixtures.shortConversationReplyMessageId)
+        #expect(entity.role == .assistant)
+        #expect(!entity.streamingComplete)
+        #expect(entity.block.id == DemoFixtures.shortConversationReplyBlockId)
+        let fenced = (entity.block.resolvedText ?? "").components(separatedBy: "```")
+        #expect(fenced.count == 3)
+        #expect(fenced[1].split(separator: "\n").count == 7)
+        #expect(entity.block.resolvedText
+            == DemoFixtures.shortConversationReplyBlock(lineCount: 7)["text"] as? String)
+
+        let terminal = try subscriptionPush(of: DemoFixtures.shortConversationChatDeltaNotification(
+            seq: 4, lineCount: 7, streamingComplete: true))
+        #expect(terminal.delta?.chatBlocks?.first?.streamingComplete == true)
+    }
+
+    @Test func shortConversationGrowthStreamsOneStepPerAddedLine() {
+        #expect(DemoFixtures.shortConversationGrowthSteps(from: 2, to: 5) == [3, 4, 5])
+        #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 6) == [6])
+        #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 5) == [5])
+        #expect(DemoFixtures.shortConversationGrowthSteps(from: 5, to: 3) == [3])
+    }
+
+    private func envelope(of notification: String) throws -> [String: Any] {
+        let data = try #require(notification.data(using: .utf8))
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private func subscriptionPush(of notification: String) throws -> SubscriptionPush {
+        let envelope = try envelope(of: notification)
+        #expect(envelope["jsonrpc"] as? String == "2.0")
+        let method = try #require(envelope["method"] as? String)
+        return try #require(SubscriptionPush.parse(method: method, params: envelope["params"] as Any))
     }
 
     /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
