@@ -366,6 +366,10 @@ private final class FakeSecItemStore {
     private(set) var updateCallCount = 0
     private(set) var addCallCount = 0
     private(set) var deleteCallCount = 0
+    /// Raw attribute dictionaries handed to SecItemUpdate / SecItemAdd, so
+    /// policy tests can assert exactly what would reach the Security framework.
+    private(set) var updateCalls: [(query: [String: Any], attributes: [String: Any])] = []
+    private(set) var addQueries: [[String: Any]] = []
 
     init(items: [String: Record] = [:]) {
         self.items = items
@@ -379,6 +383,7 @@ private final class FakeSecItemStore {
         SecItemKeychainStorage.SecurityCalls(
             update: { [self] query, attributes in
                 updateCallCount += 1
+                updateCalls.append((query: query, attributes: attributes))
                 if let updateFailure { return updateFailure }
                 guard let key = key(from: query), var record = items[key] else {
                     return errSecItemNotFound
@@ -392,6 +397,7 @@ private final class FakeSecItemStore {
             },
             add: { [self] query in
                 addCallCount += 1
+                addQueries.append(query)
                 if let addFailure { return addFailure }
                 guard let key = key(from: query), items[key] == nil,
                       let data = query[kSecValueData as String] as? Data,
@@ -482,6 +488,88 @@ struct SecItemKeychainStorageTests {
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 1)
         #expect(fake.deleteCallCount == 0)
+    }
+}
+
+/// Pins the credential backup / accessibility policy documented on
+/// `SecItemKeychainStorage` (ios#263): every LOCAL credential class is
+/// `AfterFirstUnlock`, non-synchronizable and app-private; SYNCED backend
+/// records are read as synchronizable shared-group items with no
+/// accessibility constraint of their own. Any drift in these attributes —
+/// including a move to a `ThisDeviceOnly` class — must fail here and come
+/// with an explicit policy decision plus a migration.
+@Suite("Keychain credential backup policy")
+struct KeychainAccessibilityPolicyTests {
+    private func makePersistence(
+        fake: FakeSecItemStore
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "KeychainAccessibilityPolicyTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
+
+    @Test func everyLocalCredentialClassIsAfterFirstUnlockAndNeverSynchronizable() {
+        let fake = FakeSecItemStore()
+        let setup = makePersistence(fake: fake)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let pm = setup.manager
+        let localAccounts = [
+            pm.keychainAccountConnections, pm.keychainAccountToken, pm.keychainAccountServer,
+        ]
+
+        for account in localAccounts {
+            #expect(pm.saveDataToKeychain(data: Data(account.utf8), account: account))
+        }
+
+        #expect(fake.addQueries.count == localAccounts.count)
+        #expect(
+            fake.addQueries.compactMap { $0[kSecAttrAccount as String] as? String }
+                == localAccounts)
+        for query in fake.addQueries {
+            #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
+            #expect(query[kSecAttrService as String] as? String == "com.intent.companion")
+            #expect(
+                query[kSecAttrAccessible as String] as? String
+                    == kSecAttrAccessibleAfterFirstUnlock as String)
+            #expect(query[kSecAttrSynchronizable as String] == nil)
+            #expect(query[kSecAttrAccessGroup as String] == nil)
+        }
+    }
+
+    @Test func rewritingALocalCredentialNeverTouchesItsAccessibilityOrSyncScope() {
+        let fake = FakeSecItemStore()
+        let setup = makePersistence(fake: fake)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let pm = setup.manager
+
+        #expect(pm.saveDataToKeychain(data: Data("first".utf8), account: pm.keychainAccountConnections))
+        #expect(pm.saveDataToKeychain(data: Data("second".utf8), account: pm.keychainAccountConnections))
+
+        #expect(fake.addCallCount == 1)
+        #expect(fake.updateCalls.count == 2)
+        for call in fake.updateCalls {
+            #expect(call.query[kSecAttrSynchronizable as String] == nil)
+            #expect(call.query[kSecAttrAccessGroup as String] == nil)
+            #expect(Array(call.attributes.keys) == [kSecValueData as String])
+        }
+        #expect(
+            fake.record(service: "com.intent.companion", account: pm.keychainAccountConnections)?
+                .accessibility == kSecAttrAccessibleAfterFirstUnlock as String)
+    }
+
+    @Test func syncedBackendRecordsAreReadAsSynchronizableSharedGroupItemsOnly() {
+        let group = "T.dev.intentapp.backends"
+        let query = SyncedBackendRegistry.listQuery(accessGroup: group)
+
+        #expect(query[kSecAttrService as String] as? String == "com.cloudlands.intent.backends")
+        #expect(query[kSecAttrAccessGroup as String] as? String == group)
+        #expect(
+            query[kSecAttrSynchronizable as String] as? String
+                == kSecAttrSynchronizableAny as String)
+        #expect(query[kSecAttrAccessible as String] == nil)
+        #expect(query[kSecValueData as String] == nil)
     }
 }
 
