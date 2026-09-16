@@ -516,70 +516,96 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// showed on the second launch of the process in a run, so the cold
     /// entry is repeated with a fresh launch each cycle; the gate is closed
     /// again before every launch.
+    /// EXPERIMENT (exp/338-release-offsets): when is the hooks row's landing
+    /// relative to the cold entry's settle blanking the transcript?
+    private enum Release: CustomStringConvertible {
+        case onMount, onReport, onSettle, afterSettle(TimeInterval), defaultClock
+        var description: String {
+            switch self {
+            case .onMount: return "onMount"
+            case .onReport: return "onReport"
+            case .onSettle: return "onSettle"
+            case .afterSettle(let s): return "afterSettle(\(s)s)"
+            case .defaultClock: return "defaultClock(4s, no trigger file)"
+            }
+        }
+    }
+
     @MainActor
     func testHooksRowLandingRightAfterColdEntryKeepsLastMessageOnScreen() throws {
-        for cycle in 1...Fixture.entryCycles {
-            let context = "cold entry \(cycle)/\(Fixture.entryCycles) with the hooks row released on settle"
+        continueAfterFailure = true
+        let schedule: [Release] = [
+            .onSettle, .afterSettle(0.3), .afterSettle(0.8), .afterSettle(2.0),
+            .onReport, .onMount, .defaultClock, .defaultClock, .defaultClock,
+            .onSettle, .afterSettle(0.3), .afterSettle(0.8),
+        ]
+        var summary: [String] = []
+        for (index, release) in schedule.enumerated() {
+            let cycle = index + 1
+            let context = "cold entry \(cycle)/\(schedule.count) release=\(release)"
             try? FileManager.default.removeItem(at: hooksRowTriggerFile)
-            let app = launchDemoApp()
+            let app: XCUIApplication
+            if case .defaultClock = release {
+                app = XCUIApplication()
+                app.launchArguments += ["--demo-data"]
+                app.launch()
+            } else {
+                app = launchDemoApp()
+            }
+            let t0 = Date()
             let opened = enterLongConversation(in: app, context: context)
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
             let endRow = EndRow.lastSuggestedPrompt(in: app)
             let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
+            var releasedAt: TimeInterval = .nan
+            func releaseRow() {
+                try? Data().write(to: hooksRowTriggerFile)
+                releasedAt = Date().timeIntervalSince(t0)
+            }
+            if case .onMount = release { releaseRow() }
+            if case .onReport = release {
+                _ = waitUntil(timeout: Fixture.settleTimeout) { followHasReported(in: opened) }
+                releaseRow()
+            }
 
-            // 1. Settled exactly as a cold entry does: the entry follow has
-            //    reported and the last message rests inside the transcript,
-            //    with the row still held back.
-            guard waitUntilSettled(
+            let settled = waitUntilSettled(
                 on: lastMessage, named: "last assistant paragraph",
                 in: opened, context: context,
-                alsoReporting: (endRow.element, endRow.name)
-            ) else {
-                app.terminate()
-                continue
-            }
-            XCTAssertFalse(
-                hooksRow.exists,
-                "\(context): the hooks row was already present when the transcript settled; the fixture trigger file did not hold it back")
+                alsoReporting: (endRow.element, endRow.name))
+            let settledAt = Date().timeIntervalSince(t0)
+            let rowPresentAtSettle = hooksRow.exists
             let bottomBeforeRow = transcript.frame.maxY
+            switch release {
+            case .onSettle: releaseRow()
+            case .afterSettle(let delay):
+                RunLoop.current.run(until: Date().addingTimeInterval(delay))
+                releaseRow()
+            default: break
+            }
 
-            // 2. Release the row right away; it lands and shrinks the
-            //    transcript from below.
-            try Data().write(to: hooksRowTriggerFile)
-            XCTAssertTrue(
-                hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
-                "\(context): hooks row never appeared under the transcript after the trigger file was created")
-            XCTAssertTrue(
-                waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow },
-                "\(context): transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
-
-            // 3. Still populated: the last message is realized inside the
-            //    shrunk transcript once the re-pin has run (a blank viewport
-            //    leaves it out of the accessibility hierarchy for good), Go
-            //    to End is absent, the entry follow still reports `landed`,
-            //    and the end row rests at the end over the quiet window.
+            let rowLanded = hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout)
+            let rowLandedAt = Date().timeIntervalSince(t0)
+            let shrank = waitUntil(timeout: 5) { transcript.frame.maxY < bottomBeforeRow }
             let repopulated = waitUntil(timeout: 5) { isInside(lastMessage, transcript) }
             let visibleBand = rows(intersecting: transcript)
-            XCTAssertTrue(
-                repopulated,
-                "\(context): the last assistant paragraph is not inside the transcript after the hooks row landed "
-                    + "(\(visibleBand.count) row(s) in the visible band) — "
-                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-            XCTAssertFalse(
-                opened.goToEnd.exists,
-                "\(context): Go to End appeared after the hooks row landed — "
-                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+            let goToEnd = opened.goToEnd.exists
             let report = followReport(in: opened)
-            XCTAssertTrue(
-                report.hasPrefix(Fixture.landedFollowReportPrefix),
-                "\(context): the entry follow does not report landed after the hooks row landed — \(report)")
-            assertAtEnd(endRow, in: opened, context: "\(context), after the hooks row shrank the transcript")
-            assertStaysAtBottom(
-                lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
-                in: opened, context: "\(context), after the hooks row shrank the transcript")
+            let atEnd = isAtEnd(endRow, in: transcript)
+            let held = !waitUntil(timeout: Fixture.quietWindow) {
+                opened.goToEnd.exists || !isInside(lastMessage, transcript) || !isAtEnd(endRow, in: transcript)
+            }
+            let line = "[338-probe] cycle \(cycle) release=\(release) settled=\(settled) settledAt=\(String(format: "%.2f", settledAt))s "
+                + "rowPresentAtSettle=\(rowPresentAtSettle) releasedAt=\(String(format: "%.2f", releasedAt))s rowLanded=\(rowLanded) "
+                + "rowLandedAt=\(String(format: "%.2f", rowLandedAt))s shrank=\(shrank) repopulated=\(repopulated) "
+                + "band=\(visibleBand.count) goToEnd=\(goToEnd) report=\(report) atEnd=\(atEnd) heldQuiet=\(held) "
+                + "transcript=\(transcript.frame) — " + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
+            NSLog("%@", line)
+            summary.append(line)
+            XCTAssertTrue(repopulated, "\(context): BLANK — " + line)
             app.terminate()
         }
+        NSLog("[338-probe] SUMMARY\n%@", summary.joined(separator: "\n"))
     }
 
     /// From the very top of the long transcript a single tap on Go to End
