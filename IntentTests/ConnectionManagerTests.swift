@@ -1465,6 +1465,26 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.mergeHosts(existing: ["a", "b"], reported: []) == ["a", "b"])
     }
 
+    /// ios#254: daemon-reported routes are untrusted. Only plain DNS names,
+    /// IPv4 addresses and IPv6 literals survive; URL metacharacters, ports,
+    /// paths and credentials are dropped before the list is raced or
+    /// persisted. Raw IPv6 forms are bracket-normalized and deduped against
+    /// their bracketed twin; existing hosts are still never dropped.
+    @Test @MainActor func mergeHostsRejectsInvalidReportedHostsAndNormalizesIPv6() {
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["daemon.local", "[fe80::1]"],
+            reported: [
+                "192.168.1.10", "2001:db8::1", "fe80::1", "[2001:db8::1]",
+                "host.example.com", "my-mac_2.local",
+                "192.168.1.10:4242", "evil.com/path", "user@evil.com", "evil.com?x=1",
+                "http://evil.com", "[::1", "::1]", "[]", "a b", "",
+            ])
+        #expect(merged == [
+            "daemon.local", "[fe80::1]", "192.168.1.10", "[2001:db8::1]",
+            "host.example.com", "my-mac_2.local",
+        ])
+    }
+
     @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
         // Reviewer scenario: the stored record holds a NAT hostname the current
         // session didn't connect with. The persisted list is the stored hosts
@@ -1708,6 +1728,11 @@ struct ConnectionManagerTests {
             var isOpen: Bool
             var acceptedTotal = 0
             var pingsReceived = 0
+            // Requests seen per JSON-RPC method, and how many of the next
+            // requests per method are answered with an error instead of the
+            // empty-object result — the subscription retry tests' seam.
+            var requestCounts: [String: Int] = [:]
+            var scriptedFailures: [String: Int] = [:]
         }
 
         private let listener: NWListener
@@ -1723,6 +1748,17 @@ struct ConnectionManagerTests {
         /// Sockets the listener has accepted so far (including ones cancelled
         /// since): non-zero proves a client reached this plaintext server.
         var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
+
+        /// Requests carrying `method` received so far, across all sockets.
+        func requestCount(method: String) -> Int {
+            state.withLock { $0.requestCounts[method] ?? 0 }
+        }
+
+        /// Answers the next `count` requests for `method` with a JSON-RPC
+        /// error (`-32000`), then falls back to the empty-object result.
+        func failNextRequests(_ count: Int, method: String) {
+            state.withLock { $0.scriptedFailures[method] = count }
+        }
 
         private init(listener: NWListener, gated: Bool, pongs: PongPolicy) {
             self.listener = listener
@@ -1824,9 +1860,21 @@ struct ConnectionManagerTests {
                 } else if let data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
-                    let response: [String: Any] = [
-                        "jsonrpc": "2.0", "id": id, "result": [String: Any](),
-                    ]
+                    let method = json["method"] as? String ?? ""
+                    let fails = self.state.withLock { state -> Bool in
+                        state.requestCounts[method, default: 0] += 1
+                        guard let remaining = state.scriptedFailures[method], remaining > 0 else {
+                            return false
+                        }
+                        state.scriptedFailures[method] = remaining - 1
+                        return true
+                    }
+                    var response: [String: Any] = ["jsonrpc": "2.0", "id": id]
+                    if fails {
+                        response["error"] = ["code": -32000, "message": "scripted failure"]
+                    } else {
+                        response["result"] = [String: Any]()
+                    }
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
                         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
                         let context = NWConnection.ContentContext(
@@ -2921,5 +2969,46 @@ struct ConnectionManagerTests {
         #expect(monitor.cancelCount == 0)
         #expect(monitors.monitors.count == 1)
     }
-}
 
+    // MARK: - Global subscription retry (ios#254)
+
+    private static let subscribeMethod = "events.subscribe"
+
+    /// ios#254: a daemon that rejects the first `events.subscribe` calls no
+    /// longer leaves the connection blind. The subscription is retried with
+    /// backoff through the injected clock (1 s, 2 s, ...) until the daemon
+    /// accepts; a successful connection is never torn down for it.
+    @Test @MainActor func globalSubscriptionRetriesUntilTheDaemonAccepts() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start()
+        server.failNextRequests(2, method: Self.subscribeMethod)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+
+        try await Self.settle { clock.pendingDurations.contains(.seconds(1)) }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 1)
+
+        clock.advance(by: .seconds(1))
+        try await Self.settle { clock.pendingDurations.contains(.seconds(2)) }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 2)
+
+        clock.advance(by: .seconds(2))
+        try await Self.settle { server.requestCount(method: Self.subscribeMethod) == 3 }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 3)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+    }
+}
