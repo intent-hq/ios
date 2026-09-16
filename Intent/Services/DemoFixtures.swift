@@ -662,10 +662,11 @@ enum DemoFixtures {
         "Schedule the worker scaling follow-up",
     ]
 
-    /// Tool rows the slim projection truncates (PROTOCOL §5.5), carried by
-    /// the last assistant messages of `longConversationMessages` after their
-    /// opening paragraph — the first entry by the very last message, the
-    /// second by the assistant message of the exchange before it: a `view` of `file` whose
+    /// Tool rows the slim projection truncates (PROTOCOL §5.5), each its own
+    /// tool-only assistant message of `longConversationMessages` right
+    /// before a text message — the first entry before the very last message,
+    /// the second before the assistant message of the exchange before it: a
+    /// `view` of `file` whose
     /// `tool_result` is served as a bounded preview with `outputTruncated`,
     /// and whose full listing `agent.getMessageBlock` returns through
     /// `longConversationBlockHydrationGate`. Expanding the row re-measures
@@ -1007,21 +1008,22 @@ enum DemoFixtures {
         var rows: [LongConversationRow] = []
         for (index, exchange) in exchanges.enumerated() {
             rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
-            // The last assistant messages carry a slim-truncated tool row after
-            // their opening paragraph (see `longConversationTruncatedToolCalls`):
-            // below the navigation bar once the transcript rests at the end,
-            // so a UI test can tap it, and above the closing paragraph.
+            // The last assistant text messages are each preceded by a
+            // tool-only assistant message carrying a slim-truncated tool row
+            // (see `longConversationTruncatedToolCalls`). Its own message,
+            // not a block of the text message: a text-bearing assistant row
+            // sits under the message copy context-menu overlay, which claims
+            // taps meant for plain SwiftUI content such as the row's header
+            // (`CopyContextMenuOverlay`), so a UI test could not expand it.
+            // Sitting right above the text message it also rests below the
+            // navigation bar once the transcript is at the end.
             let truncatedCallIndex = exchanges.count - 1 - index
-            let assistantBlocks: [[String: Any]]
-            if truncatedCallIndex < longConversationTruncatedToolCalls.count,
-               let paragraphBreak = exchange.assistant.range(of: "\n\n") {
-                assistantBlocks = [textBlock(String(exchange.assistant[..<paragraphBreak.lowerBound]))]
-                    + truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
-                    + [textBlock(String(exchange.assistant[paragraphBreak.upperBound...]))]
-            } else {
-                assistantBlocks = [textBlock(exchange.assistant)]
+            if truncatedCallIndex < longConversationTruncatedToolCalls.count {
+                rows.append(LongConversationRow(
+                    role: "assistant",
+                    contentBlocks: truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])))
             }
-            rows.append(LongConversationRow(role: "assistant", contentBlocks: assistantBlocks))
+            rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
             if index < exchanges.count - 1 {
                 rows += longConversationRound(index)
             }

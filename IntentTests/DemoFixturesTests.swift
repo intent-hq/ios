@@ -396,25 +396,29 @@ struct DemoFixturesTests {
         let calls = DemoFixtures.longConversationTruncatedToolCalls
         #expect(calls.count == 2)
 
-        // The last message carries the first call, the assistant message of
-        // the exchange before it the second; no other row is truncated.
-        let truncatedMessages = messages.filter { message in
-            message.contentBlocks?.contains { $0.isSlimTruncated } == true
+        // The message right before the last one carries the first call, the
+        // one before the assistant text message of the exchange before it
+        // the second; no other row is truncated.
+        let truncatedIndices = messages.indices.filter { index in
+            messages[index].contentBlocks?.contains { $0.isSlimTruncated } == true
         }
-        #expect(truncatedMessages.count == calls.count)
-        #expect(truncatedMessages.allSatisfy { $0.role == .assistant })
+        #expect(truncatedIndices.count == calls.count)
+        #expect(truncatedIndices.last == messages.count - 2)
         let last = try #require(messages.last)
-        #expect(truncatedMessages.last?.id == last.id)
+        #expect(last.role == .assistant)
+        #expect(last.contentBlocks?.allSatisfy { $0.type == .text } == true)
 
-        for (call, message) in zip(calls, truncatedMessages.reversed()) {
+        for (call, index) in zip(calls, truncatedIndices.reversed()) {
+            let message = messages[index]
             let blocks = try #require(message.contentBlocks)
-            // The row sits between the message's opening and closing
-            // paragraphs, so it rests below the navigation bar at the end.
-            let toolUseIndex = try #require(blocks.firstIndex { $0.id == call.id })
-            #expect(toolUseIndex > 0)
-            #expect(blocks[..<toolUseIndex].allSatisfy { $0.type == .text })
-            #expect(blocks.last?.type == .text)
-            let toolUse = blocks[toolUseIndex]
+            // A tool-only assistant message (no text, so no copy context-menu
+            // overlay claims the row's taps) right before a text message.
+            #expect(message.role == .assistant)
+            #expect(blocks.allSatisfy { $0.type == .toolUse || $0.type == .toolResult })
+            let following = messages[index + 1]
+            #expect(following.role == .assistant)
+            #expect(following.contentBlocks?.contains { $0.type == .text } == true)
+            let toolUse = try #require(blocks.first { $0.id == call.id })
             #expect(toolUse.type == .toolUse)
             #expect(toolUse.inputTruncated != true)
             #expect(toolUse.input?["path"]?.value as? String == call.file)
