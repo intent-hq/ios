@@ -320,6 +320,36 @@ struct WorkspaceStoreAttentionTests {
         #expect(store.workspaces[0].attention == nil)
     }
 
+    /// Every in-place updater rebuilds the row field by field; a status image
+    /// (intent-hq/intent#3868) must survive each of them, or an activity tick
+    /// silently unmounts the card thumbnail.
+    @Test func inPlaceUpdatersKeepStatusImageAssetId() async throws {
+        let store = WorkspaceStore(forTesting: true)
+        let seeded = Workspace(
+            id: "ws-1", title: "WS", branch: nil, baseRef: nil,
+            status: nil, activity: nil, displayStatus: nil, attention: "unread",
+            lastActivity: "2026-03-01T10:00:00Z", updatedAt: nil,
+            repositoryOwner: nil, repositoryName: nil, prStatus: nil,
+            prNumber: nil, diffSummaryTotalFiles: nil, taskStatsTotal: nil,
+            taskStatsCompleted: nil, taskStatsInProgress: nil,
+            agentSummaryCount: nil, agentSummaryAgents: nil,
+            statusImageAssetId: "asset-1.png"
+        )
+        store.workspaces = [seeded]
+
+        store.updateLastActivity(workspaceId: "ws-1", lastActivity: "2026-03-01T11:00:00Z")
+        #expect(store.workspaces[0].lastActivity == "2026-03-01T11:00:00Z")
+        #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+
+        store.updateWaiting(workspaceId: "ws-1", waiting: true)
+        #expect(store.workspaces[0].waiting == true)
+        #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+
+        store.clearUnreadAttentionLocally(workspaceId: "ws-1")
+        #expect(store.workspaces[0].attention == "none")
+        #expect(store.workspaces[0].statusImageAssetId == "asset-1.png")
+    }
+
     @Test func clearUnreadAttentionLocallyUnknownWorkspaceIsNoOp() async throws {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", attention: "unread")]

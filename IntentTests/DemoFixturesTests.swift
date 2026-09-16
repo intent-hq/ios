@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import Intent
 
 @MainActor
@@ -58,6 +59,41 @@ struct DemoFixturesTests {
         #expect(notes.contains { $0.isDefault })
         // A task note with checkboxes is present for the note detail screenshot
         #expect(notes.contains { $0.taskStatus != nil && $0.content.contains("- [ ]") })
+    }
+
+    @Test func exactlyOneWorkspaceFixtureCarriesAStatusImage() throws {
+        // The status-image UI test relies on one — and only one — workspace
+        // row rendering the status thumbnail (intent-hq/intent#3868).
+        let result = DemoFixtures.response(for: "workspace.list", params: [:])
+        let withImage = WorkspaceStore.parseWorkspaces(from: result)
+            .filter { $0.statusImageAssetId != nil }
+        #expect(withImage.count == 1)
+        #expect(withImage.first?.id == DemoFixtures.statusImageWorkspaceId)
+        #expect(withImage.first?.statusImageAssetId == DemoFixtures.statusImageAssetId)
+    }
+
+    @Test func noteReadAssetFixtureServesADecodableStatusImage() throws {
+        let result = DemoFixtures.response(
+            for: "note.readAsset",
+            params: [
+                "workspaceId": DemoFixtures.statusImageWorkspaceId,
+                "asset": DemoFixtures.statusImageAssetId,
+            ])
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["assetId"] as? String == DemoFixtures.statusImageAssetId)
+        #expect(dict["mimeType"] as? String == "image/png")
+        let base64 = try #require(dict["data"] as? String)
+        let bytes = try #require(Data(base64Encoded: base64))
+        let image = try #require(WorkspaceFileImageLoader.decodeImage(bytes))
+        #expect(image.size.width > 0)
+        #expect(image.size.height > 0)
+    }
+
+    @Test func noteReadAssetFixtureIsEmptyForUnknownAssets() throws {
+        let result = DemoFixtures.response(
+            for: "note.readAsset", params: ["workspaceId": "demo-ws-dashboard", "asset": "missing.png"])
+        let dict = try #require(result as? [String: Any])
+        #expect(dict.isEmpty)
     }
 
     @Test func agentListFixtureParses() throws {
