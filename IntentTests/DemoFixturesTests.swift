@@ -408,7 +408,13 @@ struct DemoFixturesTests {
 
         for (call, message) in zip(calls, truncatedMessages.reversed()) {
             let blocks = try #require(message.contentBlocks)
-            let toolUse = try #require(blocks.first { $0.id == call.id })
+            // The row sits between the message's opening and closing
+            // paragraphs, so it rests below the navigation bar at the end.
+            let toolUseIndex = try #require(blocks.firstIndex { $0.id == call.id })
+            #expect(toolUseIndex > 0)
+            #expect(blocks[..<toolUseIndex].allSatisfy { $0.type == .text })
+            #expect(blocks.last?.type == .text)
+            let toolUse = blocks[toolUseIndex]
             #expect(toolUse.type == .toolUse)
             #expect(toolUse.inputTruncated != true)
             #expect(toolUse.input?["path"]?.value as? String == call.file)

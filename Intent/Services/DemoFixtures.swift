@@ -663,9 +663,9 @@ enum DemoFixtures {
     ]
 
     /// Tool rows the slim projection truncates (PROTOCOL §5.5), carried by
-    /// the last assistant messages of `longConversationMessages` — the
-    /// first entry by the very last message, the second by the assistant
-    /// message of the exchange before it: a `view` of `file` whose
+    /// the last assistant messages of `longConversationMessages` after their
+    /// opening paragraph — the first entry by the very last message, the
+    /// second by the assistant message of the exchange before it: a `view` of `file` whose
     /// `tool_result` is served as a bounded preview with `outputTruncated`,
     /// and whose full listing `agent.getMessageBlock` returns through
     /// `longConversationBlockHydrationGate`. Expanding the row re-measures
@@ -1007,14 +1007,21 @@ enum DemoFixtures {
         var rows: [LongConversationRow] = []
         for (index, exchange) in exchanges.enumerated() {
             rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
-            // The last assistant messages open with a slim-truncated tool row
-            // (see `longConversationTruncatedToolCalls`).
+            // The last assistant messages carry a slim-truncated tool row after
+            // their opening paragraph (see `longConversationTruncatedToolCalls`):
+            // below the navigation bar once the transcript rests at the end,
+            // so a UI test can tap it, and above the closing paragraph.
             let truncatedCallIndex = exchanges.count - 1 - index
-            let truncatedBlocks = truncatedCallIndex < longConversationTruncatedToolCalls.count
-                ? truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
-                : []
-            rows.append(LongConversationRow(
-                role: "assistant", contentBlocks: truncatedBlocks + [textBlock(exchange.assistant)]))
+            let assistantBlocks: [[String: Any]]
+            if truncatedCallIndex < longConversationTruncatedToolCalls.count,
+               let paragraphBreak = exchange.assistant.range(of: "\n\n") {
+                assistantBlocks = [textBlock(String(exchange.assistant[..<paragraphBreak.lowerBound]))]
+                    + truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
+                    + [textBlock(String(exchange.assistant[paragraphBreak.upperBound...]))]
+            } else {
+                assistantBlocks = [textBlock(exchange.assistant)]
+            }
+            rows.append(LongConversationRow(role: "assistant", contentBlocks: assistantBlocks))
             if index < exchanges.count - 1 {
                 rows += longConversationRound(index)
             }
