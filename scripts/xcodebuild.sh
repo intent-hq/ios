@@ -46,7 +46,8 @@
 #   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
 #                         (falling back to /tmp). Must be a local filesystem.
 #   SIM_LOCK_KILL_GRACE   Seconds an xcodebuild orphaned by this script's death
-#                         gets to exit after SIGTERM before SIGKILL; default 30.
+#                         (with every process under it) gets to exit after
+#                         SIGTERM before the survivors are SIGKILLed; default 30.
 #
 # Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
@@ -216,11 +217,14 @@ run_xcodebuild_logged() {
 #
 # The shell writes "run <pid>" on fd 9 when xcodebuild starts and "done" when
 # it has returned. EOF between the two means the shell died mid-run while
-# xcodebuild kept going: the keeper then SIGTERMs that process tree, waits up
-# to SIM_LOCK_KILL_GRACE seconds for the PID to exit, SIGKILLs what is left,
-# and releases only afterwards, so the next run never shares the device with
-# an orphaned test process (and helpers that merely outlive a completed
-# xcodebuild are never touched).
+# xcodebuild kept going: the keeper then SIGTERMs that process tree (parents
+# before children, so a parent cannot outlive a child's exit and carry on), waits
+# up to SIM_LOCK_KILL_GRACE seconds for every process in it to exit (tracking
+# the PIDs it saw, so a descendant that outlives and reparents away from its
+# parent is still waited for, plus any new descendants that appear meanwhile),
+# SIGKILLs the survivors, and releases only once none is left, so the next run
+# never shares the device with an orphaned test process (helpers that merely
+# outlive a completed xcodebuild are never touched).
 #
 # Keeper protocol on stdout, one line each: "waiting <holder>" once if the
 # lock was busy, then "acquired <keeper pid> <seconds waited>" or
@@ -243,41 +247,60 @@ def alive(pid):
         return False
     except PermissionError:
         return True
-def process_tree(root):
-    children = {}
+def process_table():
+    table = {}
     try:
-        out = subprocess.run(["ps", "-axo", "pid=,ppid="], capture_output=True, text=True).stdout
+        out = subprocess.run(["ps", "-axo", "pid=,ppid=,stat="], capture_output=True, text=True).stdout
     except Exception:
-        out = ""
+        return table
     for line in out.splitlines():
         parts = line.split()
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-            children.setdefault(int(parts[1]), []).append(int(parts[0]))
-    tree, stack = [root], [root]
-    while stack:
-        for child in children.get(stack.pop(), []):
-            tree.append(child)
-            stack.append(child)
-    return tree
-def kill_tree(root, sig):
-    for pid in process_tree(root):
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            table[int(parts[0])] = (int(parts[1]), parts[2])
+    return table
+def with_descendants(pids, table):
+    children = {}
+    for pid, (ppid, _) in table.items():
+        children.setdefault(ppid, []).append(pid)
+    ordered, queue = list(pids), list(pids)
+    while queue:
+        for child in children.get(queue.pop(0), []):
+            if child not in ordered:
+                ordered.append(child)
+                queue.append(child)
+    return ordered
+def still_running(pids, table):
+    if not table:
+        return [pid for pid in pids if alive(pid)]
+    return [pid for pid in pids if pid in table and not table[pid][1].startswith("Z")]
+def signal_all(pids, sig):
+    for pid in pids:
         try:
             os.kill(pid, sig)
         except (ProcessLookupError, PermissionError):
             pass
-def terminate_orphaned_run(pid):
-    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, pid))
+def terminate_orphaned_run(root):
+    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, root))
     sys.stderr.flush()
-    kill_tree(pid, signal.SIGTERM)
+    tracked = with_descendants([root], process_table())
+    signal_all(tracked, signal.SIGTERM)
     deadline = time.time() + grace
-    while alive(pid) and time.time() < deadline:
-        time.sleep(0.1)
-    if alive(pid):
-        sys.stderr.write("xcodebuild.sh: xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (pid, grace))
+    while True:
+        table = process_table()
+        tracked = with_descendants(tracked, table)
+        remaining = still_running(tracked, table)
+        if not remaining or time.time() >= deadline:
+            break
+        time.sleep(0.2)
+    if remaining:
+        sys.stderr.write("xcodebuild.sh: %d process(es) of xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (len(remaining), root, grace))
         sys.stderr.flush()
-        kill_tree(pid, signal.SIGKILL)
-        while alive(pid):
+        while remaining:
+            signal_all(remaining, signal.SIGKILL)
             time.sleep(0.1)
+            table = process_table()
+            tracked = with_descendants(tracked, table)
+            remaining = still_running(tracked, table)
 start = time.time()
 announced = False
 while True:

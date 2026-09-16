@@ -26,13 +26,20 @@ EOF
 # STUB_LOG records start/end epoch seconds; STUB_LINGER leaves a detached
 # child (like xcodebuild's helper daemons) alive for that many seconds with
 # every inherited fd except stdout/stderr still open; STUB_WATCH=<pid> records
-# at start whether that peer process is still alive.
+# at start whether that peer process is still alive; STUB_RESIST=<secs> spawns
+# a child that ignores SIGTERM for that long (logged as "child <pid>") and
+# STUB_RESIST_ROOT=1 makes the stub itself ignore SIGTERM.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
 if [ -n "${STUB_WATCH:-}" ]; then
   if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
 fi
+if [ -n "${STUB_RESIST:-}" ]; then
+  (trap '' TERM; exec sleep "$STUB_RESIST") &
+  [ -z "${STUB_LOG:-}" ] || echo "child $!" >> "$STUB_LOG"
+fi
+[ -z "${STUB_RESIST_ROOT:-}" ] || trap '' TERM
 [ -z "${STUB_LINGER:-}" ] || (sleep "$STUB_LINGER" >/dev/null 2>&1 &)
 sleep "${STUB_SLEEP:-0}"
 [ -z "${STUB_LOG:-}" ] || echo "end $(date +%s) $$" >> "$STUB_LOG"
@@ -248,8 +255,44 @@ assert_eq "the second run's xcodebuild started only after the orphan was dead" "
 assert_eq "the second run's xcodebuild never saw the orphan alive" "$(grep -c '^peer alive' "$STUB_LOG")" 0
 assert_contains "the keeper reports the termination on the victim's stderr" "$(cat "$work/victim.out")" \
   "PID $victim died while xcodebuild PID $victim_xcodebuild was still running; terminating it before releasing the simulator lock"
+assert_lacks "a SIGTERM-responsive run is not escalated to SIGKILL" "$(cat "$work/victim.out")" "sending SIGKILL"
 assert_lock_free "lock released after the orphaned run was terminated"
 assert_eq "lock file is empty after the orphaned run was terminated" "$(cat "$lock")" ""
+
+# orphan_case <name> <grace> <env...>: SIGKILLs a wrapper whose stub xcodebuild
+# (started with <env...>) has a SIGTERM-immune process in its tree, with a
+# second run waiting on the lock and watching the stub's "child" PID (or the
+# stub itself when no child was logged). Asserts the immune process was
+# SIGKILLed after <grace> seconds and was dead before the second run started.
+orphan_case() {
+  local name=$1 grace=$2 log=$work/timeline-$1 victim waiter root immune
+  shift 2
+  env STUB_LOG="$log" "$@" "$SCRIPT" test-without-building > "$work/$name.victim.out" 2>&1 &
+  victim=$!
+  for _ in $(seq 1 100); do grep -q '^start ' "$log" 2>/dev/null && break; sleep 0.1; done
+  sleep 0.3
+  root=$(grep '^start ' "$log" | cut -d' ' -f3)
+  immune=$(grep '^child ' "$log" | cut -d' ' -f2 || true)
+  [ -n "$immune" ] || immune=$root
+  kill -0 "$immune" 2>/dev/null && pass "$name: SIGTERM-immune PID $immune is running" || fail "$name: no immune process"
+  STUB_LOG=$log STUB_WATCH=$immune SIM_LOCK_TIMEOUT=30 "$SCRIPT" test-without-building > "$work/$name.waiter.out" 2>&1 &
+  waiter=$!
+  for _ in $(seq 1 100); do grep -q 'waiting for simulator' "$work/$name.waiter.out" 2>/dev/null && break; sleep 0.1; done
+  kill -9 "$victim"; wait "$victim" 2>/dev/null || true
+  wait "$waiter" && pass "$name: waiter exits 0 once the orphaned tree is gone" || fail "$name: waiter failed"
+  kill -0 "$root" 2>/dev/null && fail "$name: xcodebuild root PID $root survived the release" || pass "$name: xcodebuild root is gone"
+  kill -0 "$immune" 2>/dev/null && fail "$name: immune PID $immune survived the release" || pass "$name: immune process was killed"
+  assert_eq "$name: the second run's xcodebuild started only after the immune process was dead" "$(grep -c '^peer dead' "$log")" 1
+  assert_eq "$name: the second run's xcodebuild never saw the immune process alive" "$(grep -c '^peer alive' "$log")" 0
+  assert_contains "$name: the keeper reports the SIGKILL escalation" "$(cat "$work/$name.victim.out")" "ignored SIGTERM for ${grace}s; sending SIGKILL"
+  assert_lock_free "$name: lock released after the escalation"
+}
+
+echo "# a SIGTERM-responsive xcodebuild with a SIGTERM-immune child: the child is waited for and SIGKILLed"
+orphan_case resistant-child 1 SIM_LOCK_KILL_GRACE=1 STUB_SLEEP=60 STUB_RESIST=60
+
+echo "# a SIGTERM-immune xcodebuild itself is SIGKILLed after the grace period"
+orphan_case resistant-root 1 SIM_LOCK_KILL_GRACE=1 STUB_SLEEP=60 STUB_RESIST_ROOT=1
 
 echo "# a SIGKILLed wrapper whose xcodebuild already returned terminates nothing"
 STUB_LOG=$work/timeline-kill2
