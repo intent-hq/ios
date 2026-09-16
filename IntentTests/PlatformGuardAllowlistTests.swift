@@ -9,12 +9,10 @@ import Testing
 /// alongside the change. (The guard patterns are regexes tolerating
 /// whitespace around the parentheses, so a space-separated guard spelling
 /// cannot bypass the scan; the patterns' escaped spelling also keeps this
-/// file from matching its own scan.)
+/// file from matching its own scan.) The scan reads the copies of Intent/
+/// and IntentTests/ packaged into the test bundle (see TestSourceInputs),
+/// not the checkout.
 struct PlatformGuardAllowlistTests {
-
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
 
     private static let visionOSGuard = #"os\s*\(\s*visionOS\s*\)"#
     private static let tailcatKitGuard = #"canImport\s*\(\s*TailcatKit\s*\)"#
@@ -50,19 +48,25 @@ struct PlatformGuardAllowlistTests {
         "IntentTests/TailcatTunnelSessionTests.swift",
     ]
 
-    /// Repo-relative paths of .swift files under Intent/ and IntentTests/
-    /// whose contents match the regex `pattern`.
-    private func filesContaining(_ pattern: String) throws -> Set<String> {
+    /// Paths relative to `repoRoot` of .swift files under its Intent/ and
+    /// IntentTests/ whose contents match the regex `pattern`.
+    private func filesContaining(
+        _ pattern: String, under repoRoot: URL = TestSourceInputs.root
+    ) throws -> Set<String> {
         var matches: Set<String> = []
-        let rootPrefix = Self.repoRoot.standardizedFileURL.path + "/"
+        let rootPrefix = repoRoot.standardizedFileURL.path + "/"
         for directory in ["Intent", "IntentTests"] {
-            let root = Self.repoRoot.appendingPathComponent(directory)
+            let root = repoRoot.appendingPathComponent(directory)
             var isDirectory: ObjCBool = false
             try #require(
                 FileManager.default.fileExists(
                     atPath: root.path, isDirectory: &isDirectory)
                     && isDirectory.boolValue,
-                "scan root \(directory)/ is missing or not a directory at \(root.path)"
+                """
+                scan root \(directory)/ is missing or not a directory at \
+                \(root.path); check the IntentTests target's Copy Bundle \
+                Resources phase ("Test Source Inputs" in Intent.xcodeproj).
+                """
             )
             let enumerator = try #require(
                 FileManager.default.enumerator(
@@ -115,5 +119,40 @@ struct PlatformGuardAllowlistTests {
     @Test func tailcatKitGuardsMatchAllowlist() throws {
         try assertMatchesAllowlist(
             pattern: Self.tailcatKitGuard, allowlist: Self.tailcatKitAllowlist)
+    }
+
+    /// Negative case: the scan reports a guard wherever it appears (including
+    /// the space-separated spelling) and nothing else, so an allowlist match
+    /// above is evidence of the tree's contents rather than of an empty or
+    /// unreadable scan. (The guard spellings are concatenated so this file's
+    /// packaged copy does not match its own scan.)
+    @Test func scanReportsGuardedFilesOnly() throws {
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PlatformGuardScan-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: fixture) }
+        let visionOS = "#if os(" + "visionOS)\n#endif\n"
+        let spacedVisionOS = "#if os( " + "visionOS )\n#endif\n"
+        let tailcatKit = "#if canImport(" + "TailcatKit)\n#endif\n"
+        let files = [
+            "Intent/Nested/Guarded.swift": visionOS,
+            "Intent/Spaced.swift": spacedVisionOS,
+            "Intent/Clean.swift": "#if os(iOS)\n#endif\n",
+            "Intent/NotSwift.txt": visionOS,
+            "IntentTests/TailcatGuarded.swift": tailcatKit,
+        ]
+        for (path, contents) in files {
+            let url = fixture.appendingPathComponent(path)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+        }
+
+        #expect(
+            try filesContaining(Self.visionOSGuard, under: fixture)
+                == ["Intent/Nested/Guarded.swift", "Intent/Spaced.swift"])
+        #expect(
+            try filesContaining(Self.tailcatKitGuard, under: fixture)
+                == ["IntentTests/TailcatGuarded.swift"])
     }
 }

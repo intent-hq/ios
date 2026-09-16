@@ -7,14 +7,12 @@ import Testing
 /// per-SDK INFOPLIST_KEY_ route leaves empty usage keys in the built iOS
 /// plist — so this test enforces the sync: every iOS key must be mirrored
 /// verbatim, and the visionOS extras must be exactly the dictation pair.
+/// Both plists are read from the copies packaged into the test bundle (see
+/// TestSourceInputs), not from the checkout.
 struct InfoPlistSyncTests {
 
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
-
     private func loadPlist(_ relativePath: String) throws -> [String: Any] {
-        let url = Self.repoRoot.appendingPathComponent(relativePath)
+        let url = try TestSourceInputs.url(for: relativePath)
         let data = try Data(contentsOf: url)
         let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
         return try #require(plist as? [String: Any], "\(relativePath) is not a dictionary plist")
