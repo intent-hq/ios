@@ -2284,6 +2284,14 @@ struct ConnectionManagerTests {
         }
     }
 
+    /// Whether `state` is `.reconnecting` at any attempt. A socket torn down
+    /// seconds after connecting starts at attempt 2 (flap protection, see
+    /// `reconnectStartingAttempt`), so tests assert the state, not the count.
+    private static func isReconnecting(_ state: ConnectionState) -> Bool {
+        if case .reconnecting = state { return true }
+        return false
+    }
+
     /// Polls `condition` (real time) until it holds or `timeout` elapses;
     /// the caller asserts afterwards so a miss reports the actual values.
     @MainActor private static func settle(
@@ -2680,7 +2688,7 @@ struct ConnectionManagerTests {
         #expect(disconnects.count == 0)
 
         monitor.report(Self.deadPath)
-        #expect(manager.connectionState == .reconnecting(attempt: 1))
+        #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
         #expect(monitor.cancelCount == 1)
 
@@ -2722,7 +2730,7 @@ struct ConnectionManagerTests {
         let disconnects = DisconnectCounter(manager)
 
         monitor.report(Self.deadPath)
-        #expect(manager.connectionState == .reconnecting(attempt: 1))
+        #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
         #expect(monitor.cancelCount == 1)
 
@@ -2760,7 +2768,7 @@ struct ConnectionManagerTests {
 
         monitor.report(Self.wifiPath)
         monitor.report(Self.cellularPath)
-        #expect(manager.connectionState == .reconnecting(attempt: 1))
+        #expect(Self.isReconnecting(manager.connectionState))
         #expect(disconnects.count == 1)
         #expect(monitor.cancelCount == 1)
 
