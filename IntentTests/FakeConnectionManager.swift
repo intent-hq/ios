@@ -35,6 +35,14 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
 
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState = .idle
+    private(set) var retryGlobalSubscriptionCallCount = 0
+
+    func retryGlobalSubscription() {
+        retryGlobalSubscriptionCallCount += 1
+        globalSubscriptionState = .subscribing(attempt: 1)
+    }
+
     /// Recorded `connect` calls, and the error to throw instead of connecting.
     var connectLog: [(hosts: [String], port: Int, token: String,
                       certFingerprint: String?, tcAddress: String?)] = []

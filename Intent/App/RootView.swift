@@ -179,6 +179,35 @@ struct RootView: View {
                 .padding(.top, Constants.Root.toastTopPadding)
             }
         }
+        .overlay(alignment: .bottom) {
+            // The socket is up but its global event subscription gave up
+            // after the bounded retries (ios#254): without it every store
+            // is blind to live updates, so say so and offer the retry the
+            // connection exposes. Hidden while a reconnect owns the screen.
+            if case .failed = session.connection.globalSubscriptionState,
+               session.connection.connectionState == .connected,
+               !coordinator.isDisconnected {
+                HStack(spacing: Constants.Root.reconnectButtonTopPadding) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("Live updates unavailable")
+                        .font(.subheadline)
+                    Spacer(minLength: 0)
+                    Button("Retry") {
+                        session.connection.retryGlobalSubscription()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.bottom, Constants.Root.toastTopPadding)
+                .accessibilityIdentifier("global-subscription-failed-banner")
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .background {
             // visionOS: notification sounds (agent-completion chime and
             // workspace attention cue) are emitted from within THIS window's

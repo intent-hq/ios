@@ -3076,7 +3076,11 @@ struct ConnectionManagerTests {
         try await Task.sleep(for: .milliseconds(100))
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts)
 
-        manager.retryGlobalSubscription()
+        // The window reads the failure and routes its Retry through the
+        // session connection surface, not the concrete manager.
+        let sessionConnection: any SessionConnectionManaging = manager
+        #expect(Self.isSubscriptionFailed(sessionConnection.globalSubscriptionState))
+        sessionConnection.retryGlobalSubscription()
         try await Self.settle { manager.globalSubscriptionState == .subscribed }
         #expect(manager.globalSubscriptionState == .subscribed)
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts + 1)
