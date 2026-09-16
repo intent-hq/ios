@@ -22,11 +22,13 @@ struct WorkspaceParsingTests {
             "attention": "unread",
             "waiting": true,
             "diffSummary": ["totalFiles": 5],
-            "taskStats": ["total": 10, "completed": 3, "inProgress": 2]
+            "taskStats": ["total": 10, "completed": 3, "inProgress": 2],
+            "statusImageAssetId": "m1abc-deadbeef.png"
         ]
         let ws = WorkspaceStore.parseWorkspace(dict)
         #expect(ws != nil)
         #expect(ws?.id == "ws-1")
+        #expect(ws?.statusImageAssetId == "m1abc-deadbeef.png")
         #expect(ws?.title == "My Workspace")
         #expect(ws?.branch == "feature/login")
         #expect(ws?.baseRef == "main")
@@ -81,6 +83,38 @@ struct WorkspaceParsingTests {
         #expect(ws?.prStatus == nil)
         #expect(ws?.diffSummaryTotalFiles == nil)
         #expect(ws?.taskStatsTotal == nil)
+        #expect(ws?.statusImageAssetId == nil)
+    }
+
+    @Test func parseStatusImageAssetIdTreatsBlankAsUnset() async throws {
+        // The daemon omits the field until an agent sets one and folds a
+        // blank string to a clear (PROTOCOL §5.1 `statusImageAssetId`); the
+        // parser mirrors that so the views never render an empty asset id.
+        let blank = WorkspaceStore.parseWorkspace(
+            ["id": "ws-s1", "title": "S", "statusImageAssetId": "   "])
+        #expect(blank?.statusImageAssetId == nil)
+
+        let empty = WorkspaceStore.parseWorkspace(
+            ["id": "ws-s2", "title": "S", "statusImageAssetId": ""])
+        #expect(empty?.statusImageAssetId == nil)
+
+        let null = WorkspaceStore.parseWorkspace(
+            ["id": "ws-s3", "title": "S", "statusImageAssetId": NSNull()])
+        #expect(null?.statusImageAssetId == nil)
+    }
+
+    @Test func decodeStatusImageAssetIdViaJSONDecoder() async throws {
+        let decoder = JSONDecoder()
+
+        let present = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-i1", "title": "W", "statusImageAssetId": "a1-b2.png"}"#.utf8))
+        #expect(present.statusImageAssetId == "a1-b2.png")
+
+        let absent = try decoder.decode(
+            Workspace.self,
+            from: Data(#"{"id": "ws-i2", "title": "W"}"#.utf8))
+        #expect(absent.statusImageAssetId == nil)
     }
 
     @Test func parseWaitingField() async throws {
