@@ -1,4 +1,3 @@
-import QuartzCore
 import SwiftUI
 
 /// Full-screen launch splash using the supplied GIF's frames and timing.
@@ -6,12 +5,35 @@ struct SplashArtView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
-    @State private var playback = SplashPlaybackState()
+    @State private var playback: SplashPlaybackState
+    /// Held for the view's lifetime only, so the decoded frames go away with
+    /// the splash (ios#256).
+    @State private var lease: SplashAnimationLease?
 
-    private let animation = SplashAnimation.bundled
+    private let store: SplashAnimationStore
+
+    init(
+        clock: any SplashPlaybackClock = MediaTimeSplashClock(),
+        store: SplashAnimationStore = .shared
+    ) {
+        self.store = store
+        _playback = State(initialValue: SplashPlaybackState(clock: clock))
+        _lease = State(initialValue: store.lease())
+    }
+
+    static func shouldAnimate(
+        scenePhase: ScenePhase, reduceMotion: Bool, frameCount: Int
+    ) -> Bool {
+        scenePhase == .active && !reduceMotion && frameCount > 1
+    }
+
+    private var animation: SplashAnimation? { lease?.animation }
 
     private var shouldAnimate: Bool {
-        scenePhase == .active && !reduceMotion && (animation?.frameCount ?? 0) > 1
+        Self.shouldAnimate(
+            scenePhase: scenePhase,
+            reduceMotion: reduceMotion,
+            frameCount: animation?.frameCount ?? 0)
     }
 
     var body: some View {
@@ -24,7 +46,7 @@ struct SplashArtView: View {
                     if let animation {
                         SplashFrameView(
                             image: animation.image(
-                                at: playback.elapsedTime(at: CACurrentMediaTime()),
+                                at: playback.elapsedTime,
                                 animated: !reduceMotion),
                             colorScheme: colorScheme)
                     }
@@ -33,13 +55,15 @@ struct SplashArtView: View {
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .onAppear {
-            playback.setRunning(shouldAnimate, at: CACurrentMediaTime())
+            if lease == nil { lease = store.lease() }
+            playback.setRunning(shouldAnimate)
         }
         .onChange(of: shouldAnimate) { _, isRunning in
-            playback.setRunning(isRunning, at: CACurrentMediaTime())
+            playback.setRunning(isRunning)
         }
         .onDisappear {
-            playback.setRunning(false, at: CACurrentMediaTime())
+            playback.setRunning(false)
+            lease = nil
         }
     }
 }
