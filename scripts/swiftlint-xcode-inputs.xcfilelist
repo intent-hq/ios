@@ -274,7 +274,11 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
 $(SRCROOT)/IntentTests/ConversationViewModelAttachmentTests.swift
+$(SRCROOT)/IntentTests/ConversationViewModelDividerLatchTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelModelCatalogTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelQuestionTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelRecoveryTests.swift
@@ -284,6 +288,7 @@ $(SRCROOT)/IntentTests/CreateWorkspaceBranchTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCatalogTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceCreationGateTests.swift
 $(SRCROOT)/IntentTests/CreateWorkspaceParamsTests.swift
+$(SRCROOT)/IntentTests/CreationOptionsStoreModelTests.swift
 $(SRCROOT)/IntentTests/CreationOptionsStoreTests.swift
 $(SRCROOT)/IntentTests/DeltaSubscriptionTests.swift
 $(SRCROOT)/IntentTests/DemoFixturesTests.swift
@@ -305,6 +310,7 @@ $(SRCROOT)/IntentTests/IntentFileLinkTests.swift
 $(SRCROOT)/IntentTests/IntentNoteLinkParsingTests.swift
 $(SRCROOT)/IntentTests/LaunchPhaseTimelineTests.swift
 $(SRCROOT)/IntentTests/LocalNotificationServiceTests.swift
+$(SRCROOT)/IntentTests/ManualTokenEntryTunnelTests.swift
 $(SRCROOT)/IntentTests/ManualTokenEntryViewTests.swift
 $(SRCROOT)/IntentTests/MarkdownTextViewTests.swift
 $(SRCROOT)/IntentTests/MessageBlockPartitionTests.swift
@@ -314,6 +320,7 @@ $(SRCROOT)/IntentTests/ModelsTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreFoldAndIntegrationTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrStoreTests.swift
 $(SRCROOT)/IntentTests/MonitoredPrsRowTests.swift
+$(SRCROOT)/IntentTests/NewMessagesDividerAnchorTests.swift
 $(SRCROOT)/IntentTests/NewMessagesDividerTests.swift
 $(SRCROOT)/IntentTests/NoteContentSegmentsTests.swift
 $(SRCROOT)/IntentTests/NoteDetailViewLifecycleTests.swift
@@ -388,6 +395,7 @@ $(SRCROOT)/IntentTests/WorkspaceStoreTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
