@@ -1156,10 +1156,13 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 300), isFollowing: true) == .settling)
     }
 
-    /// Corrections are bounded by count and by time, and no outcome ever
-    /// breaks the pin; a user who scrolled away, or a transcript before its
-    /// entry scroll, legitimately has the end row off screen.
-    @Test func recoveryIsBoundedAndNeverBreaksThePin() {
+    /// Corrections are bounded by count and by time — a spent budget gives
+    /// up, which the drain maps to Go to End rather than a blind follow (see
+    /// `recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind`) — and viewports
+    /// that are not following are left alone: a user who scrolled away, or a
+    /// transcript before its entry scroll, legitimately has the end row off
+    /// screen.
+    @Test func recoveryIsBoundedAndIgnoresNonFollowingViewports() {
         #expect(recovery(geometry(offsetY: 300), correctionsLeft: 1) == .recover(pageOffsetY: 0))
         #expect(recovery(geometry(offsetY: 300), correctionsLeft: 0) == .giveUp)
         #expect(recovery(geometry(offsetY: 300), timedOut: true) == .giveUp)

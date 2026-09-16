@@ -69,7 +69,9 @@ enum DemoFixtures {
     /// answering, so the hooks row appears under an already-settled
     /// transcript — the container-resize path of #272 under `--demo-data`
     /// (`ConversationTranscriptScrollUITests`). Every other fixture answers
-    /// immediately. The default delay suits the screenshot flows; a UI test
+    /// immediately, apart from `agent.getMessageBlock` behind
+    /// `longConversationBlockHydrationGate`. The default delay suits the
+    /// screenshot flows; a UI test
     /// that must observe the transcript before the row lands passes
     /// `--demo-hook-list-trigger-file=<path>` and creates that file when it
     /// is ready — a clock cannot be made robust against the render time of a
@@ -686,12 +688,14 @@ enum DemoFixtures {
     enum LongConversationSlimToolRowLayout: String, CaseIterable {
         /// Opening the text message: the row is its first block, the
         /// paragraphs follow — the shape of a coordinator turn on the
-        /// daemon, and the only one that has reproduced intent-hq/ios#338
-        /// on the CI filtered lane (run 35100409278, through the hooks-row
-        /// tests of `ConversationTranscriptScrollUITests`). The default.
+        /// daemon. The default reproducing layout for intent-hq/ios#338
+        /// (run 35100409278, through the hooks-row tests of
+        /// `ConversationTranscriptScrollUITests`), not the only one.
         case leading
         /// Its own tool-only assistant message right before the text
-        /// message. A text-bearing assistant row sits under the message copy
+        /// message; reproduced the footer blank as well (run 35107741728
+        /// at 87b44f6, `testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden`).
+        /// A text-bearing assistant row sits under the message copy
         /// context-menu overlay, which claims taps meant for plain SwiftUI
         /// content such as the row's header (intent-hq/ios#344), so a UI test
         /// that expands the row needs this layout.
