@@ -5,7 +5,20 @@ import Combine
 
 @MainActor
 struct ConversationStoreIntegrationTests {
-    
+
+    /// Bounded poll for work the store spawns as its own task (reconnect,
+    /// resnapshot, hydration); records a failure on timeout so a missed
+    /// update cannot pass silently. Pushes delivered through
+    /// `FakeConnectionManager.deliverSubscriptionPush` are applied
+    /// synchronously and need no wait.
+    private func waitFor(_ description: String, _ condition: () -> Bool) async throws {
+        for _ in 0..<200 {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        Issue.record("Timed out waiting for \(description)")
+    }
+
     // MARK: - subscribeOnConnect
 
     @Test func subscribeOnConnect() async throws {
@@ -26,15 +39,11 @@ struct ConversationStoreIntegrationTests {
         fake.simulateConnect()
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
 
-        // Yield to allow Combine publisher callbacks to run, then wait for operations
-        // Wait for the subscription handler to be registered (post-completion signal)
-        // rather than just the request log entry which happens at request start
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
-            if fake.hasSubscriptionHandler(id: "sub-1") {
-                break
-            }
+        // The connection sink hops through the main queue and onReconnected
+        // runs as a spawned task; its completion signal is the handler
+        // registration that follows the chat.subscribe reply.
+        try await waitFor("chat.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
         }
 
         // Verify chat.subscribe was called and handler registered
@@ -52,13 +61,12 @@ struct ConversationStoreIntegrationTests {
         fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
 
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
 
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
             ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
         ], delta: nil))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.messages.count == 1)
 
         // Contiguous block-level delta (PROTOCOL §7.1)
@@ -78,7 +86,6 @@ struct ConversationStoreIntegrationTests {
                 removedIds: []
             )
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         #expect(store.messages.count == 2)
         #expect(store.messages[1].contentBlocks?.first?.resolvedText == "World")
@@ -97,14 +104,14 @@ struct ConversationStoreIntegrationTests {
         // Set agentId by calling fetchConversation first (required for resnapshot to work)
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
-        
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
             ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
         ], delta: nil))
-        try await Task.sleep(nanoseconds: 50_000_000)
-        
+        #expect(store.messages.count == 1)
+
         fake.clearRequestLog()
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2", "seq": 5, "snapshot": []]
 
@@ -119,7 +126,11 @@ struct ConversationStoreIntegrationTests {
                 delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
             ))
         }
-        try await Task.sleep(nanoseconds: 200_000_000)
+        // The resnapshot runs as a spawned task: unsubscribe → subscribe →
+        // getConversation. Its final request is the completion signal.
+        try await waitFor("resnapshot baseline refetch") {
+            fake.didCallMethod("agent.getConversation")
+        }
 
         // Verify resnapshot: unsubscribe, subscribe, getConversation — once each
         #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
@@ -147,40 +158,43 @@ struct ConversationStoreIntegrationTests {
         fake.simulateConnect()
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+
+        // simulateConnect also spawned an onReconnected task; let it finish
+        // before the request log is reset so its requests cannot masquerade
+        // as the reconnect below. Its last request is agent.getSubscriptions,
+        // which nothing else in this test issues.
+        try await waitFor("initial onReconnected flow") {
+            fake.didCallMethod("agent.getSubscriptions")
+        }
 
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(subscriptionId: "sub-1", kind: .snapshot, seq: 0, snapshot: [
             ["id": "msg-1", "role": "user", "contentBlocks": [["type": "text", "text": "Hello"]], "timestamp": "2024-01-01T00:00:00Z"]
         ], delta: nil))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.messages.count == 1)
 
-        // Disconnect
+        // Disconnect, then reconnect (triggers onReconnected which calls
+        // everything). The store ignores the disconnect itself, and the
+        // main-queue sink delivers both state values in order. The reconnect's
+        // chat.subscribe answers with a fresh id so its handler registration
+        // is attributable to this flow alone.
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2", "seq": 0, "snapshot": []]
         fake.clearRequestLog()
         fake.simulateDisconnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        // Reconnect (triggers onReconnected which calls everything)
         fake.simulateConnect()
 
-        // Wait for async onReconnected operations to complete.
-        // The connection state change triggers onReconnected via a Combine publisher,
-        // which schedules the async task. We must yield to let the run loop dispatch
-        // the sink callback and then wait for all async operations to finish.
-        // Poll for the subscription handler to be registered (post-completion signal)
-        // rather than just the request log which is appended at request start.
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000) // 50ms, up to 2 seconds total
-            if fake.hasSubscriptionHandler(id: "sub-1") {
-                break
-            }
+        // onReconnected runs as a spawned task: prepareForReconnect drops the
+        // old handler, then getConversation → subscribeToStreaming →
+        // subscribeLiveChat registers sub-2 after the chat.subscribe reply.
+        try await waitFor("reconnect resubscribe") {
+            fake.hasSubscriptionHandler(id: "sub-2")
         }
 
         // Verify fresh subscribe + getConversation (both called from onReconnected)
         #expect(fake.didCallMethod("chat.subscribe"))
         #expect(fake.didCallMethod("agent.getConversation"))
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
 
     // MARK: - Agent Subscriptions with Top-Level actorIds
@@ -566,9 +580,8 @@ struct ConversationStoreIntegrationTests {
 
         store = nil
         // deinit hops to the main actor to remove the handlers; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitFor("deinit handler removal") {
+            fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0
         }
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
@@ -694,11 +707,10 @@ struct ConversationStoreIntegrationTests {
 
         // Same for a chat.subscribe (re)snapshot that re-seeds the transcript.
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1", kind: .snapshot, seq: 0,
             snapshot: [slimMessage], delta: nil))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect((store.messages.first?.contentBlocks?.first?.output?.value as? String) == "full")
     }
 
@@ -778,12 +790,12 @@ struct ConversationStoreIntegrationTests {
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
         // Seed the live channel (seq 0) so the following delta applies in order.
         fake.deliverSubscriptionPush(SubscriptionPush(
             subscriptionId: "sub-1", kind: .snapshot, seq: 0,
             snapshot: [slimMessage], delta: nil))
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.messages.count == 1)
 
         fake.responseMap["agent.getMessageBlock"] = ["block": [
             "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
@@ -803,7 +815,6 @@ struct ConversationStoreIntegrationTests {
                     "block": slimBlock,
                 ]],
                 removedIds: [])))
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         let block = store.messages.first?.contentBlocks?.first
         #expect((block?.output?.value as? String) == "full")
@@ -870,7 +881,11 @@ struct ConversationStoreIntegrationTests {
         // it resume: the stale block must NOT be inserted into the fresh cache.
         fake.pendingMethods.insert("agent.getMessageBlock")
         let hydration = Task { await store.hydrateBlock(messageId: "msg-1", blockId: "b-1") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        // The fake logs the request just before parking its continuation, so
+        // the log entry is the in-flight signal.
+        try await waitFor("hydration request in flight") {
+            fake.didCallMethod("agent.getMessageBlock")
+        }
         store.reset()
         fake.resolvePending("agent.getMessageBlock", with: ["block": [
             "type": "tool_result", "id": "b-1", "toolUseId": "tc-1", "output": "full",
