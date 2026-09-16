@@ -11,7 +11,6 @@ final class AppCoordinatorNavigationState {
     }
 
     var suppressWorkspaceNavigation = false
-    var pendingAutoOpenWorkspaceId: String?
     var claimedScreenRestoration = ScreenRestorationClaim.unclaimed
 }
 
@@ -93,7 +92,6 @@ extension AppCoordinator {
 
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
-        navigationState.pendingAutoOpenWorkspaceId = nil
         // Check for a saved per-workspace sub-screen and restore it
         if let saved = dependencies.persistence.loadWorkspaceScreen(workspaceId: workspaceId) {
             navigationState.suppressWorkspaceNavigation = true
@@ -135,31 +133,6 @@ extension AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
-        navigationState.pendingAutoOpenWorkspaceId = workspaceId
-    }
-
-    /// Continues the entry animation into the workspace's only top-level
-    /// agent: called once by the agent list when its load completes, it opens
-    /// that agent's conversation when the workspace has exactly one foreground
-    /// agent. The arm is consumed on the first call for the workspace, so a
-    /// later reload — or the list reappearing after the user goes back — never
-    /// forwards again.
-    func autoOpenSoleAgentIfArmed(workspaceId: String, foregroundAgents: [AgentSession]) {
-        guard navigationState.pendingAutoOpenWorkspaceId == workspaceId else { return }
-        navigationState.pendingAutoOpenWorkspaceId = nil
-        // The user may have navigated on while the agents loaded.
-        guard case .workspaceDetail(let shownWorkspaceId) = currentScreen,
-              shownWorkspaceId == workspaceId else { return }
-        guard foregroundAgents.count == 1, let agent = foregroundAgents.first else { return }
-        onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-    }
-
-    /// Drops the pending auto-open without navigating: the entry decided to
-    /// stay put (e.g. the workspace shows its saved Context tab), so a later
-    /// reload or tab switch can never forward.
-    func cancelPendingAutoOpen(workspaceId: String) {
-        guard navigationState.pendingAutoOpenWorkspaceId == workspaceId else { return }
-        navigationState.pendingAutoOpenWorkspaceId = nil
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread
