@@ -62,9 +62,9 @@ struct SplashAnimation {
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any]
         else { return fallbackFrameDuration }
 
-        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber
-            ?? gif[kCGImagePropertyGIFDelayTime] as? NSNumber
-        let duration = value?.doubleValue ?? fallbackFrameDuration
+        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double
+            ?? gif[kCGImagePropertyGIFDelayTime] as? Double
+        let duration = value ?? fallbackFrameDuration
         return duration > 0 ? duration : fallbackFrameDuration
     }
 
@@ -72,9 +72,9 @@ struct SplashAnimation {
         guard
             let properties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any],
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
-            let count = gif[kCGImagePropertyGIFLoopCount] as? NSNumber
+            let count = gif[kCGImagePropertyGIFLoopCount] as? Int
         else { return nil }
-        return count.intValue
+        return count
     }
 }
 
@@ -82,7 +82,7 @@ struct SplashAnimation {
 final class SplashAnimationLease {
     let animation: SplashAnimation
 
-    fileprivate init(animation: SplashAnimation) {
+    init(animation: SplashAnimation) {
         self.animation = animation
     }
 }

@@ -8,6 +8,11 @@ struct ConnectingView: View {
     @Environment(AppCoordinator.self) var coordinator
     @Environment(BackendSession.self) var session
 
+    private enum Layout {
+        static let mismatchHorizontalPadding: CGFloat = 32
+        static let contentBottomPadding: CGFloat = 24
+    }
+
     var body: some View {
         VStack {
             Spacer()
@@ -15,10 +20,10 @@ struct ConnectingView: View {
             // wrong certificate while the race continues on the others.
             if !session.connection.certMismatches.isEmpty {
                 CertMismatchListView(mismatches: session.connection.certMismatches)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, Layout.mismatchHorizontalPadding)
             }
         }
-        .padding(.bottom, 24)
+        .padding(.bottom, Layout.contentBottomPadding)
         // Keyed on connectionAttemptId: a connection switch performed while
         // this view is already showing (same screen value) bumps the id to
         // restart the attempt, which a plain one-shot .task would not.
@@ -40,7 +45,8 @@ struct ConnectingView: View {
                     // under this window; the window root's removal observation
                     // closes or rebinds it.
                     coordinator.onConnectionFailed(
-                        error: String(localized: "This connection is no longer saved."))
+                        error: String(localized: "This connection is no longer saved.")
+                    )
                 } else {
                     coordinator.currentScreen = .pairing
                 }
@@ -91,6 +97,7 @@ struct ConnectingView: View {
         try await LaunchPhaseTimeline.poll(
             until: { session.workspaceStore.lastUpdated != nil },
             timeout: timeout,
-            interval: Constants.Connecting.workspacePollInterval)
+            interval: Constants.Connecting.workspacePollInterval
+        )
     }
 }

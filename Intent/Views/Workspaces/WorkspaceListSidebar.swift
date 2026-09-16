@@ -29,7 +29,7 @@ struct WorkspaceListSidebar: View {
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.workspaces.isEmpty {
+                if viewModel.isLoading, viewModel.workspaces.isEmpty {
                     ProgressView("Loading workspaces...")
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
@@ -117,7 +117,8 @@ struct WorkspaceListSidebar: View {
                     Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                         RepoOwnerAvatarView(
                             owner: workspaces.first?.repositoryOwner,
-                            size: Constants.WorkspaceList.sidebarSectionAvatarSize)
+                            size: Constants.WorkspaceList.sidebarSectionAvatarSize
+                        )
                         Text(repoName)
                     }) {
                         ForEach(workspaces) { workspace in
@@ -152,15 +153,19 @@ struct WorkspaceListSidebar: View {
                 top: Constants.WorkspaceList.sidebarRowInset,
                 leading: Constants.WorkspaceList.sidebarRowInset,
                 bottom: Constants.WorkspaceList.sidebarRowInset,
-                trailing: Constants.WorkspaceList.sidebarRowInset))
+                trailing: Constants.WorkspaceList.sidebarRowInset
+            ))
             .listRowSeparator(.hidden)
             .listRowBackground(
                 RoundedRectangle(
                     cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius,
-                    style: .continuous)
-                    .fill(Self.rowSelectionBackground(
-                        isSelected: coordinator.selectedWorkspaceId == workspace.id,
-                        colorScheme: colorScheme)))
+                    style: .continuous
+                )
+                .fill(Self.rowSelectionBackground(
+                    isSelected: coordinator.selectedWorkspaceId == workspace.id,
+                    colorScheme: colorScheme
+                ))
+            )
     }
 
     static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {

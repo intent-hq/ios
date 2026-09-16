@@ -35,10 +35,10 @@ extension SpecialistPickerView {
         return pickable.orchestrator ?? pickable.first
     }
 
-    /// The Model section's loading state: shown while the selected
-    /// provider's catalog is not cached and this sheet's load for it has not
-    /// settled; never for a cached catalog (revalidation is silent), and not
-    /// after a settled load that failed (the daemon-default row instead).
+    // The Model section's loading state distinguishes no catalog from an empty
+    // settled catalog, so the optional collection is intentional.
+    // `nil` means no catalog has arrived; an empty catalog is a settled result.
+    // swiftlint:disable:next discouraged_optional_collection
     static func showsModelsLoading(catalog: [ModelInfo]?, settled: Bool) -> Bool {
         catalog == nil && !settled
     }
@@ -70,7 +70,7 @@ extension SpecialistPickerView {
 
         /// A reconnect clear: every marker belonged to the dropped cache.
         mutating func reset() {
-            self = SettledLoads()
+            self = Self()
         }
     }
 

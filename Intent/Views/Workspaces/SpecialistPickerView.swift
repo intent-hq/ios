@@ -49,71 +49,26 @@ struct SpecialistPickerView: View {
     /// reloads cold.
     private var isLoadingOptions: Bool {
         CreateWorkspaceView.showsOptionsLoading(
-            storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
-            settled: settledLoads.options)
+            storeIsLoading: optionsStore.isLoading,
+            storeHasLoaded: optionsStore.hasLoaded,
+            settled: settledLoads.options
+        )
     }
     private var isLoadingModels: Bool {
         guard let provider = selectedProvider else { return false }
         return Self.showsModelsLoading(
             catalog: optionsStore.models(for: provider.id),
-            settled: settledLoads.modelProviders.contains(provider.id))
+            settled: settledLoads.modelProviders.contains(provider.id)
+        )
     }
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            SpecialistStepView(
-                specialists: specialists,
-                isLoadingSpecialists: isLoadingOptions,
-                selectedSpecialist: selectedSpecialist,
-                agentName: $agentName,
-                colorScheme: colorScheme,
-                onSelect: selectSpecialist,
-                onDismiss: { dismiss() },
-                onNext: { navigationPath.append(.provider) }
-            )
-            .task { await loadOptions() }
-            .navigationDestination(for: Route.self) { route in
-                switch route {
-                case .provider:
-                        ProviderModelStepView(
-                            providers: providers,
-                            isLoadingProviders: isLoadingOptions,
-                            selectedProvider: $selectedProvider,
-                            models: models,
-                            isLoadingModels: isLoadingModels,
-                            selectedModel: $selectedModel,
-                            selectedSpecialist: selectedSpecialist,
-                            isCreating: isCreating,
-                            isCreateDisabled: Self.isCreateDisabled(
-                                hasSpecialist: selectedSpecialist != nil,
-                                isCreating: isCreating,
-                                isLoadingProviders: isLoadingOptions,
-                                isLoadingModels: isLoadingModels,
-                                providers: providers
-                            ),
-                            colorScheme: colorScheme,
-                            onCreate: createSelectedAgent
-                        )
-                        .alert("Error", isPresented: $showError) {
-                            Button("OK", role: .cancel) {}
-                        } message: {
-                            Text(errorMessage ?? "An unknown error occurred.")
-                        }
-                        .task {
-                            await loadOptions()
-                            await reconcileProviderSelection()
-                        }
-                }
-            }
+            specialistStep
+                .navigationDestination(for: Route.self) { destination(for: $0) }
         }
         .interactiveDismissDisabled(isCreating)
-        .onChange(of: agentName) {
-            if isSettingNameFromSpecialist {
-                isSettingNameFromSpecialist = false
-            } else {
-                userEditedName = true
-            }
-        }
+        .onChange(of: agentName) { handleAgentNameChange() }
         // A background revalidation or reconnect reload swaps the cached
         // lists under the open sheet: keep the selections valid against
         // them. Observed by value, not by id, so a same-id metadata change
@@ -150,6 +105,67 @@ struct SpecialistPickerView: View {
         }
     }
 
+    private var specialistStep: some View {
+        SpecialistStepView(
+            specialists: specialists,
+            isLoadingSpecialists: isLoadingOptions,
+            selectedSpecialist: selectedSpecialist,
+            agentName: $agentName,
+            colorScheme: colorScheme,
+            onSelect: selectSpecialist,
+            onDismiss: { dismiss() },
+            onNext: { navigationPath.append(.provider) }
+        )
+        .task { await loadOptions() }
+    }
+
+    @ViewBuilder
+    private func destination(for route: Route) -> some View {
+        switch route {
+        case .provider:
+            providerModelStep
+        }
+    }
+
+    private var providerModelStep: some View {
+        ProviderModelStepView(
+            providers: providers,
+            isLoadingProviders: isLoadingOptions,
+            selectedProvider: $selectedProvider,
+            models: models,
+            isLoadingModels: isLoadingModels,
+            selectedModel: $selectedModel,
+            selectedSpecialist: selectedSpecialist,
+            isCreating: isCreating,
+            isCreateDisabled: Self.isCreateDisabled(
+                hasSpecialist: selectedSpecialist != nil,
+                isCreating: isCreating,
+                isLoadingProviders: isLoadingOptions,
+                isLoadingModels: isLoadingModels,
+                providers: providers
+            ),
+            colorScheme: colorScheme,
+            onCreate: createSelectedAgent
+        )
+        .alert("Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "An unknown error occurred.")
+        }
+        .task {
+            await loadOptions()
+            await reconcileProviderSelection()
+        }
+    }
+
+    private func handleAgentNameChange() {
+        if isSettingNameFromSpecialist {
+            isSettingNameFromSpecialist = false
+        } else {
+            userEditedName = true
+        }
+    }
+
     /// Cold (nothing cached): awaits the specialist/provider load while
     /// `isLoadingOptions` shows. Cached: the steps already render the cached
     /// lists — the store revalidates in the background and no spinner shows.
@@ -171,7 +187,9 @@ struct SpecialistPickerView: View {
     private func reconcileSpecialistSelection() {
         let previousId = selectedSpecialist?.id
         selectedSpecialist = Self.reconciledSpecialist(
-            current: selectedSpecialist, catalog: optionsStore.specialists)
+            current: selectedSpecialist,
+            catalog: optionsStore.specialists
+        )
         guard let specialist = selectedSpecialist, specialist.id != previousId, !userEditedName else { return }
         applyName(from: specialist)
     }
@@ -182,7 +200,9 @@ struct SpecialistPickerView: View {
     private func reconcileProviderSelection() async {
         let previousProviderId = selectedProvider?.id
         selectedProvider = CreateWorkspaceView.preselectedProvider(
-            current: selectedProvider, providers: providers)
+            current: selectedProvider,
+            providers: providers
+        )
         guard let provider = selectedProvider else {
             selectedModel = nil
             return
@@ -195,7 +215,10 @@ struct SpecialistPickerView: View {
         let generation = optionsStore.loadGeneration
         await optionsStore.loadModelsIfNeeded(providerId: provider.id)
         settledLoads.settleModels(
-            for: provider.id, startedAt: generation, current: optionsStore.loadGeneration)
+            for: provider.id,
+            startedAt: generation,
+            current: optionsStore.loadGeneration
+        )
     }
 
     private func selectSpecialist(_ specialist: SpecialistInfo) {
@@ -239,7 +262,7 @@ struct SpecialistPickerView: View {
                 )
                 HapticManager.notification(.success)
                 dismiss()
-                if let agent = agent {
+                if let agent {
                     coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
                 }
             } catch {

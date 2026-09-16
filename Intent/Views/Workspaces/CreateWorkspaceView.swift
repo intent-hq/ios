@@ -72,8 +72,10 @@ struct CreateWorkspaceView: View {
     /// drives it back on while the store reloads cold.
     private var isLoadingOptions: Bool {
         Self.showsOptionsLoading(
-            storeIsLoading: optionsStore.isLoading, storeHasLoaded: optionsStore.hasLoaded,
-            settled: settledLoads.options)
+            storeIsLoading: optionsStore.isLoading,
+            storeHasLoaded: optionsStore.hasLoaded,
+            settled: settledLoads.options
+        )
     }
     /// True while the selected provider's catalog is uncached and this
     /// sheet's load for that provider has not settled: Create stays disabled
@@ -84,7 +86,8 @@ struct CreateWorkspaceView: View {
     private var isLoadingSelectedModelCatalog: Bool {
         Self.showsModelCatalogLoading(
             catalogCached: selectedProvider.map { optionsStore.models(for: $0.id) != nil },
-            settled: selectedProvider.map { settledLoads.modelProviders.contains($0.id) } ?? false)
+            settled: selectedProvider.map { settledLoads.modelProviders.contains($0.id) } ?? false
+        )
     }
     /// The branch step's state for the selected repo, owned by the store
     /// (authoritative listing, cached-first paint, cold-load error), never a
@@ -206,9 +209,10 @@ struct CreateWorkspaceView: View {
                 showError: $showError,
                 colorScheme: colorScheme,
                 onSelectProvider: selectProvider,
-                onCreate: createWorkspace,
-                onLoad: { await fetchCreationOptions() }
-            )
+                onCreate: createWorkspace
+            ) {
+                await fetchCreationOptions()
+            }
         }
     }
 
@@ -222,11 +226,14 @@ struct CreateWorkspaceView: View {
 
     private var displayedBranches: [String] {
         Self.displayedBranches(
-            loaded: branchListing?.branches ?? [], defaultBranch: branchListing?.defaultBranch,
-            query: branchSearchText, searchResults: branchSearchResults,
+            loaded: branchListing?.branches ?? [],
+            defaultBranch: branchListing?.defaultBranch,
+            query: branchSearchText,
+            searchResults: branchSearchResults,
             completedQuery: completedBranchQuery
         )
     }
+
     private func resetRepositoryState() {
         idempotencyKey = UUID().uuidString
         selectedBranch = nil
@@ -304,7 +311,9 @@ struct CreateWorkspaceView: View {
     /// pickable set.
     private func reconcileSpecialistSelection() {
         selectedSpecialist = Self.preselectedSpecialist(
-            current: selectedSpecialist, catalog: optionsStore.specialists)
+            current: selectedSpecialist,
+            catalog: optionsStore.specialists
+        )
     }
 
     /// Defaults the provider selection to a selectable provider (auggie
@@ -315,7 +324,9 @@ struct CreateWorkspaceView: View {
     private func reconcileProviderSelection() async {
         let previousProviderId = selectedProvider?.id
         selectedProvider = Self.preselectedProvider(
-            current: selectedProvider, providers: providers)
+            current: selectedProvider,
+            providers: providers
+        )
         guard let provider = selectedProvider else {
             selectedModel = nil
             return
@@ -338,20 +349,25 @@ struct CreateWorkspaceView: View {
         let generation = optionsStore.loadGeneration
         await optionsStore.loadModelsIfNeeded(providerId: provider.id)
         settledLoads.settleModels(
-            for: provider.id, startedAt: generation, current: optionsStore.loadGeneration)
+            for: provider.id,
+            startedAt: generation,
+            current: optionsStore.loadGeneration
+        )
     }
+}
 
+extension CreateWorkspaceView {
     /// The picker's specialist list: the modal-pickable set (no hidden or
     /// internal specialists) with the orchestrator pinned first, then by
     /// name.
     static func pickerSpecialists(_ specialists: [SpecialistInfo]) -> [SpecialistInfo] {
         let pickable = specialists.modalPickable
         let orchestratorId = pickable.orchestrator?.id
-        return pickable.sorted { a, b in
-            let aIsOrchestrator = a.id == orchestratorId
-            let bIsOrchestrator = b.id == orchestratorId
-            if aIsOrchestrator != bIsOrchestrator { return aIsOrchestrator }
-            return a.name < b.name
+        return pickable.sorted { firstSpecialist, secondSpecialist in
+            let firstIsOrchestrator = firstSpecialist.id == orchestratorId
+            let secondIsOrchestrator = secondSpecialist.id == orchestratorId
+            if firstIsOrchestrator != secondIsOrchestrator { return firstIsOrchestrator }
+            return firstSpecialist.name < secondSpecialist.name
         }
     }
 
@@ -383,6 +399,7 @@ struct CreateWorkspaceView: View {
         storeIsLoading || (!storeHasLoaded && !settled)
     }
 
+    // swiftlint:disable discouraged_optional_boolean
     /// Create's model-catalog gate: on while the selected provider's catalog
     /// is not cached (`catalogCached == false`) and this sheet's load for
     /// that provider has not settled; never for a cached catalog (instant
@@ -392,6 +409,7 @@ struct CreateWorkspaceView: View {
     static func showsModelCatalogLoading(catalogCached: Bool?, settled: Bool) -> Bool {
         catalogCached == false && !settled
     }
+    // swiftlint:enable discouraged_optional_boolean
 
     /// Keeps the selection while `current`'s id is still selectable, rebound
     /// to the fresh entry; otherwise auggie when selectable, else the first
@@ -406,7 +424,7 @@ struct CreateWorkspaceView: View {
         if let current, let fresh = selectable.first(where: { $0.id == current.id }) {
             return fresh
         }
-        return selectable.first(where: { $0.id == "auggie" }) ?? selectable.first
+        return selectable.first { $0.id == "auggie" } ?? selectable.first
     }
 
     /// Keeps an explicit model only while the displayed catalog still lists
@@ -439,39 +457,43 @@ struct CreateWorkspaceView: View {
         guard !isCreating, let repo = selectedRepo, let branch = selectedBranch else { return }
         isCreating = true
 
-        Task {
-            do {
-                let params = Self.buildCreateWorkspaceParams(
-                    githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
-                    baseRef: branch,
-                    idempotencyKey: idempotencyKey,
+        Task { await performCreateWorkspace(repo: repo, branch: branch) }
+    }
+
+    private func performCreateWorkspace(repo: GitHubRepo, branch: String) async {
+        do {
+            let params = Self.buildCreateWorkspaceParams(
+                githubUrl: "https://github.com/\(repo.owner)/\(repo.name)",
+                baseRef: branch,
+                idempotencyKey: idempotencyKey,
+                initialAgent: InitialAgentInput(
                     specialist: selectedSpecialist,
                     provider: selectedProvider,
                     model: selectedModel,
                     message: messageText
                 )
-
-                let result = try await session.connection.request(
-                    "workspace.create", params: params, timeout: Self.createRequestTimeout)
-
-                if let dict = result as? [String: Any],
-                   let wsDict = dict["workspace"] as? [String: Any],
-                   let workspace = WorkspaceStore.parseWorkspace(wsDict) {
-                    session.workspaceStore.addOrUpdate(workspace)
-                    HapticManager.notification(.success)
-                    idempotencyKey = UUID().uuidString
-                    dismiss()
-                    coordinator.onSelectWorkspace(workspace.id)
-                } else {
-                    errorMessage = "Failed to parse workspace response."
-                    showError = true
-                }
-            } catch {
-                errorMessage = error.localizedDescription
+            )
+            let result = try await session.connection.request(
+                "workspace.create",
+                params: params,
+                timeout: Self.createRequestTimeout
+            )
+            if let dictionary = result as? [String: Any],
+               let workspaceDictionary = dictionary["workspace"] as? [String: Any],
+               let workspace = WorkspaceStore.parseWorkspace(workspaceDictionary) {
+                session.workspaceStore.addOrUpdate(workspace)
+                HapticManager.notification(.success)
+                idempotencyKey = UUID().uuidString
+                dismiss()
+                coordinator.onSelectWorkspace(workspace.id)
+            } else {
+                errorMessage = "Failed to parse workspace response."
                 showError = true
             }
-            isCreating = false
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
         }
+        isCreating = false
     }
-
 }

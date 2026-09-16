@@ -4,8 +4,8 @@ import Foundation
 enum ConversationTranscriptScrollPolicy {
     enum InitialScrollStep: Equatable {
         case perform
-        case waitForScrollView
         case skip
+        case waitForScrollView
     }
 
     /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
@@ -76,10 +76,10 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum RePinDecision: Equatable {
-        /// The viewport rests within the content.
-        case none
         /// Past the end but still dragging or decelerating; check again later.
         case deferred
+        /// The viewport rests within the content.
+        case none
         case rePin(offsetY: CGFloat)
     }
 
@@ -109,10 +109,10 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum ContainerRePinDecision: Equatable {
-        /// The container is unchanged or the viewport is not following.
-        case none
         /// Following, but under the finger or decelerating; re-check on settle.
         case deferred
+        /// The container is unchanged or the viewport is not following.
+        case none
         case rePin
     }
 
@@ -384,19 +384,19 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum FollowLandingStep: Equatable {
-        /// No scroll view yet, or the geometry moved since the last poll.
-        case settling
+        /// At rest past the end of the content: clamp the offset back.
+        case clampPastEnd
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
         /// At rest within `landingTolerance` of the bottom.
         case landed
         /// At rest short of the bottom, even inside the at-bottom band:
         /// issue the scroll again.
         case scrollAgain
-        /// At rest past the end of the content: clamp the offset back.
-        case clampPastEnd
+        /// No scroll view yet, or the geometry moved since the last poll.
+        case settling
         /// The user took over the scroll view; the gesture rule owns the flag.
         case yieldToUser
-        /// Timed out, or the bounded corrections are spent: leave the pin.
-        case giveUp
     }
 
     /// A forced follow (entry, a new user message, the thinking indicator,
@@ -429,9 +429,9 @@ enum ConversationTranscriptScrollPolicy {
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
         isInteracting: Bool,
-        userIsScrolledAway: Bool = false,
         correctionsLeft: Int,
         timedOut: Bool,
+        userIsScrolledAway: Bool = false,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> FollowLandingStep {

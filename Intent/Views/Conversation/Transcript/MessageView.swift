@@ -7,13 +7,13 @@ import SwiftUI
 struct MessageView: View {
     let message: ConversationMessage
     let workspaceId: String
-    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)? = nil
-    var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)? = nil
+    var onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?
+    var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
     /// Block ids of this message with a slim-projection hydration fetch in
     /// flight (agent.getMessageBlock, PROTOCOL §5.5).
     var hydratingBlockIds: Set<String> = []
     /// Fetch the full body of a slim-truncated block of this message by id.
-    var onHydrateBlock: ((_ blockId: String) -> Void)? = nil
+    var onHydrateBlock: ((_ blockId: String) -> Void)?
 
     var body: some View {
         MessageRowContent(
@@ -43,7 +43,7 @@ struct MessageRowContent: View, Equatable {
 
     /// Manual `==`: closures are excluded on purpose — the transcript builds
     /// new ones per evaluation, and they only capture stable identifiers.
-    static func == (lhs: MessageRowContent, rhs: MessageRowContent) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.message == rhs.message
             && lhs.workspaceId == rhs.workspaceId
             && lhs.hydratingBlockIds == rhs.hydratingBlockIds
@@ -64,7 +64,9 @@ struct MessageRowContent: View, Equatable {
                 // `agent.setModel`; FE parity: ChatMessage.svelte checks
                 // getModelChangeNotice before any role branching).
                 ModelChangeNoticeView(
-                    notice: modelChange, fallbackText: message.joinedTextContent)
+                    notice: modelChange,
+                    fallbackText: message.joinedTextContent
+                )
             } else if isUser, let eventWake = message.eventWakeAttribution {
                 // Event-notification wake rows render as a compact banner —
                 // the whole body is machine text, so the banner replaces the
@@ -88,18 +90,20 @@ struct MessageRowContent: View, Equatable {
             } else if message.role == .error {
                 ErrorMessageView(message: message)
             } else if message.role == .system {
-                // Attention-request / turn-failure rows get a kind-flavored
-                // card; every other system row (e.g. `meta.kind =
-                // "interruption"`) falls back to a generic muted banner
-                // instead of rendering nothing (FE parity:
-                // ChatMessage.svelte system branch).
-                if let notice = message.attentionNotice {
-                    AttentionNoticeView(notice: notice)
-                } else {
-                    SystemNoticeBannerView(message: message.joinedTextContent)
-                }
+                systemMessage
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var systemMessage: some View {
+        // Attention-request / turn-failure rows get a kind-flavored card;
+        // every other system row falls back to a generic muted banner.
+        if let notice = message.attentionNotice {
+            AttentionNoticeView(notice: notice)
+        } else {
+            SystemNoticeBannerView(message: message.joinedTextContent)
+        }
     }
 }
