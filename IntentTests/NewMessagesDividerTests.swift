@@ -1030,6 +1030,165 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(landing(geometry(offsetY: 0), userIsScrolledAway: false) == .scrollAgain)
     }
 
+    private typealias RecoveryStep = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep
+
+    /// A recovery poll that repeats the same geometry (at rest) with the end
+    /// row unrealized by default.
+    private func recovery(
+        _ geometry: ViewportGeometry?,
+        previous: ViewportGeometry?? = nil,
+        isEndRealized: Bool = false,
+        isInteracting: Bool = false,
+        isFollowing: Bool = false,
+        hasInitiallyScrolled: Bool = true,
+        userIsScrolledAway: Bool = false,
+        correctionsLeft: Int = 2,
+        correctionsSpent: Int = 0,
+        timedOut: Bool = false
+    ) -> RecoveryStep {
+        ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep(
+            geometry: geometry,
+            previous: previous ?? geometry,
+            isEndRealized: isEndRealized,
+            isInteracting: isInteracting,
+            isFollowing: isFollowing,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            correctionsLeft: correctionsLeft,
+            correctionsSpent: correctionsSpent,
+            timedOut: timedOut,
+            atBottomThreshold: 50,
+            landingTolerance: 1
+        )
+    }
+
+    /// Regression (#338): the hooks row landing right after the entry follow
+    /// had reported `landed` shrank the container, the container re-pin's
+    /// `scrollTo` left the lazy stack with no realized rows, and the geometry
+    /// read at the bottom over the blank viewport — `corrections=0`, Go to
+    /// End absent, no path fired. A following viewport whose geometry reads
+    /// the bottom (the bounce side of the band included) with no end row
+    /// realized is paged up one viewport and followed back to the end.
+    @Test func blankViewportAtTheBottomIsPagedUpAndFollowedBack() {
+        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000)) == .recover(pageOffsetY: 1_600))
+        #expect(recovery(geometry(offsetY: 2_299.5, contentHeight: 3_000)) == .recover(pageOffsetY: 1_599.5))
+        #expect(recovery(geometry(offsetY: 2_340, contentHeight: 3_000)) == .recover(pageOffsetY: 1_640))
+        // The page up is clamped to the top of the content, under the top
+        // inset when there is one.
+        #expect(recovery(geometry(offsetY: 300)) == .recover(pageOffsetY: 0))
+        #expect(recovery(geometry(offsetY: 50, contentHeight: 750, topInset: 59)) == .recover(pageOffsetY: -59))
+    }
+
+    /// A first rest short of the bottom inside the band explains the end
+    /// row being off screen and is followed to the end, as the deferred
+    /// container re-pin does; a follow that left the geometry unchanged
+    /// (the blank can read there too) escalates to the page up.
+    @Test func shortRestInsideTheBandIsFollowedOnceThenPagedUp() {
+        #expect(recovery(geometry(offsetY: 2_270, contentHeight: 3_000)) == .followToEnd)
+        #expect(recovery(geometry(offsetY: 2_251, contentHeight: 3_000)) == .followToEnd)
+        #expect(recovery(geometry(offsetY: 2_270, contentHeight: 3_000), correctionsSpent: 1)
+            == .recover(pageOffsetY: 1_570))
+        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000), correctionsSpent: 1)
+            == .recover(pageOffsetY: 1_600))
+        #expect(recovery(geometry(offsetY: 2_270, contentHeight: 3_000), correctionsLeft: 0) == .giveUp)
+    }
+
+    /// The end row realized is the ordinary state at the bottom; nothing is
+    /// inferred from the geometry then.
+    @Test func realizedEndRowNeedsNoRecovery() {
+        #expect(recovery(geometry(offsetY: 300), isEndRealized: true) == .none)
+        #expect(recovery(geometry(offsetY: 270), isEndRealized: true) == .none)
+        #expect(recovery(geometry(offsetY: 600), isEndRealized: true) == .none)
+        #expect(recovery(nil, isEndRealized: true) == .none)
+    }
+
+    /// Geometries another path owns are waited out, bounded by the timeout:
+    /// past the end the #271 clamp, beyond the band the growth re-pin, each
+    /// on its way once its edge fired. Content shorter than the container
+    /// realizes every row, so nothing is inferred from it.
+    @Test func recoveryWaitsOutGeometriesOtherPathsOwn() {
+        #expect(recovery(geometry(offsetY: 351)) == .settling)
+        #expect(recovery(geometry(offsetY: 600)) == .settling)
+        #expect(recovery(geometry(offsetY: 249)) == .settling)
+        #expect(recovery(geometry(offsetY: 0)) == .settling)
+        #expect(recovery(geometry(offsetY: 0), timedOut: true) == .giveUp)
+        #expect(recovery(geometry(offsetY: 0, contentHeight: 400)) == .none)
+        #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780)) == .none)
+        #expect(recovery(geometry(offsetY: 0, contentHeight: 650, containerHeight: 780, topInset: 150))
+            == .settling)
+    }
+
+    /// Verified from two identical reads like a landing; a gesture or a
+    /// follow in flight is waited out rather than corrected under.
+    @Test func recoveryWaitsForRestAndForGesturesAndFollows() {
+        #expect(recovery(nil) == .settling)
+        #expect(recovery(geometry(offsetY: 300), previous: .some(nil)) == .settling)
+        #expect(recovery(geometry(offsetY: 300), previous: geometry(offsetY: 250)) == .settling)
+        #expect(recovery(geometry(offsetY: 300), previous: geometry(offsetY: 300, bottomInset: 20)) == .settling)
+        #expect(recovery(geometry(offsetY: 300), isInteracting: true) == .settling)
+        #expect(recovery(geometry(offsetY: 300), isFollowing: true) == .settling)
+    }
+
+    /// Corrections are bounded by count and by time, and no outcome ever
+    /// breaks the pin; a user who scrolled away, or a transcript before its
+    /// entry scroll, legitimately has the end row off screen.
+    @Test func recoveryIsBoundedAndNeverBreaksThePin() {
+        #expect(recovery(geometry(offsetY: 300), correctionsLeft: 1) == .recover(pageOffsetY: 0))
+        #expect(recovery(geometry(offsetY: 300), correctionsLeft: 0) == .giveUp)
+        #expect(recovery(geometry(offsetY: 300), timedOut: true) == .giveUp)
+        #expect(recovery(nil, timedOut: true) == .giveUp)
+        #expect(recovery(geometry(offsetY: 300), isInteracting: true, timedOut: true) == .giveUp)
+        #expect(recovery(geometry(offsetY: 300), userIsScrolledAway: true) == .none)
+        #expect(recovery(geometry(offsetY: 300), userIsScrolledAway: true, timedOut: true) == .none)
+        #expect(recovery(geometry(offsetY: 300), hasInitiallyScrolled: false) == .none)
+        #expect(recovery(geometry(offsetY: 300), isEndRealized: true, correctionsLeft: 0) == .none)
+        // The recovery's budget is the forced follow's, and the follow's
+        // timeout leaves room for every correction to page, follow and
+        // settle over two reads.
+        let rounds = Double(Constants.Conversation.Transcript.followLandingRetries + 1)
+        let roundMilliseconds = Double(3 * Constants.Conversation.Transcript.pastEndSettleMilliseconds)
+        #expect(rounds * roundMilliseconds < Double(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds))
+    }
+
+    /// The recovery reports next to the forced follow's report under demo
+    /// data once it has corrected the viewport, and never on the pending
+    /// report the UI tests compare whole.
+    @Test func unrealizedEndRecoverySummaryIsAppendedOnlyAfterACorrection() {
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(outcome: nil, corrections: 0) == nil)
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: RecoveryStep.none, corrections: 0) == nil)
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: RecoveryStep.none, corrections: 1) == "endRecovery=recovered corrections=1")
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: .giveUp, corrections: 3) == "endRecovery=giveUp corrections=3")
+        let recovered = ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: RecoveryStep.none, corrections: 1)
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+            outcome: .landed, corrections: 0, endRecovery: recovered)
+            == "lastForcedFollow=landed corrections=0 endRecovery=recovered corrections=1")
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+            outcome: .landed, corrections: 0, endRecovery: nil)
+            == "lastForcedFollow=landed corrections=0")
+        #expect(ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
+            outcome: nil, corrections: 0, endRecovery: recovered)
+            == "lastForcedFollow=pending")
+    }
+
+    /// The page up goes through the live scroll view without animation, so
+    /// the lazy stack lays out the rows there before the follow back.
+    @MainActor
+    @Test func pageToMovesTheLiveScrollViewOrReportsItMissing() {
+        let scrollView = UIScrollView(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.contentSize = CGSize(width: 390, height: 3_000)
+        scrollView.contentOffset = CGPoint(x: 0, y: 2_300)
+        let proxy = ScrollViewMomentumProxy()
+        #expect(!proxy.pageTo(offsetY: 1_600))
+        proxy.scrollView = scrollView
+        #expect(proxy.pageTo(offsetY: 1_600))
+        #expect(scrollView.contentOffset.y == 1_600)
+    }
+
     /// An unknown distance never releases a scrolled-away state: every
     /// automatic path stays suppressed until the geometry proves otherwise.
     @Test func unknownDistanceDoesNotFlipScrolledAwayBackToPinned() {

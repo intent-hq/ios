@@ -135,7 +135,7 @@ struct ConversationTranscriptView: View {
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
             LazyVStack(spacing: 16) {
-                transcriptRows(dividerAnchorId: dividerAnchorId)
+                transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
             .padding(.horizontal, 16)
             .padding(.top, 24)
@@ -150,7 +150,11 @@ struct ConversationTranscriptView: View {
         .demoAccessibilityValue(
             ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
                 outcome: scrollState.lastForcedFollowOutcome,
-                corrections: scrollState.lastForcedFollowCorrections
+                corrections: scrollState.lastForcedFollowCorrections,
+                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+                    outcome: scrollState.lastUnrealizedEndRecoveryOutcome,
+                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections
+                )
             )
         )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
@@ -227,7 +231,90 @@ struct ConversationTranscriptView: View {
         .onDisappear {
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
+            cancelUnrealizedEndRecovery()
         }
+    }
+
+    /// Verifies, once the geometry has settled, that a following viewport
+    /// rests on realized rows, and recovers a blank one (#338): the lazy
+    /// stack can realize no rows at all under an offset that still reads
+    /// "at bottom" — the container re-pin's `scrollTo` after a footer row
+    /// landed did exactly that on a transcript whose last rows re-measure —
+    /// so every geometry-driven path stays silent. Armed when the end row
+    /// derealizes; each correction pages the live scroll view up a viewport
+    /// so rows realize above, then follows back to the end, and the loop
+    /// re-verifies from two fresh reads, a bounded number of times (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep`). A
+    /// gesture or a follow in flight is waited out; a user who rests away
+    /// ends it. It is not a forced follow, so the follow's report is left as
+    /// it is; the recovery reports next to it under `--demo-data`. A
+    /// verification already running keeps its budget: it reads the end
+    /// row's current state at every poll, so re-arming it would only reset
+    /// the bound.
+    private func scheduleUnrealizedEndRecovery(proxy: ScrollViewProxy) {
+        guard scrollState.unrealizedEndRecoveryTask == nil else { return }
+        scrollState.unrealizedEndRecoveryTask = Task { @MainActor in
+            let deadline = ContinuousClock.now
+                + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
+            var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
+            var corrections = 0
+            var previous: ScrollViewMomentumProxy.RestingGeometry?
+            while true {
+                try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+                guard !Task.isCancelled else { return }
+                let geometry = scrollMomentumProxy.restingGeometry
+                let step = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryStep(
+                    geometry: geometry,
+                    previous: previous,
+                    isEndRealized: scrollState.isEndRealized,
+                    isInteracting: isUserInteracting,
+                    isFollowing: scrollDebounceTask != nil || isScrollingToBottom,
+                    hasInitiallyScrolled: hasInitiallyScrolled,
+                    userIsScrolledAway: userIsScrolledAway,
+                    correctionsLeft: correctionsLeft,
+                    correctionsSpent: corrections,
+                    timedOut: ContinuousClock.now >= deadline
+                )
+                previous = geometry
+                switch step {
+                case .settling:
+                    continue
+                case .followToEnd:
+                    correctionsLeft -= 1
+                    corrections += 1
+                    scrollState.isRecoveringUnrealizedEnd = true
+                    AppLog.ui.debug("[SCROLL] End row off screen short of the bottom; following to the end")
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    previous = nil
+                case .recover(let pageOffsetY):
+                    correctionsLeft -= 1
+                    corrections += 1
+                    scrollState.isRecoveringUnrealizedEnd = true
+                    AppLog.ui.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
+                    if scrollMomentumProxy.pageTo(offsetY: pageOffsetY) {
+                        try? await Task.sleep(
+                            for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+                        guard !Task.isCancelled else { return }
+                    }
+                    proxy.scrollTo("scroll-bottom", anchor: .bottom)
+                    previous = nil
+                case .none, .giveUp:
+                    if corrections > 0 {
+                        scrollState.lastUnrealizedEndRecoveryOutcome = step
+                        scrollState.lastUnrealizedEndRecoveryCorrections = corrections
+                    }
+                    scrollState.isRecoveringUnrealizedEnd = false
+                    scrollState.unrealizedEndRecoveryTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func cancelUnrealizedEndRecovery() {
+        scrollState.unrealizedEndRecoveryTask?.cancel()
+        scrollState.unrealizedEndRecoveryTask = nil
+        scrollState.isRecoveringUnrealizedEnd = false
     }
 
     /// Re-checks the live scroll view once the geometry has had time to
@@ -265,9 +352,10 @@ struct ConversationTranscriptView: View {
         }
     }
 
-    /// A follow is in flight from its request until its landing is verified.
+    /// A follow is in flight from its request until its landing is verified;
+    /// an unrealized-end correction on its way back to the end counts too.
     private var isFollowing: Bool {
-        scrollDebounceTask != nil || isScrollingToBottom
+        scrollDebounceTask != nil || isScrollingToBottom || scrollState.isRecoveringUnrealizedEnd
     }
 
     private func cancelPastEndRePin() {
@@ -408,7 +496,7 @@ struct ConversationTranscriptView: View {
     }
 
     @ViewBuilder
-    private func transcriptRows(dividerAnchorId: String?) -> some View {
+    private func transcriptRows(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         if viewModel.isTruncated {
             truncationBanner
                 .id("truncation-banner")
@@ -456,10 +544,20 @@ struct ConversationTranscriptView: View {
         // The stack's bottom padding lives on the marker so that
         // `scrollTo("scroll-bottom", anchor: .bottom)` targets the true end
         // of the content, not a point 12 points above it that a landing
-        // judged against `followLandingTolerance` could never reach.
+        // judged against `followLandingTolerance` could never reach. Its
+        // realization is the end-row signal the unrealized-end recovery
+        // reads (#338): the lazy stack appears and disappears the marker as
+        // it realizes and drops it.
         Color.clear.frame(height: 8)
             .padding(.bottom, 12)
             .id("scroll-bottom")
+            .onAppear {
+                scrollState.isEndRealized = true
+            }
+            .onDisappear {
+                scrollState.isEndRealized = false
+                scheduleUnrealizedEndRecovery(proxy: proxy)
+            }
     }
 
     private var goToEndButton: some View {

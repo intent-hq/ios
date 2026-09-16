@@ -454,14 +454,103 @@ enum ConversationTranscriptScrollPolicy {
         return .landed
     }
 
+    enum UnrealizedEndRecoveryStep: Equatable {
+        /// The end row is realized, the viewport is not following, or the
+        /// content is shorter than the container.
+        case none
+        /// No scroll view yet, a follow or gesture in flight, the geometry
+        /// moved since the last poll, or a geometry another path corrects.
+        case settling
+        /// At rest short of the bottom inside the band, which alone explains
+        /// the end row being off screen: follow to the end once.
+        case followToEnd
+        /// At rest at the bottom by geometry with no end row realized, or a
+        /// follow that changed nothing: page the offset up to `pageOffsetY`
+        /// so the lazy stack realizes rows again, then follow back to the end.
+        case recover(pageOffsetY: CGFloat)
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
+    }
+
+    /// Every re-pin judges the viewport by geometry alone, and the geometry
+    /// can read at the bottom over a blank viewport (#338): a footer row
+    /// shrinking the container right after the entry follow landed, on a
+    /// transcript whose last rows re-measure once realized, left the
+    /// container re-pin's `scrollTo` with a lazy stack that realized no rows
+    /// at all — the offset agreed with the stack's estimate of its own size,
+    /// so neither the past-end clamp (#271) nor the growth re-pin had an
+    /// edge to fire on, and the entry follow had already reported `landed`.
+    /// The end row's realization is the missing signal: a following
+    /// viewport at rest within the at-bottom band, with no gesture and no
+    /// follow in flight, whose end row is not realized is blank. It is
+    /// recovered the way a user does — paged up a viewport, so rows realize
+    /// above, and followed back to the end — a bounded number of times.
+    /// A first rest short of the bottom inside the band explains the end
+    /// row on its own and is followed to the end as the deferred container
+    /// re-pin does; the page up is for a rest the geometry calls the bottom,
+    /// or one that follow left unchanged. Content shorter than the container
+    /// realizes every row, so nothing is inferred from it; a rest past the
+    /// end or beyond the band is waited out like a follow, since the clamp
+    /// or the growth re-pin that owns it is on its way; and a user who
+    /// scrolled away legitimately has the end row off screen.
+    static func unrealizedEndRecoveryStep(
+        geometry: ViewportGeometry?,
+        previous: ViewportGeometry?,
+        isEndRealized: Bool,
+        isInteracting: Bool,
+        isFollowing: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool,
+        correctionsLeft: Int,
+        correctionsSpent: Int = 0,
+        timedOut: Bool,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
+        landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
+    ) -> UnrealizedEndRecoveryStep {
+        if isEndRealized { return .none }
+        guard shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        ) else { return .none }
+        if timedOut { return .giveUp }
+        if isInteracting || isFollowing { return .settling }
+        guard let geometry, geometry == previous else { return .settling }
+        guard geometry.contentHeight > geometry.containerHeight - geometry.verticalInsets else { return .none }
+        let distance = geometry.distanceToBottom
+        if isPastEnd(
+            distanceToBottom: distance,
+            contentHeight: geometry.contentHeight,
+            containerHeight: geometry.containerHeight,
+            verticalInsets: geometry.verticalInsets,
+            atBottomThreshold: atBottomThreshold
+        ) || isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
+            return .settling
+        }
+        guard correctionsLeft > 0 else { return .giveUp }
+        if correctionsSpent == 0, isDriftedWithinBottomBand(
+            distanceToBottom: distance,
+            driftTolerance: landingTolerance,
+            atBottomThreshold: atBottomThreshold
+        ) {
+            return .followToEnd
+        }
+        return .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
+    }
+
     /// The transcript's accessibility value under `--demo-data`: the last
     /// forced follow's outcome and the corrections it spent, e.g.
     /// `lastForcedFollow=landed corrections=1`, or
     /// `lastForcedFollow=pending` while one is in flight (or before the
     /// first). Lets the XCUITests assert the follow landed rather than gave
     /// up with the pin kept, which the visible geometry alone cannot tell
-    /// apart within the at-bottom band (#304, #305).
-    static func forcedFollowLandingSummary(outcome: FollowLandingStep?, corrections: Int) -> String {
+    /// apart within the at-bottom band (#304, #305). `endRecovery` (see
+    /// `unrealizedEndRecoverySummary`) is appended once the follow has
+    /// reported, never to the pending report the tests compare whole.
+    static func forcedFollowLandingSummary(
+        outcome: FollowLandingStep?,
+        corrections: Int,
+        endRecovery: String? = nil
+    ) -> String {
         guard let outcome else { return "lastForcedFollow=pending" }
         let name: String
         switch outcome {
@@ -472,6 +561,24 @@ enum ConversationTranscriptScrollPolicy {
         case .scrollAgain: name = "scrollAgain"
         case .clampPastEnd: name = "clampPastEnd"
         }
-        return "lastForcedFollow=\(name) corrections=\(corrections)"
+        let summary = "lastForcedFollow=\(name) corrections=\(corrections)"
+        guard let endRecovery else { return summary }
+        return "\(summary) \(endRecovery)"
+    }
+
+    /// The last unrealized-end recovery that spent a correction, e.g.
+    /// `endRecovery=recovered corrections=1` or
+    /// `endRecovery=giveUp corrections=3`; nil before any recovery has
+    /// corrected the viewport, so the ordinary report is unchanged.
+    static func unrealizedEndRecoverySummary(outcome: UnrealizedEndRecoveryStep?, corrections: Int) -> String? {
+        guard let outcome, corrections > 0 else { return nil }
+        let name: String
+        switch outcome {
+        case .none: name = "recovered"
+        case .giveUp: name = "giveUp"
+        case .settling: name = "settling"
+        case .followToEnd, .recover: name = "recovering"
+        }
+        return "endRecovery=\(name) corrections=\(corrections)"
     }
 }
