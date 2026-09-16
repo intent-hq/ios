@@ -857,9 +857,9 @@ private extension ConversationTranscriptView {
                 geometry: geometry,
                 previous: previous,
                 isInteracting: isUserInteracting,
-                userIsScrolledAway: userIsScrolledAway,
                 correctionsLeft: correctionsLeft,
-                timedOut: ContinuousClock.now >= deadline
+                timedOut: ContinuousClock.now >= deadline,
+                userIsScrolledAway: userIsScrolledAway
             )
             previous = geometry
             switch step {
