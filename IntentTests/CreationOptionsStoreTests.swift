@@ -120,8 +120,8 @@ struct CreationOptionsStoreTests {
         #expect(store.providers == [
             ProviderInfo(id: "auggie", authenticated: true),
             ProviderInfo(id: "claude-code", authenticated: false),
-            ProviderInfo(id: "grok", authenticated: nil),
-            ProviderInfo(id: "pi", authenticated: nil)
+            ProviderInfo(id: "grok", authenticated: .unknown),
+            ProviderInfo(id: "pi", authenticated: .unknown)
         ])
     }
 

@@ -92,6 +92,7 @@ extension AppCoordinator {
 
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
+        pendingAutoOpenWorkspaceId = nil
         // Check for a saved per-workspace sub-screen and restore it
         if let saved = dependencies.persistence.loadWorkspaceScreen(workspaceId: workspaceId) {
             navigationState.suppressWorkspaceNavigation = true
@@ -133,6 +134,25 @@ extension AppCoordinator {
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
+        pendingAutoOpenWorkspaceId = workspaceId
+    }
+
+    func autoOpenSoleAgentIfArmed(
+        workspaceId: String,
+        foregroundAgents: [AgentSession]
+    ) {
+        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
+        pendingAutoOpenWorkspaceId = nil
+        guard case .workspaceDetail(let shownWorkspaceId) = currentScreen,
+              shownWorkspaceId == workspaceId,
+              foregroundAgents.count == 1,
+              let agent = foregroundAgents.first else { return }
+        onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
+    }
+
+    func cancelPendingAutoOpen(workspaceId: String) {
+        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
+        pendingAutoOpenWorkspaceId = nil
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread

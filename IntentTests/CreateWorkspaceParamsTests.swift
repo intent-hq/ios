@@ -39,10 +39,12 @@ struct CreateWorkspaceParamsTests {
             githubUrl: "https://github.com/intent-hq/intentd",
             baseRef: baseRef,
             idempotencyKey: "key-123",
-            specialist: specialist,
-            provider: provider,
-            model: model,
-            message: message
+            initialAgent: .init(
+                specialist: specialist,
+                provider: provider,
+                model: model,
+                message: message
+            )
         )
     }
 

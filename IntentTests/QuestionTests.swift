@@ -78,7 +78,7 @@ struct ResourceBlockDecodingTests {
             ]
         ]
         let msg = try #require(ConversationMessage.parseMessage(dict))
-        let blocks = try #require(msg.contentBlocks)
+        let blocks = msg.contentBlocks
         #expect(blocks.count == 2)
         #expect(blocks[1].type == .resource)
         #expect(Question.question(from: blocks[1])?.header == "Auth method")

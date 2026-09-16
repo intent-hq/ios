@@ -109,24 +109,30 @@ import Observation
         }
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
-            // Guard: a stale response for a previous workspace must not
-            // replace the current workspace's notes or flip hasLoaded. The
-            // current workspace's own fetch manages isLoading.
+            // Ignore stale responses for a previous workspace.
             guard self.workspaceId == workspaceId else { return }
-            notes = mergeSlimRows(items.compactMap { Note.parseNote($0) })
-            hasLoaded = true
-            // The spec is the one structural exception (its content links task
-            // notes for the progress ring), so hydrate it full when its slim
-            // row is stale. Fail-soft: a miss keeps the slim row as-is.
+            // A cancelled fetch must not publish its late response.
+            try Task.checkCancellation()
+            // Avoid invalidating observers for an identical refetch.
+            let merged = mergeSlimRows(items.compactMap { Note.parseNote($0) })
+            if merged != notes {
+                notes = merged
+            }
+            if !hasLoaded {
+                hasLoaded = true
+            }
+            // Hydrate a stale spec because its content links task notes.
             if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
                 _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
             }
+        } catch is CancellationError {
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
-        isLoading = false
-        // Note: live-state subscription is owned by onConnected() lifecycle.
-        // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
+        if isLoading {
+            isLoading = false
+        }
+        // Live-state subscription is owned by onConnected().
     }
 
     /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:
@@ -220,18 +226,14 @@ import Observation
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
+            // A cancelled fetch must not publish a late note body.
+            try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let noteDict = dict["note"] as? [String: Any],
                let note = Note.parseNote(noteDict) {
                 if note.isArchived { return .notFound }
-                // Upsert the full body over a cached slim list row (§5.2) so
-                // content surfaces and optimistic content edits work off the
-                // cache. Replace-only: never grows the list, only for the
-                // workspace the cache belongs to (note ids like "spec" repeat
-                // across workspaces), and never over a newer cached row — a
-                // delta/re-list may have advanced it while this note.get was
-                // in flight, and a late older body must not clobber it or
-                // clear its stale marker.
+                // Replace a matching cached slim row, but never a newer row or
+                // one from another workspace.
                 if self.workspaceId == workspaceId,
                    let idx = notes.firstIndex(where: { $0.id == note.id }),
                    !Self.isCachedRowNewer(notes[idx], thanFetched: note) {
@@ -240,8 +242,11 @@ import Observation
                 return .found(note)
             }
             return .transientError
+        } catch is CancellationError {
+            return .transientError
         } catch let error as NSError where error.isEntityNotFound {
-            return .notFound
+            // Ignore not-found when it races the caller's cancellation.
+            return Task.isCancelled ? .transientError : .notFound
         } catch let error as NSError
             where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             // -32602 without data.code == "not-found" (invalid-params or absent

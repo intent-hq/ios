@@ -86,8 +86,8 @@ extension CreateWorkspaceParamsTests {
         #expect(catalogGate("codex", store: store, settled: settled))
         #expect(
             isCreateDisabled(
-                isLoadingProviders: catalogGate("codex", store: store, settled: settled),
-                providers: [makeProvider(id: "codex")]
+                providers: [makeProvider(id: "codex")],
+                isLoadingProviders: catalogGate("codex", store: store, settled: settled)
             )
         )
 
@@ -288,7 +288,7 @@ extension CreateWorkspaceParamsTests {
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
-    private func isCreateDisabled(
+    func isCreateDisabled(
         providers: [ProviderInfo],
         isCreating: Bool = false,
         isLoadingProviders: Bool = false
@@ -320,8 +320,8 @@ extension CreateWorkspaceParamsTests {
     }
 
     @Test func createDisabledWhileCreatingOrLoadingProviders() {
-        #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
+        #expect(isCreateDisabled(providers: [makeProvider()], isCreating: true))
         // An empty in-flight list can't be told apart from a seat with no providers
-        #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
+        #expect(isCreateDisabled(providers: [], isLoadingProviders: true))
     }
 }

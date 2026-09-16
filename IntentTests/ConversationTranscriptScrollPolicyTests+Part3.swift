@@ -35,9 +35,9 @@ extension ConversationTranscriptScrollPolicyTests {
             geometry: geometry,
             previous: previous ?? geometry,
             isInteracting: isInteracting,
-            userIsScrolledAway: userIsScrolledAway,
             correctionsLeft: correctionsLeft,
             timedOut: timedOut,
+            userIsScrolledAway: userIsScrolledAway,
             atBottomThreshold: kTestAtBottomThreshold,
             landingTolerance: 1
         )

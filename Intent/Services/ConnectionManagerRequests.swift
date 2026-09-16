@@ -1,7 +1,7 @@
 import Foundation
 
 extension ConnectionManager {
-    private static let webSocketErrorDomain = "WebSocket"
+    nonisolated private static let webSocketErrorDomain = "WebSocket"
     private static let requestTimedOutErrorCode = -2
     private static let connectionClosedErrorCode = -3
     private static let notConnectedErrorCode = -4
@@ -26,6 +26,9 @@ extension ConnectionManager {
         timeout: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
         if DemoMode.isEnabled {
+            if let gate = DemoFixtures.responseGate(for: method, params: params) {
+                try await DemoFixtures.wait(for: gate)
+            }
             return DemoFixtures.response(for: method, params: params)
         }
         guard let currentSocket = socket else {
@@ -117,50 +120,102 @@ extension ConnectionManager {
         }
     }
 
-    func handleTextMessage(_ text: String) {
+    nonisolated static func parseInboundFrame(_ text: String) -> InboundFrame? {
         guard let data = text.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
 
         if let id = json["id"] as? Int {
-            if let continuation = pendingRequests.removeValue(forKey: id) {
-                if let error = json["error"] as? [String: Any] {
-                    let parsedCode = error["code"] as? Int
-                    let code = parsedCode ?? -1
-                    let hasCode = parsedCode != nil
-                    let topMessage = error["message"] as? String ?? "Unknown error"
-                    let errorData = error["data"] as? [String: Any]
+            guard let error = json["error"] as? [String: Any] else {
+                return .response(id: id, result: InboundJSONValue(value: json["result"] as Any))
+            }
+            let parsedCode = error["code"] as? Int
+            let code = parsedCode ?? -1
+            let topMessage = error["message"] as? String ?? "Unknown error"
+            let errorData = error["data"] as? [String: Any]
+            let dataMessage = errorData?["message"] as? String
+            let effectiveMessage = dataMessage.flatMap { $0.isEmpty ? nil : $0 } ?? topMessage
+            let description = parsedCode == nil ? effectiveMessage : "\(effectiveMessage) (\(code))"
+            var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
+            if let dataCode = errorData?["code"] as? String {
+                userInfo[NSError.intentErrorDataCodeKey] = dataCode
+            }
+            return .error(
+                id: id,
+                error: NSError(domain: Self.webSocketErrorDomain, code: code, userInfo: userInfo)
+            )
+        }
+        if let method = json["method"] as? String {
+            let params = json["params"] as Any
+            if let push = SubscriptionPush.parse(method: method, params: params) {
+                return .subscriptionPush(push)
+            }
+            return .notification(method: method, params: InboundJSONValue(value: params))
+        }
+        return nil
+    }
 
-                    // Extract error.data.message if present (daemon stashes real cause there)
-                    var effectiveMessage = topMessage
-                    if let dataMessage = errorData?["message"] as? String,
-                       !dataMessage.isEmpty {
-                        effectiveMessage = dataMessage
-                    }
+    func handleTextMessage(_ text: String) {
+        let parseStart = CFAbsoluteTimeGetCurrent()
+        guard let frame = Self.parseInboundFrame(text) else { return }
+        let parseElapsed = CFAbsoluteTimeGetCurrent() - parseStart
+        dispatchInboundFrame(
+            frame,
+            byteCount: text.utf8.count,
+            parseElapsed: parseElapsed,
+            waitElapsed: 0
+        )
+    }
 
-                    let description = hasCode ? "\(effectiveMessage) (\(code))" : effectiveMessage
-                    var userInfo: [String: Any] = [NSLocalizedDescriptionKey: description]
-                    // Preserve the error.data.code discriminator (PROTOCOL §3.3) so
-                    // callers can distinguish "not-found" from "invalid-params".
-                    if let dataCode = errorData?["code"] as? String {
-                        userInfo[NSError.intentErrorDataCodeKey] = dataCode
-                    }
-                    continuation.resume(throwing: NSError(
-                        domain: "WebSocket",
-                        code: code,
-                        userInfo: userInfo
-                    ))
-                } else {
-                    continuation.resume(returning: json["result"] as Any)
+    func dispatchInboundFrame(
+        _ frame: InboundFrame,
+        byteCount: Int,
+        parseElapsed: TimeInterval,
+        waitElapsed: TimeInterval
+    ) {
+        let dispatchStart = CFAbsoluteTimeGetCurrent()
+        switch frame {
+        case let .response(id, result):
+            pendingRequests.removeValue(forKey: id)?.resume(returning: result.value)
+        case let .error(id, error):
+            pendingRequests.removeValue(forKey: id)?.resume(throwing: error)
+        case .subscriptionPush(let push):
+            subscriptionRouter.route(push)
+        case let .notification(method, params):
+            if !subscriptionRouter.route(method: method, params: params.value) {
+                for handler in eventHandlers.values {
+                    handler(method, params.value)
                 }
             }
-        } else if let method = json["method"] as? String {
-            let params = json["params"] as Any
-            if subscriptionRouter.route(method: method, params: params) { return }
-            // Broadcast other events to all legacy eventHandlers (subscription.push is NOT broadcast)
-            for handler in eventHandlers.values {
-                handler(method, params)
-            }
         }
+        let dispatchElapsed = CFAbsoluteTimeGetCurrent() - dispatchStart
+        if let line = Self.slowFrameLogLine(
+            label: frame.label,
+            byteCount: byteCount,
+            parseElapsed: parseElapsed,
+            waitElapsed: waitElapsed,
+            dispatchElapsed: dispatchElapsed,
+            threshold: Constants.Connection.slowFrameLogThreshold
+        ) {
+            AppLog.connection.info("\(line)")
+        }
+    }
+
+    // swiftlint:disable:next function_parameter_count
+    nonisolated static func slowFrameLogLine(
+        label: String,
+        byteCount: Int,
+        parseElapsed: TimeInterval,
+        waitElapsed: TimeInterval,
+        dispatchElapsed: TimeInterval,
+        threshold: TimeInterval
+    ) -> String? {
+        guard parseElapsed > threshold || waitElapsed > threshold || dispatchElapsed > threshold else {
+            return nil
+        }
+        return "[ConnectionManager] slow frame \(label) bytes=\(byteCount) "
+            + "parse=\(Int(parseElapsed * millisecondsPerSecond))ms "
+            + "wait=\(Int(waitElapsed * millisecondsPerSecond))ms "
+            + "dispatch=\(Int(dispatchElapsed * millisecondsPerSecond))ms"
     }
 
     func removeEventHandler(id: UUID) {

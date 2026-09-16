@@ -46,7 +46,7 @@ struct DemoFixturesTests {
         #expect(workspaces.count == 4)
         #expect(workspaces.allSatisfy { !$0.title.isEmpty })
         // At least one workspace carries an agent summary for the detail screen
-        #expect(workspaces.contains { ($0.agentSummaryAgents?.count ?? 0) > 0 })
+        #expect(workspaces.contains { !$0.agentSummaryAgents.isEmpty })
     }
 
     @Test func noteListFixtureParses() throws {
@@ -117,7 +117,7 @@ struct DemoFixturesTests {
         #expect(messages.contains { $0.role == .assistant })
         // Every message renders at least one text block
         #expect(messages.allSatisfy { message in
-            message.contentBlocks?.contains { $0.resolvedText?.isEmpty == false } == true
+            message.contentBlocks.contains { $0.resolvedText?.isEmpty == false }
         })
     }
 
@@ -191,7 +191,7 @@ struct DemoFixturesTests {
     @Test func longConversationMixesToolCallsAgentMessagesAndMarkdown() throws {
         let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
         let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
-        let blocks = messages.flatMap { $0.contentBlocks ?? [] }
+        let blocks = messages.flatMap(\.contentBlocks)
 
         let toolUses = blocks.filter { $0.type == .toolUse }
         let toolResults = blocks.filter { $0.type == .toolResult }
@@ -219,7 +219,7 @@ struct DemoFixturesTests {
         #expect(texts.contains { $0.contains("<group:") && !$0.contains("</group>") })
         #expect(texts.contains { $0.contains("</group>") && !$0.contains("<group:") })
         #expect(texts.contains { $0.contains("| Percentile | Duration |") })
-        #expect(messages.contains { ($0.contentBlocks?.count ?? 0) >= 5 })
+        #expect(messages.contains { $0.contentBlocks.count >= 5 })
     }
 
     @Test func subscriptionsReportTheDelegationGroupForTheLongConversationAgent() throws {

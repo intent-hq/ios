@@ -302,7 +302,7 @@ struct ConversationMessageTests {
                 )
             ],
             timestamp: "2025-01-01T00:00:00Z",
-            isStreaming: true
+            streamingState: .streaming
         )
         var same = base
         same.contentBlocks = [
@@ -317,15 +317,15 @@ struct ConversationMessageTests {
         #expect(base == same)
 
         var textDelta = base
-        textDelta.contentBlocks?[0].text = "Hello, world"
+        textDelta.contentBlocks[0].text = "Hello, world"
         #expect(base != textDelta)
 
         var inputChanged = base
-        inputChanged.contentBlocks?[1].input = ["path": AnyCodable("b.txt")]
+        inputChanged.contentBlocks[1].input = ["path": AnyCodable("b.txt")]
         #expect(base != inputChanged)
 
         var appended = base
-        appended.contentBlocks?.append(ContentBlock(id: "b3", type: .text, text: "more"))
+        appended.contentBlocks.append(ContentBlock(id: "b3", type: .text, text: "more"))
         #expect(base != appended)
 
         var finished = base

@@ -175,6 +175,13 @@ extension AppCoordinator {
         guard case .available(let records) = dependencies.syncedRegistry.listBackends() else { return nil }
         let windowID = windowConnectionID
         let outcome = dependencies.persistence.mergeSyncedBackends(records: records)
+        savedConnectionsUndecodable = outcome.registryUndecodable
+        if outcome.registryUndecodable {
+            AppLog.app.error(
+                "[AppCoordinator] Saved connections could not be decoded; synced merge skipped to preserve them"
+            )
+            return outcome
+        }
         // Tombstones close windows on the removed backends; a re-added
         // record (same id resurrected from another device) clears its mark.
         dependencies.sessionRegistry.markBackendsRemoved(outcome.removedIds.map(BackendID.init))

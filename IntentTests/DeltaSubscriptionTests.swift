@@ -78,10 +78,10 @@ struct DeltaSubscriptionTests {
         #expect(messages.first?.id == "0190a1b2-user")
         #expect(messages.first?.role == .user)
         #expect(messages.first?.timestamp == "2026-06-27T01:00:00.000Z")
-        #expect(messages.first?.contentBlocks?.count == 1)
-        #expect(messages.first?.contentBlocks?.first?.id == "0190a1b2-user:0")
-        #expect(messages.first?.contentBlocks?.first?.type == .text)
-        #expect(messages.first?.contentBlocks?.first?.resolvedText == "Run the tests")
+        #expect(messages.first?.contentBlocks.count == 1)
+        #expect(messages.first?.contentBlocks.first?.id == "0190a1b2-user:0")
+        #expect(messages.first?.contentBlocks.first?.type == .text)
+        #expect(messages.first?.contentBlocks.first?.resolvedText == "Run the tests")
     }
 
     @Test func parseObjectSnapshotDropsUndecodableRows() {
@@ -263,7 +263,7 @@ struct DeltaSubscriptionTests {
         #expect(chatBlocks[0].block.id == "0190a200-asst:1")
         #expect(chatBlocks[0].block.type == .toolUse)
         #expect(chatBlocks[0].block.resolvedName == "view")
-        #expect(chatBlocks[0].block.input?["path"]?.stringValue == "a.txt")
+        #expect(chatBlocks[0].block.input["path"]?.stringValue == "a.txt")
         #expect(chatBlocks[0].timestamp == nil)
         #expect(chatBlocks[0].streamingComplete == false)
         #expect(chatBlocks[1].block.id == "0190a200-asst:0")

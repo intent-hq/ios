@@ -102,7 +102,8 @@ extension ConversationViewModelTests {
             workspaceId: "test-ws",
             agentName: "Test",
             connection: ConnectionManager.shared,
-            uploadService: service
+            uploadService: service,
+            optionsStore: CreationOptionsStore()
         )
         #expect(viewModel.uploadService === service)
     }

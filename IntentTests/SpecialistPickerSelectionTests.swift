@@ -210,10 +210,10 @@ struct SpecialistPickerSelectionTests {
 
     @Test func createDisabledWhileLoadingCreatingOrWithoutSpecialist() {
         let providers = [ProviderInfo(id: "auggie", authenticated: true)]
-        #expect(isCreateDisabled(hasSpecialist: false, providers: providers))
-        #expect(isCreateDisabled(isCreating: true, providers: providers))
-        #expect(isCreateDisabled(isLoadingProviders: true, providers: providers))
-        #expect(isCreateDisabled(isLoadingModels: true, providers: providers))
+        #expect(isCreateDisabled(providers: providers, hasSpecialist: false))
+        #expect(isCreateDisabled(providers: providers, isCreating: true))
+        #expect(isCreateDisabled(providers: providers, isLoadingProviders: true))
+        #expect(isCreateDisabled(providers: providers, isLoadingModels: true))
     }
 
     // MARK: - daemonDefaultLabel (resolvedModel/resolvedProvider preview)

@@ -262,7 +262,10 @@ extension ManualTokenEntryViewTests {
         #expect(status == errSecSuccess)
         let dicts = try #require(items as? [[String: Any]])
         let first = try #require(dicts.first)
-        return try #require(first[kSecImportItemIdentity as String] as? SecIdentity)
+        let identity = try #require(first[kSecImportItemIdentity as String])
+        // CoreFoundation identities cannot be conditionally cast under Swift 6.4.
+        // swiftlint:disable:next force_cast
+        return identity as! SecIdentity
     }
 
     /// Starts a loopback TLS listener serving the fixture identity and waits

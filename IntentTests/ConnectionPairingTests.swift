@@ -109,9 +109,9 @@ struct ConnectionPairingTests {
     /// A pairing over an undecodable saved-connections blob must not replace
     /// it with a one-entry list; it fails with a distinct, recoverable error
     /// and leaves the blob and active pointer alone (intent-hq/ios#265).
-    @Test @MainActor func pairingOverUndecodableRegistryPreservesBlob() async {
+    @Test @MainActor func pairingOverUndecodableRegistryPreservesBlob() async throws {
         let storage = InMemoryKeychainStorage()
-        let setup = makePersistence(storage: storage)
+        let setup = try makePersistence(storage: storage)
         defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
         let manager = setup.manager
         let undecodable = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)

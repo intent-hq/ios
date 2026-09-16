@@ -6,7 +6,7 @@ import UIKit
 private let kTestAtBottomThreshold: CGFloat = 50
 
 extension ConversationTranscriptScrollPolicyTests {
-    private func executeFollow(
+    func executeFollow(
         forced: Bool = false,
         userIsScrolledAway: Bool = false,
         distanceToBottom: CGFloat? = 20,
@@ -154,7 +154,7 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(latch(distanceToBottom: 0, isInteracting: true))
         #expect(!latch(distanceToBottom: 0, isInteracting: false))
         #expect(!latch(distanceToBottom: 50, isInteracting: false))
-        #expect(!latch(current: false, distanceToBottom: 300, isInteracting: true))
+        #expect(!latch(distanceToBottom: 300, isInteracting: true, current: false))
         #expect(honorForced(takenOver: false))
     }
 

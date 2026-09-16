@@ -8,6 +8,21 @@ enum ConnectionState: Equatable {
     case reconnecting(attempt: Int)
 }
 
+nonisolated enum InboundFrame: Sendable {
+    case error(id: Int, error: NSError)
+    case notification(method: String, params: InboundJSONValue)
+    case response(id: Int, result: InboundJSONValue)
+    case subscriptionPush(SubscriptionPush)
+
+    var label: String {
+        switch self {
+        case let .response(id, _), let .error(id, _): "id=\(id)"
+        case .subscriptionPush: "method=subscription.push"
+        case let .notification(method, _): "method=\(method)"
+        }
+    }
+}
+
 /// How a store reacts to one bus event type (or one discriminating payload
 /// value of it). Each store exposes a pure `classify(type:data:)` returning
 /// `nil` for anything its tables do not name, so the coverage test in

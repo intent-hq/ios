@@ -29,6 +29,21 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         case delta
     }
 
+    enum Payload {
+        case collectionSnapshot([[String: Any]])
+        case conversationSnapshot(rows: [[String: Any]], metadata: [String: Any])
+        case delta(DeltaPayload)
+    }
+
+    var payload: Payload {
+        if let delta { return .delta(delta) }
+        let rows = snapshot ?? []
+        if let snapshotMeta {
+            return .conversationSnapshot(rows: rows, metadata: snapshotMeta)
+        }
+        return .collectionSnapshot(rows)
+    }
+
     /// One chat-channel block delta entity (PROTOCOL §7.1) with its `block`
     /// decoded into a `ContentBlock`.
     struct ChatBlockEntity {
@@ -107,6 +122,43 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         self.delta = delta
         self.snapshotMeta = snapshotMeta
         self.snapshotMessages = snapshotMessages
+    }
+
+    init(subscriptionId: String, seq: Int, snapshot: [[String: Any]]) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .snapshot,
+            seq: seq,
+            snapshot: snapshot,
+            delta: nil
+        )
+    }
+
+    init(
+        subscriptionId: String,
+        seq: Int,
+        conversationSnapshot: [[String: Any]],
+        metadata: [String: Any]
+    ) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .snapshot,
+            seq: seq,
+            snapshot: conversationSnapshot,
+            delta: nil,
+            snapshotMeta: metadata,
+            snapshotMessages: conversationSnapshot.compactMap { ConversationMessage.parseMessage($0) }
+        )
+    }
+
+    init(subscriptionId: String, seq: Int, delta: DeltaPayload) {
+        self.init(
+            subscriptionId: subscriptionId,
+            kind: .delta,
+            seq: seq,
+            snapshot: nil,
+            delta: delta
+        )
     }
 
     /// Parse a daemon notification into a SubscriptionPush, or nil if it isn't one.

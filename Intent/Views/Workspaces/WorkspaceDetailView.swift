@@ -104,6 +104,18 @@ struct WorkspaceDetailView: View {
         .onChange(of: agentStore.agents) { _, newAgents in
             viewModel.agents = newAgents
         }
+        .onChange(of: agentStore.hasLoaded) { _, hasLoaded in
+            guard hasLoaded else { return }
+            viewModel.agents = agentStore.agents
+            guard selectedTab == 0 else {
+                coordinator.cancelPendingAutoOpen(workspaceId: workspaceId)
+                return
+            }
+            coordinator.autoOpenSoleAgentIfArmed(
+                workspaceId: workspaceId,
+                foregroundAgents: viewModel.foregroundAgents
+            )
+        }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
             if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
@@ -201,11 +213,26 @@ private extension WorkspaceDetailView {
     var detailContent: some View {
         VStack(spacing: 0) {
             repositoryName
+            statusImage
             taskProgress
             workspacePicker
             tabContent
         }
     }
+
+    @ViewBuilder
+    var statusImage: some View {
+        if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
+            WorkspaceStatusImageView(
+                workspaceId: workspaceId,
+                assetId: statusImageAssetId,
+                style: .detail
+            )
+            .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+            .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
+        }
+    }
+
     @ViewBuilder
     var repositoryName: some View {
         if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {

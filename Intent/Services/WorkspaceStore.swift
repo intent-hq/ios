@@ -4,15 +4,6 @@ import Observation
 
 @MainActor
 @Observable class WorkspaceStore {
-    private static let agentLifecycleEventTypes: Set<String> = [
-        "agent:started", "agent:completed", "agent:failed", "agent:created",
-        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed"
-    ]
-    private static let legacyWorkspaceRefreshEventTypes: Set<String> = [
-        "workspace:activity-changed", "workspace:displayStatus-changed",
-        "workspace:attention-changed", "workspace:updated", "workspace:deleted"
-    ]
-
     static let shared = WorkspaceStore()
 
     var workspaces: [Workspace] = []
@@ -182,16 +173,33 @@ extension WorkspaceStore {
         guard let eventType = event["type"] as? String else { return }
         AppLog.workspace.debug("[WorkspaceStore] Received event: \(eventType)")
 
-        // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
-        // lastActivity is never bumped locally: intentd derives it and pushes
-        // workspace:updated { changes.lastActivity } at turn boundaries.
-        if Self.agentLifecycleEventTypes.contains(eventType) {
-            refreshIfUsingLegacyEvents()
-        } else if eventType.hasPrefix("workspace:") {
-            handleWorkspaceEvent(eventType, event: event)
-        } else if eventType.hasPrefix("agent:") {
-            // Unknown agent event — log and ignore (all known types handled above)
-            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(eventType)")
+        let eventWorkspaceId = event["workspaceId"] as? String
+        let data = event["data"] as? [String: Any]
+
+        // In-place patches apply in every mode (live or not) and before the
+        // refetch decision, since they are the complete application of the event.
+        if eventType == "workspace:updated",
+           let changes = data?["changes"] as? [String: Any],
+           let lastActivity = changes["lastActivity"] as? String,
+           let workspaceId = eventWorkspaceId {
+            updateLastActivity(workspaceId: workspaceId, lastActivity: lastActivity)
+        }
+        if eventType == "workspace:waiting-changed",
+           let data,
+           let waiting = data["waiting"] as? Bool,
+           let workspaceId = (data["workspaceId"] as? String) ?? eventWorkspaceId {
+            updateWaiting(workspaceId: workspaceId, waiting: waiting)
+        }
+
+        switch Self.classify(type: eventType, data: data) {
+        case .refetch:
+            if !workspaceLive {
+                Task { await fetchAll() }
+            }
+        case .patchInPlace, .ignore:
+            break
+        case nil:
+            AppLog.workspace.debug("[WorkspaceStore] Ignoring unclassified event: \(eventType)")
         }
     }
 
@@ -201,37 +209,77 @@ extension WorkspaceStore {
         (dictionary["event"] as? [String: Any]) ?? dictionary
     }
 
-    private func handleWorkspaceEvent(_ eventType: String, event: [String: Any]) {
-        let data = event["data"] as? [String: Any] ?? [:]
-        let envelopeWorkspaceId = event["workspaceId"] as? String
+    // MARK: - Event classification
 
-        // workspace:updated carrying lastActivity is an intentd-derived value —
-        // patch the row in place as received.
-        if eventType == "workspace:updated",
-           let changes = data["changes"] as? [String: Any],
-           let lastActivity = changes["lastActivity"] as? String,
-           let workspaceId = envelopeWorkspaceId {
-            updateLastActivity(workspaceId: workspaceId, lastActivity: lastActivity)
+    nonisolated static let handledChannels = ["workspace:", "agent:"]
+
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "workspace:created", "workspace:deleted",
+        "workspace:activity-changed", "workspace:displayStatus-changed",
+        "workspace:attention-changed",
+        "agent:started", "agent:completed", "agent:failed", "agent:created",
+        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed"
+    ]
+
+    nonisolated static let patchInPlaceEventTypes: Set<String> = [
+        "workspace:waiting-changed"
+    ]
+
+    nonisolated static let ignoredEventTypes: Set<String> = [
+        "workspace:delete-scheduled", "workspace:delete-cancelled",
+        "workspace:opened", "workspace:closed", "workspace:activity",
+        "workspace:setup:started", "workspace:setup:completed",
+        "workspace:transfer:failed", "workspace:transfer:progress",
+        "workspace:transfer:ready", "workspace:tokenUsage-changed",
+        "workspace:context-changed",
+        "agent:attention-requested", "agent:delete-cancelled",
+        "agent:delete-scheduled", "agent:delivery-confirmed",
+        "agent:event-delivery-failed", "agent:event-delivery-timeout",
+        "agent:last-message", "agent:message", "agent:message:delivery-failed",
+        "agent:message:received", "agent:message:sent",
+        "agent:permission:request", "agent:permission:resolved",
+        "agent:process:evicted", "agent:process:queued", "agent:process:resumed",
+        "agent:queue:processing", "agent:queue:processing-cancelled",
+        "agent:queue:stale-message", "agent:queue:updated",
+        "agent:restored", "agent:retired", "agent:session-stats-changed",
+        "agent:stream:activity", "agent:stream:end", "agent:stream:start",
+        "agent:stream:status", "agent:subscribed", "agent:subscriptions-changed",
+        "agent:subscriptions-restored", "agent:tool:call", "agent:unsubscribed",
+        "agent:updated", "agent:user-message:sent", "agent:woken-by-subscription"
+    ]
+
+    nonisolated static let workspaceUpdatedChangeKeyClassification: [String: EventClassification] = [
+        "lastActivity": .patchInPlace,
+        "activePullRequest": .refetch, "archived": .refetch, "archivedAt": .refetch,
+        "attention": .refetch, "autoCommitEnabled": .refetch, "autoUnarchive": .refetch,
+        "baseCommitSha": .refetch, "baseRef": .refetch, "branch": .refetch,
+        "browserClientId": .refetch, "defaultModel": .refetch, "isRemote": .refetch,
+        "mcpServerToggled": .refetch, "path": .refetch, "prNumber": .refetch,
+        "prStatus": .refetch, "prUrl": .refetch, "pullRequests": .refetch,
+        "repositoryName": .refetch, "repositoryOwner": .refetch,
+        "repositoryPath": .refetch, "scope": .refetch, "setupScript": .refetch,
+        "skipIsolation": .refetch, "status": .refetch, "statusImageAssetId": .refetch,
+        "statusMessage": .refetch, "tags": .refetch, "title": .refetch,
+        "worktreePath": .refetch
+    ]
+
+    nonisolated static func classify(
+        type: String,
+        data: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
+    ) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if patchInPlaceEventTypes.contains(type) { return .patchInPlace }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        if type == "workspace:updated" {
+            guard let changes = data?["changes"] as? [String: Any], !changes.isEmpty else {
+                return .refetch
+            }
+            let allPatched = changes.keys.allSatisfy { key in
+                workspaceUpdatedChangeKeyClassification[key] == .patchInPlace
+            }
+            return allPatched ? .patchInPlace : .refetch
         }
-
-        // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
-        // transition-only, protocol 6.17) — patch the row in place, no refetch.
-        if eventType == "workspace:waiting-changed",
-           let waiting = data["waiting"] as? Bool,
-           let workspaceId = (data["workspaceId"] as? String) ?? envelopeWorkspaceId {
-            updateWaiting(workspaceId: workspaceId, waiting: waiting)
-        }
-
-        if Self.legacyWorkspaceRefreshEventTypes.contains(eventType) {
-            refreshIfUsingLegacyEvents()
-        }
-    }
-
-    /// Live subscription deltas already carry these changes, so event-driven
-    /// list refreshes are only needed while the store is in legacy mode.
-    private func refreshIfUsingLegacyEvents() {
-        guard !workspaceLive else { return }
-        Task { await fetchAll() }
+        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {

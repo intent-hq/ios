@@ -30,7 +30,7 @@ extension WorkspaceRowPresentationTests {
         #expect(workspace.title.hasSuffix("important metadata"))
         #expect(workspace.repositoryName?.hasSuffix("layout-regressions") == true)
         #expect(workspace.lastActivity == "2026-09-09T15:42:17Z")
-        #expect(workspace.pullRequests?.count == 2)
+        #expect(workspace.pullRequests.count == 2)
         #expect(indicator.pill?.number == 123_456_789)
         #expect(
             WorkspaceStatusIconView.accessibilitySummary(for: workspace)

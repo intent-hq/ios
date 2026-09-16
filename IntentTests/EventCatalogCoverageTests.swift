@@ -233,8 +233,7 @@ extension EventCatalogCoverageTests {
         )
         #expect(
             expectedValues == goldenValues,
-            "\(store.name) expectations for \(type) must list exactly the catalog's discriminator values; "
-                + "extra: \(expectedValues.subtracting(goldenValues)), missing: \(goldenValues.subtracting(expectedValues))"
+            "\(store.name) expectations for \(type) must list exactly the catalog's discriminator values; extra: \(expectedValues.subtracting(goldenValues)), missing: \(goldenValues.subtracting(expectedValues))"
         )
         let coverage = (named: named, expectation: expectation)
         for value in discriminator.values {

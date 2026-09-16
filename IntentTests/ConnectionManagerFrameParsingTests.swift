@@ -69,6 +69,18 @@ extension ConnectionManagerTests {
         #expect(error.localizedDescription == "unknown agent id: gone (-32602)")
     }
 
+    @Test func parseInboundFrameEmptyDataMessageUsesTopLevelMessage() {
+        let frame = ConnectionManager.parseInboundFrame("""
+        {"jsonrpc":"2.0","id":10,"error":{"code":-32602,"message":"Invalid params",\
+        "data":{"message":""}}}
+        """)
+        guard case let .error(_, error)? = frame else {
+            Issue.record("Expected .error, got \(String(describing: frame))")
+            return
+        }
+        #expect(error.localizedDescription == "Invalid params (-32602)")
+    }
+
     @Test func parseInboundFrameErrorWithoutCodeUsesFallbackAndPlainDescription() {
         let frame = ConnectionManager.parseInboundFrame("""
         {"jsonrpc":"2.0","id":11,"error":{"message":"boom"}}
@@ -164,7 +176,7 @@ extension ConnectionManagerTests {
         }
         let messages = try #require(push.snapshotMessages)
         #expect(messages.map(\.id) == ["m-1"])
-        #expect(messages.first?.contentBlocks?.first?.resolvedText == "Run the tests")
+        #expect(messages.first?.contentBlocks.first?.resolvedText == "Run the tests")
         #expect(push.snapshotMeta?["agentId"] as? String == "a")
     }
 

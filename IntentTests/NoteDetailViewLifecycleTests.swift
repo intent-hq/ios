@@ -135,7 +135,7 @@ final class NoteDetailViewLifecycleTests {
                 noteTitle: "Note",
                 session: session
             )
-            observeStore(view.noteStore)
+            observeStore(view.noteStoreForTesting)
 
             let controller = UIHostingController(rootView: AnyView(
                 NavigationStack { view }

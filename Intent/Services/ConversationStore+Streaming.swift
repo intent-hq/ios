@@ -279,10 +279,11 @@ extension ConversationStore {
     }
 
     private func handleQueueUpdated(_ data: [String: Any]) {
-        if let queueItems = data["queue"] as? [[String: Any]],
-           let jsonData = try? JSONSerialization.data(withJSONObject: queueItems),
-           let parsed = try? JSONDecoder().decode([QueuedMessage].self, from: jsonData) {
-            queuedMessages = parsed
+        if let decoded = ConversationCommands.decodeQueueSnapshot(
+            data["queue"],
+            source: "agent:queue:updated"
+        ) {
+            queuedMessages = decoded
             return
         }
         if let agentId {

@@ -249,11 +249,11 @@ extension CreateWorkspaceParamsTests {
             catalogCached: false,
             settled: false
         )
-        #expect(isCreateDisabled(isLoadingProviders: catalogLoading, providers: [makeProvider()]))
+        #expect(isCreateDisabled(providers: [makeProvider()], isLoadingProviders: catalogLoading))
         let catalogWarm = CreateWorkspaceView.showsModelCatalogLoading(
             catalogCached: true,
             settled: false
         )
-        #expect(!isCreateDisabled(isLoadingProviders: catalogWarm, providers: [makeProvider()]))
+        #expect(!isCreateDisabled(providers: [makeProvider()], isLoadingProviders: catalogWarm))
     }
 }

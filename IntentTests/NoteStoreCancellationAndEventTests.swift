@@ -222,7 +222,7 @@ extension NoteStoreIntegrationTests {
     @Test func storeDeallocatesAfterNoteChangesConsumerIsCancelled() async throws {
         let fake = FakeConnectionManager()
         var store: NoteStore? = NoteStore(connectionManager: fake)
-        weak var weakStore = store
+        weak let weakStore = store
         fake.responseMap["note.list"] = ["notes": []]
         store?.startObservingEvents(workspaceId: "ws-1")
         #expect(fake.eventHandlerCount == 1)

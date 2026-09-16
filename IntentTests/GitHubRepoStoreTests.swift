@@ -4,6 +4,13 @@ import Testing
 
 @MainActor
 struct GitHubRepoStoreTests {
+    func repoResult(_ outcome: GitHubRepoSearchOutcome) -> (repos: [GitHubRepo], failed: Bool) {
+        switch outcome {
+        case .failed: ([], true)
+        case .results(let repos): (repos, false)
+        }
+    }
+
     func makeRepoDict(
         owner: String = "intent-hq",
         name: String = "intentd",
@@ -212,34 +219,39 @@ struct GitHubRepoStoreTests {
         #expect(store.lastError == "boom")
         #expect(store.isLoading == false)
     }
+}
 
+extension GitHubRepoStoreTests {
     // MARK: - searchRepos
 
     @Test func searchReposSendsRewrittenQuery() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict()]]
-        let results = await store.searchRepos(query: "intent-hq/intentd")
+        let result = repoResult(await store.searchRepos(query: "intent-hq/intentd"))
         let params = fake.paramsForMethod("github.repos.search")
         #expect(params.count == 1)
         #expect(params[0]["query"] as? String == "intentd user:intent-hq")
-        #expect(results?.count == 1)
+        #expect(result.repos.count == 1)
+        #expect(!result.failed)
     }
 
     @Test func searchReposSendsBareQueryVerbatim() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
         fake.responseMap["github.repos.search"] = ["repos": []]
-        let results = await store.searchRepos(query: "intentd")
+        let result = repoResult(await store.searchRepos(query: "intentd"))
         #expect(fake.paramsForMethod("github.repos.search")[0]["query"] as? String == "intentd")
-        #expect(results?.isEmpty == true)
+        #expect(result.repos.isEmpty)
+        #expect(!result.failed)
     }
 
     @Test func searchReposEmptyQueryReturnsEmptyWithoutRequest() async {
         let fake = FakeConnectionManager()
         let store = GitHubRepoStore(connectionManager: fake)
-        let results = await store.searchRepos(query: "   ")
-        #expect(results?.isEmpty == true)
+        let result = repoResult(await store.searchRepos(query: "   "))
+        #expect(result.repos.isEmpty)
+        #expect(!result.failed)
         #expect(fake.didCallMethod("github.repos.search") == false)
     }
 
@@ -252,11 +264,12 @@ struct GitHubRepoStoreTests {
         let cachedRecents = store.recentRepos
         let cachedOwn = store.ownRepos
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "alpha")]]
-        let first = await store.searchRepos(query: "alpha")
+        let first = repoResult(await store.searchRepos(query: "alpha"))
         fake.responseMap["github.repos.search"] = ["repos": [makeRepoDict(name: "beta")]]
-        let second = await store.searchRepos(query: "beta")
-        #expect(first?.map(\.name) == ["alpha"])
-        #expect(second?.map(\.name) == ["beta"])
+        let second = repoResult(await store.searchRepos(query: "beta"))
+        #expect(first.repos.map(\.name) == ["alpha"])
+        #expect(second.repos.map(\.name) == ["beta"])
+        #expect(!first.failed && !second.failed)
         #expect(store.recentRepos == cachedRecents)
         #expect(store.ownRepos == cachedOwn)
     }
@@ -269,8 +282,9 @@ struct GitHubRepoStoreTests {
             code: -1,
             userInfo: [NSLocalizedDescriptionKey: "search down"]
         )
-        let results = await store.searchRepos(query: "intentd")
-        #expect(results == nil)
+        let result = repoResult(await store.searchRepos(query: "intentd"))
+        #expect(result.failed)
+        #expect(result.repos.isEmpty)
         #expect(store.lastError == "search down")
         #expect(store.isLoading == false)
     }

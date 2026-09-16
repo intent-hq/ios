@@ -32,6 +32,18 @@ struct NoteDetailView: View {
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
     }
 
+    var agentStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(agentStore.connectionManager)
+    }
+
+    var noteStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(noteStore.connectionManager)
+    }
+
+    var noteStoreForTesting: NoteStore {
+        noteStore
+    }
+
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()

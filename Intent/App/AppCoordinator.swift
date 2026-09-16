@@ -53,6 +53,8 @@ class AppCoordinator {
     /// connections (e.g. after logging off the active connection while others
     /// are still saved). The Connect to… screen reads this flag.
     var pairingShowsSavedConnections = false
+    /// True when the saved-connections store exists but could not be decoded.
+    var savedConnectionsUndecodable = false
     /// Deep-link pairing awaiting user confirmation; drives the
     /// DeepLinkPairingView sheet in RootView.
     var pendingDeepLinkPairing: DeepLinkPairingRequest?
@@ -80,6 +82,9 @@ class AppCoordinator {
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var certMismatchObserver: AnyCancellable?
     @ObservationIgnored private var reconnectLoadingObservationID: UUID?
+    /// Workspace entered from the list whose agent list has not yet decided
+    /// whether to auto-open its sole top-level agent.
+    @ObservationIgnored var pendingAutoOpenWorkspaceId: String?
     /// Intentionally tracked so mutating it consumes the current one-shot
     /// workspace-loading registration before that registration is abandoned.
     private var reconnectLoadingObservationGeneration = 0

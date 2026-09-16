@@ -189,19 +189,27 @@ extension ConnectionManager {
         let currentSocket = socket
         messagePumpTask?.cancel()
         guard let currentSocket else { return }
-        messagePumpTask = Task { [weak self] in
+        messagePumpTask = Task.detached { [weak self] in
             do {
                 while !Task.isCancelled {
                     let message = try await currentSocket.receive()
-                    guard let self, socket === currentSocket else {
-                        AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
-                        return
-                    }
+                    guard let self else { return }
                     switch message {
                     case .string(let text):
                         let preview = String(text.prefix(Constants.Connection.logPreviewCharacterLimit))
                         AppLog.connection.debug("[ConnectionManager] Received text: \(preview)...")
-                        handleTextMessage(text)
+                        let parseStart = CFAbsoluteTimeGetCurrent()
+                        let frame = Self.parseInboundFrame(text)
+                        let parseEnd = CFAbsoluteTimeGetCurrent()
+                        guard let frame else { continue }
+                        let accepted = await acceptInboundFrame(
+                            frame,
+                            byteCount: text.utf8.count,
+                            parseElapsed: parseEnd - parseStart,
+                            parseEnd: parseEnd,
+                            from: currentSocket
+                        )
+                        if !accepted { return }
                     case .data(let data):
                         AppLog.connection.debug("[ConnectionManager] Received binary: \(data.count) bytes")
                     @unknown default:
@@ -209,11 +217,37 @@ extension ConnectionManager {
                     }
                 }
             } catch {
-                guard !Task.isCancelled, let self, socket === currentSocket else { return }
-                AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
-                handleDisconnection()
+                guard !Task.isCancelled, let self else { return }
+                await handleSocketFailure(error, from: currentSocket)
             }
         }
+    }
+
+    func acceptInboundFrame(
+        _ frame: InboundFrame,
+        byteCount: Int,
+        parseElapsed: TimeInterval,
+        parseEnd: CFAbsoluteTime,
+        from origin: WebSocketConnection
+    ) -> Bool {
+        let waitElapsed = CFAbsoluteTimeGetCurrent() - parseEnd
+        guard socket === origin else {
+            AppLog.connection.debug("[ConnectionManager] Ignoring message from stale socket")
+            return false
+        }
+        dispatchInboundFrame(
+            frame,
+            byteCount: byteCount,
+            parseElapsed: parseElapsed,
+            waitElapsed: waitElapsed
+        )
+        return true
+    }
+
+    func handleSocketFailure(_ error: any Error, from origin: WebSocketConnection) {
+        guard socket === origin else { return }
+        AppLog.connection.debug("[ConnectionManager] Socket error: \(error.localizedDescription)")
+        handleDisconnection()
     }
 
     func handleDisconnection() {
