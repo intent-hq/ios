@@ -29,6 +29,29 @@ enum PrMonitorFlushMode {
 /// `prMonitor:*` prefix filter.
 @MainActor
 @Observable class MonitoredPrStore {
+    private enum MonitorEventKind {
+        case cancelled
+        case changed
+        case completed
+        case emitted
+        case registered
+
+        init?(eventType: String) {
+            switch eventType {
+            case "prMonitor:cancelled": self = .cancelled
+            case "prMonitor:changed": self = .changed
+            case "prMonitor:completed": self = .completed
+            case "prMonitor:emitted": self = .emitted
+            case "prMonitor:registered": self = .registered
+            default: return nil
+            }
+        }
+
+        var needsRefetchWhenMissing: Bool {
+            self != .cancelled
+        }
+    }
+
     var monitors: [MonitoredPr] = []
     var isLoading = false
 
@@ -201,12 +224,13 @@ enum PrMonitorFlushMode {
         eventType: String,
         data: [String: Any]
     ) -> FoldResult {
-        guard let monitorId = data["monitorId"] as? String else {
+        guard let monitorId = data["monitorId"] as? String,
+              let eventKind = MonitorEventKind(eventType: eventType) else {
             return FoldResult(monitors: monitors, needsRefetch: false)
         }
 
         // Cancelled rows are excluded from `prMonitor.list` — drop them.
-        if eventType == "prMonitor:cancelled" {
+        if eventKind == .cancelled {
             return FoldResult(
                 monitors: monitors.filter { $0.monitorId != monitorId },
                 needsRefetch: false
@@ -214,20 +238,17 @@ enum PrMonitorFlushMode {
         }
 
         guard let index = monitors.firstIndex(where: { $0.monitorId == monitorId }) else {
-            switch eventType {
-            case "prMonitor:registered", "prMonitor:changed",
-                 "prMonitor:emitted", "prMonitor:completed":
-                return FoldResult(monitors: monitors, needsRefetch: true)
-            default:
-                return FoldResult(monitors: monitors, needsRefetch: false)
-            }
+            return FoldResult(
+                monitors: monitors,
+                needsRefetch: eventKind.needsRefetchWhenMissing
+            )
         }
 
         let payloadState = (data["state"] as? String).flatMap(MonitoredPr.State.init)
 
         var next = monitors
-        switch eventType {
-        case "prMonitor:registered":
+        switch eventKind {
+        case .registered:
             // Fires on registration and on an idempotent re-arm; a re-arm
             // refreshes the monitor's baseline server-side, so clear the
             // pre-re-arm pending state immediately and refetch to converge
@@ -237,26 +258,26 @@ enum PrMonitorFlushMode {
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
             return FoldResult(monitors: next, needsRefetch: true)
-        case "prMonitor:changed":
+        case .changed:
             next[index].state = payloadState ?? next[index].state
             if let changes = data["changes"] as? [String] {
                 next[index].pendingChanges = changes
                 next[index].hasPendingChanges = !changes.isEmpty
             }
-        case "prMonitor:emitted":
+        case .emitted:
             // The consolidated wake was delivered — pending changes cleared.
             next[index].state = payloadState ?? next[index].state
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
-        case "prMonitor:completed":
+        case .completed:
             // PR merged/closed — the row is retained (completed monitors
             // stay visible) with the immediate final wake delivered.
             next[index].state = payloadState ?? .completed
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
-        default:
+        case .cancelled:
             return FoldResult(monitors: monitors, needsRefetch: false)
         }
         return FoldResult(monitors: next, needsRefetch: false)

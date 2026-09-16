@@ -8,6 +8,21 @@ enum ViewMode: String, CaseIterable {
 }
 
 enum WorkspaceDisplayStatus: String, CaseIterable {
+    private static let wireStatuses: [String: Self] = [
+        "failed": .failed,
+        "blocked": .blocked,
+        "needs_attention": .needsAttention,
+        "idle": .idle,
+        "not_started": .notStarted,
+        "in_progress": .inProgress,
+        "unread": .idle,
+        "complete": .complete,
+        "pr_ready": .prReady,
+        "pr_open": .prOpen,
+        "pr_queued": .prQueued,
+        "pr_merged": .prMerged
+    ]
+
     private enum SortOrder {
         static let failed = 0
         static let blocked = 1
@@ -50,21 +65,8 @@ enum WorkspaceDisplayStatus: String, CaseIterable {
     /// is now the workspace `attention` flag rendered as a dot overlay, not
     /// a first-class status.
     init?(wireValue: String) {
-        switch wireValue {
-        case "failed": self = .failed
-        case "blocked": self = .blocked
-        case "needs_attention": self = .needsAttention
-        case "idle": self = .idle
-        case "not_started": self = .notStarted
-        case "in_progress": self = .inProgress
-        case "unread": self = .idle
-        case "complete": self = .complete
-        case "pr_ready": self = .prReady
-        case "pr_open": self = .prOpen
-        case "pr_queued": self = .prQueued
-        case "pr_merged": self = .prMerged
-        default: return nil
-        }
+        guard let status = Self.wireStatuses[wireValue] else { return nil }
+        self = status
     }
 
     var color: Color {

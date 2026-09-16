@@ -36,23 +36,11 @@ class FakeConnectionManager: SessionConnectionManaging {
     var tunnelDialer: any TunnelDialing = UnavailableTunnelDialer()
 
     /// Recorded `connect` calls, and the error to throw instead of connecting.
-    var connectLog: [(
-        hosts: [String],
-        port: Int,
-        token: String,
-        certFingerprint: String?,
-        tcAddress: String?
-    )] = []
+    var connectLog: [FakeConnectRecord] = []
     var connectError: Error?
 
     /// Recorded `updateCachedCredentials` calls.
-    var updateCachedCredentialsLog: [(
-        hosts: [String],
-        port: Int,
-        token: String,
-        certFingerprint: String?,
-        tcAddress: String?
-    )] = []
+    var updateCachedCredentialsLog: [FakeCredentialUpdateRecord] = []
 
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
@@ -64,7 +52,13 @@ class FakeConnectionManager: SessionConnectionManaging {
         certFingerprint: String?,
         tcAddress: String?
     ) async throws {
-        connectLog.append((hosts, port, token, certFingerprint, tcAddress))
+        connectLog.append(FakeConnectRecord(
+            hosts: hosts,
+            port: port,
+            token: token,
+            certFingerprint: certFingerprint,
+            tcAddress: tcAddress
+        ))
         if let connectError { throw connectError }
         connectionState = .connected
     }
@@ -76,7 +70,13 @@ class FakeConnectionManager: SessionConnectionManaging {
         certFingerprint: String?,
         tcAddress: String?
     ) {
-        updateCachedCredentialsLog.append((hosts, port, token, certFingerprint, tcAddress))
+        updateCachedCredentialsLog.append(FakeCredentialUpdateRecord(
+            hosts: hosts,
+            port: port,
+            token: token,
+            certFingerprint: certFingerprint,
+            tcAddress: tcAddress
+        ))
     }
 
     func refreshHostRoutes() async {
@@ -107,8 +107,8 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// should fail.
     var errorQueueMap: [String: [Error]] = [:]
 
-    /// Recorded request log: [(method, params, timestamp)]
-    var requestLog: [(method: String, params: [String: Any], timestamp: Date)] = []
+    /// Recorded requests in invocation order.
+    var requestLog: [FakeRequestRecord] = []
 
     /// Optional per-method artificial delay (nanoseconds) applied before responding,
     /// for tests that need to interleave work while a request is in flight.
@@ -135,7 +135,11 @@ class FakeConnectionManager: SessionConnectionManaging {
         params: [String: Any] = [:],
         timeout _: TimeInterval = ConnectionManager.defaultRequestTimeout
     ) async throws -> Any {
-        requestLog.append((method, params, Date()))
+        requestLog.append(FakeRequestRecord(
+            method: method,
+            params: params,
+            timestamp: Date()
+        ))
 
         if pendingMethods.contains(method) {
             let requestId = UUID()

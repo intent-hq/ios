@@ -188,12 +188,22 @@ private extension UIContentSizeCategory {
         case .xLarge: self = .extraLarge
         case .xxLarge: self = .extraExtraLarge
         case .xxxLarge: self = .extraExtraExtraLarge
-        case .accessibility1: self = .accessibilityMedium
-        case .accessibility2: self = .accessibilityLarge
-        case .accessibility3: self = .accessibilityExtraLarge
-        case .accessibility4: self = .accessibilityExtraExtraLarge
-        case .accessibility5: self = .accessibilityExtraExtraExtraLarge
+        case .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5:
+            self = Self.accessibilityCategory(for: size)
         @unknown default: self = .large
+        }
+    }
+
+    nonisolated private static func accessibilityCategory(
+        for size: DynamicTypeSize
+    ) -> UIContentSizeCategory {
+        switch size {
+        case .accessibility1: return .accessibilityMedium
+        case .accessibility2: return .accessibilityLarge
+        case .accessibility3: return .accessibilityExtraLarge
+        case .accessibility4: return .accessibilityExtraExtraLarge
+        case .accessibility5: return .accessibilityExtraExtraExtraLarge
+        default: return .large
         }
     }
 }

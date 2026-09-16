@@ -50,6 +50,20 @@ extension MonitoredPrStoreTests {
         #expect(result.needsRefetch == false)
     }
 
+    @Test func foldChangedWithoutChangesPreservesPendingState() throws {
+        let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
+        let result = MonitoredPrStore.foldMonitorEvent(
+            monitors: [monitor],
+            eventType: "prMonitor:changed",
+            data: makeEventData()
+        )
+
+        #expect(result.monitors[0].pendingChanges == monitor.pendingChanges)
+        #expect(result.monitors[0].hasPendingChanges == monitor.hasPendingChanges)
+        #expect(result.monitors[0].pendingSince == monitor.pendingSince)
+        #expect(result.needsRefetch == false)
+    }
+
     @Test func foldEmittedClearsPendingChanges() throws {
         let monitor = try #require(MonitoredPr.parseMonitor(makeMonitorDict()))
         let result = MonitoredPrStore.foldMonitorEvent(

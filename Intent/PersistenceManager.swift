@@ -15,6 +15,10 @@ class PersistenceManager {
     /// between tests or into the real app container.
     let defaults: UserDefaults
 
+    /// Backend for Keychain-stored values. Tests substitute an in-memory
+    /// implementation (SecItem calls fail in headless CI simulators).
+    var keychainStorage: KeychainStorage
+
     init(
         defaults: UserDefaults = .standard,
         keychainStorage: KeychainStorage = SecItemKeychainStorage()
@@ -22,7 +26,9 @@ class PersistenceManager {
         self.defaults = defaults
         self.keychainStorage = keychainStorage
     }
+}
 
+extension PersistenceManager {
     // MARK: - Connections
 
     func loadConnections() -> [StoredConnection] {
@@ -321,158 +327,7 @@ class PersistenceManager {
         return true
     }
 
-    // MARK: - Draft Messages
-
-    private let draftPrefix = "draft_"
-
-    func saveDraft(_ text: String, workspaceId: String, agentId: String) {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        if text.isEmpty {
-            defaults.removeObject(forKey: key)
-        } else {
-            defaults.set(text, forKey: key)
-        }
-    }
-
-    func loadDraft(workspaceId: String, agentId: String) -> String {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        return defaults.string(forKey: key) ?? ""
-    }
-
-    func clearDraft(workspaceId: String, agentId: String) {
-        let key = "\(draftPrefix)\(workspaceId)_\(agentId)"
-        defaults.removeObject(forKey: key)
-    }
-
-    // MARK: - Last Viewed Screen (keyed per backend)
-
-    private let lastScreensKey = "lastScreens"
-    // Legacy single-slot keys (pre window model v2): read once as a
-    // migration fallback for the connection that was active when they were
-    // written, then cleaned up.
-    private let lastScreenKey = "lastScreen"
-    private let lastWorkspaceIdKey = "lastWorkspaceId"
-    private let lastAgentIdKey = "lastAgentId"
-    private let lastAgentNameKey = "lastAgentName"
-    private let lastNoteTitleKey = "lastNoteTitle"
-    private let lastNoteIdKey = "lastNoteId"
-
-    struct SavedScreen: Codable {
-        let screen: String  // "workspaceList", "workspaceDetail", "conversation", "note"
-        let workspaceId: String?
-        let agentId: String?
-        let agentName: String?
-        let noteId: String?
-        let noteTitle: String?
-    }
-
-    func saveLastScreen(_ screen: SavedScreen, for connectionID: UUID) {
-        var dict = loadLastScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[connectionID.uuidString] = data
-        }
-        defaults.set(dict, forKey: lastScreensKey)
-    }
-
-    func loadLastScreen(for connectionID: UUID) -> SavedScreen? {
-        let dict = loadLastScreensDict()
-        if let data = dict[connectionID.uuidString] {
-            return try? JSONDecoder().decode(SavedScreen.self, from: data)
-        }
-        // Legacy migration: the old single-slot screen belonged to the
-        // connection that was active when it was saved.
-        guard let legacy = loadLegacyLastScreen(),
-              activeConnection()?.id == connectionID else { return nil }
-        saveLastScreen(legacy, for: connectionID)
-        clearLegacyLastScreen()
-        return legacy
-    }
-
-    func clearLastScreen(for connectionID: UUID) {
-        var dict = loadLastScreensDict()
-        dict.removeValue(forKey: connectionID.uuidString)
-        defaults.set(dict, forKey: lastScreensKey)
-        if activeConnection()?.id == connectionID {
-            clearLegacyLastScreen()
-        }
-    }
-
-    private func loadLastScreensDict() -> [String: Data] {
-        (defaults.dictionary(forKey: lastScreensKey) as? [String: Data]) ?? [:]
-    }
-
-    private func loadLegacyLastScreen() -> SavedScreen? {
-        guard let screen = defaults.string(forKey: lastScreenKey) else { return nil }
-        return SavedScreen(
-            screen: screen,
-            workspaceId: defaults.string(forKey: lastWorkspaceIdKey),
-            agentId: defaults.string(forKey: lastAgentIdKey),
-            agentName: defaults.string(forKey: lastAgentNameKey),
-            noteId: defaults.string(forKey: lastNoteIdKey),
-            noteTitle: defaults.string(forKey: lastNoteTitleKey)
-        )
-    }
-
-    private func clearLegacyLastScreen() {
-        defaults.removeObject(forKey: lastScreenKey)
-        defaults.removeObject(forKey: lastWorkspaceIdKey)
-        defaults.removeObject(forKey: lastAgentIdKey)
-        defaults.removeObject(forKey: lastAgentNameKey)
-        defaults.removeObject(forKey: lastNoteIdKey)
-        defaults.removeObject(forKey: lastNoteTitleKey)
-    }
-
-    // MARK: - Per-Workspace Screen
-
-    private let workspaceScreensKey = "workspaceScreens"
-
-    func saveWorkspaceScreen(workspaceId: String, screen: SavedScreen) {
-        var dict = loadWorkspaceScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[workspaceId] = data
-        }
-        defaults.set(dict, forKey: workspaceScreensKey)
-    }
-
-    func loadWorkspaceScreen(workspaceId: String) -> SavedScreen? {
-        let dict = loadWorkspaceScreensDict()
-        guard let data = dict[workspaceId] else { return nil }
-        return try? JSONDecoder().decode(SavedScreen.self, from: data)
-    }
-
-    func clearWorkspaceScreen(workspaceId: String) {
-        var dict = loadWorkspaceScreensDict()
-        dict.removeValue(forKey: workspaceId)
-        defaults.set(dict, forKey: workspaceScreensKey)
-    }
-
-    private func loadWorkspaceScreensDict() -> [String: Data] {
-        (defaults.dictionary(forKey: workspaceScreensKey) as? [String: Data]) ?? [:]
-    }
-
-    // MARK: - Per-Workspace Tab
-
-    private let workspaceTabsKey = "workspaceTabs"
-
-    func saveWorkspaceTab(workspaceId: String, tab: Int) {
-        var dict = loadWorkspaceTabsDict()
-        dict[workspaceId] = tab
-        defaults.set(dict, forKey: workspaceTabsKey)
-    }
-
-    func loadWorkspaceTab(workspaceId: String) -> Int? {
-        loadWorkspaceTabsDict()[workspaceId]
-    }
-
-    private func loadWorkspaceTabsDict() -> [String: Int] {
-        (defaults.dictionary(forKey: workspaceTabsKey) as? [String: Int]) ?? [:]
-    }
-
     // MARK: - Keychain
-
-    /// Backend for Keychain-stored values. Tests substitute an in-memory
-    /// implementation (SecItem calls fail in headless CI simulators).
-    var keychainStorage: KeychainStorage
 
     @discardableResult
     func saveDataToKeychain(data: Data, account: String) -> Bool {

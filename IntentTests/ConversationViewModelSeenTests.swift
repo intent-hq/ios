@@ -173,6 +173,22 @@ extension ConversationViewModelTests {
         )
     }
 
+    @Test func replacingStoreDetachesPriorStreamingLifecycle() async {
+        let (viewModel, oldFake) = makeSeenVM()
+        let oldStore = viewModel.store
+        viewModel.conversationAppeared()
+        oldStore.isStreaming = true
+
+        let newFake = FakeConnectionManager()
+        newFake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        viewModel.store = ConversationStore(connectionManager: newFake)
+        oldStore.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!oldFake.didCallMethod("agent.markSeen"))
+        #expect(!newFake.didCallMethod("agent.markSeen"))
+    }
+
     @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
         let (viewModel, fake) = makeSeenVM()
         // No conversationAppeared() — composing is proof of looking.

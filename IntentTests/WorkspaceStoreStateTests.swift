@@ -168,6 +168,21 @@ struct WorkspaceStoreWaitingTests {
         #expect(store.workspaces[1].waiting == true)
     }
 
+    @Test func waitingChangedEventFallsBackToEnvelopeWorkspaceId() async {
+        let store = WorkspaceStore(forTesting: true)
+        store.workspaces = [makeWorkspace(id: "ws-1")]
+
+        store.handleEvent("event", params: [
+            "event": [
+                "type": "workspace:waiting-changed",
+                "workspaceId": "ws-1",
+                "data": ["waiting": true]
+            ] as [String: Any]
+        ] as [String: Any])
+
+        #expect(store.workspaces[0].waiting == true)
+    }
+
     @Test func waitingSurvivesLastActivityRebuild() async {
         let store = WorkspaceStore(forTesting: true)
         store.workspaces = [makeWorkspace(id: "ws-1", waiting: true)]

@@ -27,6 +27,14 @@ struct WorkspaceDetailViewTests {
         #expect(progress.remaining == 3)
     }
 
+    @Test func progressSummaryIncludesOnlyActiveWork() throws {
+        let active = try #require(WorkspaceTaskProgressLayout(total: 10, completed: 4, inProgress: 3))
+        let inactive = try #require(WorkspaceTaskProgressLayout(total: 10, completed: 4, inProgress: 0))
+
+        #expect(active.summary == "4 of 10 tasks complete, 3 in progress")
+        #expect(inactive.summary == "4 of 10 tasks complete")
+    }
+
     @Test func overflowingCountsAreClampedToTotal() throws {
         let progress = try #require(WorkspaceTaskProgressLayout(
             total: 5,

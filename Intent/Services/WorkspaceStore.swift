@@ -4,6 +4,15 @@ import Observation
 
 @MainActor
 @Observable class WorkspaceStore {
+    private static let agentLifecycleEventTypes: Set<String> = [
+        "agent:started", "agent:completed", "agent:failed", "agent:created",
+        "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed"
+    ]
+    private static let legacyWorkspaceRefreshEventTypes: Set<String> = [
+        "workspace:activity-changed", "workspace:displayStatus-changed",
+        "workspace:attention-changed", "workspace:updated", "workspace:deleted"
+    ]
+
     static let shared = WorkspaceStore()
 
     var workspaces: [Workspace] = []
@@ -168,70 +177,61 @@ extension WorkspaceStore {
             return
         }
 
-        guard let dict = params as? [String: Any] else { return }
-
-        // Events from websocket-event-bridge are wrapped:
-        // { subscriptionId, event: { type, workspaceId, timestamp, data } }
-        let event: [String: Any]
-        if let innerEvent = dict["event"] as? [String: Any] {
-            event = innerEvent
-        } else {
-            event = dict
-        }
-
+        guard let paramsDictionary = params as? [String: Any] else { return }
+        let event = Self.eventDictionary(from: paramsDictionary)
         guard let eventType = event["type"] as? String else { return }
-
         AppLog.workspace.debug("[WorkspaceStore] Received event: \(eventType)")
 
-        let eventWorkspaceId = event["workspaceId"] as? String
-
-        switch eventType {
         // All 8 agent lifecycle events (matching cloudlands-fe AGENT_LIFECYCLE_EVENTS).
         // lastActivity is never bumped locally: intentd derives it and pushes
         // workspace:updated { changes.lastActivity } at turn boundaries.
-        case "agent:started", "agent:completed", "agent:failed", "agent:created",
-             "agent:deleted", "agent:idle", "agent:status-changed", "agent:renamed":
-            // Only refetch if not in live mode (avoid double-apply)
-            if !workspaceLive {
-                Task { await fetchAll() }
-            }
-
-        case let eventName where eventName.hasPrefix("workspace:"):
-            // workspace:updated carrying lastActivity is an intentd-derived value —
-            // patch the row in place as received.
-            if eventType == "workspace:updated",
-               let data = event["data"] as? [String: Any],
-               let changes = data["changes"] as? [String: Any],
-               let lastActivity = changes["lastActivity"] as? String,
-               let wsId = eventWorkspaceId {
-                updateLastActivity(workspaceId: wsId, lastActivity: lastActivity)
-            }
-            // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
-            // transition-only, protocol 6.17) — patch the row in place, no refetch.
-            if eventType == "workspace:waiting-changed",
-               let data = event["data"] as? [String: Any],
-               let waiting = data["waiting"] as? Bool,
-               let wsId = (data["workspaceId"] as? String) ?? eventWorkspaceId {
-                updateWaiting(workspaceId: wsId, waiting: waiting)
-            }
-            // Only refetch if not in live mode (avoid double-apply)
-            if !workspaceLive {
-                if eventType == "workspace:activity-changed" ||
-                   eventType == "workspace:displayStatus-changed" ||
-                   eventType == "workspace:attention-changed" ||
-                   eventType == "workspace:updated" ||
-                   eventType == "workspace:deleted" {
-                    Task { await fetchAll() }
-                }
-            }
-
-        case let eventName where eventName.hasPrefix("agent:"):
+        if Self.agentLifecycleEventTypes.contains(eventType) {
+            refreshIfUsingLegacyEvents()
+        } else if eventType.hasPrefix("workspace:") {
+            handleWorkspaceEvent(eventType, event: event)
+        } else if eventType.hasPrefix("agent:") {
             // Unknown agent event — log and ignore (all known types handled above)
-            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(eventName)")
-
-        default:
-            break
+            AppLog.workspace.debug("[WorkspaceStore] Ignoring unknown agent event: \(eventType)")
         }
+    }
+
+    /// Unwraps the websocket-event-bridge envelope while preserving direct
+    /// event dictionaries used by tests and legacy callers.
+    private static func eventDictionary(from dictionary: [String: Any]) -> [String: Any] {
+        (dictionary["event"] as? [String: Any]) ?? dictionary
+    }
+
+    private func handleWorkspaceEvent(_ eventType: String, event: [String: Any]) {
+        let data = event["data"] as? [String: Any] ?? [:]
+        let envelopeWorkspaceId = event["workspaceId"] as? String
+
+        // workspace:updated carrying lastActivity is an intentd-derived value —
+        // patch the row in place as received.
+        if eventType == "workspace:updated",
+           let changes = data["changes"] as? [String: Any],
+           let lastActivity = changes["lastActivity"] as? String,
+           let workspaceId = envelopeWorkspaceId {
+            updateLastActivity(workspaceId: workspaceId, lastActivity: lastActivity)
+        }
+
+        // workspace:waiting-changed is self-sufficient ({ workspaceId, waiting },
+        // transition-only, protocol 6.17) — patch the row in place, no refetch.
+        if eventType == "workspace:waiting-changed",
+           let waiting = data["waiting"] as? Bool,
+           let workspaceId = (data["workspaceId"] as? String) ?? envelopeWorkspaceId {
+            updateWaiting(workspaceId: workspaceId, waiting: waiting)
+        }
+
+        if Self.legacyWorkspaceRefreshEventTypes.contains(eventType) {
+            refreshIfUsingLegacyEvents()
+        }
+    }
+
+    /// Live subscription deltas already carry these changes, so event-driven
+    /// list refreshes are only needed while the store is in legacy mode.
+    private func refreshIfUsingLegacyEvents() {
+        guard !workspaceLive else { return }
+        Task { await fetchAll() }
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {

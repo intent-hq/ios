@@ -7,7 +7,7 @@ nonisolated enum AppLog {
     nonisolated struct Category: Sendable {
         private let logger: Logger
 
-        fileprivate init(_ name: String) {
+         init(_ name: String) {
             logger = Logger(
                 subsystem: Bundle.main.bundleIdentifier ?? "Intent",
                 category: name

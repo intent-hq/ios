@@ -135,17 +135,23 @@ struct SpecialistPickerView: View {
         isLoadingModels = true
         selectedModel = nil
         let fetched = await agentStore.fetchModels(providerId: provider.id)
-        guard let outcome = Self.modelFetchOutcome(
+        let outcome = Self.modelFetchOutcome(
             fetched: fetched,
             requestedProviderId: provider.id,
             selectedProviderId: selectedProvider?.id,
             requestGeneration: generation,
             latestGeneration: modelFetchGeneration
-        ) else { return }
-        isLoadingModels = outcome.isLoadingModels
-        guard let applied = outcome.models else { return }
-        models = applied
-        selectedModel = outcome.selectedModel
+        )
+        switch outcome {
+        case .superseded:
+            return
+        case .noModelUpdate:
+            isLoadingModels = false
+        case let .replaceModels(fetched):
+            isLoadingModels = false
+            models = fetched
+            selectedModel = nil
+        }
     }
 
     private func selectSpecialist(_ specialist: SpecialistInfo) {

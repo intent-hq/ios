@@ -94,6 +94,103 @@ struct IntentFileAttachmentLoaderTests {
         #expect((attachment.base as? IntentFileImageAttachment)?.image === image)
     }
 
+    @Test func shortIntentFileLinkWithoutWorkspaceYieldsPlaceholder() async throws {
+        let log = FileImageFetchLog()
+        var loader = IntentFileAttachmentLoader(workspaceId: nil, fallback: .image())
+        loader.fileImage = { workspaceId, path in
+            await log.record(workspaceId, path)
+            return UIImage()
+        }
+        var fallbackCalls = 0
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/pic.png")!,
+            text: "missing workspace"
+        ) {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(log.entries.isEmpty)
+        #expect(fallbackCalls == 0)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "missing workspace")
+    }
+
+    @Test func nonImageIntentFileLinkYieldsPlaceholderWithoutFetching() async throws {
+        let log = FileImageFetchLog()
+        var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
+        loader.fileImage = { workspaceId, path in
+            await log.record(workspaceId, path)
+            return UIImage()
+        }
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/readme.txt")!,
+            text: "not an image"
+        ) {
+            Issue.record("intent-file links must not consult the fallback loader")
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(log.entries.isEmpty)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "not an image")
+    }
+
+    @Test func intentFileCancellationYieldsPlaceholderWithoutFallback() async throws {
+        var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
+        loader.fileImage = { _, _ in throw CancellationError() }
+        var fallbackCalls = 0
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/pic.png")!,
+            text: "cancelled"
+        ) {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(fallbackCalls == 0)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "cancelled")
+    }
+
+    @Test func longIntentFileLinkUsesEmbeddedWorkspaceAndPath() async throws {
+        let image = UIImage()
+        let log = FileImageFetchLog()
+        var loader = IntentFileAttachmentLoader(workspaceId: "window-workspace", fallback: .image())
+        loader.fileImage = { workspaceId, path in
+            await log.record(workspaceId, path)
+            return image
+        }
+
+        _ = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/link-workspace/file/a/b.png")!,
+            text: "alt"
+        ) {
+            Issue.record("intent-file links must not consult the fallback loader")
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(log.entries.count == 1)
+        #expect(log.entries.first?.workspaceId == "link-workspace")
+        #expect(log.entries.first?.path == "a/b.png")
+    }
+
+    @Test func intentFileFetchFailureYieldsPlaceholderWithoutFallback() async throws {
+        struct FetchFailure: Error {}
+        var loader = IntentFileAttachmentLoader(workspaceId: "ws-1", fallback: .image())
+        loader.fileImage = { _, _ in throw FetchFailure() }
+
+        let attachment = try await loader.resolvedAttachment(
+            for: URL(string: "intent://local/file/pic.png")!,
+            text: "failed"
+        ) {
+            Issue.record("intent-file links must not consult the fallback loader")
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "failed")
+    }
+
     // MARK: - Remote attachment path
 
     private static let remoteURL = URL(string: "https://example.com/pic.png")!
@@ -134,6 +231,22 @@ struct IntentFileAttachmentLoaderTests {
             workspaceId: nil,
             fallback: .image()
         ) { _ in throw FetchFailure() }
+        var fallbackCalls = 0
+
+        let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {
+            fallbackCalls += 1
+            return AnyAttachment(IntentFileFailureAttachment(altText: "from-fallback"))
+        }
+
+        #expect(fallbackCalls == 1)
+        #expect((attachment.base as? IntentFileFailureAttachment)?.altText == "from-fallback")
+    }
+
+    @Test func remoteCancellationDelegatesToFallbackLoader() async throws {
+        let loader = IntentFileAttachmentLoader(
+            workspaceId: nil,
+            fallback: .image()
+        ) { _ in throw CancellationError() }
         var fallbackCalls = 0
 
         let attachment = try await loader.resolvedAttachment(for: Self.remoteURL, text: "alt") {

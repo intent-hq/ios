@@ -175,6 +175,31 @@ struct PersistenceManagerTests {
         #expect(loaded?.noteId == "n2")
     }
 
+    @Test func draftsRemainScopedAndEmptySaveClearsOnlyTargetDraft() throws {
+        let suiteName = "PersistenceManagerDraftTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let manager = PersistenceManager(
+            defaults: defaults,
+            keychainStorage: InMemoryKeychainStorage()
+        )
+
+        manager.saveDraft("first", workspaceId: "ws-a", agentId: "agent-a")
+        manager.saveDraft("second", workspaceId: "ws-a", agentId: "agent-b")
+        manager.saveDraft("third", workspaceId: "ws-b", agentId: "agent-a")
+
+        #expect(defaults.string(forKey: "draft_ws-a_agent-a") == "first")
+        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-b") == "second")
+        #expect(manager.loadDraft(workspaceId: "ws-b", agentId: "agent-a") == "third")
+
+        manager.saveDraft("", workspaceId: "ws-a", agentId: "agent-a")
+
+        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-a").isEmpty)
+        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-b") == "second")
+        #expect(manager.loadDraft(workspaceId: "ws-b", agentId: "agent-a") == "third")
+    }
+
     // MARK: - MainActor serialization smoke test
 
     @Test func serializedMainActorSavesMaintainDataIntegrity() async {

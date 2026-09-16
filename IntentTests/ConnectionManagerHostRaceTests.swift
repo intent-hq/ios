@@ -178,6 +178,44 @@ extension ConnectionManagerTests {
         #expect(ConnectionManager.localIps(fromSystemStatus: NSNull()) == .unavailable)
     }
 
+    @Test @MainActor func hostRouteRefreshDecisionRejectsFailedStatusRequest() {
+        let response: Result<Any, Error> = .failure(
+            NSError(domain: "test", code: 1)
+        )
+
+        #expect(ConnectionManager.hostRouteRefreshDecision(
+            response: response,
+            requestedGeneration: 4,
+            currentGeneration: 4
+        ) == .failed)
+    }
+
+    @Test @MainActor func hostRouteRefreshDecisionRejectsStaleStatusResponse() {
+        let response: Result<Any, Error> = .success([
+            "localIps": ["10.0.0.5"],
+            "tcAddress": "tc-stale"
+        ])
+
+        #expect(ConnectionManager.hostRouteRefreshDecision(
+            response: response,
+            requestedGeneration: 4,
+            currentGeneration: 5
+        ) == .stale)
+    }
+
+    @Test @MainActor func hostRouteRefreshDecisionCarriesCurrentRoutes() {
+        let response: Result<Any, Error> = .success([
+            "localIps": ["10.0.0.5"],
+            "tcAddress": " tc-current "
+        ])
+
+        #expect(ConnectionManager.hostRouteRefreshDecision(
+            response: response,
+            requestedGeneration: 5,
+            currentGeneration: 5
+        ) == .current(localIps: .value(["10.0.0.5"]), tcAddress: "tc-current"))
+    }
+
     // MARK: - tcAddress parsing (system.status)
 
     @Test @MainActor func tcAddressParsedFromSystemStatusResult() {

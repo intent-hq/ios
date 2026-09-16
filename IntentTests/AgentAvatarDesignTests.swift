@@ -160,4 +160,18 @@ struct AgentAvatarDesignTests {
         #expect(abs(crown.width - inverted.width) < 0.001)
         #expect(abs(crown.height - inverted.height) < 0.001)
     }
+
+    @Test func svgParserSupportsImplicitLinesAxisLinesAndCurves() {
+        let lines = Path(svgPathData: "M1 2,3 4H5V6")
+        #expect(lines.boundingRect == CGRect(x: 1, y: 2, width: 4, height: 4))
+
+        let curve = Path(svgPathData: "M0 0C1 2 3 4 5 6")
+        #expect(!curve.isEmpty)
+        #expect(curve.boundingRect == CGRect(x: 0, y: 0, width: 5, height: 6))
+    }
+
+    @Test func svgParserStopsAtUnsupportedCommandWithoutDiscardingPriorPath() {
+        let path = Path(svgPathData: "M0 0L2 2ZL10 10")
+        #expect(path.boundingRect == CGRect(x: 0, y: 0, width: 2, height: 2))
+    }
 }

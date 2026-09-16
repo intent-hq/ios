@@ -235,8 +235,8 @@ extension ToolClassifier {
 
 extension ToolClassifier {
     static func classifyFallback(_ context: ClassificationContext) -> ToolDisplay {
-        let input = context.input
-        let clean = context.clean
+        _ = context.input
+        _ = context.clean
         let acpTitle = context.acpTitle
         let pathVal = context.pathValue
         let query = context.query

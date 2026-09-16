@@ -289,6 +289,7 @@ extension AppCoordinatorTests {
         #expect(persistence.loadLastScreen(for: stored.id) != nil)
         #expect(!registry.isBackendRemoved(BackendID(stored.id)))
         #expect(fake.disconnectCallCount == 1)
+        #expect(coordinator.connectionFailureRetryPolicy == .manualLogOff)
         if case let .connectionFailed(message) = coordinator.currentScreen {
             #expect(message == "Could not forget this connection. Please try again.")
         } else {

@@ -239,35 +239,61 @@ struct PendingQuestionSet: Equatable {
         case .cleared:
             return nil
         case .set(let markedId):
-            guard let marked = messages.first(where: { $0.id == markedId }) else {
-                // Fails open (no wizard, plain composer): the marked row is not
-                // in the loaded window (slim transcript truncation). Recovery is
-                // a follow-up; log so the case is diagnosable in the field.
-                AppLog.conversation.debug(
-                    "[PendingQuestionSet] marker \(markedId) set but row not loaded"
-                )
-                return nil
-            }
-            guard marked.role == .assistant, marked.isStreaming != true else {
-                return nil
-            }
-            if queuedAnsweredQuestionsMessageIds.contains(markedId)
-                || isQuestionSetAnswered(messages: messages, messageId: markedId) {
-                return nil
-            }
-            return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+            return deriveMarkedSet(
+                messages: messages,
+                markedId: markedId,
+                dismissedQuestionsMessageId: dismissedQuestionsMessageId,
+                queuedAnsweredQuestionsMessageIds: queuedAnsweredQuestionsMessageIds
+            )
         case .absent:
-            if isTurnActive { return nil }
-            // Match the daemon's pre-marker fallback: trailing system rows are
-            // transparent, but the first non-system row must itself be a
-            // question-bearing assistant message (a user row supersedes).
-            for msg in messages.reversed() {
-                if msg.role == .system { continue }
-                guard msg.role == .assistant, msg.isStreaming != true else { return nil }
-                return questionSet(from: msg, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
-            }
+            return deriveLegacySet(
+                messages: messages,
+                isTurnActive: isTurnActive,
+                dismissedQuestionsMessageId: dismissedQuestionsMessageId
+            )
+        }
+    }
+
+    private static func deriveMarkedSet(
+        messages: [ConversationMessage],
+        markedId: String,
+        dismissedQuestionsMessageId: String?,
+        queuedAnsweredQuestionsMessageIds: Set<String>
+    ) -> Self? {
+        guard let marked = messages.first(where: { $0.id == markedId }) else {
+            // Fails open (no wizard, plain composer): the marked row is not
+            // in the loaded window (slim transcript truncation). Recovery is
+            // a follow-up; log so the case is diagnosable in the field.
+            AppLog.conversation.debug(
+                "[PendingQuestionSet] marker \(markedId) set but row not loaded"
+            )
             return nil
         }
+        guard marked.role == .assistant, marked.isStreaming != true else {
+            return nil
+        }
+        if queuedAnsweredQuestionsMessageIds.contains(markedId)
+            || isQuestionSetAnswered(messages: messages, messageId: markedId) {
+            return nil
+        }
+        return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+    }
+
+    private static func deriveLegacySet(
+        messages: [ConversationMessage],
+        isTurnActive: Bool,
+        dismissedQuestionsMessageId: String?
+    ) -> Self? {
+        if isTurnActive { return nil }
+        // Match the daemon's pre-marker fallback: trailing system rows are
+        // transparent, but the first non-system row must itself be a
+        // question-bearing assistant message (a user row supersedes).
+        for message in messages.reversed() {
+            if message.role == .system { continue }
+            guard message.role == .assistant, message.isStreaming != true else { return nil }
+            return questionSet(from: message, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+        }
+        return nil
     }
 
     /// True when a user row in `messages` carries the wizard's answer tag

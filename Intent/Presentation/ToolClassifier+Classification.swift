@@ -160,49 +160,71 @@ private extension ToolClassifier {
 
     static func classifyTerminal(_ context: ClassificationContext) -> ToolDisplay? {
         let clean = context.clean
-        let command = context.command
-        let acpTitle = context.acpTitle
         // Terminal/process
-        if clean.contains("process") || clean.contains("terminal") || clean.contains("bash")
-            || clean.contains("shell") || clean == "run" || clean.hasPrefix("run ")
-            || clean == "launch" || clean.hasPrefix("launch ") || command != nil {
-            if clean.contains("read") { return ToolDisplay(icon: "▶️", verb: "Read", subject: "terminal", path: nil) }
-            if clean.contains("write") { return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil) }
-            if clean.contains("kill") { return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil) }
-            if clean.contains("list") { return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil) }
-            var verb = "Run"
-            var cmd = command.map { command in
-                String(command.split(separator: "\n").first ?? "")
-                    .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength)
-            }
-            .map(String.init)
-            if cmd == nil, let title = acpTitle {
-                // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
-                // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity)
-                let pattern = #"^(Run|Launch|Read|List|Kill|Write)\s+`?(.+?)`?\s*$"#
-                if let titleVerb = firstCapture(pattern, in: title, group: 1)?.lowercased(),
-                   let rest = firstCapture(pattern, in: title, group: 2)?
-                       .trimmingCharacters(in: .whitespaces),
-                   !rest.isEmpty {
-                    switch titleVerb {
-                    case "list": verb = "List"; cmd = rest
-                    case "read": verb = "Read"; cmd = rest
-                    case "kill": verb = "Kill"; cmd = rest
-                    case "write": verb = "Write to"; cmd = rest
-                    case "launch":
-                        verb = "Launch"
-                        cmd = String(String(rest.split(separator: "\n").first ?? "")
-                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
-                    default:
-                        cmd = String(String(rest.split(separator: "\n").first ?? "")
-                            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
-                    }
-                }
-            }
-            return ToolDisplay(icon: "▶️", verb: verb, subject: cmd, path: nil)
-        }
+        guard isTerminalTool(context) else { return nil }
+        if let operation = terminalOperationDisplay(clean: clean) { return operation }
+        let invocation = context.command.map(terminalCommandInvocation)
+            ?? terminalTitleInvocation(context.acpTitle)
+            ?? TerminalInvocation(verb: "Run", subject: nil)
+        return ToolDisplay(icon: "▶️", verb: invocation.verb, subject: invocation.subject, path: nil)
+    }
 
+    private struct TerminalInvocation {
+        let verb: String
+        let subject: String?
+    }
+
+    private static func isTerminalTool(_ context: ClassificationContext) -> Bool {
+        let clean = context.clean
+        return clean.contains("process") || clean.contains("terminal") || clean.contains("bash")
+            || clean.contains("shell") || clean == "run" || clean.hasPrefix("run ")
+            || clean == "launch" || clean.hasPrefix("launch ") || context.command != nil
+    }
+
+    private static func terminalOperationDisplay(clean: String) -> ToolDisplay? {
+        if clean.contains("read") {
+            return ToolDisplay(icon: "▶️", verb: "Read", subject: "terminal", path: nil)
+        }
+        if clean.contains("write") {
+            return ToolDisplay(icon: "▶️", verb: "Write to", subject: "terminal", path: nil)
+        }
+        if clean.contains("kill") {
+            return ToolDisplay(icon: "▶️", verb: "Kill", subject: "terminal", path: nil)
+        }
+        if clean.contains("list") {
+            return ToolDisplay(icon: "▶️", verb: "List", subject: "processes", path: nil)
+        }
         return nil
+    }
+
+    private static func terminalCommandInvocation(_ command: String) -> TerminalInvocation {
+        TerminalInvocation(verb: "Run", subject: truncatedCommand(command))
+    }
+
+    private static func terminalTitleInvocation(_ title: String?) -> TerminalInvocation? {
+        guard let title else { return nil }
+        // _acpTitle fallback: extract the verb/command from e.g. "Run `cargo test`",
+        // "Kill terminal 5", "Launch `pnpm dev`" (desktop parity).
+        let pattern = #"^(Run|Launch|Read|List|Kill|Write)\s+`?(.+?)`?\s*$"#
+        guard let titleVerb = firstCapture(pattern, in: title, group: 1)?.lowercased(),
+              let rest = firstCapture(pattern, in: title, group: 2)?
+                  .trimmingCharacters(in: .whitespaces),
+              !rest.isEmpty else {
+            return nil
+        }
+        switch titleVerb {
+        case "list": return TerminalInvocation(verb: "List", subject: rest)
+        case "read": return TerminalInvocation(verb: "Read", subject: rest)
+        case "kill": return TerminalInvocation(verb: "Kill", subject: rest)
+        case "write": return TerminalInvocation(verb: "Write to", subject: rest)
+        case "launch": return TerminalInvocation(verb: "Launch", subject: truncatedCommand(rest))
+        default: return terminalCommandInvocation(rest)
+        }
+    }
+
+    private static func truncatedCommand(_ command: String) -> String {
+        String(String(command.split(separator: "\n").first ?? "")
+            .prefix(Constants.Conversation.ToolClassifier.commandMaximumLength))
     }
 
     static func classifyScriptsContextAndSearch(_ context: ClassificationContext) -> ToolDisplay? {

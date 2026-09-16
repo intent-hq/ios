@@ -229,6 +229,21 @@ struct QuestionParsingHelperTests {
         let question = try #require(Question.question(from: block))
         #expect(question.attachmentId == "tar-0123456789ab")
     }
+
+    @Test func explicitResourceTakesPrecedenceOverLegacyMetadataFallback() {
+        let block = ContentBlock(
+            id: "b1",
+            type: .resource,
+            resource: ResourceContents(uri: "intent-question://q", mimeType: "text/plain", text: questionJSON()),
+            metadata: [
+                "resource": AnyCodable(
+                    ["mimeType": kQuestionMime, "text": questionJSON()] as [String: Any]
+                )
+            ]
+        )
+
+        #expect(Question.question(from: block) == nil)
+    }
 }
 
 // MARK: - Marker recovery exclusivity (visionOS composerVisible invariant)

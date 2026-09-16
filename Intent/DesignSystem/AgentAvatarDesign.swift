@@ -126,6 +126,16 @@ extension AgentAvatarDesign {
     // Glyph geometry below is also verbatim artwork data; naming each coordinate
     // would obscure its relationship to the desktop source.
     private static func makeGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
+        switch design {
+        case .coordinator, .implementor, .verifier, .prReviewer, .uiDesigner, .chiefOfStaff, .ralph:
+            return makeBuiltinGlyph(design)
+        case .fallbackGlasses, .fallbackCrown, .fallbackCrownInverted,
+             .fallbackCrownMouth, .fallbackCode, .fallbackDots:
+            return makeFallbackGlyph(design)
+        }
+    }
+
+    private static func makeBuiltinGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
         var (stroke, fill) = (Path(), Path())
         var transform = CGAffineTransform.identity
         switch design {
@@ -163,6 +173,16 @@ extension AgentAvatarDesign {
             // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 3)
             stroke.addPath(Path(svgPathData: "M7 0V10M4 2L1.636 3.669C.818 4.246.784 5.447 1.568 6.069L4 8M10 2L12.364 3.669C13.182 4.246 13.216 5.447 12.432 6.069L10 8"))
+        default:
+            assertionFailure("Unexpected fallback avatar design")
+        }
+        return AgentAvatarGlyph(strokePath: stroke.applying(transform), fillPath: fill.applying(transform))
+    }
+
+    private static func makeFallbackGlyph(_ design: AgentAvatarDesign) -> AgentAvatarGlyph {
+        var (stroke, fill) = (Path(), Path())
+        var transform = CGAffineTransform.identity
+        switch design {
         case .fallbackGlasses:
             // swiftlint:disable:next no_magic_numbers
             transform = CGAffineTransform(translationX: 1, y: 5.335)
@@ -196,6 +216,8 @@ extension AgentAvatarDesign {
             fill.addEllipse(in: circleRect(centerX: 1.5, centerY: 1.5, radius: 1.5))
             // swiftlint:disable:next no_magic_numbers
             fill.addEllipse(in: circleRect(centerX: 6.5, centerY: 1.5, radius: 1.5))
+        default:
+            assertionFailure("Unexpected builtin avatar design")
         }
         return AgentAvatarGlyph(strokePath: stroke.applying(transform), fillPath: fill.applying(transform))
     }
@@ -232,30 +254,49 @@ private struct SVGPathParser {
 
     private mutating func appendCommand(to path: inout Path) -> Bool {
         switch command {
-        case "M":
-            guard let point = point() else { return false }
-            path.move(to: point)
-            currentPoint = point
-            command = "L"
-        case "L":
-            guard let point = point() else { return false }
-            path.addLine(to: point)
-            currentPoint = point
-        case "H":
-            guard let x = number() else { return false }
-            currentPoint = CGPoint(x: x, y: currentPoint.y)
-            path.addLine(to: currentPoint)
-        case "V":
-            guard let y = number() else { return false }
-            currentPoint = CGPoint(x: currentPoint.x, y: y)
-            path.addLine(to: currentPoint)
-        case "C":
-            guard let control1 = point(), let control2 = point(), let point = point() else { return false }
-            path.addCurve(to: point, control1: control1, control2: control2)
-            currentPoint = point
+        case "M": return appendMove(to: &path)
+        case "L": return appendLine(to: &path)
+        case "H": return appendHorizontalLine(to: &path)
+        case "V": return appendVerticalLine(to: &path)
+        case "C": return appendCurve(to: &path)
         default:
             return false
         }
+    }
+
+    private mutating func appendMove(to path: inout Path) -> Bool {
+        guard let point = point() else { return false }
+        path.move(to: point)
+        currentPoint = point
+        command = "L"
+        return true
+    }
+
+    private mutating func appendLine(to path: inout Path) -> Bool {
+        guard let point = point() else { return false }
+        path.addLine(to: point)
+        currentPoint = point
+        return true
+    }
+
+    private mutating func appendHorizontalLine(to path: inout Path) -> Bool {
+        guard let x = number() else { return false }
+        currentPoint = CGPoint(x: x, y: currentPoint.y)
+        path.addLine(to: currentPoint)
+        return true
+    }
+
+    private mutating func appendVerticalLine(to path: inout Path) -> Bool {
+        guard let y = number() else { return false }
+        currentPoint = CGPoint(x: currentPoint.x, y: y)
+        path.addLine(to: currentPoint)
+        return true
+    }
+
+    private mutating func appendCurve(to path: inout Path) -> Bool {
+        guard let control1 = point(), let control2 = point(), let point = point() else { return false }
+        path.addCurve(to: point, control1: control1, control2: control2)
+        currentPoint = point
         return true
     }
 

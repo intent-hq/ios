@@ -90,6 +90,12 @@ struct WorkspaceListViewModelTests {
 
     // MARK: - filteredWorkspaces
 
+    @Test func displayStatusWireValuesRemainExactAndCaseSensitive() {
+        #expect(WorkspaceDisplayStatus(wireValue: "PR_OPEN") == nil)
+        #expect(WorkspaceDisplayStatus(wireValue: "pr-open") == nil)
+        #expect(WorkspaceDisplayStatus(wireValue: "") == nil)
+    }
+
     @Test @MainActor func filteredWorkspaces_returnsAll_whenSearchIsEmpty() {
         let workspaces = [makeWorkspace(id: "1", title: "Alpha"), makeWorkspace(id: "2", title: "Beta")]
         let viewModel = setUp(workspaces)

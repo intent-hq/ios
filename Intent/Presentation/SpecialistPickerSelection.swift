@@ -27,20 +27,18 @@ extension SpecialistPickerView {
         return selectable.first { $0.id == "auggie" } ?? selectable.first
     }
 
-    /// Returns nil for a superseded fetch. A current fetch only applies models
-    /// when its requested provider is still selected.
+    /// Distinguishes a superseded fetch from a current fetch whose provider
+    /// changed, preserving whether an empty model catalog should be applied.
     static func modelFetchOutcome(
         fetched: [ModelInfo],
         requestedProviderId: String,
         selectedProviderId: String?,
         requestGeneration: Int,
         latestGeneration: Int
-    ) -> (models: [ModelInfo]?, selectedModel: ModelInfo?, isLoadingModels: Bool)? {
-        guard requestGeneration == latestGeneration else { return nil }
-        guard selectedProviderId == requestedProviderId else {
-            return (nil, nil, false)
-        }
-        return (fetched, nil, false)
+    ) -> SpecialistModelFetchOutcome {
+        guard requestGeneration == latestGeneration else { return .superseded }
+        guard selectedProviderId == requestedProviderId else { return .noModelUpdate }
+        return .replaceModels(fetched)
     }
 
     /// Builds the provider/model params for `agent.create`; auggie is omitted

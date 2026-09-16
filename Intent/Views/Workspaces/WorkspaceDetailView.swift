@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct WorkspaceDetailView: View {
-    private static let increasedRemainingOpacity = 0.55
-    private static let increasedContrastProgressBorderWidth: CGFloat = 1.5
-
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
     @State private var agentStore: AgentStore
@@ -16,7 +13,6 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
-    @State private var progressWidth: CGFloat = 0
     @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
 
@@ -243,83 +239,7 @@ private extension WorkspaceDetailView {
                completed: workspace?.taskStatsCompleted ?? 0,
                inProgress: workspace?.taskStatsInProgress ?? 0
            ) {
-            taskProgressSection(progress)
-        }
-    }
-
-    func taskProgressSection(_ progress: WorkspaceTaskProgressLayout) -> some View {
-        VStack(alignment: .leading, spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
-            Text(progressSummary(progress))
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Theme.foreground(for: colorScheme))
-                .fixedSize(horizontal: false, vertical: true)
-            progressBar(progress)
-        }
-        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-        .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
-    }
-    func progressSummary(_ progress: WorkspaceTaskProgressLayout) -> String {
-        "\(progress.completed) of \(progress.total) tasks complete"
-            + (progress.inProgress > 0 ? ", \(progress.inProgress) in progress" : "")
-    }
-    func progressBar(_ progress: WorkspaceTaskProgressLayout) -> some View {
-        HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-            progressSegment(count: progress.completed, color: .green, progress: progress)
-            progressSegment(count: progress.inProgress, color: .blue, progress: progress)
-            remainingProgressSegment(progress)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: Constants.WorkspaceDetail.progressHeight)
-        .clipShape(RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { progressWidth = $0 }
-        .overlay { progressBorder }
-        .accessibilityHidden(true)
-    }
-    @ViewBuilder
-    func progressSegment(
-        count: Int,
-        color: Color,
-        progress: WorkspaceTaskProgressLayout
-    ) -> some View {
-        if count > 0 {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                .fill(color)
-                .frame(width: segmentWidth(for: count, progress: progress))
-        }
-    }
-    @ViewBuilder
-    func remainingProgressSegment(_ progress: WorkspaceTaskProgressLayout) -> some View {
-        if progress.remaining > 0 {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                .fill(
-                    Theme.mutedForeground(for: colorScheme, contrast: colorSchemeContrast)
-                        .opacity(
-                            colorSchemeContrast == .increased
-                                ? Self.increasedRemainingOpacity
-                                : Constants.WorkspaceDetail.remainingProgressOpacity
-                        )
-                )
-                .frame(width: segmentWidth(for: progress.remaining, progress: progress))
-        }
-    }
-    func segmentWidth(for count: Int, progress: WorkspaceTaskProgressLayout) -> CGFloat {
-        progressWidth > 0
-            ? progress.segmentWidth(
-                for: count,
-                in: progressWidth,
-                spacing: Constants.WorkspaceDetail.progressSpacing
-            )
-            : 0
-    }
-
-    @ViewBuilder
-    var progressBorder: some View {
-        if colorSchemeContrast == .increased {
-            RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                .strokeBorder(
-                    Theme.border(for: colorScheme, contrast: colorSchemeContrast),
-                    lineWidth: Self.increasedContrastProgressBorderWidth
-                )
+            WorkspaceTaskProgressView(progress: progress)
         }
     }
     @ViewBuilder

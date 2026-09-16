@@ -89,6 +89,17 @@ final class AppCoordinatorTests {
 
         let stored = persistence.upsertConnection(Self.makeConnection(port: 4242))
         persistence.setActiveConnection(id: stored.id)
+        persistence.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail",
+                workspaceId: "restored-workspace",
+                agentId: nil,
+                agentName: nil,
+                noteId: nil,
+                noteTitle: nil
+            ),
+            for: stored.id
+        )
         let coordinator = AppCoordinator(
             backendID: BackendID(stored.id),
             persistence: persistence,
@@ -115,7 +126,7 @@ final class AppCoordinatorTests {
             #expect(workspaceId == "workspace-1")
             #expect(agentName == "Build Agent")
         } else {
-            Issue.record("Expected notification target conversation, got \(coordinator.currentScreen)")
+            Issue.record("Expected notification to win over restoration, got \(coordinator.currentScreen)")
         }
     }
 
@@ -189,6 +200,7 @@ final class AppCoordinatorTests {
     @Test @MainActor func onConnectionFailed_setsConnectionFailed() {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onConnectionFailed(error: "timeout")
+        #expect(coordinator.connectionFailureRetryPolicy == .automaticConnection)
         if case let .connectionFailed(error) = coordinator.currentScreen {
             #expect(error == "timeout")
         } else {

@@ -266,7 +266,7 @@ extension AppCoordinatorTests {
     /// removal marks, which never create or tear down sessions.
     @MainActor static func markOnlySessionRegistry() -> BackendSessionRegistry {
         BackendSessionRegistry { kind in
-            fatalError("Removal marks must not build sessions (got \(kind))")
+            fatalError("Removal marks must not build sessions (got \(String(describing: kind)))")
         }
     }
 

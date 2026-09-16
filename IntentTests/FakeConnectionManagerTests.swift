@@ -27,6 +27,43 @@ struct FakeConnectionManagerTests {
         cancellable.cancel()
     }
 
+    @Test func connectionLogsPreserveNamedFieldsAndOrder() async throws {
+        let fake = FakeConnectionManager()
+
+        try await fake.connect(
+            hosts: ["first.example"],
+            port: 1111,
+            token: "first-token",
+            certFingerprint: "first-cert",
+            tcAddress: nil
+        )
+        try await fake.connect(
+            hosts: ["second.example"],
+            port: 2222,
+            token: "second-token",
+            certFingerprint: nil,
+            tcAddress: "tailnet.example"
+        )
+        fake.updateCachedCredentials(
+            hosts: ["cached.example"],
+            port: 3333,
+            token: "cached-token",
+            certFingerprint: "cached-cert",
+            tcAddress: "cached-tailnet.example"
+        )
+
+        #expect(fake.connectLog.map(\.hosts) == [["first.example"], ["second.example"]])
+        #expect(fake.connectLog.map(\.port) == [1111, 2222])
+        #expect(fake.connectLog.map(\.token) == ["first-token", "second-token"])
+        #expect(fake.connectLog.map(\.certFingerprint) == ["first-cert", nil])
+        #expect(fake.connectLog.map(\.tcAddress) == [nil, "tailnet.example"])
+        #expect(fake.updateCachedCredentialsLog.first?.hosts == ["cached.example"])
+        #expect(fake.updateCachedCredentialsLog.first?.port == 3333)
+        #expect(fake.updateCachedCredentialsLog.first?.token == "cached-token")
+        #expect(fake.updateCachedCredentialsLog.first?.certFingerprint == "cached-cert")
+        #expect(fake.updateCachedCredentialsLog.first?.tcAddress == "cached-tailnet.example")
+    }
+
     // MARK: - Request/Response Mocking
 
     @Test func requestReturnsConfiguredResponse() async throws {
@@ -71,12 +108,19 @@ struct FakeConnectionManagerTests {
         fake.responseMap["method1"] = "ok"
         fake.responseMap["method2"] = "ok"
 
+        let beforeRequests = Date()
         _ = try await fake.request("method1", params: ["a": 1])
         _ = try await fake.request("method2", params: ["b": 2])
+        let afterRequests = Date()
 
         #expect(fake.requestLog.count == 2)
         #expect(fake.requestLog[0].method == "method1")
+        #expect(fake.requestLog[0].params["a"] as? Int == 1)
         #expect(fake.requestLog[1].method == "method2")
+        #expect(fake.requestLog[1].params["b"] as? Int == 2)
+        #expect(fake.requestLog[0].timestamp >= beforeRequests)
+        #expect(fake.requestLog[0].timestamp <= fake.requestLog[1].timestamp)
+        #expect(fake.requestLog[1].timestamp <= afterRequests)
         #expect(fake.didCallMethod("method1"))
         #expect(fake.didCallMethod("method2"))
         #expect(!fake.didCallMethod("method3"))

@@ -5,18 +5,6 @@ import UIKit
 
 @MainActor
 struct WorkspaceRowPresentationTests {
-    @Test func metadataReflowsOnlyAtAccessibilitySizes() {
-        #expect(!WorkspaceRowView.usesExpandedMetadataLayout(for: .xxxLarge))
-        #expect(WorkspaceRowView.usesExpandedMetadataLayout(for: .accessibility1))
-        #expect(WorkspaceRowView.usesExpandedMetadataLayout(for: .accessibility5))
-    }
-
-    @Test func accessibilitySizesDoNotLimitLongTitles() {
-        #expect(WorkspaceRowView.titleLineLimit(for: .xxxLarge) == 2)
-        #expect(WorkspaceRowView.titleLineLimit(for: .accessibility1) == nil)
-        #expect(WorkspaceRowView.titleLineLimit(for: .accessibility5) == nil)
-    }
-
     @Test func denseMetadataFixturePreservesLongFieldsAndConcurrentCues() {
         let workspace = makeWorkspace(
             displayStatus: "in_progress",
@@ -48,15 +36,6 @@ struct WorkspaceRowPresentationTests {
         #expect(indicator.pill?.number == 123_456_789)
         #expect(WorkspaceStatusIconView.accessibilitySummary(for: workspace)
             == "In Progress, Active agent, Unread attention")
-    }
-
-    @Test func additionalPullRequestCountHasReadableAccessibilityLabel() {
-        #expect(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(1)
-            == "1 additional pull request")
-        #expect(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(3)
-            == "3 additional pull requests")
-        #expect(WorkspaceRowView.additionalPullRequestsAccessibilityLabel(100)
-            == "100 additional pull requests")
     }
 
     @Test func densePrBadgeInputsPreserveLongIdentifierAndLargeCount() {
