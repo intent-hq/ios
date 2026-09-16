@@ -135,7 +135,7 @@ struct WorkspaceFileImageLoaderTests {
     private static func assetResponse(_ bytes: Data, assetId: String = "a1-b2.png") -> [String: Any] {
         [
             "assetId": assetId, "mimeType": "image/png",
-            "data": bytes.base64EncodedString(), "sizeKb": 1,
+            "data": bytes.base64EncodedString(), "sizeKb": 1
         ]
     }
 
@@ -168,7 +168,7 @@ struct WorkspaceFileImageLoaderTests {
     @Test func assetResponseWithInvalidBase64ThrowsMalformedResponse() async {
         let fake = FakeConnectionManager()
         fake.responseMap["note.readAsset"] = [
-            "assetId": "a1-b2.png", "mimeType": "image/png", "data": "%%not-base64%%", "sizeKb": 0,
+            "assetId": "a1-b2.png", "mimeType": "image/png", "data": "%%not-base64%%", "sizeKb": 0
         ]
         let loader = WorkspaceFileImageLoader(connection: fake)
 
