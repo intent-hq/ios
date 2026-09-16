@@ -593,6 +593,97 @@ struct ConversationTranscriptScrollPolicyTests {
             from: 780, to: 700, hasInitiallyScrolled: false, userIsScrolledAway: true) == .none)
     }
 
+    private typealias BottomBandRePin = ConversationTranscriptScrollPolicy.BottomBandRePinDecision
+
+    private func recheckBottomBandAfterEdge(
+        geometryAway: Bool = false,
+        isInteracting: Bool = false,
+        isFollowing: Bool = false,
+        hasInitiallyScrolled: Bool = true,
+        userIsScrolledAway: Bool = false
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge(
+            geometryAway: geometryAway,
+            isInteracting: isInteracting,
+            isFollowing: isFollowing,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    private func bottomBandRePin(
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool = false,
+        isFollowing: Bool = false,
+        hasInitiallyScrolled: Bool = true,
+        userIsScrolledAway: Bool = false
+    ) -> BottomBandRePin {
+        ConversationTranscriptScrollPolicy.bottomBandRePinDecision(
+            distanceToBottom: distanceToBottom,
+            isInteracting: isInteracting,
+            isFollowing: isFollowing,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway,
+            driftTolerance: 1,
+            atBottomThreshold: 50
+        )
+    }
+
+    /// Regression (#346): a new conversation's transcript grows from shorter
+    /// than the container (a negative distance) past one page, and the band
+    /// observer delivers the crossing into band 0 reading within the band.
+    /// On a pinned, settled transcript with no follow in flight that edge
+    /// schedules the settle re-check; an away edge is content growth that
+    /// `shouldRePinAfterContentGrowth` re-pins at once.
+    @Test func withinBandEdgeOnPinnedSettledTranscriptSchedulesRecheck() {
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: -120) == -3)
+        #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: 32) == 0)
+        #expect(recheckBottomBandAfterEdge())
+        #expect(!recheckBottomBandAfterEdge(geometryAway: true))
+    }
+
+    /// Not under the finger (a gesture, not growth), not while a follow is
+    /// landing there on its own, not before the entry scroll has decided, and
+    /// not for a reader who scrolled away.
+    @Test func withinBandEdgeRecheckYieldsToGesturesFollowsAndTheEntryDecision() {
+        #expect(!recheckBottomBandAfterEdge(isInteracting: true))
+        #expect(!recheckBottomBandAfterEdge(isFollowing: true))
+        #expect(!recheckBottomBandAfterEdge(hasInitiallyScrolled: false))
+        #expect(!recheckBottomBandAfterEdge(userIsScrolledAway: true))
+    }
+
+    /// Settled, pinned and resting a line or two short of the end — 32 pt in
+    /// the report, under the threshold so Go to End stays hidden — the
+    /// viewport is followed to the bottom. A rest within the drift tolerance
+    /// is layout rounding; content still shorter than the container rests at
+    /// a negative distance; past the threshold the away edge owns it; an
+    /// unknown distance proves nothing.
+    @Test func bottomBandRePinFollowsOnSettleWithinBand() {
+        #expect(bottomBandRePin(distanceToBottom: 32) == .rePin)
+        #expect(bottomBandRePin(distanceToBottom: 2) == .rePin)
+        #expect(bottomBandRePin(distanceToBottom: 50) == .rePin)
+        #expect(bottomBandRePin(distanceToBottom: 1) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 0) == .none)
+        #expect(bottomBandRePin(distanceToBottom: -120) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 51) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 400) == .none)
+        #expect(bottomBandRePin(distanceToBottom: nil) == .none)
+    }
+
+    /// Still interacting, or with a follow in flight the re-pin would land
+    /// under, the re-check waits again; scrolled away or before the entry
+    /// scroll nothing is following, whatever the gesture state.
+    @Test func bottomBandRePinDefersWhileInteractingOrFollowing() {
+        #expect(bottomBandRePin(distanceToBottom: 32, isInteracting: true) == .deferred)
+        #expect(bottomBandRePin(distanceToBottom: 32, isFollowing: true) == .deferred)
+        #expect(bottomBandRePin(distanceToBottom: 0, isInteracting: true) == .deferred)
+        #expect(bottomBandRePin(distanceToBottom: nil, isFollowing: true) == .deferred)
+        #expect(bottomBandRePin(distanceToBottom: 32, userIsScrolledAway: true) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 32, hasInitiallyScrolled: false) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 32, isInteracting: true, userIsScrolledAway: true) == .none)
+        #expect(bottomBandRePin(distanceToBottom: 32, isFollowing: true, hasInitiallyScrolled: false) == .none)
+    }
+
     @Test func followsOnlyAfterEntryScrollWhileAtBottom() {
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowToBottom(
             hasInitiallyScrolled: false,
