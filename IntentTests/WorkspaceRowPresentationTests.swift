@@ -482,7 +482,14 @@ enum SyntheticBadgeHost {
                 accessibilityElements(in: hostView)
                     .contains { accessibilityIdentifier(of: $0) == probeIdentifier }
             }
-            return found ?? false
+            let publishes = found ?? false
+            if !publishes {
+                print(
+                    "SYNTHETIC host probe found no accessibility tree on this physical device; "
+                        + "skipping rendered badge tests (see intent-hq/ios#322 for the device-side "
+                        + "repair and verification that remain open).")
+            }
+            return publishes
         #endif
     }
 
