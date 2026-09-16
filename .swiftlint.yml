@@ -78,7 +78,6 @@ opt_in_rules:
   - period_spacing
   - prefer_asset_symbols
   - prefer_condition_list
-  - prefer_nimble
   - prefer_self_in_static_references
   - prefer_self_type_over_type_of_self
   - prefer_zero_over_explicit_init
