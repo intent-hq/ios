@@ -2284,6 +2284,14 @@ struct ConnectionManagerTests {
         }
     }
 
+    /// Whether `state` is `.reconnecting` at any attempt. A socket torn down
+    /// seconds after connecting starts at attempt 2 (flap protection, see
+    /// `reconnectStartingAttempt`), so tests assert the state, not the count.
+    private static func isReconnecting(_ state: ConnectionState) -> Bool {
+        if case .reconnecting = state { return true }
+        return false
+    }
+
     /// Polls `condition` (real time) until it holds or `timeout` elapses;
     /// the caller asserts afterwards so a miss reports the actual values.
     @MainActor private static func settle(
@@ -2606,6 +2614,210 @@ struct ConnectionManagerTests {
         #expect(server.pingsReceived == 3)
         #expect(disconnects.count == 0)
         #expect(manager.connectionState == .connected)
+    }
+
+    // MARK: - Network path monitoring (intent#3765)
+
+    /// Fake `NetworkPathMonitoring`: records its lifecycle and lets a test
+    /// push path snapshots to the manager synchronously on the main actor.
+    /// Keeps its handler after `cancel()` so a test can deliver the late
+    /// callback a real monitor may still emit and check the manager ignores it.
+    @MainActor private final class FakePathMonitor: NetworkPathMonitoring {
+        private(set) var startCount = 0
+        private(set) var cancelCount = 0
+        private var onUpdate: (@MainActor @Sendable (NetworkPathSnapshot) -> Void)?
+
+        func start(onUpdate: @escaping @MainActor @Sendable (NetworkPathSnapshot) -> Void) {
+            startCount += 1
+            self.onUpdate = onUpdate
+        }
+
+        func cancel() {
+            cancelCount += 1
+        }
+
+        func report(_ snapshot: NetworkPathSnapshot) {
+            onUpdate?(snapshot)
+        }
+    }
+
+    /// Hands the manager one fake monitor per connection and keeps them all
+    /// so a test can inspect the monitor of a retired socket.
+    @MainActor private final class FakePathMonitorFactory {
+        private(set) var monitors: [FakePathMonitor] = []
+
+        func make() -> FakePathMonitor {
+            let monitor = FakePathMonitor()
+            monitors.append(monitor)
+            return monitor
+        }
+    }
+
+    private static let wifiPath = NetworkPathSnapshot(isSatisfied: true, primaryInterface: "en0")
+    private static let cellularPath = NetworkPathSnapshot(isSatisfied: true, primaryInterface: "pdp_ip0")
+    private static let deadPath = NetworkPathSnapshot(isSatisfied: false, primaryInterface: nil)
+
+    /// intent#3765: a path that stops being satisfied under a `.connected`
+    /// socket tears it down and enters the reconnect path in the same
+    /// runloop turn, instead of waiting for a receive error or pong timeout.
+    /// The dead socket's monitor is cancelled and the reconnected socket
+    /// gets a fresh one.
+    @Test @MainActor func pathLossReconnectsImmediately() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        manager.makePathMonitor = { monitors.make() }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        #expect(monitors.monitors.count == 1)
+        #expect(monitor.startCount == 1)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.wifiPath)
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 0)
+
+        monitor.report(Self.deadPath)
+        #expect(Self.isReconnecting(manager.connectionState))
+        #expect(disconnects.count == 1)
+        #expect(monitor.cancelCount == 1)
+
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        #expect(monitors.monitors.count == 2)
+        #expect(monitors.monitors.last?.startCount == 1)
+        #expect(monitors.monitors.last?.cancelCount == 0)
+        #expect(disconnects.count == 1)
+
+        // A late report from the retired monitor cannot touch the new socket.
+        monitor.report(Self.wifiPath)
+        monitor.report(Self.deadPath)
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+    }
+
+    /// The monitor starts after the handshake and reports asynchronously, so
+    /// the path can die before its first report. That first report being
+    /// unsatisfied is a dead path, not a baseline: reconnect at once. The
+    /// reconnected socket's monitor then baselines on a satisfied path.
+    @Test @MainActor func pathDeadAtFirstReportReconnectsImmediately() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        manager.makePathMonitor = { monitors.make() }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.deadPath)
+        #expect(Self.isReconnecting(manager.connectionState))
+        #expect(disconnects.count == 1)
+        #expect(monitor.cancelCount == 1)
+
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        let replacement = try #require(monitors.monitors.last)
+        #expect(monitors.monitors.count == 2)
+        replacement.report(Self.wifiPath)
+        replacement.report(Self.wifiPath)
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+        #expect(replacement.cancelCount == 0)
+    }
+
+    /// A satisfied path that moves to another interface (Wi-Fi → cellular)
+    /// is a dead path for the established socket: reconnect at once.
+    @Test @MainActor func pathInterfaceChangeReconnectsImmediately() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        manager.makePathMonitor = { monitors.make() }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.wifiPath)
+        monitor.report(Self.cellularPath)
+        #expect(Self.isReconnecting(manager.connectionState))
+        #expect(disconnects.count == 1)
+        #expect(monitor.cancelCount == 1)
+
+        try await Self.settle { manager.connectionState == .connected }
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 1)
+    }
+
+    /// The monitor's first report is the baseline, and a satisfied →
+    /// satisfied report on the same interface is a no-op; the monitor lives
+    /// exactly as long as the socket (cancelled by `disconnect()`).
+    @Test @MainActor func unchangedSatisfiedPathKeepsConnection() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let monitors = FakePathMonitorFactory()
+        let server = try await LoopbackWebSocketServer.start()
+        let originalFactory = manager.makePathMonitor
+        manager.makePathMonitor = { monitors.make() }
+        defer {
+            manager.disconnect()
+            manager.makePathMonitor = originalFactory
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let monitor = try #require(monitors.monitors.last)
+        let disconnects = DisconnectCounter(manager)
+
+        monitor.report(Self.wifiPath)
+        monitor.report(Self.wifiPath)
+        monitor.report(Self.wifiPath)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(manager.connectionState == .connected)
+        #expect(disconnects.count == 0)
+        #expect(monitor.cancelCount == 0)
+        let result = try await manager.request("system.status")
+        #expect(result is [String: Any])
+
+        manager.disconnect()
+        #expect(manager.connectionState == .disconnected)
+        #expect(monitor.cancelCount == 1)
+        #expect(monitors.monitors.count == 1)
+
+        // A report from the cancelled monitor is inert.
+        monitor.report(Self.deadPath)
+        #expect(manager.connectionState == .disconnected)
+        #expect(disconnects.count == 0)
     }
 }
 
