@@ -250,7 +250,10 @@ struct ConversationTranscriptView: View {
     /// correction has it paged up cancels it (see
     /// `cancelPendingFollowOnTakeover`, `claimViewportForExplicitFollow`),
     /// and the follow back re-checks the claim once the rows have realized
-    /// rather than scroll over it. A correction in flight suppresses the
+    /// rather than scroll over it. A follow that drains with the end row
+    /// still unrealized arms it again from the level (see `scrollToBottom`),
+    /// since the row it cancelled the recovery over yields no new edge. A
+    /// correction in flight suppresses the
     /// growth re-pin as a follow does, so the drain replays the live edge
     /// the way the automatic follow's does. It is not a forced follow, so
     /// the follow's report is left as it is; the recovery reports next to it
@@ -884,6 +887,12 @@ struct ConversationTranscriptView: View {
             scrollDebounceTask = nil
             if !forced {
                 applyLiveScrolledAwayEdge(proxy: proxy)
+            }
+            if ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+                executed: shouldExecute,
+                isEndRealized: scrollState.isEndRealized
+            ) {
+                scheduleUnrealizedEndRecovery(proxy: proxy)
             }
         }
     }

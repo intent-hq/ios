@@ -1212,6 +1212,28 @@ struct ConversationTranscriptScrollPolicyTests {
             outcome: .yieldToUser, corrections: 1) == "endRecovery=yieldToUser corrections=1")
     }
 
+    /// An explicit follow cancels a recovery in flight, and the recovery is
+    /// otherwise armed only by the end row derealizing — so a follow (Go to
+    /// End, the user's message, the entry follow) that executed and drained
+    /// with the end row still unrealized re-arms it from the level, or a
+    /// viewport that landed blank over an already-unrealized row would
+    /// never be recovered. A follow that yielded to the user landed nowhere
+    /// and arms nothing; a realized end row needs nothing. The armed
+    /// recovery still judges the blank from geometry: a viewport at the
+    /// bottom over the unrealized row is paged up, a realized row ends it.
+    @Test func followDrainingOverAnUnrealizedEndRowArmsTheRecovery() {
+        #expect(ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+            executed: true, isEndRealized: false))
+        #expect(!ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+            executed: true, isEndRealized: true))
+        #expect(!ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+            executed: false, isEndRealized: false))
+        #expect(!ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+            executed: false, isEndRealized: true))
+        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000)) == .recover(pageOffsetY: 1_600))
+        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000), isEndRealized: true) == .none)
+    }
+
     /// The recovery reports next to the forced follow's report under demo
     /// data once it has corrected the viewport, and never on the pending
     /// report the UI tests compare whole.

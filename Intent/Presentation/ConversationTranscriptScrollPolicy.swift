@@ -554,6 +554,21 @@ enum ConversationTranscriptScrollPolicy {
         !isInteracting && !userIsScrolledAway && !isFollowing
     }
 
+    /// The recovery is armed by the end row derealizing — an edge — and an
+    /// explicit follow cancels one in flight, so a follow that executed and
+    /// drained onto a viewport whose end row is still unrealized arms it
+    /// again from the level: the row was already unrealized when the follow
+    /// claimed the viewport, and no new edge will come. A follow that
+    /// yielded to the user did not land anywhere; the viewport is theirs.
+    /// A realized end row needs nothing, and `unrealizedEndRecoveryStep`
+    /// bounds what an armed recovery may do from here.
+    static func shouldArmUnrealizedEndRecoveryAfterFollow(
+        executed: Bool,
+        isEndRealized: Bool
+    ) -> Bool {
+        executed && !isEndRealized
+    }
+
     /// The transcript's accessibility value under `--demo-data`: the last
     /// forced follow's outcome and the corrections it spent, e.g.
     /// `lastForcedFollow=landed corrections=1`, or
