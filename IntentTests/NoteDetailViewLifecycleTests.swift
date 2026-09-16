@@ -1,8 +1,8 @@
 import Foundation
+@testable import Intent
 import SwiftUI
 import Testing
 import UIKit
-@testable import Intent
 
 /// `NoteDetailView` owns a `NoteStore` and, while on screen, has it refresh
 /// the open note on every note event. That refresh must die with the view:
@@ -17,10 +17,14 @@ final class NoteDetailViewLifecycleTests {
     init() {
         _ = TestKeychainStorage.installed
         suiteName = "NoteDetailViewLifecycleTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            fatalError("Could not create test defaults")
+        }
         defaults.removePersistentDomain(forName: suiteName)
         persistence = PersistenceManager(
-            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+            defaults: defaults,
+            keychainStorage: InMemoryKeychainStorage()
+        )
     }
 
     deinit {
@@ -62,8 +66,10 @@ final class NoteDetailViewLifecycleTests {
         let afterTeardown = fake.requestLog.filter { $0.method == "note.get" }.count
         deliverNoteUpdated(on: fake)
         try await Task.sleep(nanoseconds: 300_000_000)
-        #expect(fake.requestLog.filter { $0.method == "note.get" }.count == afterTeardown,
-                "a dismissed NoteDetailView must not refetch its note on a note event")
+        #expect(
+            fake.requestLog.filter { $0.method == "note.get" }.count == afterTeardown,
+            "a dismissed NoteDetailView must not refetch its note on a note event"
+        )
     }
 
     private func deliverNoteUpdated(on fake: FakeConnectionManager) {
@@ -73,7 +79,8 @@ final class NoteDetailViewLifecycleTests {
     }
 
     private static func waitUntil(
-        _ what: String, timeout: TimeInterval = 5,
+        _ what: String,
+        timeout: TimeInterval = 5,
         _ condition: @MainActor () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
@@ -95,8 +102,11 @@ final class NoteDetailViewLifecycleTests {
         private var controller: UIHostingController<AnyView>?
         private var window: UIWindow?
 
-        init(connection: FakeConnectionManager, persistence: PersistenceManager,
-             observeStore: (NoteStore) -> Void) {
+        init(
+            connection: FakeConnectionManager,
+            persistence: PersistenceManager,
+            observeStore: (NoteStore) -> Void
+        ) {
             let fileLoader = WorkspaceFileImageLoader(connection: connection)
             let session = BackendSession(
                 backendID: BackendID(UUID()),
@@ -109,19 +119,29 @@ final class NoteDetailViewLifecycleTests {
                 attachmentUploadService: AttachmentUploadService(connection: connection),
                 workspaceFileImageLoader: fileLoader,
                 attachmentImageLoader: AttachmentImageLoader(
-                    connection: connection, fileLoader: fileLoader),
-                attentionCueCenter: WorkspaceAttentionCueCenter(playSound: {}))
+                    connection: connection,
+                    fileLoader: fileLoader
+                ),
+                attentionCueCenter: WorkspaceAttentionCueCenter {}
+            )
             let coordinator = AppCoordinator(
-                workspaceStore: session.workspaceStore, connection: connection,
-                persistence: persistence)
+                workspaceStore: session.workspaceStore,
+                connection: connection,
+                persistence: persistence
+            )
             let view = NoteDetailView(
-                noteId: "n-1", workspaceId: "ws-1", noteTitle: "Note", session: session)
+                noteId: "n-1",
+                workspaceId: "ws-1",
+                noteTitle: "Note",
+                session: session
+            )
             observeStore(view.noteStore)
 
             let controller = UIHostingController(rootView: AnyView(
                 NavigationStack { view }
                     .environment(coordinator)
-                    .environment(session)))
+                    .environment(session)
+            ))
             let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
             controller.view.frame = window.bounds
             controller.beginAppearanceTransition(true, animated: false)

@@ -6,23 +6,19 @@ import Testing
 
 struct AnyCodableTests {
     private func isArrayValue(_ match: AnyCodableArrayMatch) -> Bool {
-        if case .value = match { return true }
-        return false
+        if case .value = match { true } else { false }
     }
 
     private func isDictionaryValue(_ match: AnyCodableDictionaryMatch) -> Bool {
-        if case .value = match { return true }
-        return false
+        if case .value = match { true } else { false }
     }
 
     private func isTypeMismatch(_ match: AnyCodableArrayMatch) -> Bool {
-        if case .typeMismatch = match { return true }
-        return false
+        if case .typeMismatch = match { true } else { false }
     }
 
     private func isTypeMismatch(_ match: AnyCodableDictionaryMatch) -> Bool {
-        if case .typeMismatch = match { return true }
-        return false
+        if case .typeMismatch = match { true } else { false }
     }
 
     @Test func encodeDecodeString() throws {
@@ -299,8 +295,11 @@ struct ConversationMessageTests {
             contentBlocks: [
                 ContentBlock(id: "b1", type: .text, text: "Hello"),
                 ContentBlock(
-                    id: "b2", type: .toolUse, name: "read_file",
-                    input: ["path": AnyCodable("a.txt")]),
+                    id: "b2",
+                    type: .toolUse,
+                    name: "read_file",
+                    input: ["path": AnyCodable("a.txt")]
+                )
             ],
             timestamp: "2025-01-01T00:00:00Z",
             isStreaming: true
@@ -309,8 +308,11 @@ struct ConversationMessageTests {
         same.contentBlocks = [
             ContentBlock(id: "b1", type: .text, text: "Hello"),
             ContentBlock(
-                id: "b2", type: .toolUse, name: "read_file",
-                input: ["path": AnyCodable("a.txt")]),
+                id: "b2",
+                type: .toolUse,
+                name: "read_file",
+                input: ["path": AnyCodable("a.txt")]
+            )
         ]
         #expect(base == same)
 
@@ -488,5 +490,3 @@ struct QueuedMessageTests {
         ]).isUserMessage)
     }
 }
-
-// MARK: - ImageBlock Tests

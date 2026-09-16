@@ -1,11 +1,10 @@
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 @MainActor
 struct DemoFixturesTests {
-
     // MARK: - Launch-argument gating
 
     @Test func demoModeInactiveWithoutArguments() {
@@ -61,7 +60,7 @@ struct DemoFixturesTests {
         #expect(notes.contains { $0.taskStatus != nil && $0.content.contains("- [ ]") })
     }
 
-    @Test func exactlyOneWorkspaceFixtureCarriesAStatusImage() throws {
+    @Test func exactlyOneWorkspaceFixtureCarriesAStatusImage() {
         // The status-image UI test relies on one — and only one — workspace
         // row rendering the status thumbnail (intent-hq/intent#3868).
         let result = DemoFixtures.response(for: "workspace.list", params: [:])
@@ -77,8 +76,9 @@ struct DemoFixturesTests {
             for: "note.readAsset",
             params: [
                 "workspaceId": DemoFixtures.statusImageWorkspaceId,
-                "asset": DemoFixtures.statusImageAssetId,
-            ])
+                "asset": DemoFixtures.statusImageAssetId
+            ]
+        )
         let dict = try #require(result as? [String: Any])
         #expect(dict["assetId"] as? String == DemoFixtures.statusImageAssetId)
         #expect(dict["mimeType"] as? String == "image/png")
@@ -91,7 +91,9 @@ struct DemoFixturesTests {
 
     @Test func noteReadAssetFixtureIsEmptyForUnknownAssets() throws {
         let result = DemoFixtures.response(
-            for: "note.readAsset", params: ["workspaceId": "demo-ws-dashboard", "asset": "missing.png"])
+            for: "note.readAsset",
+            params: ["workspaceId": "demo-ws-dashboard", "asset": "missing.png"]
+        )
         let dict = try #require(result as? [String: Any])
         #expect(dict.isEmpty)
     }
@@ -123,7 +125,9 @@ struct DemoFixturesTests {
 
     private func conversationMessages(agentId: String?) throws -> (items: [[String: Any]], total: Int) {
         var params: [String: Any] = [:]
-        if let agentId { params["agentId"] = agentId }
+        if let agentId {
+            params["agentId"] = agentId
+        }
         let result = DemoFixtures.response(for: "agent.getConversation", params: params)
         let dict = try #require(result as? [String: Any])
         let items = try #require(dict["messages"] as? [[String: Any]])
@@ -221,7 +225,8 @@ struct DemoFixturesTests {
     @Test func subscriptionsReportTheDelegationGroupForTheLongConversationAgent() throws {
         let result = DemoFixtures.response(
             for: "agent.getSubscriptions",
-            params: ["agentId": DemoFixtures.longConversationAgentId, "workspaceId": DemoFixtures.longConversationWorkspaceId])
+            params: ["agentId": DemoFixtures.longConversationAgentId, "workspaceId": DemoFixtures.longConversationWorkspaceId]
+        )
         let dict = try #require(result as? [String: Any])
         let groups = try #require(dict["delegationGroups"] as? [[String: Any]])
         let group = try #require(groups.first)
@@ -232,7 +237,9 @@ struct DemoFixturesTests {
         #expect(subscriptions.allSatisfy { ($0["actorIds"] as? [String]).map { !$0.isEmpty } == true })
 
         let other = DemoFixtures.response(
-            for: "agent.getSubscriptions", params: ["agentId": "demo-agent-implementor"])
+            for: "agent.getSubscriptions",
+            params: ["agentId": "demo-agent-implementor"]
+        )
         let otherDict = try #require(other as? [String: Any])
         #expect(otherDict.isEmpty)
     }
@@ -240,7 +247,9 @@ struct DemoFixturesTests {
     @Test func agentListRoutesByWorkspaceId() throws {
         func agentIds(workspaceId: String?) throws -> [String] {
             var params: [String: Any] = [:]
-            if let workspaceId { params["workspaceId"] = workspaceId }
+            if let workspaceId {
+                params["workspaceId"] = workspaceId
+            }
             let result = DemoFixtures.response(for: "agent.list", params: params)
             let dict = try #require(result as? [String: Any])
             let items = try #require(dict["agents"] as? [[String: Any]])
@@ -252,7 +261,9 @@ struct DemoFixturesTests {
             == [DemoFixtures.longConversationAgentId] + DemoFixtures.longConversationDelegateIds)
 
         let result = DemoFixtures.response(
-            for: "agent.get", params: ["agentId": DemoFixtures.longConversationAgentId])
+            for: "agent.get",
+            params: ["agentId": DemoFixtures.longConversationAgentId]
+        )
         let dict = try #require(result as? [String: Any])
         let agentDict = try #require(dict["agent"] as? [String: Any])
         #expect(agentDict["id"] as? String == DemoFixtures.longConversationAgentId)
@@ -265,7 +276,9 @@ struct DemoFixturesTests {
     /// "Waiting for all" footer has rows to show.
     @Test func longConversationDelegatesAreBackgroundSubAgentsOfTheCoordinator() throws {
         let result = DemoFixtures.response(
-            for: "agent.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId])
+            for: "agent.list",
+            params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
+        )
         let dict = try #require(result as? [String: Any])
         let items = try #require(dict["agents"] as? [[String: Any]])
         let agents = items.compactMap { AgentSession.parseAgent($0) }
@@ -285,12 +298,16 @@ struct DemoFixturesTests {
             #expect(agentDict["id"] as? String == delegateId)
         }
     }
+}
 
+extension DemoFixturesTests {
     // MARK: - Delayed hooks row for the long conversation
 
     private func hooks(workspaceId: String?) throws -> [BackgroundHook] {
         var params: [String: Any] = [:]
-        if let workspaceId { params["workspaceId"] = workspaceId }
+        if let workspaceId {
+            params["workspaceId"] = workspaceId
+        }
         let result = DemoFixtures.response(for: "hook.list", params: params)
         let dict = try #require(result as? [String: Any])
         let items = try #require(dict["hooks"] as? [[String: Any]])
@@ -318,7 +335,7 @@ struct DemoFixturesTests {
     @Test func hookListDelayComesFromTheLaunchArgumentWhenPresent() {
         #expect(DemoFixtures.hookListDelay(from: ["--demo-data"]) == DemoFixtures.defaultHookListDelay)
         #expect(DemoFixtures.hookListDelay(from: ["--demo-data", "--demo-hook-list-delay-ms=9000"])
-            == .milliseconds(9_000))
+            == .milliseconds(9000))
         #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=0"]) == .zero)
         #expect(DemoFixtures.hookListDelay(from: ["--demo-hook-list-delay-ms=abc"])
             == DemoFixtures.defaultHookListDelay)
@@ -331,7 +348,7 @@ struct DemoFixturesTests {
     @Test func hookListGateIsATriggerFileWhenTheLaunchArgumentNamesOne() {
         #expect(DemoFixtures.hookListGate(from: ["--demo-data"]) == .delay(DemoFixtures.defaultHookListDelay))
         #expect(DemoFixtures.hookListGate(from: ["--demo-data", "--demo-hook-list-delay-ms=9000"])
-            == .delay(.milliseconds(9_000)))
+            == .delay(.milliseconds(9000)))
         #expect(DemoFixtures.hookListGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
             == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
         // The trigger file wins over a delay; the last non-empty path wins.
@@ -339,7 +356,7 @@ struct DemoFixturesTests {
             "--demo-hook-list-delay-ms=9000",
             "--demo-hook-list-trigger-file=/tmp/a.trigger",
             "--demo-hook-list-trigger-file=/tmp/b.trigger",
-            "--demo-hook-list-trigger-file=",
+            "--demo-hook-list-trigger-file="
         ]) == .triggerFile(URL(fileURLWithPath: "/tmp/b.trigger")))
         #expect(DemoFixtures.hookListGate(from: ["--demo-hook-list-trigger-file="])
             == .delay(DemoFixtures.defaultHookListDelay))
@@ -372,7 +389,10 @@ struct DemoFixturesTests {
 
     private actor OpenedFlag {
         private(set) var value = false
-        func set() { value = true }
+
+        func set() {
+            value = true
+        }
     }
 
     @Test func triggerFileGateWaitIsCancellable() async {
@@ -403,7 +423,9 @@ struct DemoFixturesTests {
 
     @Test func noteGetReturnsRequestedNote() throws {
         let result = DemoFixtures.response(
-            for: "note.get", params: ["noteId": "demo-note-research"])
+            for: "note.get",
+            params: ["noteId": "demo-note-research"]
+        )
         let dict = try #require(result as? [String: Any])
         let noteDict = try #require(dict["note"] as? [String: Any])
         #expect(noteDict["id"] as? String == "demo-note-research")
@@ -423,12 +445,18 @@ struct DemoFixturesTests {
             DemoFixtures.response(for: "note.list", params: [:]),
             DemoFixtures.response(for: "agent.list", params: [:]),
             DemoFixtures.response(
-                for: "agent.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]),
+                for: "agent.list",
+                params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
+            ),
             DemoFixtures.response(for: "agent.getConversation", params: [:]),
             DemoFixtures.response(
-                for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]),
+                for: "agent.getConversation",
+                params: ["agentId": DemoFixtures.longConversationAgentId]
+            ),
             DemoFixtures.response(
-                for: "hook.list", params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]),
+                for: "hook.list",
+                params: ["workspaceId": DemoFixtures.longConversationWorkspaceId]
+            )
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         let text = try #require(String(data: data, encoding: .utf8)).lowercased()

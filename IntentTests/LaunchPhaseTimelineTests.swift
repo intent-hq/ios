@@ -1,12 +1,11 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// ios#230: the launch screens' staged delays must honor task cancellation,
 /// so a dismissed or superseded screen stops advancing its timeline and never
 /// reaches the stage (the coordinator callback) that follows the delay.
 struct LaunchPhaseTimelineTests {
-
     /// Records which timeline stages ran and how often the poll condition
     /// was evaluated.
     private final class Probe {
@@ -44,7 +43,8 @@ struct LaunchPhaseTimelineTests {
                     return false
                 },
                 timeout: .seconds(3),
-                interval: .milliseconds(10))
+                interval: .milliseconds(10)
+            )
             probe.reached.append(ready ? "success" : "timeout")
         }
         try? await Task.sleep(for: .milliseconds(50))
@@ -64,7 +64,10 @@ struct LaunchPhaseTimelineTests {
     @Test func pollCancelledBeforeStartingDoesNotReportSuccess() async {
         let task = Task {
             try await LaunchPhaseTimeline.poll(
-                until: { true }, timeout: .seconds(1), interval: .milliseconds(10))
+                until: { true },
+                timeout: .seconds(1),
+                interval: .milliseconds(10)
+            )
         }
         task.cancel()
         let result = await task.result
@@ -87,7 +90,8 @@ struct LaunchPhaseTimelineTests {
                 return remaining <= 0
             },
             timeout: .seconds(5),
-            interval: .milliseconds(5))
+            interval: .milliseconds(5)
+        )
         #expect(ready)
         #expect(remaining == 0)
     }
@@ -95,7 +99,10 @@ struct LaunchPhaseTimelineTests {
     @Test func pollReturnsFalseAfterTimeout() async throws {
         let start = ContinuousClock.now
         let ready = try await LaunchPhaseTimeline.poll(
-            until: { false }, timeout: .milliseconds(60), interval: .milliseconds(10))
+            until: { false },
+            timeout: .milliseconds(60),
+            interval: .milliseconds(10)
+        )
         let elapsed = ContinuousClock.now - start
         #expect(!ready)
         #expect(elapsed >= .milliseconds(60))

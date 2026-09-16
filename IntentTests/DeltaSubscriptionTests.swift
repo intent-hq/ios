@@ -1,12 +1,11 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct DeltaSubscriptionTests {
-
     // MARK: - SubscriptionPush parsing
 
-    @Test func parseSnapshotPush() async throws {
+    @Test func parseSnapshotPush() {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
             "kind": "snapshot",
@@ -26,7 +25,7 @@ struct DeltaSubscriptionTests {
         #expect(push?.snapshotMessages == nil) // Only chat snapshots are pre-decoded
     }
 
-    @Test func parseObjectSnapshotPush() async throws {
+    @Test func parseObjectSnapshotPush() throws {
         // Chat channel seq-0 snapshot: object with messages + metadata/activity flags (PROTOCOL §7.1)
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
@@ -36,7 +35,10 @@ struct DeltaSubscriptionTests {
                 "agentId": "agent-123",
                 "messages": [
                     [
-                        "id": "0190a1b2-user", "agentId": "agent-123", "seq": 0, "role": "user",
+                        "id": "0190a1b2-user",
+                        "agentId": "agent-123",
+                        "seq": 0,
+                        "role": "user",
                         "contentBlocks": [["type": "text", "id": "0190a1b2-user:0", "text": "Run the tests"]],
                         "timestamp": "2026-06-27T01:00:00.000Z"
                     ]
@@ -51,15 +53,14 @@ struct DeltaSubscriptionTests {
             ]
         ]
 
-        let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.subscriptionId == "sub-chat")
-        #expect(push?.kind == .snapshot)
-        #expect(push?.seq == 0)
-        #expect(push?.snapshot?.count == 1)
-        #expect(push?.snapshot?.first?["id"] as? String == "0190a1b2-user")
+        let push = try #require(SubscriptionPush.parse(method: "subscription.push", params: params))
+        #expect(push.subscriptionId == "sub-chat")
+        #expect(push.kind == .snapshot)
+        #expect(push.seq == 0)
+        #expect(push.snapshot?.count == 1)
+        #expect(push.snapshot?.first?["id"] as? String == "0190a1b2-user")
 
-        let meta = push?.snapshotMeta
+        let meta = push.snapshotMeta
         #expect(meta != nil)
         #expect(meta?["agentId"] as? String == "agent-123")
         #expect(meta?["truncated"] as? Bool == false)
@@ -72,7 +73,7 @@ struct DeltaSubscriptionTests {
 
         // Chat snapshot rows are pre-decoded at parse time (off MainActor in
         // the live pump) so the transcript only merges typed values.
-        let messages = try #require(push?.snapshotMessages)
+        let messages = try #require(push.snapshotMessages)
         #expect(messages.count == 1)
         #expect(messages.first?.id == "0190a1b2-user")
         #expect(messages.first?.role == .user)
@@ -83,7 +84,7 @@ struct DeltaSubscriptionTests {
         #expect(messages.first?.contentBlocks?.first?.resolvedText == "Run the tests")
     }
 
-    @Test func parseObjectSnapshotDropsUndecodableRows() async throws {
+    @Test func parseObjectSnapshotDropsUndecodableRows() {
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
             "kind": "snapshot",
@@ -102,7 +103,7 @@ struct DeltaSubscriptionTests {
         #expect(push?.snapshotMessages?.map(\.id) == ["m-2"])
     }
 
-    @Test func parseObjectSnapshotWithEmptyMessages() async throws {
+    @Test func parseObjectSnapshotWithEmptyMessages() {
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
             "kind": "snapshot",
@@ -121,7 +122,7 @@ struct DeltaSubscriptionTests {
         #expect(push?.snapshotMeta?["agentId"] as? String == "agent-123")
     }
 
-    @Test func parseDeltaPush() async throws {
+    @Test func parseDeltaPush() {
         let params: [String: Any] = [
             "subscriptionId": "sub-123",
             "kind": "delta",
@@ -143,13 +144,13 @@ struct DeltaSubscriptionTests {
         #expect(push?.delta?.chatBlocks == nil) // Collection entities are not block-shaped
     }
 
-    @Test func parseNonPushMethodReturnsNil() async throws {
+    @Test func parseNonPushMethodReturnsNil() {
         let params: [String: Any] = ["foo": "bar"]
         let push = SubscriptionPush.parse(method: "other.method", params: params)
         #expect(push == nil)
     }
 
-    @Test func parseMalformedPushReturnsNil() async throws {
+    @Test func parseMalformedPushReturnsNil() {
         let params: [String: Any] = ["kind": "snapshot"] // missing subscriptionId and seq
         let push = SubscriptionPush.parse(method: "subscription.push", params: params)
         #expect(push == nil)
@@ -198,22 +199,25 @@ struct DeltaSubscriptionTests {
         #expect(SubscriptionPush.parse(method: "subscription.push", params: scalarSnapshot) == nil)
     }
 
-    @Test func parseBlockShapedDeltaPassthrough() async throws {
-        // Chat channel delta: block-level entities with { agentId, messageId, role, block } (PROTOCOL §7.1)
-        let params: [String: Any] = [
+    private func blockShapedDeltaParams() -> [String: Any] {
+        [
             "subscriptionId": "sub-chat",
             "kind": "delta",
             "seq": 6,
             "delta": [
                 "added": [
                     [
-                        "agentId": "agent-123", "messageId": "0190a200-asst", "role": "assistant",
+                        "agentId": "agent-123",
+                        "messageId": "0190a200-asst",
+                        "role": "assistant",
                         "block": ["type": "tool_use", "id": "0190a200-asst:1", "name": "view", "input": ["path": "a.txt"]]
                     ]
                 ],
                 "updated": [
                     [
-                        "agentId": "agent-123", "messageId": "0190a200-asst", "role": "assistant",
+                        "agentId": "agent-123",
+                        "messageId": "0190a200-asst",
+                        "role": "assistant",
                         "block": ["type": "text", "id": "0190a200-asst:0", "text": "Let me check the logs first."],
                         "messageSeq": 4,
                         "timestamp": "2026-06-27T01:00:10.000Z",
@@ -223,32 +227,36 @@ struct DeltaSubscriptionTests {
                 "removedIds": ["0190a200-asst:2"]
             ]
         ]
+    }
 
-        let push = SubscriptionPush.parse(method: "subscription.push", params: params)
-        #expect(push != nil)
-        #expect(push?.kind == .delta)
-        #expect(push?.seq == 6)
+    @Test func parseBlockShapedDeltaPassthrough() throws {
+        let push = try #require(SubscriptionPush.parse(
+            method: "subscription.push",
+            params: blockShapedDeltaParams()
+        ))
+        #expect(push.kind == .delta)
+        #expect(push.seq == 6)
 
         // Raw dictionaries pass through untouched so a block-level reducer can consume them
-        let added = push?.delta?.added.first
+        let added = push.delta?.added.first
         #expect(added?["messageId"] as? String == "0190a200-asst")
         #expect(added?["role"] as? String == "assistant")
         let addedBlock = added?["block"] as? [String: Any]
         #expect(addedBlock?["id"] as? String == "0190a200-asst:1")
         #expect(addedBlock?["type"] as? String == "tool_use")
 
-        let updated = push?.delta?.updated.first
+        let updated = push.delta?.updated.first
         #expect(updated?["messageSeq"] as? Int == 4)
         #expect(updated?["streamingComplete"] as? Bool == true)
         let updatedBlock = updated?["block"] as? [String: Any]
         #expect(updatedBlock?["id"] as? String == "0190a200-asst:0")
         #expect(updatedBlock?["text"] as? String == "Let me check the logs first.")
 
-        #expect(push?.delta?.removedIds == ["0190a200-asst:2"])
+        #expect(push.delta?.removedIds == ["0190a200-asst:2"])
 
         // Block-shaped entities are also pre-decoded (added, then updated) so the
         // transcript merges typed blocks without a per-block decode on MainActor.
-        let chatBlocks = try #require(push?.delta?.chatBlocks)
+        let chatBlocks = try #require(push.delta?.chatBlocks)
         #expect(chatBlocks.count == 2)
         #expect(chatBlocks[0].messageId == "0190a200-asst")
         #expect(chatBlocks[0].role == .assistant)
@@ -264,7 +272,7 @@ struct DeltaSubscriptionTests {
         #expect(chatBlocks[1].streamingComplete == true)
     }
 
-    @Test func parseBlockShapedDeltaDropsEntitiesWithoutDecodableBlock() async throws {
+    @Test func parseBlockShapedDeltaDropsEntitiesWithoutDecodableBlock() {
         let params: [String: Any] = [
             "subscriptionId": "sub-chat",
             "kind": "delta",
@@ -284,10 +292,12 @@ struct DeltaSubscriptionTests {
         #expect(push?.delta?.added.count == 3)
         #expect(push?.delta?.chatBlocks?.map(\.block.id) == ["b-2"])
     }
+}
 
+extension DeltaSubscriptionTests {
     // MARK: - DeltaReconciler
 
-    @Test func reconcilerSnapshot() async throws {
+    @Test func reconcilerSnapshot() {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
@@ -303,7 +313,7 @@ struct DeltaSubscriptionTests {
         #expect(values.count == 2)
     }
 
-    @Test func reconcilerDelta() async throws {
+    @Test func reconcilerDelta() {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
@@ -329,7 +339,7 @@ struct DeltaSubscriptionTests {
         #expect(values.count == 2) // 1 (updated) + 3 (added), 2 removed
     }
 
-    @Test func reconcilerDeltaGapDetection() async throws {
+    @Test func reconcilerDeltaGapDetection() {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
@@ -345,7 +355,7 @@ struct DeltaSubscriptionTests {
         #expect(success == false)
     }
 
-    @Test func reconcilerDeltaBeforeSnapshotFails() async throws {
+    @Test func reconcilerDeltaBeforeSnapshotFails() {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
@@ -358,7 +368,7 @@ struct DeltaSubscriptionTests {
         #expect(success == false)
     }
 
-    @Test func reconcilerReset() async throws {
+    @Test func reconcilerReset() {
         let reconciler = DeltaReconciler<[String: Any]>(
             getId: { $0["id"] as? String },
             normalize: { $0 }
@@ -368,7 +378,7 @@ struct DeltaSubscriptionTests {
         #expect(reconciler.values().count == 1)
 
         reconciler.reset()
-        #expect(reconciler.values().count == 0)
+        #expect(reconciler.values().isEmpty)
 
         // After reset, delta should fail (not seeded)
         let delta = SubscriptionPush.DeltaPayload(added: [["id": "2", "name": "Two"]], updated: [], removedIds: [])

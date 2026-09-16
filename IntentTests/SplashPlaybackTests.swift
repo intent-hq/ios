@@ -1,7 +1,7 @@
 import Foundation
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 /// ios#247 / ios#256: splash playback samples one injectable monotonic clock
 /// for both frame selection and pause/resume accounting, and the decoded GIF
@@ -10,8 +10,14 @@ struct SplashPlaybackTests {
     /// Stepped monotonic clock: nothing but `advance` moves it.
     private final class SteppedClock: SplashPlaybackClock {
         var now: TimeInterval
-        init(now: TimeInterval = 100) { self.now = now }
-        func advance(by seconds: TimeInterval) { now += seconds }
+
+        init(now: TimeInterval = 100) {
+            self.now = now
+        }
+
+        func advance(by seconds: TimeInterval) {
+            now += seconds
+        }
     }
 
     private final class Counter {
@@ -20,7 +26,9 @@ struct SplashPlaybackTests {
 
     private func bundledAnimation() throws -> SplashAnimation {
         let url = try #require(
-            SplashAnimation.bundledURL, "IntentSplash.gif is missing from the app bundle")
+            SplashAnimation.bundledURL,
+            "IntentSplash.gif is missing from the app bundle"
+        )
         return try #require(SplashAnimation(url: url))
     }
 
@@ -164,7 +172,8 @@ struct SplashPlaybackTests {
         print(
             "SplashAnimation footprint: \(animation.frameCount) frames, "
                 + "\(decodedBytes) decoded bytes retained per lease, "
-                + "\(encodedBytes) encoded bytes on disk")
+                + "\(encodedBytes) encoded bytes on disk"
+        )
         #expect(decodedBytes > encodedBytes)
     }
 }

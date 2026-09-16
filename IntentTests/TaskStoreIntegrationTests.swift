@@ -56,7 +56,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         )
         fake.deliverSubscriptionPush(push)
         try await Task.sleep(nanoseconds: 50_000_000)
@@ -82,7 +82,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -120,7 +120,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -158,7 +158,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -194,7 +194,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -233,7 +233,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
@@ -244,7 +244,7 @@ struct TaskStoreIntegrationTests {
             seq: 0,
             snapshot: [
                 ["id": "task-99", "title": "Should not appear", "status": "in_progress", "updatedAt": "2024-01-01T00:00:00Z"]
-            ],
+            ]
         ))
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -270,8 +270,10 @@ struct TaskStoreIntegrationTests {
 
         store = nil
         // deinit hops to the main actor to remove the handlers; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0, fake.subscriptionHandlerCount == 0 { break }
+        for _ in 0 ..< 40 {
+            if fake.eventHandlerCount == 0, fake.subscriptionHandlerCount == 0 {
+                break
+            }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         #expect(fake.eventHandlerCount == 0)
@@ -314,15 +316,17 @@ struct TaskStoreIntegrationTests {
     /// `data.triggeredBy.reason == "note-deleted"` and no other `task:*` type,
     /// so that emission is the only signal that a task row left the list.
     private func readyTasksChangedEvent(triggeredBy: [String: Any]) -> [String: Any] {
-        ["event": [
-            "type": "task:ready-tasks-changed",
-            "workspaceId": "ws-1",
-            "data": [
-                "readyTaskIds": ["task-2"],
-                "triggeredBy": triggeredBy,
-                "computedAt": "2026-03-01T10:00:00Z"
+        [
+            "event": [
+                "type": "task:ready-tasks-changed",
+                "workspaceId": "ws-1",
+                "data": [
+                    "readyTaskIds": ["task-2"],
+                    "triggeredBy": triggeredBy,
+                    "computedAt": "2026-03-01T10:00:00Z"
+                ] as [String: Any]
             ] as [String: Any]
-        ] as [String: Any]]
+        ]
     }
 
     @Test func readyTasksChangedForDeletedNoteRefetchesWhenNotLive() async throws {
@@ -331,7 +335,8 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
 
         store.handleEvent("events.event", params: readyTasksChangedEvent(
-            triggeredBy: ["noteId": "task-1", "reason": "note-deleted"]))
+            triggeredBy: ["noteId": "task-1", "reason": "note-deleted"]
+        ))
         try await Task.sleep(nanoseconds: 100_000_000)
 
         #expect(fake.didCallMethod("task.list"))
@@ -343,9 +348,11 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
 
         store.handleEvent("events.event", params: readyTasksChangedEvent(
-            triggeredBy: ["noteId": "task-1", "reason": "relations-changed"]))
+            triggeredBy: ["noteId": "task-1", "reason": "relations-changed"]
+        ))
         store.handleEvent("events.event", params: readyTasksChangedEvent(
-            triggeredBy: ["noteId": "task-1", "previousStatus": "not_started", "newStatus": "complete"]))
+            triggeredBy: ["noteId": "task-1", "previousStatus": "not_started", "newStatus": "complete"]
+        ))
         try await Task.sleep(nanoseconds: 100_000_000)
 
         #expect(!fake.didCallMethod("task.list"))
@@ -361,5 +368,4 @@ struct TaskStoreIntegrationTests {
 
         #expect(!fake.didCallMethod("task.list"))
     }
-
 }

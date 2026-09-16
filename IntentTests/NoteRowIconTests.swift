@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct NoteRowIconTests {
     private func makeNote(
@@ -12,9 +12,16 @@ struct NoteRowIconTests {
         parentId: String? = nil
     ) -> Note {
         Note(
-            id: id, title: "Note \(id)", content: content, tags: [],
-            isDefault: isDefault, isArchived: isArchived, taskStatus: taskStatus,
-            parentId: parentId, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z"
+            id: id,
+            title: "Note \(id)",
+            content: content,
+            tags: [],
+            isDefault: isDefault,
+            isArchived: isArchived,
+            taskStatus: taskStatus,
+            parentId: parentId,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z"
         )
     }
 
@@ -44,7 +51,7 @@ struct NoteRowIconTests {
         let notes = [
             makeNote(id: "a", taskStatus: "complete"),
             makeNote(id: "b", taskStatus: "in_progress"),
-            makeNote(id: "c", taskStatus: "not_started"),
+            makeNote(id: "c", taskStatus: "not_started")
         ]
         let spec = makeNote(id: "spec", isDefault: true, content: [link("a"), link("b"), link("c")].joined(separator: "\n"))
         let expected = TaskStats(total: 3, completed: 1, inProgress: 1)
@@ -54,7 +61,7 @@ struct NoteRowIconTests {
     @Test func plainNoteWithLinkedTasksGetsProgressRing() {
         let notes = [
             makeNote(id: "a", taskStatus: "complete"),
-            makeNote(id: "b", taskStatus: "review_required"),
+            makeNote(id: "b", taskStatus: "review_required")
         ]
         let note = makeNote(id: "n1", content: link("a") + "\n" + link("b"))
         let expected = TaskStats(total: 2, completed: 1, inProgress: 1)
@@ -80,7 +87,7 @@ struct NoteRowIconTests {
         let parent = makeNote(id: "p", taskStatus: "in_progress")
         let notes = [
             makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
-            makeNote(id: "c2", taskStatus: "complete", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "complete", parentId: "p")
         ]
         #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.complete))
     }
@@ -89,7 +96,7 @@ struct NoteRowIconTests {
         let parent = makeNote(id: "p", taskStatus: "in_progress")
         let notes = [
             makeNote(id: "c1", taskStatus: "not_started", parentId: "p"),
-            makeNote(id: "c2", taskStatus: "not_started", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", parentId: "p")
         ]
         #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.notStarted))
     }
@@ -98,7 +105,7 @@ struct NoteRowIconTests {
         let parent = makeNote(id: "p", taskStatus: "blocked")
         let notes = [
             makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
-            makeNote(id: "c2", taskStatus: "not_started", parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", parentId: "p")
         ]
         #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.inProgress))
     }
@@ -113,7 +120,7 @@ struct NoteRowIconTests {
         let parent = makeNote(id: "p", taskStatus: "waiting")
         let notes = [
             makeNote(id: "c1", taskStatus: "complete", parentId: "p"),
-            makeNote(id: "c2", taskStatus: "not_started", isArchived: true, parentId: "p"),
+            makeNote(id: "c2", taskStatus: "not_started", isArchived: true, parentId: "p")
         ]
         #expect(NoteRowIcon.kind(for: parent, notes: notes) == .taskStatus(.complete))
     }
@@ -130,9 +137,15 @@ struct NoteRowIconTests {
 struct NoteRowLayoutTests {
     private func makeNote(title: String, tags: [String], isDefault: Bool) -> Note {
         Note(
-            id: "note", title: title, content: "", tags: tags,
-            isDefault: isDefault, isArchived: false, taskStatus: nil,
-            parentId: nil, createdAt: "2026-01-01T00:00:00Z",
+            id: "note",
+            title: title,
+            content: "",
+            tags: tags,
+            isDefault: isDefault,
+            isArchived: false,
+            taskStatus: nil,
+            parentId: nil,
+            createdAt: "2026-01-01T00:00:00Z",
             updatedAt: "2026-01-01T00:00:00Z"
         )
     }
@@ -150,13 +163,22 @@ struct NoteRowLayoutTests {
 
     @Test(arguments: [false, true])
     func nestedRowsStartRightOfTheirParentAtEveryDepth(usesAccessibilityLayout: Bool) {
-        for depth in 1...4 {
+        for depth in 1 ... 4 {
             let parent = NoteRowLayout.contentLeadingOffset(
-                depth: depth - 1, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+                depth: depth - 1,
+                hasChildren: true,
+                usesAccessibilityLayout: usesAccessibilityLayout
+            )
             let leaf = NoteRowLayout.contentLeadingOffset(
-                depth: depth, hasChildren: false, usesAccessibilityLayout: usesAccessibilityLayout)
+                depth: depth,
+                hasChildren: false,
+                usesAccessibilityLayout: usesAccessibilityLayout
+            )
             let branch = NoteRowLayout.contentLeadingOffset(
-                depth: depth, hasChildren: true, usesAccessibilityLayout: usesAccessibilityLayout)
+                depth: depth,
+                hasChildren: true,
+                usesAccessibilityLayout: usesAccessibilityLayout
+            )
             #expect(leaf > parent, "depth \(depth) leaf sits left of its parent")
             #expect(branch > parent, "depth \(depth) branch sits left of its parent")
             #expect(leaf == branch, "depth \(depth) leaf and branch siblings misalign")

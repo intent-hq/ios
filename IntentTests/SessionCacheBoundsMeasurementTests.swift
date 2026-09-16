@@ -1,8 +1,8 @@
 import Combine
 import Foundation
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// ios#264 measurement harness for the three session-lifetime caches with no
 /// count bound: `WorkspaceFileImageLoader.failedKeys`,
@@ -29,7 +29,9 @@ struct SessionCacheBoundsMeasurementTests {
         let name: String
         let workspaces: Int
         let keysPerWorkspace: Int
-        var totalKeys: Int { workspaces * keysPerWorkspace }
+        var totalKeys: Int {
+            workspaces * keysPerWorkspace
+        }
     }
 
     /// A long day across many workspaces where every rendered image
@@ -53,58 +55,77 @@ struct SessionCacheBoundsMeasurementTests {
         var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
             Just(.connected).eraseToAnyPublisher()
         }
+
         var requestCount = 0
 
-        func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any {
+        func request(_ method: String, params: [String: Any], timeout _: TimeInterval) async throws -> Any {
             requestCount += 1
             guard method == "file.getAttachmentInfo" else {
                 throw NSError(
-                    domain: "WebSocket", code: -32602,
-                    userInfo: [NSError.intentErrorDataCodeKey: "not-found"])
+                    domain: "WebSocket",
+                    code: -32_602,
+                    userInfo: [NSError.intentErrorDataCodeKey: "not-found"]
+                )
             }
             let attachmentId = params["attachmentId"] as? String ?? ""
             return [
-                "attachmentId": attachmentId, "fileName": "screenshot.png", "size": 1,
-                "uploadedAt": "2026-01-01T00:00:00Z", "exists": true,
-                "path": SessionCacheBoundsMeasurementTests.attachmentPath(attachmentId),
+                "attachmentId": attachmentId,
+                "fileName": "screenshot.png",
+                "size": 1,
+                "uploadedAt": "2026-01-01T00:00:00Z",
+                "exists": true,
+                "path": SessionCacheBoundsMeasurementTests.attachmentPath(attachmentId)
             ]
         }
 
         @discardableResult
-        func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID { UUID() }
-        func removeEventHandler(id: UUID) {}
-        func registerSubscriptionHandler(id: String, handler: @escaping @MainActor (SubscriptionPush) -> Void) {}
-        func unregisterSubscriptionHandler(id: String) {}
+        func onEvent(_: (String, Any) -> Void) -> UUID {
+            UUID()
+        }
+
+        func removeEventHandler(id _: UUID) {}
+        func registerSubscriptionHandler(id _: String, handler _: @MainActor (SubscriptionPush) -> Void) {}
+        func unregisterSubscriptionHandler(id _: String) {}
     }
 
     // MARK: - Key shapes (deterministic, production-length)
 
     /// A 36-character UUID-shaped id derived from two indices.
-    private nonisolated static func syntheticId(_ hi: Int, _ lo: Int) -> String {
-        String(format: "%08X-0000-4000-8000-%012X", hi, lo)
+    nonisolated private static func syntheticId(_ high: Int, _ low: Int) -> String {
+        String(format: "%08X-0000-4000-8000-%012X", high, low)
     }
 
-    private nonisolated static func workspaceId(_ w: Int) -> String { syntheticId(0xA0, w) }
+    nonisolated private static func workspaceId(_ workspace: Int) -> String {
+        syntheticId(0xA0, workspace)
+    }
 
     /// Broken `intent://local/file/...` link target, workspace-relative.
-    private nonisolated static func filePath(_ w: Int, _ i: Int) -> String {
-        "docs/screenshots/\(syntheticId(w, i)).png"
+    nonisolated private static func filePath(_ workspace: Int, _ index: Int) -> String {
+        "docs/screenshots/\(syntheticId(workspace, index)).png"
     }
 
     /// GitHub user-attachment URL, the common remote image shape.
-    private nonisolated static func remoteURL(_ w: Int, _ i: Int) -> URL {
-        URL(string: "https://github.com/user-attachments/assets/\(syntheticId(w, i))")!
+    nonisolated private static func remoteURL(_ workspace: Int, _ index: Int) -> URL {
+        guard let url = URL(string: "https://github.com/user-attachments/assets/\(syntheticId(workspace, index))") else {
+            fatalError("Could not create synthetic attachment URL")
+        }
+        return url
     }
 
-    private nonisolated static func attachmentId(_ w: Int, _ i: Int) -> String { syntheticId(0xB0 + w, i) }
+    nonisolated private static func attachmentId(_ workspace: Int, _ index: Int) -> String {
+        syntheticId(0xB0 + workspace, index)
+    }
 
     /// Registry-row path under `.intent/attachments/`.
-    private nonisolated static func attachmentPath(_ attachmentId: String) -> String {
+    nonisolated private static func attachmentPath(_ attachmentId: String) -> String {
         ".intent/attachments/\(attachmentId)-screenshot.png"
     }
 
-    private nonisolated static func response(_ status: Int, for url: URL) -> URLResponse {
-        HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+    nonisolated private static func response(_ status: Int, for url: URL) -> URLResponse {
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else {
+            fatalError("Could not create synthetic response")
+        }
+        return response
     }
 
     // MARK: - Retained-bytes model
@@ -112,7 +133,7 @@ struct SessionCacheBoundsMeasurementTests {
     /// Swift native string storage: up to 15 UTF-8 bytes live inline in the
     /// 16-byte `String`; longer strings own a heap object (32-byte header +
     /// bytes + NUL) rounded up to malloc's 16-byte quantum.
-    private nonisolated static func heapBytes(of string: String) -> Int {
+    nonisolated private static func heapBytes(of string: String) -> Int {
         let count = string.utf8.count
         return count <= 15 ? 0 : (32 + count + 1 + 15) / 16 * 16
     }
@@ -121,15 +142,17 @@ struct SessionCacheBoundsMeasurementTests {
     /// `capacity` as the ≤ 3/4-load fill of that table, so the table the
     /// collection actually allocated (including any over-reservation) is
     /// recovered from its observed `capacity`, never inferred from `count`.
-    private nonisolated static func bucketCount(forCapacity capacity: Int) -> Int {
+    nonisolated private static func bucketCount(forCapacity capacity: Int) -> Int {
         var buckets = 1
-        while buckets * 3 / 4 < capacity { buckets *= 2 }
+        while buckets * 3 / 4 < capacity {
+            buckets *= 2
+        }
         return buckets
     }
 
     /// Storage header + one 16-byte slot per bucket + 1-bit occupancy map +
     /// heap storage of every key.
-    private nonisolated static func retainedBytes(of set: Set<String>) -> Int {
+    nonisolated private static func retainedBytes(of set: Set<String>) -> Int {
         let buckets = bucketCount(forCapacity: set.capacity)
         return 64 + buckets * MemoryLayout<String>.stride + buckets / 8
             + set.reduce(0) { $0 + heapBytes(of: $1) }
@@ -137,17 +160,23 @@ struct SessionCacheBoundsMeasurementTests {
 
     /// As `retainedBytes(of: Set)` with a second 16-byte slot per bucket for
     /// values and their heap storage.
-    private nonisolated static func retainedBytes(of dictionary: [String: String]) -> Int {
+    nonisolated private static func retainedBytes(of dictionary: [String: String]) -> Int {
         let buckets = bucketCount(forCapacity: dictionary.capacity)
         return 64 + buckets * 2 * MemoryLayout<String>.stride + buckets / 8
             + dictionary.reduce(0) { $0 + heapBytes(of: $1.key) + heapBytes(of: $1.value) }
     }
 
-    private nonisolated static func mallocBytesUsed() -> Int { Int(mstats().bytes_used) }
+    nonisolated private static func mallocBytesUsed() -> Int {
+        Int(mstats().bytes_used)
+    }
 
-    private nonisolated static func formatBytes(_ bytes: Int) -> String {
-        if bytes >= 1 << 20 { return String(format: "%.2f MiB", Double(bytes) / Double(1 << 20)) }
-        if bytes >= 1 << 10 { return String(format: "%.1f KiB", Double(bytes) / Double(1 << 10)) }
+    nonisolated private static func formatBytes(_ bytes: Int) -> String {
+        if bytes >= 1 << 20 {
+            return String(format: "%.2f MiB", Double(bytes) / Double(1 << 20))
+        }
+        if bytes >= 1 << 10 {
+            return String(format: "%.1f KiB", Double(bytes) / Double(1 << 10))
+        }
         return "\(bytes) B"
     }
 
@@ -162,8 +191,13 @@ struct SessionCacheBoundsMeasurementTests {
         /// Process-wide malloc growth across the run — informational only.
         var mallocDelta = 0
 
-        var entries: Int { checkpoints.last?.entries ?? 0 }
-        var bytesPerEntry: Int { entries == 0 ? 0 : retainedBytes / entries }
+        var entries: Int {
+            checkpoints.last?.entries ?? 0
+        }
+
+        var bytesPerEntry: Int {
+            entries == 0 ? 0 : retainedBytes / entries
+        }
 
         var markdownRow: String {
             let curve = checkpoints.map { "\($0.entries)/\($0.driven)" }.joined(separator: " → ")
@@ -177,7 +211,8 @@ struct SessionCacheBoundsMeasurementTests {
     /// Drives `populate(workspace, index)` over the whole profile, sampling
     /// `entries()` after each quarter and `retained()` once at the end.
     private static func run(
-        cache: String, profile: SessionProfile,
+        cache: String,
+        profile: SessionProfile,
         populate: (Int, Int) async -> Void,
         entries: () -> Int,
         retained: () -> Int
@@ -186,12 +221,12 @@ struct SessionCacheBoundsMeasurementTests {
         let mallocBefore = mallocBytesUsed()
         let quarter = max(1, profile.workspaces / 4)
         var driven = 0
-        for workspace in 0..<profile.workspaces {
-            for index in 0..<profile.keysPerWorkspace {
+        for workspace in 0 ..< profile.workspaces {
+            for index in 0 ..< profile.keysPerWorkspace {
                 await populate(workspace, index)
                 driven += 1
             }
-            if (workspace + 1) % quarter == 0 || workspace + 1 == profile.workspaces {
+            if (workspace + 1).isMultiple(of: quarter) || workspace + 1 == profile.workspaces {
                 measurement.checkpoints.append((driven, entries()))
             }
         }
@@ -205,22 +240,28 @@ struct SessionCacheBoundsMeasurementTests {
     /// exactly), a few hundred bytes per entry, and an immaterial footprint
     /// for the realistic session.
     private static func expectMeasuredContract(
-        _ measurement: Measurement, sourceLocation: SourceLocation = #_sourceLocation
+        _ measurement: Measurement,
+        sourceLocation: SourceLocation = #_sourceLocation
     ) {
         let label = "\(measurement.cache) [\(measurement.profile.name)]"
         for checkpoint in measurement.checkpoints {
             #expect(
                 checkpoint.entries == checkpoint.driven,
                 "\(label): \(checkpoint.entries) entries after \(checkpoint.driven) distinct keys",
-                sourceLocation: sourceLocation)
+                sourceLocation: sourceLocation
+            )
         }
         #expect(
             measurement.bytesPerEntry <= maxBytesPerEntry,
-            "\(label): \(measurement.bytesPerEntry) B/entry", sourceLocation: sourceLocation)
+            "\(label): \(measurement.bytesPerEntry) B/entry",
+            sourceLocation: sourceLocation
+        )
         if measurement.profile.name == realistic.name {
             #expect(
                 measurement.retainedBytes < realisticRetainedCeiling,
-                "\(label): retains \(formatBytes(measurement.retainedBytes))", sourceLocation: sourceLocation)
+                "\(label): retains \(formatBytes(measurement.retainedBytes))",
+                sourceLocation: sourceLocation
+            )
         }
     }
 
@@ -231,8 +272,8 @@ struct SessionCacheBoundsMeasurementTests {
     /// with the same keys has to breach the per-entry ceiling and the
     /// realistic footprint ceiling, or the guards above are inert.
     @Test func overReservedCollectionsBreachFootprintGuards() {
-        let keys = (0..<Self.realistic.workspaces).flatMap { workspace in
-            (0..<Self.realistic.keysPerWorkspace).map { Self.filePath(workspace, $0) }
+        let keys = (0 ..< Self.realistic.workspaces).flatMap { workspace in
+            (0 ..< Self.realistic.keysPerWorkspace).map { Self.filePath(workspace, $0) }
         }
         let superlinear = keys.count * keys.count
 
@@ -261,27 +302,33 @@ struct SessionCacheBoundsMeasurementTests {
         for profile in [Self.realistic, Self.stress] {
             let loader = WorkspaceFileImageLoader(connection: ScriptedConnection())
             let measurement = await Self.run(
-                cache: "WorkspaceFileImageLoader.failedKeys", profile: profile,
+                cache: "WorkspaceFileImageLoader.failedKeys",
+                profile: profile,
                 populate: { workspace, index in
                     _ = try? await loader.image(
-                        workspaceId: Self.workspaceId(workspace), path: Self.filePath(workspace, index))
+                        workspaceId: Self.workspaceId(workspace),
+                        path: Self.filePath(workspace, index)
+                    )
                 },
                 entries: { loader.failedKeys.count },
-                retained: { Self.retainedBytes(of: loader.failedKeys) })
+                retained: { Self.retainedBytes(of: loader.failedKeys) }
+            )
             Self.expectMeasuredContract(measurement)
         }
     }
 
     @Test func remoteNegativeCacheGrowthAndFootprint() async {
         for profile in [Self.realistic, Self.stress] {
-            let loader = RemoteImageLoader(fetchData: { url in (Data(), Self.response(404, for: url)) })
+            let loader = RemoteImageLoader { url in (Data(), Self.response(404, for: url)) }
             let measurement = await Self.run(
-                cache: "RemoteImageLoader.failedKeys", profile: profile,
+                cache: "RemoteImageLoader.failedKeys",
+                profile: profile,
                 populate: { workspace, index in
                     _ = try? await loader.image(for: Self.remoteURL(workspace, index))
                 },
                 entries: { loader.failedKeys.count },
-                retained: { Self.retainedBytes(of: loader.failedKeys) })
+                retained: { Self.retainedBytes(of: loader.failedKeys) }
+            )
             Self.expectMeasuredContract(measurement)
         }
     }
@@ -290,16 +337,21 @@ struct SessionCacheBoundsMeasurementTests {
         for profile in [Self.realistic, Self.stress] {
             let connection = ScriptedConnection()
             let loader = AttachmentImageLoader(
-                connection: connection, fileLoader: WorkspaceFileImageLoader(connection: connection))
+                connection: connection,
+                fileLoader: WorkspaceFileImageLoader(connection: connection)
+            )
             let measurement = await Self.run(
-                cache: "AttachmentImageLoader.pathCache", profile: profile,
+                cache: "AttachmentImageLoader.pathCache",
+                profile: profile,
                 populate: { workspace, index in
                     _ = try? await loader.image(
                         workspaceId: Self.workspaceId(workspace),
-                        attachmentId: Self.attachmentId(workspace, index))
+                        attachmentId: Self.attachmentId(workspace, index)
+                    )
                 },
                 entries: { loader.pathCache.count },
-                retained: { Self.retainedBytes(of: loader.pathCache) })
+                retained: { Self.retainedBytes(of: loader.pathCache) }
+            )
             Self.expectMeasuredContract(measurement)
             // Immutable rows: one resolution plus one (failing) byte fetch per
             // attachment, never a second `file.getAttachmentInfo`. The malloc

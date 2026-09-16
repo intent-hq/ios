@@ -1,44 +1,51 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Session-lifetime specialist / provider / model cache: cold load,
 /// stale-while-revalidate, single-flight, invalidation and reconnect
 /// hard-clear (same contract as `GitHubRepoStoreTests`).
 @MainActor
 struct CreationOptionsStoreTests {
-
     private func specialistDict(id: String, name: String? = nil, role: String? = nil) -> [String: Any] {
         var dict: [String: Any] = ["id": id, "name": name ?? id.capitalized, "description": "d"]
-        if let role { dict["role"] = role }
+        if let role {
+            dict["role"] = role
+        }
         return dict
     }
 
     private func providerDict(id: String, authenticated: Any? = true) -> [String: Any] {
         var dict: [String: Any] = ["id": id]
-        if let authenticated { dict["authenticated"] = authenticated }
+        if let authenticated {
+            dict["authenticated"] = authenticated
+        }
         return dict
     }
 
-    private func modelDict(id: String, provider: String = "auggie", isDefault: Bool = false) -> [String: Any] {
+    func modelDict(id: String, provider: String = "auggie", isDefault: Bool = false) -> [String: Any] {
         ["id": id, "name": "\(id) (balanced)", "provider": provider, "isDefault": isDefault]
     }
 
     private func configureLoadResponses(_ fake: FakeConnectionManager) {
-        fake.responseMap["specialist.list"] = ["specialists": [
-            specialistDict(id: "implementor"),
-            specialistDict(id: "coordinator", role: "orchestrator"),
-        ]]
-        fake.responseMap["host.providerAuthStatus"] = ["providers": [
-            providerDict(id: "auggie", authenticated: true),
-            providerDict(id: "claude-code", authenticated: false),
-        ]]
+        fake.responseMap["specialist.list"] = [
+            "specialists": [
+                specialistDict(id: "implementor"),
+                specialistDict(id: "coordinator", role: "orchestrator")
+            ]
+        ]
+        fake.responseMap["host.providerAuthStatus"] = [
+            "providers": [
+                providerDict(id: "auggie", authenticated: true),
+                providerDict(id: "claude-code", authenticated: false)
+            ]
+        ]
         fake.responseMap["models.list"] = ["models": [modelDict(id: "sonnet4.5")]]
     }
 
     /// A fake whose reads answer immediately, plus a store that has
     /// completed its cold specialist/provider load over it.
-    private func makeLoadedStore() async -> (store: CreationOptionsStore, fake: FakeConnectionManager) {
+    func makeLoadedStore() async -> (store: CreationOptionsStore, fake: FakeConnectionManager) {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
         let store = CreationOptionsStore(connectionManager: fake)
@@ -49,9 +56,11 @@ struct CreationOptionsStoreTests {
     /// Poll (bounded) until the condition holds — avoids fixed-sleep
     /// flakiness for assertions on Task-spawned background refreshes.
     /// Records a failure on timeout so a missed update cannot pass silently.
-    private func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
-        for _ in 0..<200 {
-            if condition() { return }
+    func waitFor(_ description: String = "condition", _ condition: () -> Bool) async throws {
+        for _ in 0 ..< 200 {
+            if condition() {
+                return
+            }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         Issue.record("Timed out waiting for \(description)")
@@ -69,7 +78,7 @@ struct CreationOptionsStoreTests {
         #expect(store.specialists.orchestrator?.id == "coordinator")
         #expect(store.providers == [
             ProviderInfo(id: "auggie", authenticated: true),
-            ProviderInfo(id: "claude-code", authenticated: false),
+            ProviderInfo(id: "claude-code", authenticated: false)
         ])
         #expect(store.hasLoaded)
         #expect(store.lastLoadedAt != nil)
@@ -97,30 +106,34 @@ struct CreationOptionsStoreTests {
     @Test func providersParseTriStateAuthenticatedAndSkipEntriesWithoutId() async {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
-        fake.responseMap["host.providerAuthStatus"] = ["providers": [
-            providerDict(id: "auggie", authenticated: true),
-            providerDict(id: "claude-code", authenticated: false),
-            providerDict(id: "grok", authenticated: NSNull()),
-            providerDict(id: "pi", authenticated: nil),
-            ["authenticated": true],
-        ]]
+        fake.responseMap["host.providerAuthStatus"] = [
+            "providers": [
+                providerDict(id: "auggie", authenticated: true),
+                providerDict(id: "claude-code", authenticated: false),
+                providerDict(id: "grok", authenticated: NSNull()),
+                providerDict(id: "pi", authenticated: nil),
+                ["authenticated": true]
+            ]
+        ]
         let store = CreationOptionsStore(connectionManager: fake)
         await store.loadIfNeeded()
         #expect(store.providers == [
             ProviderInfo(id: "auggie", authenticated: true),
             ProviderInfo(id: "claude-code", authenticated: false),
             ProviderInfo(id: "grok", authenticated: nil),
-            ProviderInfo(id: "pi", authenticated: nil),
+            ProviderInfo(id: "pi", authenticated: nil)
         ])
     }
 
     @Test func specialistsSkipUnparsableRows() async {
         let fake = FakeConnectionManager()
         configureLoadResponses(fake)
-        fake.responseMap["specialist.list"] = ["specialists": [
-            specialistDict(id: "implementor"),
-            ["id": "broken"],
-        ]]
+        fake.responseMap["specialist.list"] = [
+            "specialists": [
+                specialistDict(id: "implementor"),
+                ["id": "broken"]
+            ]
+        ]
         let store = CreationOptionsStore(connectionManager: fake)
         await store.loadIfNeeded()
         #expect(store.specialists.map(\.id) == ["implementor"])
@@ -227,7 +240,9 @@ struct CreationOptionsStoreTests {
         #expect(store.providers.map(\.id) == ["auggie", "claude-code"])
         #expect(fake.paramsForMethod("host.providerAuthStatus").count == 2)
     }
+}
 
+extension CreationOptionsStoreTests {
     // MARK: - Invalidate
 
     @Test func invalidateEmptiesListsAndResetsHasLoaded() async {
@@ -453,116 +468,5 @@ struct CreationOptionsStoreTests {
 
         #expect(fake.requestLog.isEmpty)
         #expect(store.hasLoaded == false)
-    }
-
-    // MARK: - Models (per provider)
-
-    @Test func coldModelLoadFetchesAndCachesPerProvider() async {
-        let (store, fake) = await makeLoadedStore()
-        #expect(store.models(for: "auggie") == nil)
-
-        await store.loadModelsIfNeeded(providerId: "auggie")
-
-        let calls = fake.paramsForMethod("models.list")
-        #expect(calls.count == 1)
-        #expect(calls[0]["providerId"] as? String == "auggie")
-        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
-        #expect(store.models(for: "auggie")?.first?.provider == "auggie")
-        #expect(store.models(for: "codex") == nil)
-        // Model loads never drive the picker's loading state.
-        #expect(store.isLoading == false)
-    }
-
-    @Test func modelParsingFallsBackToRequestedProviderAndSkipsUnparsableRows() async {
-        let (store, fake) = await makeLoadedStore()
-        fake.responseMap["models.list"] = ["models": [
-            ["id": "gpt-5", "name": "GPT-5"],
-            ["id": "gpt-5-mini", "name": "GPT-5 mini", "provider": "codex", "isDefault": true],
-            ["id": "no-name"],
-        ]]
-
-        await store.loadModelsIfNeeded(providerId: "codex")
-
-        let models = store.models(for: "codex") ?? []
-        #expect(models.map(\.id) == ["gpt-5", "gpt-5-mini"])
-        #expect(models.map(\.provider) == ["codex", "codex"])
-        #expect(models.map(\.isDefault) == [false, true])
-    }
-
-    @Test func cachedModelLoadReturnsImmediatelyAndRevalidatesSilently() async throws {
-        let (store, fake) = await makeLoadedStore()
-        await store.loadModelsIfNeeded(providerId: "auggie")
-        fake.pendingMethods = ["models.list"]
-
-        await store.loadModelsIfNeeded(providerId: "auggie")
-
-        // Returned with the cached catalog intact while the refresh is in flight.
-        try await waitFor("refresh read") { fake.paramsForMethod("models.list").count == 2 }
-        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
-        #expect(store.isLoading == false)
-
-        fake.resolvePending("models.list", with: ["models": [modelDict(id: "opus4.6")]])
-        try await waitFor("refresh completion") { store.models(for: "auggie")?.map(\.id) == ["opus4.6"] }
-    }
-
-    @Test func concurrentModelLoadsForOneProviderShareOneFlight() async throws {
-        let (store, fake) = await makeLoadedStore()
-
-        // Hold the reads open so every caller enters the store while the
-        // first flight is still in flight (a completed flight would turn the
-        // second call into a legitimate stale-while-revalidate refresh).
-        fake.pendingMethods = ["models.list"]
-        let first = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
-        let second = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
-        let other = Task { await store.loadModelsIfNeeded(providerId: "codex") }
-        try await waitFor("both cold reads") { fake.paramsForMethod("models.list").count == 2 }
-        fake.resolvePending("models.list", with: ["models": [modelDict(id: "sonnet4.5")]])
-        fake.resolvePending("models.list", with: ["models": [modelDict(id: "gpt", provider: "codex")]])
-        _ = await (first.value, second.value, other.value)
-
-        let providerIds = fake.paramsForMethod("models.list").compactMap { $0["providerId"] as? String }
-        #expect(providerIds.sorted() == ["auggie", "codex"])
-        #expect(store.models(for: "auggie") != nil)
-        #expect(store.models(for: "codex") != nil)
-    }
-
-    @Test func failedModelLoadKeepsCacheAndRetriesColdNextTime() async throws {
-        let (store, fake) = await makeLoadedStore()
-        fake.errorMap["models.list"] = NSError(domain: "t", code: -1)
-
-        await store.loadModelsIfNeeded(providerId: "auggie")
-        #expect(store.models(for: "auggie") == nil)
-
-        // Not cached after a failure: the next call is an awaited cold load.
-        fake.errorMap["models.list"] = nil
-        await store.loadModelsIfNeeded(providerId: "auggie")
-        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
-        #expect(fake.paramsForMethod("models.list").count == 2)
-
-        // A failed background refresh keeps the cached catalog.
-        fake.errorMap["models.list"] = NSError(domain: "t", code: -1)
-        await store.loadModelsIfNeeded(providerId: "auggie")
-        try await waitFor("refresh read") { fake.paramsForMethod("models.list").count == 3 }
-        try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
-    }
-
-    @Test func invalidateDuringPendingModelLoadRejectsStaleCompletion() async throws {
-        let (store, fake) = await makeLoadedStore()
-        fake.pendingMethods = ["models.list"]
-        let load = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
-        try await waitFor("model read") { fake.didCallMethod("models.list") }
-
-        store.invalidate()
-        fake.resolvePending("models.list", with: ["models": [modelDict(id: "stale")]])
-        await load.value
-        #expect(store.models(for: "auggie") == nil)
-
-        // The next call starts a fresh flight rather than joining the
-        // superseded one.
-        fake.pendingMethods = []
-        await store.loadModelsIfNeeded(providerId: "auggie")
-        #expect(store.models(for: "auggie")?.map(\.id) == ["sonnet4.5"])
-        #expect(fake.paramsForMethod("models.list").count == 2)
     }
 }

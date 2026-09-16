@@ -116,21 +116,31 @@ struct ConnectionPairingTests {
         let manager = setup.manager
         let undecodable = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)
         #expect(manager.saveDataToKeychain(
-            data: undecodable, account: manager.keychainAccountConnections))
+            data: undecodable,
+            account: manager.keychainAccountConnections
+        ))
         let fake = FakeConnectionManager()
         fake.responseMap["host.status"] = ["prettyHostname": "New Mac"]
         let server = PairedServer(
-            hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
-            certFingerprint: "aa:bb")
+            hosts: ["10.0.0.1"],
+            port: 4242,
+            name: "daemon",
+            pairedAt: Date(),
+            certFingerprint: "aa:bb"
+        )
 
         await #expect(throws: ConnectionPairing.PersistenceError.registryUndecodable) {
             try await ConnectionPairing.finalize(
-                server: server, token: "new-token", connection: fake,
-                persistence: manager)
+                server: server,
+                token: "new-token",
+                connection: fake,
+                persistence: manager
+            )
         }
 
         #expect(manager.loadDataFromKeychain(
-            account: manager.keychainAccountConnections) == undecodable)
+            account: manager.keychainAccountConnections
+        ) == undecodable)
         #expect(manager.isConnectionRegistryUndecodable())
         #expect(manager.activeConnection() == nil)
         #expect(manager.defaults.string(forKey: manager.activeConnectionIdKey) == nil)
