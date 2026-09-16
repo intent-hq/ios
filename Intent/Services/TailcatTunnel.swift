@@ -35,22 +35,39 @@ nonisolated struct UnavailableTunnelDialer: TunnelDialing {
 
 #if canImport(TailcatKit)
 
+/// The gomobile handles a session tears down. Abstracted so teardown can be
+/// tested with injected (blocking) fakes; the TailcatKit projections conform.
+nonisolated protocol TunnelClientHandle {
+    func close() throws
+}
+
+nonisolated protocol TunnelForwarderHandle {
+    func port() -> Int
+    func close() throws
+}
+
+nonisolated extension TailcatkitClient: TunnelClientHandle {}
+nonisolated extension TailcatkitForwarder: TunnelForwarderHandle {}
+
 /// TailcatKit-backed session: owns the gomobile client and its loopback
 /// forwarder. `@unchecked Sendable`: the gomobile projections are thread-safe
 /// handles to Go objects.
 nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable {
     let localPort: Int
-    private let client: TailcatkitClient
-    private let forwarder: TailcatkitForwarder
+    private let client: any TunnelClientHandle
+    private let forwarder: (any TunnelForwarderHandle)?
 
-    init(client: TailcatkitClient, forwarder: TailcatkitForwarder) {
+    /// `forwarder` is nil for a partially constructed session (client dialed,
+    /// no forwarder started): its `localPort` is 0 and `close()` tears down
+    /// only the client.
+    init(client: any TunnelClientHandle, forwarder: (any TunnelForwarderHandle)?) {
         self.client = client
         self.forwarder = forwarder
-        self.localPort = forwarder.port()
+        self.localPort = forwarder?.port() ?? 0
     }
 
     func close() async {
-        try? forwarder.close()
+        try? forwarder?.close()
         try? client.close()
     }
 }
