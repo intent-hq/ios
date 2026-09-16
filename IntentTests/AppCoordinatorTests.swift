@@ -2126,6 +2126,33 @@ final class AppCoordinatorTests {
         try? await Task.sleep(nanoseconds: 200_000_000)
     }
 
+    /// One round trip through the main queue. The coordinator's connection
+    /// sink is `receive(on: DispatchQueue.main)`, which dispatches every
+    /// value asynchronously, and MainActor tasks enqueue on the same serial
+    /// queue — so a block queued here runs only after the sinks and tasks
+    /// already queued by the preceding `simulate*` / observation change.
+    @MainActor
+    private static func awaitMainQueueTurn() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
+    /// Bounded poll; records a failure on timeout so a missed update cannot
+    /// pass silently.
+    @MainActor
+    private static func waitFor(
+        _ description: String, timeout: Duration = .seconds(2),
+        _ condition: () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for \(description)")
+    }
+
     // MARK: - workspace.markSeen on open
 
     @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async {
@@ -2567,7 +2594,7 @@ final class AppCoordinatorTests {
 
     // MARK: - Reconnect re-validation of the open conversation
 
-    @Test @MainActor func repeatedReconnectAttemptsDoNotFanOutWorkspaceLoadingChanges() async {
+    @Test @MainActor func repeatedReconnectAttemptsDoNotFanOutWorkspaceLoadingChanges() async throws {
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         let callbackCount = Mutex(0)
@@ -2580,29 +2607,35 @@ final class AppCoordinatorTests {
             })
 
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         fake.simulateDisconnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
+        #expect(coordinator.isDisconnected)
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
         // Repeated connected events replace the pending reconnect attempt while
         // the overlay is still waiting for workspace loading to complete.
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
-        await Self.drainMainQueue()
+        // The onChange callback fires synchronously and queues a MainActor
+        // task that re-arms the observation; that task must run before the
+        // next loading change for it to be observed too.
+        await Self.awaitMainQueueTurn()
 
         #expect(callbackCount.withLock { $0 } == baseline + 1,
                 "Only the current reconnect registration may receive a loading change")
         #expect(coordinator.isDisconnected)
 
         store.isLoading = false
-        await Self.drainMainQueue()
+        try await Self.waitFor("overlay cleared once loading finished") {
+            !coordinator.isDisconnected
+        }
 
         #expect(callbackCount.withLock { $0 } == baseline + 2)
         #expect(!coordinator.isDisconnected,
@@ -2622,24 +2655,31 @@ final class AppCoordinatorTests {
             })
 
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         fake.simulateDisconnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
+        #expect(coordinator.isDisconnected)
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
-        try await Task.sleep(for: .milliseconds(5_200))
+        // The overlay timeout is production behaviour
+        // (Constants.AppCoordination.reconnectOverlayTimeout); poll for its
+        // effect rather than sleeping a guessed margin past it.
+        try await Self.waitFor(
+            "reconnect overlay timeout",
+            timeout: Constants.AppCoordination.reconnectOverlayTimeout + .seconds(2)
+        ) { !coordinator.isDisconnected }
         #expect(!coordinator.isDisconnected)
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
         #expect(callbackCount.withLock { $0 } == baseline,
                 "A timed-out reconnect must not leave a loading callback registered")
     }
 
-    @Test @MainActor func coordinatorDeallocationRemovesWorkspaceLoadingObservation() async {
+    @Test @MainActor func coordinatorDeallocationRemovesWorkspaceLoadingObservation() async throws {
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
         let callbackCount = Mutex(0)
@@ -2656,20 +2696,20 @@ final class AppCoordinatorTests {
             weakCoordinator = coordinator
 
             fake.simulateConnect()
-            await Self.drainMainQueue()
+            await Self.awaitMainQueueTurn()
             fake.simulateDisconnect()
-            await Self.drainMainQueue()
+            await Self.awaitMainQueueTurn()
             fake.simulateConnect()
-            await Self.drainMainQueue()
+            await Self.awaitMainQueueTurn()
             coordinator = nil
         }
 
-        await Self.drainMainQueue()
+        try await Self.waitFor("coordinator deallocation") { weakCoordinator == nil }
         #expect(weakCoordinator == nil)
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
         #expect(callbackCount.withLock { $0 } == baseline,
                 "Deallocation must consume the pending loading registration")
@@ -2688,22 +2728,26 @@ final class AppCoordinatorTests {
             })
 
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         fake.simulateDisconnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
+        #expect(coordinator.isDisconnected)
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         fake.simulateDisconnect()
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
 
         #expect(coordinator.isDisconnected)
+        // Negative assertion on the production timeout
+        // (Constants.AppCoordination.reconnectOverlayTimeout, 5 s): the stale
+        // timer must NOT fire, so this deliberately outwaits it.
         try await Task.sleep(for: .milliseconds(5_200))
         #expect(coordinator.isDisconnected,
                 "A timeout from the prior reconnect must not hide a later disconnection")
 
         let baseline = callbackCount.withLock { $0 }
         store.isLoading = true
-        await Self.drainMainQueue()
+        await Self.awaitMainQueueTurn()
         #expect(callbackCount.withLock { $0 } == baseline,
                 "Disconnect must consume the pending loading registration")
     }

@@ -564,6 +564,41 @@ final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
 }
 
 /// Production backend over the Security framework.
+///
+/// ## Credential backup / accessibility policy (intent-hq/ios#263)
+///
+/// Two credential classes live in the Keychain with deliberately different
+/// policies; `KeychainAccessibilityPolicyTests` pins both.
+///
+/// - **Local credentials** — everything this store writes under service
+///   `com.intent.companion`: the `connections` blob (each paired daemon's
+///   bearer token + certificate pin) and the legacy `apiToken` /
+///   `serverInfo` items. Added with `kSecAttrAccessibleAfterFirstUnlock`,
+///   NOT synchronizable and in no shared access group. They never leave the
+///   device via iCloud Keychain, but they DO ride encrypted backups and
+///   device-to-device migration, so a phone restored or migrated onto new
+///   hardware keeps its pairings. `AfterFirstUnlock` (rather than
+///   `WhenUnlocked`) keeps the token reachable for background work while the
+///   device is locked.
+///
+///   A `...ThisDeviceOnly` class is deliberately NOT used — a usability
+///   trade-off, not a security equivalence. It would make these items
+///   unusable after a restore or migration onto a DIFFERENT device (Apple
+///   protects such items with the device UID in backups; a same-device
+///   restore keeps them), forcing a fresh pairing per daemon. For daemons
+///   that also appear in the desktop-written synced registry the pairing
+///   comes back on its own, but pairings made only on this phone, or with
+///   desktop sync disabled/unavailable, have no synced counterpart — for
+///   those, `ThisDeviceOnly` WOULD remove the cross-device backup-restore
+///   exposure, at the cost of re-pairing. The current policy accepts that
+///   exposure for compatibility with existing items and restore usability.
+///   Changing it is a product/security decision (see ios#263) and needs a
+///   migration: `save` updates existing items in place, so a new
+///   accessibility class only applies to items added after the change.
+/// - **Synced backend records** — `SyncedBackendRegistry` (service
+///   `com.cloudlands.intent.backends`, shared access group) are written by the
+///   desktop app with `kSecAttrSynchronizable = true` and are read-only on
+///   iOS; their accessibility is the writer's policy.
 struct SecItemKeychainStorage: KeychainStorage {
     struct SecurityCalls {
         let update: ([String: Any], [String: Any]) -> OSStatus

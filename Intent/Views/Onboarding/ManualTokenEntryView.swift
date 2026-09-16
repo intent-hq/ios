@@ -232,13 +232,13 @@ struct ManualTokenEntryView: View {
         errorMessage = nil
 
         connectTask = Task {
-            let fingerprint: String?
+            let probed: CertFingerprintProbe.ProbeResult
             switch input {
             case .direct(let host):
-                fingerprint = await CertFingerprintProbe.probe(host: host, port: portNum)
+                probed = await CertFingerprintProbe.probe(host: host, port: portNum)
             case .tailcat(let tcAddress):
                 do {
-                    fingerprint = try await CertFingerprintProbe.probeViaTunnel(
+                    probed = try await CertFingerprintProbe.probeViaTunnel(
                         dialer: session.connection.tunnelDialer,
                         tcAddress: tcAddress, remotePort: portNum)
                 } catch {
@@ -254,20 +254,21 @@ struct ManualTokenEntryView: View {
             }
 
             // The user may have hit Cancel while the probe was in flight: a
-            // cancelled direct probe surfaces here as a nil fingerprint (the
+            // cancelled direct probe surfaces here as `.cancelled` (the
             // tunnel branch handles its thrown cancellation above), and
             // processing it would show a spurious certificate error (or
             // clobber the state of a newer attempt). Drop the result instead.
             guard !Task.isCancelled else { return }
 
-            switch CertFingerprintProbe.outcome(forFingerprint: fingerprint) {
+            switch CertFingerprintProbe.outcome(forProbe: probed) {
             case .confirmFingerprint(let fingerprint):
                 probedFingerprint = fingerprint
                 probedInput = input
                 showFingerprintConfirmation = true
             case .abort(let message):
                 // Never connect unpinned: without a probed certificate there is
-                // no way to verify the server's identity.
+                // no way to verify the server's identity. The message names
+                // the stage the probe failed at (ios#233).
                 errorMessage = message
                 isValidating = false
             }
