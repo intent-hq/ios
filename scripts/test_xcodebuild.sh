@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Self-tests for scripts/xcodebuild.sh: the simulator lock and the
-# crash-vs-failure classification of a test run. xcrun and xcodebuild are
-# replaced by stubs on PATH, so this runs anywhere with bash (including the
-# stock macOS Bash 3.2) plus python3 (which the lock keeper needs) and never
-# touches a real simulator.
+# Self-tests for scripts/xcodebuild.sh: the simulator lock, the
+# crash-vs-failure classification of a test run, and the resolution of
+# ONLY_TESTING selectors against the enumerated test catalog. xcrun and
+# xcodebuild are replaced by stubs on PATH, so this runs anywhere with bash
+# (including the stock macOS Bash 3.2) plus python3 (which the lock keeper and
+# the resolver need) and never touches a real simulator.
 #
 # Usage: scripts/test_xcodebuild.sh
 set -euo pipefail
@@ -12,7 +13,11 @@ cd "$(dirname "$0")/.."
 SCRIPT=$PWD/scripts/xcodebuild.sh
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-selftest.XXXXXX")
-trap 'rm -rf -- "$work"' EXIT
+# test-ios-unit preflights the gitignored TailcatKit.xcframework; a stand-in
+# directory is created for the run and removed again unless it already existed.
+tailcatkit=TailcatKit/build/TailcatKit.xcframework
+made_tailcatkit=0
+trap 'rm -rf -- "$work"; [ "$made_tailcatkit" -eq 0 ] || { rm -rf -- "$tailcatkit"; rmdir TailcatKit/build 2>/dev/null || true; }' EXIT
 stubs=$work/bin
 mkdir -p "$stubs"
 
@@ -28,9 +33,30 @@ EOF
 # every inherited fd except stdout/stderr still open; STUB_WATCH=<pid> records
 # at start whether that peer process is still alive; STUB_RESIST=<secs> spawns
 # a child that ignores SIGTERM for that long (logged as "child <pid>") and
-# STUB_RESIST_ROOT=1 makes the stub itself ignore SIGTERM.
+# STUB_RESIST_ROOT=1 makes the stub itself ignore SIGTERM. STUB_ARGS records
+# every invocation's argv as one "argv: [arg] [arg] ..." line. An
+# -enumerate-tests invocation copies $STUB_CATALOG to the requested
+# -test-enumeration-output-path and exits 0 (nonzero with STUB_ENUMERATE_FAIL=1)
+# without running the canned outcome.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
+if [ -n "${STUB_ARGS:-}" ]; then
+  { printf 'argv:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
+fi
+case " $* " in
+  *" -enumerate-tests "*)
+    if [ -n "${STUB_ENUMERATE_FAIL:-}" ]; then
+      echo "xcodebuild: error: Unable to enumerate tests (stub)"
+      exit 70
+    fi
+    out=; prev=
+    for arg in "$@"; do
+      [ "$prev" != "-test-enumeration-output-path" ] || out=$arg
+      prev=$arg
+    done
+    cp "$STUB_CATALOG" "$out"
+    exit 0 ;;
+esac
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
 if [ -n "${STUB_WATCH:-}" ]; then
   if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
@@ -80,6 +106,32 @@ esac
 EOF
 chmod +x "$stubs/xcrun" "$stubs/xcodebuild"
 
+# The enumerated catalog in xcodebuild's flat JSON shape: an XCTest suite with
+# "()" methods, a Swift Testing suite with a parameterised function, a UI
+# suite, a look-alike of a suite that does not exist, and one disabled test.
+export STUB_CATALOG=$work/catalog.json
+cat > "$STUB_CATALOG" <<'EOF'
+{
+  "errors" : [ ],
+  "values" : [
+    {
+      "testPlan" : "Intent",
+      "enabledTests" : [
+        { "identifier" : "IntentTests/DemoFixturesTests/testFoo()", "name" : "testFoo()" },
+        { "identifier" : "IntentTests/DemoFixturesTests/testBar()", "name" : "testBar()" },
+        { "identifier" : "IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank(width:)", "name" : "recoversAfterBlank(width:)" },
+        { "identifier" : "IntentTests/ConversationTranscriptScrollPolicyTests/staysPinnedAtEnd()", "name" : "staysPinnedAtEnd()" },
+        { "identifier" : "IntentTests/NewMessagesDividerViewTests/testDividerAppears()", "name" : "testDividerAppears()" },
+        { "identifier" : "IntentUITests/ConversationTranscriptScrollUITests/testGoToEndButtonAppears()", "name" : "testGoToEndButtonAppears()" }
+      ],
+      "disabledTests" : [
+        { "identifier" : "IntentTests/QuarantinedDemoTests/flakyOnCI()", "name" : "flakyOnCI()" }
+      ]
+    }
+  ]
+}
+EOF
+
 export PATH="$stubs:$PATH"
 export TMPDIR=$work
 export SIM_UDID=00000000-0000-0000-0000-000000000001
@@ -108,6 +160,18 @@ run_wrapper() {
   "$SCRIPT" "$2" > "$1" 2>&1 || status=$?
   echo "$status"
 }
+# run_filtered <name> <ONLY_TESTING> <subcommand> [env...]: exit status on
+# stdout, output in $work/<name>.out, the stub's argv lines in $work/<name>.args.
+run_filtered() {
+  local name=$1 only=$2 sub=$3 status=0
+  shift 3
+  : > "$work/$name.args"
+  env STUB_ARGS="$work/$name.args" ONLY_TESTING="$only" "$@" "$SCRIPT" "$sub" > "$work/$name.out" 2>&1 || status=$?
+  echo "$status"
+}
+# argv_line <name> <n>: the n-th recorded xcodebuild invocation; argv_count <name>.
+argv_line() { sed -n "${2}p" "$work/$1.args"; }
+argv_count() { grep -c '^argv:' "$work/$1.args" || true; }
 # The lock is a flock(2), so "free" means a non-blocking exclusive flock succeeds.
 lock_is_free() {
   python3 -c 'import fcntl, os, sys
@@ -327,6 +391,146 @@ assert_contains "non-numeric SIM_LOCK_TIMEOUT names the knob" "$(cat "$work/knob
 status=$(SIM_LOCK_KILL_GRACE=-1 run_wrapper "$work/knob2.out" test-without-building)
 assert_eq "non-numeric SIM_LOCK_KILL_GRACE is refused" "$status" 1
 assert_contains "non-numeric SIM_LOCK_KILL_GRACE names the knob" "$(cat "$work/knob2.out")" "SIM_LOCK_KILL_GRACE must be a non-negative integer"
+
+echo "# empty ONLY_TESTING: no enumeration, xcodebuild argv unchanged"
+status=$(run_filtered plain "" test-without-building)
+assert_eq "empty ONLY_TESTING exits 0" "$status" 0
+assert_eq "empty ONLY_TESTING makes exactly one xcodebuild call" "$(argv_count plain)" 1
+assert_eq "empty ONLY_TESTING leaves the argv byte-identical" "$(argv_line plain 1)" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO]"
+assert_lacks "empty ONLY_TESTING prints no resolution notice" "$(cat "$work/plain.out")" "ONLY_TESTING"
+
+echo "# a target-wide selector resolves; enumeration precedes the real run"
+status=$(run_filtered target "IntentTests" test-without-building)
+assert_eq "target-wide selector exits 0" "$status" 0
+assert_eq "filtered run makes an enumeration call and a test call" "$(argv_count target)" 2
+enum=$(argv_line target 1)
+real=$(argv_line target 2)
+assert_contains "enumeration uses the same project and destination" "$enum" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID]"
+assert_contains "enumeration asks for a flat json catalog" "$enum" \
+  "[-enumerate-tests] [-test-enumeration-style] [flat] [-test-enumeration-format] [json] [-test-enumeration-output-path] [$work/xcodebuild-enumerate."
+assert_lacks "enumeration carries no -only-testing:" "$enum" "-only-testing:"
+assert_lacks "enumeration is not a real test run" "$enum" "-parallel-testing-enabled"
+assert_eq "the real run keeps the unfiltered argv plus the selector" "$real" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-only-testing:IntentTests]"
+assert_contains "target-wide selector reports its resolved count" "$(cat "$work/target.out")" "ONLY_TESTING: IntentTests -> 5 test(s)"
+assert_lock_free "lock released after a resolved filtered run"
+assert_eq "enumeration scratch files are removed" "$(ls "$work" | grep -c '^xcodebuild-enumerate\.')" 0
+
+echo "# Target/Class selectors resolve for XCTest and Swift Testing suites"
+status=$(run_filtered xctest "IntentTests/DemoFixturesTests" test-without-building)
+assert_eq "XCTest suite selector exits 0" "$status" 0
+assert_contains "XCTest suite selector resolves its () methods" "$(cat "$work/xctest.out")" "ONLY_TESTING: IntentTests/DemoFixturesTests -> 2 test(s)"
+status=$(run_filtered swifttesting "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building)
+assert_eq "Swift Testing suite selector exits 0" "$status" 0
+assert_contains "Swift Testing suite selector resolves its functions" "$(cat "$work/swifttesting.out")" "ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests -> 2 test(s)"
+
+echo "# method selectors resolve with and without () or a parameter list"
+methods="IntentTests/DemoFixturesTests/testFoo IntentTests/DemoFixturesTests/testBar() IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank(width:)"
+status=$(run_filtered methods "$methods" test-without-building)
+out=$(cat "$work/methods.out")
+assert_eq "method selectors exit 0" "$status" 0
+assert_contains "bare XCTest method matches testFoo()" "$out" "ONLY_TESTING: IntentTests/DemoFixturesTests/testFoo -> 1 test(s)"
+assert_contains "XCTest method with () matches" "$out" "ONLY_TESTING: IntentTests/DemoFixturesTests/testBar() -> 1 test(s)"
+assert_contains "bare Swift Testing function matches its parameterised identifier" "$out" "ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank -> 1 test(s)"
+assert_contains "Swift Testing function with parameter list matches" "$out" "ONLY_TESTING: IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank(width:) -> 1 test(s)"
+real=$(argv_line methods 2)
+for id in $methods; do
+  assert_contains "the real run carries -only-testing:$id" "$real" "[-only-testing:$id]"
+done
+status=$(run_filtered wrongparams "IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank(height:)" test-without-building)
+assert_eq "a method selector with the wrong parameter list exits 82" "$status" 82
+
+echo "# a file-name or typo selector exits 82 with the look-alike suite"
+status=$(run_filtered typo "IntentTests/NewMessagesDividerTests" test-without-building)
+out=$(cat "$work/typo.out")
+assert_eq "unmatched selector exits 82" "$status" 82
+assert_contains "unmatched selector is named" "$out" "ONLY_TESTING selector 'IntentTests/NewMessagesDividerTests' matched no test in the enumerated catalog"
+assert_contains "unmatched selector gets the look-alike suite suggested" "$out" "did you mean: IntentTests/NewMessagesDividerViewTests"
+assert_contains "unmatched selector gets the Target/Suite reminder" "$out" "not a file name"
+assert_contains "unmatched selector says the run was not started" "$out" "the test run was not started"
+assert_contains "unmatched selector names the exit code" "$out" "Exiting 82 (unmatched ONLY_TESTING selector)"
+assert_eq "unmatched selector never starts the real run" "$(argv_count typo)" 1
+assert_lacks "unmatched selector passes no -only-testing: to xcodebuild" "$(cat "$work/typo.args")" "-only-testing:"
+assert_lock_free "lock released after an unmatched selector"
+status=$(run_filtered filename "IntentTests/NewMessagesDividerViewTests.swift" test-without-building)
+assert_eq "a .swift file name exits 82" "$status" 82
+assert_contains "a .swift file name gets the suite suggested" "$(cat "$work/filename.out")" "did you mean: IntentTests/NewMessagesDividerViewTests"
+
+echo "# a valid selector does not rescue an unmatched one"
+status=$(run_filtered mixed "IntentTests/TranscriptScrollPolicyTests IntentUITests/ConversationTranscriptScrollUITests" test-without-building)
+out=$(cat "$work/mixed.out")
+assert_eq "mixed valid and unmatched selectors exit 82" "$status" 82
+assert_contains "the unmatched selector is named" "$out" "'IntentTests/TranscriptScrollPolicyTests' matched no test"
+assert_contains "the unmatched selector gets the policy suite suggested" "$out" "did you mean: IntentTests/ConversationTranscriptScrollPolicyTests"
+assert_contains "the valid UI selector is reported as resolved" "$out" "ONLY_TESTING: IntentUITests/ConversationTranscriptScrollUITests -> 1 test(s)"
+assert_lacks "the valid UI selector is not reported as unmatched" "$out" "'IntentUITests/ConversationTranscriptScrollUITests' matched"
+assert_eq "mixed selectors never start the real run" "$(argv_count mixed)" 1
+assert_lock_free "lock released after mixed selectors"
+
+echo "# a selector matching only disabled tests exits 82"
+status=$(run_filtered disabled "IntentTests/QuarantinedDemoTests" test-without-building)
+assert_eq "only-disabled selector exits 82" "$status" 82
+assert_contains "only-disabled selector says so" "$(cat "$work/disabled.out")" "ONLY_TESTING selector 'IntentTests/QuarantinedDemoTests' matched only disabled tests (1, e.g. IntentTests/QuarantinedDemoTests/flakyOnCI())"
+assert_eq "only-disabled selector never starts the real run" "$(argv_count disabled)" 1
+
+echo "# duplicate selectors collapse; a shadowed selector is still resolved"
+status=$(run_filtered dupes "IntentTests IntentTests/DemoFixturesTests IntentTests" test-without-building)
+out=$(cat "$work/dupes.out")
+assert_eq "duplicate selectors exit 0" "$status" 0
+assert_eq "a duplicate selector is resolved once" "$(grep -c '^ONLY_TESTING: IntentTests ->' "$work/dupes.out")" 1
+assert_contains "the shadowed selector is resolved individually" "$out" "ONLY_TESTING: IntentTests/DemoFixturesTests -> 2 test(s)"
+assert_eq "a duplicate selector is forwarded once" "$(argv_line dupes 2 | grep -o '\[-only-testing:IntentTests\]' | grep -c .)" 1
+assert_contains "the shadowed selector is still forwarded" "$(argv_line dupes 2)" "[-only-testing:IntentTests/DemoFixturesTests]"
+
+echo "# a failed or unparsable enumeration exits 83"
+status=$(run_filtered enumfail "IntentTests" test-without-building STUB_ENUMERATE_FAIL=1)
+out=$(cat "$work/enumfail.out")
+assert_eq "failed enumeration exits 83" "$status" 83
+assert_contains "failed enumeration says the selection is unverified" "$out" "could not verify the ONLY_TESTING selection: xcodebuild -enumerate-tests exited 70"
+assert_contains "failed enumeration names the exit code" "$out" "Exiting 83 (test selection unverified), not 70"
+assert_eq "failed enumeration never starts the real run" "$(argv_count enumfail)" 1
+assert_lock_free "lock released after a failed enumeration"
+echo "not json" > "$work/garbage.json"
+status=$(run_filtered garbage "IntentTests" test-without-building STUB_CATALOG="$work/garbage.json")
+assert_eq "unparsable catalog exits 83" "$status" 83
+assert_contains "unparsable catalog is reported" "$(cat "$work/garbage.out")" "could not verify the ONLY_TESTING selection: the test enumeration output is unreadable"
+assert_eq "unparsable catalog never starts the real run" "$(argv_count garbage)" 1
+echo '{ "errors" : [ ], "values" : [ ] }' > "$work/empty.json"
+status=$(run_filtered emptycatalog "IntentTests" test-without-building STUB_CATALOG="$work/empty.json")
+assert_eq "catalog without tests exits 83" "$status" 83
+assert_contains "catalog without tests is reported" "$(cat "$work/emptycatalog.out")" "the test enumeration output lists no tests"
+assert_lock_free "lock released after an unparsable catalog"
+
+echo "# a flag-like entry is refused before any xcodebuild call"
+status=$(run_filtered flaglike "IntentTests -sdk" test-without-building)
+assert_eq "flag-like entry exits 1" "$status" 1
+assert_contains "flag-like entry is named" "$(cat "$work/flaglike.out")" "ONLY_TESTING entry '-sdk' looks like a flag"
+assert_eq "flag-like entry makes no xcodebuild call" "$(argv_count flaglike)" 0
+
+echo "# test-ios-unit: enumeration carries -skip-testing:, a skipped selector exits 82"
+if [ ! -d "$tailcatkit" ]; then
+  mkdir -p "$tailcatkit"
+  made_tailcatkit=1
+fi
+status=$(run_filtered unitskip "IntentUITests/ConversationTranscriptScrollUITests" test-ios-unit)
+out=$(cat "$work/unitskip.out")
+assert_eq "UI selector under test-ios-unit exits 82" "$status" 82
+assert_contains "UI selector under test-ios-unit names the exclusion" "$out" \
+  "ONLY_TESTING selector 'IntentUITests/ConversationTranscriptScrollUITests' is excluded by -skip-testing:IntentUITests on this subcommand"
+assert_eq "test-ios-unit builds, enumerates, and stops" "$(argv_count unitskip)" 2
+assert_contains "test-ios-unit builds first" "$(argv_line unitskip 1)" "argv: [build-for-testing]"
+enum=$(argv_line unitskip 2)
+assert_contains "test-ios-unit enumeration carries -skip-testing:IntentUITests" "$enum" "[-enumerate-tests] [-test-enumeration-style] [flat] [-test-enumeration-format] [json] [-test-enumeration-output-path] [$work/xcodebuild-enumerate."
+assert_contains "test-ios-unit enumeration ends with the skip flag" "$enum" "] [-skip-testing:IntentUITests]"
+assert_lacks "test-ios-unit enumeration carries no -only-testing:" "$enum" "-only-testing:"
+assert_lock_free "lock released after a skipped selector"
+status=$(run_filtered unitok "IntentTests/DemoFixturesTests" test-ios-unit)
+assert_eq "unit selector under test-ios-unit exits 0" "$status" 0
+assert_eq "test-ios-unit builds, enumerates, and runs" "$(argv_count unitok)" 3
+assert_contains "test-ios-unit real run carries the selector and the skip flag" "$(argv_line unitok 3)" \
+  "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/DemoFixturesTests] [-skip-testing:IntentUITests]"
 
 echo
 if [ "$failures" -eq 0 ]; then
