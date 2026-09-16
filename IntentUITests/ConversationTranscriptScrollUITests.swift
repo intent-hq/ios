@@ -168,11 +168,13 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // hydration back the same way (DemoFixtures.longConversationBlockHydrationGate).
         static let blockHydrationTriggerFileArgumentPrefix = "--demo-block-hydration-trigger-file="
         static let blockHydrationTimeout: TimeInterval = 15
-        // File name of the `view` tool row the last assistant message carries
-        // after its opening paragraph
+        // File name of the `view` tool row of the tool-only assistant message
+        // right before the last message
         // (DemoFixtures.longConversationTruncatedToolCalls[0]): its header
         // reads "Read final_evidence_table.py tests/payments/evidence"
         // (ToolClassifier), and its result is a slim preview until hydrated.
+        // A tool-only message: a text-bearing assistant row's copy
+        // context-menu overlay claims taps meant for its SwiftUI buttons.
         static let truncatedToolFileName = "final_evidence_table.py"
         // ToolCallView's hydration hint under an expanded slim row: "Preview
         // — tap to load full content" until the fetch starts, "Loading full
@@ -612,9 +614,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// The device reproduction of intent-hq/ios#338: the transcript has
     /// settled at the end — on a cold entry or a warm re-entry — and
     /// seconds later, on a slow network, a slim-truncated block near the end
-    /// hydrates and its row re-measures under the resting viewport. Here the
-    /// last assistant message carries a `view` tool row between its two
-    /// paragraphs whose result the
+    /// hydrates and its row re-measures under the resting viewport. Here a
+    /// tool-only assistant message right before the last one carries a
+    /// `view` tool row whose result the
     /// fixture serves as a bounded preview; the test expands it once the
     /// entry has settled (the row grows by its expanded preview and the
     /// hydration fetch starts, held by the trigger-file gate), lets the
@@ -662,7 +664,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 hydrationHint.exists,
                 "\(context): the slim tool row was already expanded when the transcript settled")
 
-            // 2. Expand the slim tool row in the last message: the row grows
+            // 2. Expand the slim tool row right above the last message: the row grows
             //    by its expanded preview and its hydration starts, held back
             //    by the trigger file. Let the transcript rest again so the
             //    hydration lands on a settled viewport, as on the device.
@@ -676,7 +678,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 waitUntil(timeout: 5) {
                     isVisible(toolRow, in: transcript) && (frame(of: toolRow)?.minY ?? -.infinity) >= navigationBarBottom
                 },
-                "\(context): the slim tool row of the last message is not tappable while the transcript rests at the end "
+                "\(context): the slim tool row above the last message is not tappable while the transcript rests at the end "
                     + "(navigation bar bottom \(navigationBarBottom)) — "
                     + restingState(of: toolRow, named: "slim tool row", in: opened))
             toolRow.tap()
