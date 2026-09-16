@@ -16,7 +16,6 @@ import Testing
 /// gone or stale for a relocated build (intent-hq/ios#320). A missing
 /// resource is a wiring error and fails loudly here; it is never a skip.
 enum TestSourceInputs {
-
     /// The packaged copy of the repository root inside the test bundle.
     static var root: URL {
         Bundle(for: BundleToken.self).bundleURL

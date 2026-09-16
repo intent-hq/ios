@@ -6,14 +6,83 @@ import os
 import Testing
 
 extension ConnectionManagerTests {
-    @Test func webSocketURLUsesPlainSchemeWithoutFingerprint() throws {
-        let url = try WebSocketConnection.makeURL(
-            host: "daemon.local",
+    static func enablePlaintextLoopback() -> Bool {
+        WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { state in
+            let previous = state
+            state = true
+            return previous
+        }
+    }
+
+    static func restorePlaintextLoopback(_ previous: Bool) {
+        WebSocketConnection.allowsPlaintextLoopbackForTesting.withLock { $0 = previous }
+    }
+
+    @Test func webSocketURLRefusesMissingOrBlankFingerprint() {
+        for fingerprint in [nil, "", "   "] as [String?] {
+            #expect(throws: WebSocketTransportError.self) {
+                _ = try WebSocketConnection.makeURL(
+                    host: "daemon.local",
+                    port: 4242,
+                    certFingerprint: fingerprint
+                )
+            }
+            do {
+                _ = try WebSocketConnection.makeURL(
+                    host: "daemon.local",
+                    port: 4242,
+                    certFingerprint: fingerprint
+                )
+            } catch let error as WebSocketTransportError {
+                #expect(error.isMissingCertificatePin)
+                #expect(!error.isCertificateMismatch)
+            } catch {
+                Issue.record("unexpected error: \(error)")
+            }
+        }
+    }
+
+    @Test func plaintextLoopbackOverrideNeverReachesRemoteHosts() throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
+
+        let loopback = try WebSocketConnection.makeURL(
+            host: "127.0.0.1",
             port: 4242,
             certFingerprint: nil
         )
+        #expect(loopback.absoluteString == "ws://127.0.0.1:4242/ws")
 
-        #expect(url.absoluteString == "ws://daemon.local:4242/ws")
+        for host in ["daemon.local", "10.0.0.7"] {
+            #expect(throws: WebSocketTransportError.self) {
+                _ = try WebSocketConnection.makeURL(
+                    host: host,
+                    port: 4242,
+                    certFingerprint: nil
+                )
+            }
+        }
+    }
+
+    @Test func trustedPinNormalizesBlankToNil() {
+        #expect(WebSocketConnection.trustedPin(nil) == nil)
+        #expect(WebSocketConnection.trustedPin("") == nil)
+        #expect(WebSocketConnection.trustedPin(" \n") == nil)
+        #expect(WebSocketConnection.trustedPin(" aa:bb ") == "aa:bb")
+    }
+
+    @Test func plaintextLoopbackOverrideRestoredWhenSetupThrows() {
+        struct SetupFailed: Error {}
+        func failingSetup() throws {
+            let previous = Self.enablePlaintextLoopback()
+            defer { Self.restorePlaintextLoopback(previous) }
+            #expect(WebSocketConnection.plaintextLoopbackOverrideActive)
+            throw SetupFailed()
+        }
+
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+        #expect(throws: SetupFailed.self) { try failingSetup() }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
     }
 
     @Test func pinnedWebSocketURLUsesSecureScheme() throws {

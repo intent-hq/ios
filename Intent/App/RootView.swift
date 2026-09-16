@@ -254,6 +254,34 @@ struct RootView: View {
                 .padding(.top, Constants.Root.toastTopPadding)
             }
         }
+        .overlay(alignment: .bottom) {
+            // A live socket without its global subscription leaves every store
+            // blind to updates; surface the bounded retry failure to the user.
+            if case .failed = session.connection.globalSubscriptionState,
+               session.connection.connectionState == .connected,
+               !coordinator.isDisconnected {
+                HStack(spacing: Constants.Root.reconnectButtonTopPadding) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .accessibilityHidden(true)
+                    Text("Live updates unavailable")
+                        .font(.subheadline)
+                    Spacer(minLength: 0)
+                    Button("Retry") {
+                        session.connection.retryGlobalSubscription()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.vertical, Constants.Root.reconnectButtonTopPadding)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.horizontal, Constants.Root.reconnectPanelSpacing)
+                .padding(.bottom, Constants.Root.toastTopPadding)
+                .accessibilityIdentifier("global-subscription-failed-banner")
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .background {
             // visionOS: notification sounds (agent-completion chime and
             // workspace attention cue) are emitted from within THIS window's
@@ -315,7 +343,7 @@ struct ConversationDestinationView: View {
     @Environment(AppCoordinator.self) private var coordinator
 
     private var target: Target? {
-        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
             return Target(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         }
         return fallback

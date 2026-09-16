@@ -65,7 +65,7 @@ enum ConversationConstants {
         /// Spacing between live geometry reads that verify a forced follow.
         static let followLandingPollMilliseconds = 50
         /// Longest a forced follow keeps verifying its landing.
-        static let followLandingTimeoutMilliseconds = 3_000
+        static let followLandingTimeoutMilliseconds = 3000
         /// Maximum distance from the bottom for a completed forced follow.
         static let followLandingTolerance: CGFloat = 1
         /// Minimum spacing between follow-to-bottom streaming scrolls.
@@ -167,7 +167,8 @@ enum Constants {
     enum Root {}
 
     enum Connecting {
-        static let workspaceLoadTimeout: Duration = .seconds(5)
+        private static let workspaceLoadTimeoutSeconds = 5
+        static let workspaceLoadTimeout: Duration = .seconds(workspaceLoadTimeoutSeconds)
         static let workspacePollInterval: Duration = .milliseconds(100)
     }
 

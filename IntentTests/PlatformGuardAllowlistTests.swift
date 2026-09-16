@@ -13,7 +13,6 @@ import Testing
 /// and IntentTests/ packaged into the test bundle (see TestSourceInputs),
 /// not the checkout.
 struct PlatformGuardAllowlistTests {
-
     private static let visionOSGuard = #"os\s*\(\s*visionOS\s*\)"#
     private static let tailcatKitGuard = #"canImport\s*\(\s*TailcatKit\s*\)"#
 
@@ -38,14 +37,14 @@ struct PlatformGuardAllowlistTests {
         "Intent/Views/Workspaces/WorkspaceDetailView.swift",
         "Intent/Views/Workspaces/WorkspaceListSidebar.swift",
         "Intent/Views/Workspaces/WorkspaceListView.swift",
-        "IntentTests/PairingOptionTests.swift",
+        "IntentTests/PairingOptionTests.swift"
     ]
 
     private static let tailcatKitAllowlist: Set<String> = [
         "Intent/Services/ConnectionManager.swift",
         "Intent/Services/TailcatTunnel.swift",
         "IntentTests/TailcatKitSmokeTests.swift",
-        "IntentTests/TailcatTunnelSessionTests.swift",
+        "IntentTests/TailcatTunnelSessionTests.swift"
     ]
 
     /// Paths relative to `repoRoot` of .swift files under its Intent/ and
@@ -60,7 +59,9 @@ struct PlatformGuardAllowlistTests {
             var isDirectory: ObjCBool = false
             try #require(
                 FileManager.default.fileExists(
-                    atPath: root.path, isDirectory: &isDirectory)
+                    atPath: root.path,
+                    isDirectory: &isDirectory
+                )
                     && isDirectory.boolValue,
                 """
                 scan root \(directory)/ is missing or not a directory at \
@@ -113,12 +114,16 @@ struct PlatformGuardAllowlistTests {
 
     @Test func visionOSGuardsMatchAllowlist() throws {
         try assertMatchesAllowlist(
-            pattern: Self.visionOSGuard, allowlist: Self.visionOSAllowlist)
+            pattern: Self.visionOSGuard,
+            allowlist: Self.visionOSAllowlist
+        )
     }
 
     @Test func tailcatKitGuardsMatchAllowlist() throws {
         try assertMatchesAllowlist(
-            pattern: Self.tailcatKitGuard, allowlist: Self.tailcatKitAllowlist)
+            pattern: Self.tailcatKitGuard,
+            allowlist: Self.tailcatKitAllowlist
+        )
     }
 
     /// Negative case: the scan reports a guard wherever it appears (including
@@ -138,21 +143,24 @@ struct PlatformGuardAllowlistTests {
             "Intent/Spaced.swift": spacedVisionOS,
             "Intent/Clean.swift": "#if os(iOS)\n#endif\n",
             "Intent/NotSwift.txt": visionOS,
-            "IntentTests/TailcatGuarded.swift": tailcatKit,
+            "IntentTests/TailcatGuarded.swift": tailcatKit
         ]
         for (path, contents) in files {
             let url = fixture.appendingPathComponent(path)
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
+                withIntermediateDirectories: true
+            )
             try contents.write(to: url, atomically: true, encoding: .utf8)
         }
 
         #expect(
             try filesContaining(Self.visionOSGuard, under: fixture)
-                == ["Intent/Nested/Guarded.swift", "Intent/Spaced.swift"])
+                == ["Intent/Nested/Guarded.swift", "Intent/Spaced.swift"]
+        )
         #expect(
             try filesContaining(Self.tailcatKitGuard, under: fixture)
-                == ["IntentTests/TailcatGuarded.swift"])
+                == ["IntentTests/TailcatGuarded.swift"]
+        )
     }
 }

@@ -178,15 +178,18 @@ extension ConnectionManager {
 
     /// Merges daemon-reported IPs into the existing host list: existing hosts
     /// (originally paired/entered) keep their order and are never dropped;
-    /// reported IPs not already present are appended, deduped.
+    /// reported IPs not already present are appended, deduped. Reported values
+    /// are untrusted and must be valid URL host components; raw IPv6 literals
+    /// are bracket-normalized before they can be raced or persisted.
     static func mergeHosts(existing: [String], reported: [String]) -> [String] {
         var merged = existing
         var seen = Set(existing)
         for ipAddress in reported {
             let trimmed = ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !seen.contains(trimmed) else { continue }
-            merged.append(trimmed)
-            seen.insert(trimmed)
+            guard let host = SyncedBackendConnectionMerge.usableHost(trimmed),
+                  !seen.contains(host) else { continue }
+            merged.append(host)
+            seen.insert(host)
         }
         return merged
     }

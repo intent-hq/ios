@@ -23,6 +23,7 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     /// once its bounded retries are exhausted, which the window surfaces
     /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+
     func retryGlobalSubscription()
 
     func connect(

@@ -105,8 +105,8 @@ import Observation
         let generation = loadGeneration
         loadTask = Task { [weak self] in
             await self?.runLoad(silent: silent, generation: generation)
-            guard let self, self.loadGeneration == generation else { return }
-            self.loadTask = nil
+            guard let self, loadGeneration == generation else { return }
+            loadTask = nil
         }
     }
 
@@ -119,7 +119,7 @@ import Observation
         async let providersSucceeded = fetchProviders(generation: generation)
         let succeeded = await (specialistsSucceeded, providersSucceeded)
         guard generation == loadGeneration else { return }
-        if succeeded.0 && succeeded.1 {
+        if succeeded.0, succeeded.1 {
             hasLoaded = true
             lastLoadedAt = Date()
         }
@@ -182,11 +182,13 @@ import Observation
 
     // MARK: - Models
 
+    // swiftlint:disable discouraged_optional_collection
     /// The cached `models.list` catalog for `providerId`, or nil when it has
-    /// not been loaded yet.
+    /// not been loaded yet. An empty array is a loaded empty catalog.
     func models(for providerId: String) -> [ModelInfo]? {
         modelsByProvider[providerId]
     }
+    // swiftlint:enable discouraged_optional_collection
 
     /// Loads `models.list` for `providerId` with the same cold / cached /
     /// forced semantics as `loadIfNeeded(force:)`, single-flight per
@@ -207,8 +209,8 @@ import Observation
         let generation = loadGeneration
         modelLoadTasks[providerId] = Task { [weak self] in
             await self?.fetchModels(providerId: providerId, generation: generation)
-            guard let self, self.loadGeneration == generation else { return }
-            self.modelLoadTasks[providerId] = nil
+            guard let self, loadGeneration == generation else { return }
+            modelLoadTasks[providerId] = nil
         }
     }
 
@@ -218,7 +220,9 @@ import Observation
         guard generation == loadGeneration else { return }
         do {
             let result = try await connectionManager.request(
-                "models.list", params: ["providerId": providerId])
+                "models.list",
+                params: ["providerId": providerId]
+            )
             guard generation == loadGeneration else { return }
             let items = (result as? [String: Any])?["models"] as? [[String: Any]] ?? []
             modelsByProvider[providerId] = items.compactMap { item in

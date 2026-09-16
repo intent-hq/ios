@@ -1,5 +1,11 @@
 import Foundation
 
+struct ConnectionUpsertOutcome {
+    let connection: StoredConnection
+    let persisted: Bool
+    let registryUndecodable: Bool
+}
+
 class PersistenceManager {
     static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
 
@@ -72,10 +78,14 @@ extension PersistenceManager {
     @discardableResult
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
-    ) -> (connection: StoredConnection, persisted: Bool, registryUndecodable: Bool) {
+    ) -> ConnectionUpsertOutcome {
         migrateLegacyPairingIfNeeded()
         guard var connections = readConnectionsLocked() else {
-            return (connection, false, true)
+            return ConnectionUpsertOutcome(
+                connection: connection,
+                persisted: false,
+                registryUndecodable: true
+            )
         }
         let stored: StoredConnection
         if let index = connections.firstIndex(where: { storedConnection in
@@ -115,7 +125,11 @@ extension PersistenceManager {
             stored = connection
             connections.append(stored)
         }
-        return (stored, saveConnectionsLocked(connections), false)
+        return ConnectionUpsertOutcome(
+            connection: stored,
+            persisted: saveConnectionsLocked(connections),
+            registryUndecodable: false
+        )
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -243,8 +257,12 @@ extension PersistenceManager {
         migrateLegacyPairingIfNeeded()
         guard let connections = readConnectionsLocked() else {
             return SyncedBackendMergeOutcome(
-                addedIds: [], updatedIds: [], removedIds: [],
-                removedActiveConnection: false, registryUndecodable: true)
+                addedIds: [],
+                updatedIds: [],
+                removedIds: [],
+                removedActiveConnection: false,
+                registryUndecodable: true
+            )
         }
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
         var removedActive = false
@@ -271,6 +289,8 @@ extension PersistenceManager {
         )
     }
 
+    // nil distinguishes an undecodable registry from a valid empty registry.
+    // swiftlint:disable:next discouraged_optional_collection
     private func readConnectionsLocked() -> [StoredConnection]? {
         guard let data = loadDataFromKeychain(account: keychainAccountConnections) else {
             return []

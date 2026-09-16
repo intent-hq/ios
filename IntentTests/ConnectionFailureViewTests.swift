@@ -51,13 +51,21 @@ struct ConnectionFailureViewTests {
     /// under `.automaticConnection` retries on its own.
     @Test func shouldAutoRetryOnlyForOrdinaryAutomaticFailures() {
         #expect(ConnectionFailureView.shouldAutoRetry(
-            retryPolicy: .automaticConnection, isCertMismatch: false))
+            retryPolicy: .automaticConnection,
+            isCertMismatch: false
+        ))
         #expect(!ConnectionFailureView.shouldAutoRetry(
-            retryPolicy: .automaticConnection, isCertMismatch: true))
+            retryPolicy: .automaticConnection,
+            isCertMismatch: true
+        ))
         #expect(!ConnectionFailureView.shouldAutoRetry(
-            retryPolicy: .manualLogOff, isCertMismatch: false))
+            retryPolicy: .manualLogOff,
+            isCertMismatch: false
+        ))
         #expect(!ConnectionFailureView.shouldAutoRetry(
-            retryPolicy: .manualLogOff, isCertMismatch: true))
+            retryPolicy: .manualLogOff,
+            isCertMismatch: true
+        ))
     }
 
     @Test func retryBackoffIsExponentialAndCapped() {

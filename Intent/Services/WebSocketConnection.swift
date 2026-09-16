@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Network
 import os
@@ -10,6 +9,8 @@ import os
 /// below — the SHA-256 certificate fingerprint is the sole trust decision.
 actor WebSocketConnection {
     nonisolated let host: String
+    /// The socket's path at handshake completion, used as the path-monitor baseline.
+    nonisolated let establishedPath: NetworkPathSnapshot?
 
     private let connection: NWConnection
     private let queue: DispatchQueue
@@ -32,48 +33,18 @@ actor WebSocketConnection {
         host: String,
         connection: NWConnection,
         queue: DispatchQueue,
-        didOpen: OSAllocatedUnfairLock<Bool>
+        didOpen: OSAllocatedUnfairLock<Bool>,
+        establishedPath: NetworkPathSnapshot?
     ) {
         self.host = host
         self.connection = connection
         self.queue = queue
         self.didOpen = didOpen
+        self.establishedPath = establishedPath
     }
 
     deinit {
         Self.close(connection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
-    }
-
-    // MARK: - URL / header / pinning helpers (pure, unit-testable)
-
-    nonisolated static func makeURL(
-        host: String,
-        port: Int,
-        certFingerprint: String?
-    ) throws -> URL {
-        let scheme = certFingerprint == nil ? "ws" : "wss"
-        guard let url = URL(string: "\(scheme)://\(host):\(port)/ws") else {
-            throw WebSocketTransportError.invalidURL(host: host)
-        }
-        return url
-    }
-
-    nonisolated static func additionalHeaders(token: String) -> [(name: String, value: String)] {
-        [(name: "Authorization", value: "Bearer \(token)")]
-    }
-
-    /// SHA-256 fingerprint of a DER-encoded certificate, formatted as
-    /// lowercase colon-separated hex — the normalization the pairing flow uses.
-    nonisolated static func fingerprint(ofCertificate der: Data) -> String {
-        SHA256.hash(data: der)
-            .map { String(format: "%02x", $0) }
-            .joined(separator: ":")
-    }
-
-    /// Case-insensitive fingerprint comparison — the sole trust decision for
-    /// pinned connections.
-    nonisolated static func fingerprintMatches(_ received: String, pinned: String) -> Bool {
-        received.lowercased() == pinned.lowercased()
     }
 
     // MARK: - Connection setup
@@ -86,7 +57,7 @@ actor WebSocketConnection {
         verifyQueue: DispatchQueue
     ) -> NWParameters {
         let parameters: NWParameters
-        if let pinned = certFingerprint {
+        if let pinned = trustedPin(certFingerprint) {
             let tlsOptions = NWProtocolTLS.Options()
             // Fingerprint pinning is the sole trust decision: the verify block
             // replaces default chain evaluation entirely (the daemon's cert is
@@ -234,13 +205,6 @@ actor WebSocketConnection {
             didOpen: didOpen,
             continuation: lifecycleContinuation
         )
-        let connection = WebSocketConnection(
-            host: host,
-            connection: nwConnection,
-            queue: queue,
-            didOpen: didOpen
-        )
-
         do {
             try await awaitOpening(
                 nwConnection,
@@ -250,7 +214,13 @@ actor WebSocketConnection {
                 host: host
             )
             try Task.checkCancellation()
-            return connection
+            return WebSocketConnection(
+                host: host,
+                connection: nwConnection,
+                queue: queue,
+                didOpen: didOpen,
+                establishedPath: nwConnection.currentPath.map { NetworkPathSnapshot($0) }
+            )
         } catch {
             Self.close(nwConnection, didOpen: didOpen, code: .protocolCode(.goingAway), queue: queue)
             throw WebSocketPingSupport.mappedConnectionError(

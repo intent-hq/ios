@@ -300,7 +300,8 @@ struct Workspace: Codable, Identifiable, Equatable {
         }
         activePullRequest = try container.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
         statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
-            try container.decodeIfPresent(String.self, forKey: .statusImageAssetId))
+            try container.decodeIfPresent(String.self, forKey: .statusImageAssetId)
+        )
     }
 
     func encode(to encoder: Encoder) throws {

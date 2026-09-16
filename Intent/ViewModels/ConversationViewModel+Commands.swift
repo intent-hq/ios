@@ -84,6 +84,8 @@ extension ConversationViewModel {
         }
     }
 
+    // nil distinguishes a cache miss from a loaded empty provider catalog.
+    // swiftlint:disable:next discouraged_optional_collection
     var selectableModels: [ModelInfo]? {
         if let providerId = currentProviderId {
             return optionsStore.models(for: providerId)
@@ -105,8 +107,8 @@ extension ConversationViewModel {
         provider: String?,
         catalog: [ModelInfo]
     ) -> String {
-        catalog.first {
-            $0.id == modelId && (provider == nil || $0.provider == provider)
+        catalog.first { model in
+            model.id == modelId && (provider == nil || model.provider == provider)
         }?.name ?? modelId
     }
 

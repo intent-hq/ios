@@ -1,8 +1,6 @@
 import Foundation
 
 extension ConnectionManager {
-    private static let pingInterval: TimeInterval = 15  // Send ping every 15s
-    private static let pongTimeout: TimeInterval = 30   // Dead if no pong in 30s
     private static let stableConnectionThreshold: TimeInterval = 10
     nonisolated private static let initialReconnectAttempt: Int = 1
     nonisolated private static let minimumBackedOffReconnectAttempt: Int = 2
@@ -146,6 +144,10 @@ extension ConnectionManager {
                     )
                 case .invalidURL:
                     throw WebSocketTransportError.invalidURL(host: tunnelCandidateLabel)
+                case .missingCertificatePin:
+                    throw WebSocketTransportError.missingCertificatePin(
+                        host: tunnelCandidateLabel
+                    )
                 case .timedOut:
                     throw WebSocketTransportError.timedOut(host: tunnelCandidateLabel)
                 case .failed(_, let message):
@@ -221,7 +223,9 @@ extension ConnectionManager {
             AppLog.connection.debug("[ConnectionManager] Already disconnected, ignoring")
             return
         }
-        stopPingTimer()
+        stopHeartbeat()
+        stopPathMonitor()
+        stopGlobalSubscription()
         let oldSocket = socket
         socket = nil
         let oldTunnel = activeTunnel
@@ -352,7 +356,8 @@ extension ConnectionManager {
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = attempt
         subscribeToAllEvents()
-        startPingTimer()
+        startHeartbeat()
+        startPathMonitor()
         scheduleHostRoutesRefresh()
         return true
     }
@@ -370,47 +375,53 @@ extension ConnectionManager {
         return false
     }
 
-    // MARK: - Heartbeat
+    // MARK: - Network path monitoring
 
-    func startPingTimer() {
-        stopPingTimer()
-        lastPongReceived = Date()
-        let timer = Timer(timeInterval: Self.pingInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.sendPingAndCheckHealth()
-            }
+    func startPathMonitor() {
+        stopPathMonitor()
+        pathMonitorID += 1
+        let monitorID = pathMonitorID
+        if let socket, let path = readSocketPath(socket), path.isOnPhysicalInterface {
+            socketInterface = path.primaryInterface
         }
-        timer.tolerance = 2
-        RunLoop.main.add(timer, forMode: .common)
-        pingTimer = timer
+        let monitor = makePathMonitor()
+        pathMonitor = monitor
+        monitor.start { [weak self] snapshot in
+            self?.handlePathUpdate(snapshot, monitorID: monitorID)
+        }
     }
 
-    func stopPingTimer() {
-        pingTimer?.invalidate()
-        pingTimer = nil
+    func stopPathMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        lastPathSnapshot = nil
+        socketInterface = nil
     }
 
-    private func sendPingAndCheckHealth() async {
-        guard connectionState == .connected, let currentSocket = socket else { return }
+    private func handlePathUpdate(_ snapshot: NetworkPathSnapshot, monitorID: Int) {
+        guard pathMonitorID == monitorID, pathMonitor != nil else { return }
+        let previous = lastPathSnapshot
+        lastPathSnapshot = snapshot
+        guard connectionState == .connected, socket != nil else { return }
 
-        // Check if we've timed out
-        let timeSinceLastPong = Date().timeIntervalSince(lastPongReceived)
-        if timeSinceLastPong > Self.pongTimeout {
-            AppLog.connection.debug("[ConnectionManager] Ping timeout — no pong received in \(Int(timeSinceLastPong))s, triggering reconnection")
-            stopPingTimer()
-            handleDisconnection()
-            return
+        let pathDied: Bool
+        let interfaceChanged: Bool
+        if let previous {
+            pathDied = previous.isSatisfied && !snapshot.isSatisfied
+            interfaceChanged = snapshot.isSatisfied
+                && snapshot.primaryInterface != previous.primaryInterface
+        } else {
+            pathDied = !snapshot.isSatisfied
+            interfaceChanged = false
         }
-
-        do {
-            try await currentSocket.sendPing()
-            guard socket === currentSocket else { return }
-            lastPongReceived = Date()
-            AppLog.connection.debug("[ConnectionManager] Received pong")
-        } catch {
-            guard socket === currentSocket else { return }
-            AppLog.connection.debug("[ConnectionManager] Ping failed: \(error.localizedDescription)")
-            handleDisconnection()
-        }
+        let socketInterfaceLost = socketInterface.map { interface in
+            snapshot.isSatisfied && !snapshot.availableInterfaces.contains(interface)
+        } ?? false
+        guard pathDied || interfaceChanged || socketInterfaceLost else { return }
+        AppLog.connection.debug(
+            "[ConnectionManager] Network path changed (\(String(describing: previous)) -> "
+                + "\(String(describing: snapshot))), reconnecting"
+        )
+        handleDisconnection()
     }
 }

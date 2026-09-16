@@ -137,8 +137,8 @@ enum GitHubRepoSearchOutcome {
         let generation = loadGeneration
         loadTask = Task { [weak self] in
             await self?.runLoad(silent: silent, generation: generation)
-            guard let self, self.loadGeneration == generation else { return }
-            self.loadTask = nil
+            guard let self, loadGeneration == generation else { return }
+            loadTask = nil
         }
     }
 
@@ -188,10 +188,13 @@ enum GitHubRepoSearchOutcome {
     /// `isConfigured` untouched so a failed background refresh cannot turn a
     /// cached, connected picker into not-connected guidance.
     @discardableResult
+    // nil is a transport failure; false is a successful unconfigured result.
+    // swiftlint:disable:next discouraged_optional_boolean
     func fetchAuthStatus() async -> Bool? {
         await fetchAuthStatus(generation: loadGeneration)
     }
 
+    // swiftlint:disable:next discouraged_optional_boolean
     private func fetchAuthStatus(generation: Int) async -> Bool? {
         do {
             let result = try await connectionManager.request("github.authStatus")

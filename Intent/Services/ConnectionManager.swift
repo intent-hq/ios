@@ -65,12 +65,29 @@ import os
     /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored var reconnectTask: Task<Void, Never>?
+    /// Read by tests as a completion barrier for a retired heartbeat.
+    @ObservationIgnored var heartbeatTask: Task<Void, Never>?
     @ObservationIgnored var globalSubscriptionTask: Task<Void, Never>?
-    @ObservationIgnored var pingTimer: Timer?
-    @ObservationIgnored var lastPongReceived = Date()
-    @ObservationIgnored var lastSuccessfulConnectAt: CFAbsoluteTime?
+    /// Time source for heartbeat cadence/probe deadlines and subscription retry backoff.
     @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
+    /// A fresh path monitor is created for every live socket because NWPathMonitor is one-shot.
+    @ObservationIgnored var makePathMonitor: () -> any NetworkPathMonitoring = {
+        NWPathMonitorAdapter()
+    }
+    @ObservationIgnored var pathMonitor: (any NetworkPathMonitoring)?
+    @ObservationIgnored var pathMonitorID = 0
+    @ObservationIgnored var lastPathSnapshot: NetworkPathSnapshot?
+    /// Injectable socket-path reader; loopback tests override this baseline.
+    @ObservationIgnored var readSocketPath: (WebSocketConnection) -> NetworkPathSnapshot? = { socket in
+        socket.establishedPath
+    }
+    @ObservationIgnored var socketInterface: String?
+    @ObservationIgnored var lastSuccessfulConnectAt: CFAbsoluteTime?
     @ObservationIgnored var lastReconnectAttempt = 0
+    nonisolated private static let heartbeatIntervalSeconds = 15
+    nonisolated private static let heartbeatProbeTimeoutSeconds = 30
+    nonisolated static let heartbeatInterval: Duration = .seconds(heartbeatIntervalSeconds)
+    nonisolated static let heartbeatProbeTimeout: Duration = .seconds(heartbeatProbeTimeoutSeconds)
     nonisolated static let millisecondsPerSecond: CFTimeInterval = 1000
     @ObservationIgnored private(set) var hosts: [String] = []
     @ObservationIgnored var host: String?
@@ -104,6 +121,10 @@ import os
     /// additional instance per pinned backend session; `.shared` remains the
     /// process-wide default used by the default session and existing code.
     init() {}
+
+    isolated deinit {
+        stopPathMonitor()
+    }
 }
 
 extension ConnectionManager {
@@ -131,6 +152,7 @@ extension ConnectionManager {
         certFingerprint: String? = nil,
         tcAddress: String? = nil
     ) async throws {
+        try validateTransportSecurity(hosts: hosts, certFingerprint: certFingerprint)
         let target = ConnectTarget(
             hosts: hosts,
             port: port,
@@ -178,6 +200,15 @@ extension ConnectionManager {
         AppLog.connection.debug("[ConnectionManager] Connect: socket setup completed in \(Int((setupEnd - raceEnd) * Self.millisecondsPerSecond))ms (at +\(Int((setupEnd - connectStart) * Self.millisecondsPerSecond))ms)")
         let totalElapsed = CFAbsoluteTimeGetCurrent() - connectStart
         AppLog.connection.debug("[ConnectionManager] Connect: total elapsed \(Int(totalElapsed * Self.millisecondsPerSecond))ms, connected to \(self.host ?? "?")")
+    }
+
+    private func validateTransportSecurity(hosts: [String], certFingerprint: String?) throws {
+        // Fail closed before touching state or opening a socket: otherwise a
+        // pinless saved record could send its bearer token over plaintext.
+        guard WebSocketConnection.trustedPin(certFingerprint) != nil
+            || WebSocketConnection.plaintextLoopbackOverrideActive else {
+            throw WebSocketTransportError.missingCertificatePin(host: hosts.first ?? "unknown")
+        }
     }
 
     private func beginConnectAttempt(_ target: ConnectTarget) -> ConnectAttemptContext {
@@ -246,7 +277,8 @@ extension ConnectionManager {
         lastSuccessfulConnectAt = CFAbsoluteTimeGetCurrent()
         lastReconnectAttempt = 0
         subscribeToAllEvents()
-        startPingTimer()
+        startHeartbeat()
+        startPathMonitor()
         scheduleHostRoutesRefresh()
         return lateMismatchGeneration
     }
@@ -289,7 +321,8 @@ extension ConnectionManager {
     /// while an explicit `disconnect()` clears them.
     private func teardownConnection() {
         connectionGeneration += 1
-        stopPingTimer()
+        stopHeartbeat()
+        stopPathMonitor()
         stopGlobalSubscription()
         reconnectTask?.cancel()
         reconnectTask = nil

@@ -208,12 +208,74 @@ extension ConnectionManager {
 
     nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
     nonisolated static let globalSubscriptionMaxAttempts = 5
-    nonisolated static let globalSubscriptionBackoffMaximum: Duration = .seconds(8)
+    nonisolated static let globalSubscriptionBackoffMaximumSeconds = 8
+    nonisolated static let globalSubscriptionBackoffMaximumExponent = 3
+    nonisolated static let globalSubscriptionBackoffMaximum: Duration = .seconds(
+        globalSubscriptionBackoffMaximumSeconds
+    )
 
     nonisolated static func globalSubscriptionBackoff(afterAttempt attempt: Int) -> Duration {
-        let exponent = min(max(attempt, 1) - 1, 3)
+        let exponent = min(
+            max(attempt, 1) - 1,
+            Self.globalSubscriptionBackoffMaximumExponent
+        )
         let backoff: Duration = .seconds(1 << exponent)
-        return min(backoff, globalSubscriptionBackoffMaximum)
+        return min(backoff, Self.globalSubscriptionBackoffMaximum)
+    }
+
+    private func isCurrentGlobalSubscription(
+        socket currentSocket: WebSocketConnection,
+        generation: Int
+    ) -> Bool {
+        connectionGeneration == generation && socket === currentSocket
+    }
+
+    private func runGlobalSubscription(
+        socket currentSocket: WebSocketConnection,
+        generation: Int,
+        clock: any HeartbeatClock
+    ) async {
+        var attempt = 1
+        while true {
+            guard !Task.isCancelled,
+                  isCurrentGlobalSubscription(socket: currentSocket, generation: generation)
+            else { return }
+            do {
+                _ = try await request(
+                    "events.subscribe",
+                    params: [
+                        "eventTypes": Self.globalEventTypes,
+                        "replaceGroup": "global"
+                    ]
+                )
+                guard !Task.isCancelled,
+                      isCurrentGlobalSubscription(socket: currentSocket, generation: generation)
+                else { return }
+                globalSubscriptionState = .subscribed
+                AppLog.connection.debug("[ConnectionManager] Subscribed to all events (attempt \(attempt))")
+                return
+            } catch {
+                guard !Task.isCancelled,
+                      isCurrentGlobalSubscription(socket: currentSocket, generation: generation)
+                else { return }
+                if attempt >= Self.globalSubscriptionMaxAttempts {
+                    globalSubscriptionState = .failed(
+                        attempts: attempt,
+                        lastError: error.localizedDescription
+                    )
+                    AppLog.connection.error("[ConnectionManager] Failed to subscribe after \(attempt) attempts: \(error)")
+                    return
+                }
+                let backoff = Self.globalSubscriptionBackoff(afterAttempt: attempt)
+                attempt += 1
+                globalSubscriptionState = .subscribing(attempt: attempt)
+                do {
+                    try await clock.sleep(for: backoff)
+                } catch {
+                    return
+                }
+            }
+        }
     }
 
     func subscribeToAllEvents() {
@@ -226,42 +288,11 @@ extension ConnectionManager {
         let clock = heartbeatClock
         globalSubscriptionState = .subscribing(attempt: 1)
         globalSubscriptionTask = Task { [weak self] in
-            var attempt = 1
-            while true {
-                guard !Task.isCancelled, let self,
-                      self.connectionGeneration == generation,
-                      self.socket === currentSocket else { return }
-                do {
-                    _ = try await self.request("events.subscribe", params: [
-                        "eventTypes": Self.globalEventTypes,
-                        "replaceGroup": "global"
-                    ])
-                    guard !Task.isCancelled,
-                          self.connectionGeneration == generation,
-                          self.socket === currentSocket else { return }
-                    self.globalSubscriptionState = .subscribed
-                    AppLog.connection.debug("[ConnectionManager] Subscribed to all events (attempt \(attempt))")
-                    return
-                } catch {
-                    guard !Task.isCancelled,
-                          self.connectionGeneration == generation,
-                          self.socket === currentSocket else { return }
-                    if attempt >= Self.globalSubscriptionMaxAttempts {
-                        self.globalSubscriptionState = .failed(
-                            attempts: attempt, lastError: error.localizedDescription)
-                        AppLog.connection.error("[ConnectionManager] Failed to subscribe after \(attempt) attempts: \(error)")
-                        return
-                    }
-                    let backoff = Self.globalSubscriptionBackoff(afterAttempt: attempt)
-                    attempt += 1
-                    self.globalSubscriptionState = .subscribing(attempt: attempt)
-                    do {
-                        try await clock.sleep(for: backoff)
-                    } catch {
-                        return
-                    }
-                }
-            }
+            await self?.runGlobalSubscription(
+                socket: currentSocket,
+                generation: generation,
+                clock: clock
+            )
         }
     }
 

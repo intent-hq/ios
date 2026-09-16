@@ -16,12 +16,17 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
     case disconnected(host: String, code: Int, reason: String)
     case failed(host: String, message: String)
     case invalidURL(host: String)
+    /// The record has no trusted certificate pin, so the connection is refused
+    /// before any bearer token can be sent over a socket.
+    case missingCertificatePin(host: String)
     case timedOut(host: String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL(let host):
             "Invalid WebSocket URL for \(host)"
+        case .missingCertificatePin(let host):
+            "No trusted certificate is saved for \(host). Re-pair this device to connect securely."
         case .timedOut(let host):
             "Connection to \(host) timed out"
         case let .failed(host, message):
@@ -42,5 +47,10 @@ nonisolated enum WebSocketTransportError: LocalizedError, Sendable {
         case .certificateMismatch, .certificateMismatches: true
         default: false
         }
+    }
+
+    var isMissingCertificatePin: Bool {
+        if case .missingCertificatePin = self { return true }
+        return false
     }
 }

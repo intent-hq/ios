@@ -140,6 +140,22 @@ extension ConnectionManagerTests {
         #expect(ConnectionManager.mergeHosts(existing: ["a", "b"], reported: []) == ["a", "b"])
     }
 
+    @Test @MainActor func mergeHostsRejectsInvalidReportedHostsAndNormalizesIPv6() {
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["daemon.local", "[fe80::1]"],
+            reported: [
+                "192.168.1.10", "2001:db8::1", "fe80::1", "[2001:db8::1]",
+                "host.example.com", "my-mac_2.local", "192.168.1.10:4242",
+                "evil.com/path", "user@evil.com", "evil.com?x=1", "http://evil.com",
+                "[::1", "::1]", "[]", "a b", "", "::::", "2001::db8::1"
+            ]
+        )
+        #expect(merged == [
+            "daemon.local", "[fe80::1]", "192.168.1.10", "[2001:db8::1]",
+            "host.example.com", "my-mac_2.local"
+        ])
+    }
+
     @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
         // Reviewer scenario: the stored record holds a NAT hostname the current
         // session didn't connect with. The persisted list is the stored hosts
@@ -325,6 +341,7 @@ extension ConnectionManagerTests {
     /// the session must be closed (no leaked tunnel from a dead candidate).
     @Test func tunnelClosedWhenSocketHandshakeFails() async {
         // Port 1 on loopback: connection refused, fast deterministic failure.
+        // Pinned so the failure is the handshake itself, not pin admission.
         let tunnel = FakeTunnelSession(localPort: 1)
         let dialer = FakeTunnelDialer(result: .success(tunnel))
         await #expect(throws: (any Error).self) {
@@ -333,8 +350,32 @@ extension ConnectionManagerTests {
                 tcAddress: "tc-x",
                 remotePort: 5181,
                 token: "t",
+                certFingerprint: "aa:bb"
+            )
+        }
+        #expect(tunnel.isClosed)
+    }
+
+    @Test func tunnelRefusesPinlessSocketAndCloses() async {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        do {
+            _ = try await ConnectionManager.connectViaTunnel(
+                dialer: dialer,
+                tcAddress: "tc-x",
+                remotePort: 5181,
+                token: "t",
                 certFingerprint: nil
             )
+            Issue.record("expected connectViaTunnel to refuse a pin-less record")
+        } catch let error as WebSocketTransportError {
+            guard case let .missingCertificatePin(host) = error else {
+                Issue.record("unexpected transport error: \(error)")
+                return
+            }
+            #expect(host == ConnectionManager.tunnelCandidateLabel)
+        } catch {
+            Issue.record("unexpected error: \(error)")
         }
         #expect(tunnel.isClosed)
     }

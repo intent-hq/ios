@@ -22,6 +22,7 @@ extension ConnectionManagerTests {
         // racing connect() calls completes first.
         var pendingStart: [NWConnection] = []
         var isOpen: Bool
+        var acceptedTotal = 0
     }
 
     nonisolated private final class LoopbackWebSocketServer: @unchecked Sendable {
@@ -32,6 +33,7 @@ extension ConnectionManagerTests {
         private let state: OSAllocatedUnfairLock<LoopbackWebSocketServerState>
 
         var port: Int { Int(listener.port?.rawValue ?? 0) }
+        var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
 
         private init(listener: NWListener, gated: Bool) {
             self.listener = listener
@@ -53,6 +55,7 @@ extension ConnectionManagerTests {
                 guard let server else { return }
                 let startNow = server.state.withLock { state in
                     state.accepted.append(connection)
+                    state.acceptedTotal += 1
                     if !state.isOpen { state.pendingStart.append(connection) }
                     return state.isOpen
                 }
@@ -143,11 +146,46 @@ extension ConnectionManagerTests {
         return port
     }
 
+    @Test @MainActor func pinlessConnectNeverOpensPlaintextSocket() async throws {
+        let manager = ConnectionManager.shared
+        let server = try await LoopbackWebSocketServer.start()
+        defer {
+            manager.disconnect()
+            server.stop()
+        }
+        #expect(!WebSocketConnection.plaintextLoopbackOverrideActive)
+        let stateBefore = manager.connectionState
+
+        for fingerprint in [nil, "", "  "] as [String?] {
+            do {
+                try await manager.connect(
+                    hosts: ["127.0.0.1"],
+                    port: server.port,
+                    token: "secret-token",
+                    certFingerprint: fingerprint
+                )
+                Issue.record("expected connect() to refuse a pin-less record")
+            } catch let error as WebSocketTransportError {
+                #expect(error.isMissingCertificatePin)
+                #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
+            } catch {
+                Issue.record("unexpected error: \(error)")
+            }
+        }
+
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(server.acceptedCount == 0)
+        #expect(manager.connectionState == stateBefore)
+        #expect(manager.token != "secret-token")
+    }
+
     /// Regression for monorepo#4185: a pairing attempt (QR / manual token /
     /// intent:// link all funnel into `connect()`) that fails while a live
     /// connection is active must NOT strand the app in `.connecting` on a
     /// dead socket — the existing connection keeps serving.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsItServing() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
@@ -185,6 +223,8 @@ extension ConnectionManagerTests {
     /// reset (different target) must not wipe it, and mismatches observed by
     /// the failed race must not stick to the preserved connection.
     @Test @MainActor func failedPairingOverLiveConnectionKeepsCertMismatches() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {
@@ -220,6 +260,8 @@ extension ConnectionManagerTests {
 
 extension ConnectionManagerTests {
     @Test @MainActor func successfulPairingOverLiveConnectionAdoptsNewTarget() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -272,6 +314,8 @@ extension ConnectionManagerTests {
     /// candidate's certificate mismatch, reported by the background drain,
     /// must still reach `certMismatches`: the race was not superseded.
     @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let serverA = try await LoopbackWebSocketServer.start()
         let serverB = try await LoopbackWebSocketServer.start()
@@ -321,6 +365,8 @@ extension ConnectionManagerTests {
     /// connect-attempt counter: the older attempt is superseded, the newer
     /// one adopts its target.
     @Test @MainActor func olderOverlappingPairingAttemptDoesNotWin() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let liveServer = try await LoopbackWebSocketServer.start()
         let olderTarget = try await LoopbackWebSocketServer.start(gated: true)
@@ -377,6 +423,8 @@ extension ConnectionManagerTests {
     /// the reconnect loop (and its target) alive instead of cancelling it
     /// and stranding the app in `.connecting`.
     @Test @MainActor func failedPairingWhileReconnectingKeepsReconnectLoop() async throws {
+        let previous = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
         let server = try await LoopbackWebSocketServer.start()
         defer {

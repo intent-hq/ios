@@ -44,9 +44,9 @@ struct GitHubBranchListing: Equatable {
 /// outcome: the authoritative listing, the cached-first paint shown only
 /// until it lands, and the last cold-load error (cleared by a success).
 struct GitHubBranchLoadState: Equatable {
-    var listing: GitHubBranchListing? = nil
-    var paint: GitHubBranchListing? = nil
-    var error: String? = nil
+    var listing: GitHubBranchListing?
+    var paint: GitHubBranchListing?
+    var error: String?
 
     /// What the branch step renders: authoritative first, else the paint.
     var displayed: GitHubBranchListing? { listing ?? paint }
