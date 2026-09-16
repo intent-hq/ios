@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 @testable import Intent
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
@@ -7,6 +7,20 @@ import Combine
 /// state, request responses, and subscription push delivery.
 @MainActor
 class FakeConnectionManager: SessionConnectionManaging {
+    struct ConnectionLogEntry {
+        let hosts: [String]
+        let port: Int
+        let token: String
+        let certFingerprint: String?
+        let tcAddress: String?
+    }
+
+    struct RequestLogEntry {
+        let method: String
+        let params: [String: Any]
+        let timestamp: Date
+    }
+
     // MARK: - Published State
 
     private let _connectionState = CurrentValueSubject<ConnectionState, Never>(.disconnected)
@@ -44,31 +58,51 @@ class FakeConnectionManager: SessionConnectionManaging {
     }
 
     /// Recorded `connect` calls, and the error to throw instead of connecting.
-    var connectLog: [(hosts: [String], port: Int, token: String,
-                      certFingerprint: String?, tcAddress: String?)] = []
+    var connectLog: [ConnectionLogEntry] = []
     var connectError: Error?
 
     /// Recorded `updateCachedCredentials` calls.
-    var updateCachedCredentialsLog: [(hosts: [String], port: Int, token: String,
-                                      certFingerprint: String?, tcAddress: String?)] = []
+    var updateCachedCredentialsLog: [ConnectionLogEntry] = []
 
     private(set) var disconnectCallCount = 0
     private(set) var refreshHostRoutesCallCount = 0
 
     func connect(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) async throws {
-        connectLog.append((hosts, port, token, certFingerprint, tcAddress))
+        connectLog.append(
+            ConnectionLogEntry(
+                hosts: hosts,
+                port: port,
+                token: token,
+                certFingerprint: certFingerprint,
+                tcAddress: tcAddress
+            )
+        )
         if let connectError { throw connectError }
         connectionState = .connected
     }
 
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) {
-        updateCachedCredentialsLog.append((hosts, port, token, certFingerprint, tcAddress))
+        updateCachedCredentialsLog.append(
+            ConnectionLogEntry(
+                hosts: hosts,
+                port: port,
+                token: token,
+                certFingerprint: certFingerprint,
+                tcAddress: tcAddress
+            )
+        )
     }
 
     func refreshHostRoutes() async {
@@ -100,7 +134,7 @@ class FakeConnectionManager: SessionConnectionManaging {
     var errorQueueMap: [String: [Error]] = [:]
 
     /// Recorded request log: [(method, params, timestamp)]
-    var requestLog: [(method: String, params: [String: Any], timestamp: Date)] = []
+    var requestLog: [RequestLogEntry] = []
 
     /// Optional per-method artificial delay (nanoseconds) applied before responding,
     /// for tests that need to interleave work while a request is in flight.
@@ -130,9 +164,12 @@ class FakeConnectionManager: SessionConnectionManaging {
         pending.continuation.resume(throwing: error)
     }
 
-    func request(_ method: String, params: [String: Any] = [:],
-                 timeout: TimeInterval = ConnectionManager.defaultRequestTimeout) async throws -> Any {
-        requestLog.append((method, params, Date()))
+    func request(
+        _ method: String,
+        params: [String: Any] = [:],
+        timeout _: TimeInterval = ConnectionManager.defaultRequestTimeout
+    ) async throws -> Any {
+        requestLog.append(RequestLogEntry(method: method, params: params, timestamp: Date()))
 
         if pendingMethods.contains(method) {
             let requestId = UUID()
@@ -249,26 +286,26 @@ class FakeConnectionManager: SessionConnectionManaging {
 
     /// Check if a specific request method was called.
     func didCallMethod(_ method: String) -> Bool {
-        return requestLog.contains { $0.method == method }
+        requestLog.contains { $0.method == method }
     }
 
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
-        return requestLog.filter { $0.method == method }.map { $0.params }
+        requestLog.filter { $0.method == method }.map { $0.params }
     }
 
     /// Check if a handler is registered for a given subscriptionId.
     func hasSubscriptionHandler(id: String) -> Bool {
-        return subscriptionHandlers[id] != nil
+        subscriptionHandlers[id] != nil
     }
 
     /// Count of registered event handlers.
     var eventHandlerCount: Int {
-        return eventHandlers.count
+        eventHandlers.count
     }
 
     /// Count of registered subscription handlers.
     var subscriptionHandlerCount: Int {
-        return subscriptionHandlers.count
+        subscriptionHandlers.count
     }
 }
