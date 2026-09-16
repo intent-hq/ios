@@ -65,10 +65,19 @@ extension ConnectionManagerTests {
         // Snapshot + first delta arrive BEFORE the store registers its handler
         // (the seq-0 race this fix addresses)
         manager.dispatchMessage("""
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"snapshot","seq":0,"snapshot":{"agentId":"agent-1","messages":[{"id":"msg-1","role":"user","contentBlocks":[{"type":"text","id":"msg-1:0","text":"Hello"}],"timestamp":"2026-07-21T01:00:00.000Z"}]}}}
+        {"jsonrpc":"2.0","method":"subscription.push","params":{\
+        "subscriptionId":"buf-chat-race","kind":"snapshot","seq":0,\
+        "snapshot":{"agentId":"agent-1","messages":[{\
+        "id":"msg-1","role":"user","contentBlocks":[{\
+        "type":"text","id":"msg-1:0","text":"Hello"}],\
+        "timestamp":"2026-07-21T01:00:00.000Z"}]}}}
         """)
         manager.dispatchMessage("""
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":1,"delta":{"added":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working"}}],"updated":[],"removedIds":[]}}}
+        {"jsonrpc":"2.0","method":"subscription.push","params":{\
+        "subscriptionId":"buf-chat-race","kind":"delta","seq":1,\
+        "delta":{"added":[{"agentId":"agent-1","messageId":"msg-2",\
+        "role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working"}}],\
+        "updated":[],"removedIds":[]}}}
         """)
 
         // The store registers its handler (as subscribeLiveChat does after the
@@ -86,7 +95,12 @@ extension ConnectionManagerTests {
         // The channel is seeded correctly: the next live delta continues the
         // sequence without a gap (no resnapshot wiped the seeded state)
         manager.dispatchMessage("""
-        {"jsonrpc":"2.0","method":"subscription.push","params":{"subscriptionId":"buf-chat-race","kind":"delta","seq":2,"delta":{"added":[],"updated":[{"agentId":"agent-1","messageId":"msg-2","role":"assistant","block":{"type":"text","id":"msg-2:0","text":"Working on it."}}],"removedIds":[]}}}
+        {"jsonrpc":"2.0","method":"subscription.push","params":{\
+        "subscriptionId":"buf-chat-race","kind":"delta","seq":2,\
+        "delta":{"added":[],"updated":[{\
+        "agentId":"agent-1","messageId":"msg-2","role":"assistant",\
+        "block":{"type":"text","id":"msg-2:0","text":"Working on it."}}],\
+        "removedIds":[]}}}
         """)
         #expect(store.messages[1].contentBlocks.first?.resolvedText == "Working on it.")
 

@@ -15,19 +15,27 @@ struct ConnectionManagerTests {
     // MARK: - ConnectionState equality
 
     @Test @MainActor func connectionStateDisconnectedEquality() {
-        #expect(ConnectionState.disconnected == ConnectionState.disconnected)
+        let actual = ConnectionState.disconnected
+        let expected = ConnectionState.disconnected
+        #expect(actual == expected)
     }
 
     @Test @MainActor func connectionStateConnectedEquality() {
-        #expect(ConnectionState.connected == ConnectionState.connected)
+        let actual = ConnectionState.connected
+        let expected = ConnectionState.connected
+        #expect(actual == expected)
     }
 
     @Test @MainActor func connectionStateConnectingEquality() {
-        #expect(ConnectionState.connecting == ConnectionState.connecting)
+        let actual = ConnectionState.connecting
+        let expected = ConnectionState.connecting
+        #expect(actual == expected)
     }
 
     @Test @MainActor func connectionStateReconnectingSameAttempt() {
-        #expect(ConnectionState.reconnecting(attempt: 1) == ConnectionState.reconnecting(attempt: 1))
+        let actual = ConnectionState.reconnecting(attempt: 1)
+        let expected = ConnectionState.reconnecting(attempt: 1)
+        #expect(actual == expected)
     }
 
     @Test @MainActor func connectionStateReconnectingDifferentAttempt() {

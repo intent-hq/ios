@@ -93,10 +93,9 @@ struct AgentAvatarDesignTests {
     @Test func fallbackIsDeterministicPerAgentId() {
         let ids = ["agent-123", "agent-456", "", "0d9c66aa-1c9e-4a09-b52f-1f6f7a10a1de", "AGENT-123"]
         for id in ids {
-            #expect(
-                AgentAvatarDesign.fallbackDesign(agentId: id)
-                    == AgentAvatarDesign.fallbackDesign(agentId: id)
-            )
+            let firstDesign = AgentAvatarDesign.fallbackDesign(agentId: id)
+            let secondDesign = AgentAvatarDesign.fallbackDesign(agentId: id)
+            #expect(firstDesign == secondDesign)
         }
     }
 

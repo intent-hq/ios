@@ -386,9 +386,11 @@ extension AppCoordinatorTests {
 
         let coordinator = AppCoordinator(
             backendID: Self.windowBackend,
-            persistence: persistence,
-            claimScreenRestoration: { false }
-        )
+            persistence: persistence
+        ) {
+        } claimScreenRestoration: {
+            false
+        }
         coordinator.onConnectionSuccess()
 
         if case .workspaceList = coordinator.currentScreen {
