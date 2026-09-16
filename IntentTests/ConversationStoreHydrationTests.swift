@@ -34,7 +34,13 @@ extension ConversationStoreIntegrationTests {
         await store.subscribeLiveChat(agentId: "agent-1")
         try await Task.sleep(nanoseconds: subscriptionDeliveryDelayNanoseconds)
         try await deliverAndWait(
-            SubscriptionPush(subscriptionId: "sub-1", seq: 0, snapshot: snapshot),
+            SubscriptionPush(
+                subscriptionId: "sub-1",
+                kind: .snapshot,
+                seq: 0,
+                snapshot: snapshot,
+                delta: nil
+            ),
             through: fake
         )
     }
