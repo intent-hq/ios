@@ -57,6 +57,11 @@ jobs:
         working-directory: TailcatKit
         run: go test -timeout 300s ./...
 
+      # Exercises the simulator lock and crash classification in
+      # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs only bash.
+      - name: xcodebuild.sh self-tests
+        run: scripts/test_xcodebuild.sh
+
   build-and-test:
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing != '' && 'iOS Filtered Tests (non-gating)' || 'iOS Build & Test' }}
     # The repo ruleset requires only this job. A job skipped because a

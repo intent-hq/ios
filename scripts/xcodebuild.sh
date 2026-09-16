@@ -41,7 +41,37 @@
 #                         test-ios-unit). Entries starting with '-' are refused.
 #   TAILCATKIT_AUTOBUILD  Set to 0 to never run TailcatKit/build_xcframework.sh
 #                         from the preflight; a missing xcframework then fails fast.
+#   SIM_LOCK_TIMEOUT      Seconds to wait for the simulator lock (below) before
+#                         giving up; default 1800. 0 fails immediately when held.
+#   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
+#                         (falling back to /tmp).
+#
+# Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
+# an exclusive lock on the chosen simulator for the duration of the xcodebuild
+# test run. Two runs driving one device concurrently (two agents in one
+# checkout, or two checkouts picking the same device) kill each other's test
+# processes and produce disjoint, false "Failing tests" lists
+# (intent-hq/intent#4563). The lock is a symlink
+# <SIM_LOCK_DIR>/xcodebuild-sim-<UDID>.lock -> <holder PID>, created atomically
+# with ln -s (stock macOS Bash 3.2 has no flock). A waiter prints who holds the
+# lock and polls once a second; a lock whose holder PID no longer exists is
+# stale and reclaimed. CI runs one job per VM, so the lock is never contended
+# there.
+#
+# Exit codes: xcodebuild's own status is passed through (65 = build or test
+# failure) except for these wrapper-specific codes, chosen outside sysexits(3)
+# so they cannot be confused with xcodebuild's:
+#   80  the test process crashed or was terminated (xcodebuild printed
+#       "Restarting after unexpected exit, crash, or test timeout", "Test
+#       crashed with signal ...", or a lost test-runner connection). xcodebuild
+#       reports this as a plain 65 with a "Failing tests" list that names
+#       whichever tests happened to be running; the wrapper prints the
+#       distinguishing lines instead and keeps the full log (intent-hq/ios#238).
+#   81  timed out waiting for the simulator lock.
 set -euo pipefail
+
+EXIT_TEST_PROCESS_CRASHED=80
+EXIT_SIM_LOCK_TIMEOUT=81
 
 cd "$(dirname "$0")/.."
 
@@ -67,7 +97,9 @@ Usage: scripts/xcodebuild.sh <subcommand>
   pick-simulator          Print the chosen iPhone simulator UDID on stdout
 
 Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
-TAILCATKIT_AUTOBUILD (see script header).
+TAILCATKIT_AUTOBUILD, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see script header).
+Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated) and
+81 (timed out waiting for the simulator lock).
 EOF
   exit 2
 }
@@ -146,6 +178,124 @@ run_xcodebuild() {
   )
 }
 
+# Same as run_xcodebuild, but stderr is merged into stdout and everything is
+# tee'd to the log file at $1 so the test outcome can be classified afterwards.
+# pipefail makes the pipeline report xcodebuild's own status.
+run_xcodebuild_logged() {
+  local log=$1 extra=()
+  shift
+  while IFS= read -r arg; do extra+=("$arg"); done < <(common_args)
+  (
+    set -x
+    xcodebuild "$@" ${extra+"${extra[@]}"}
+  ) 2>&1 | tee "$log"
+}
+
+# Simulator lock (see the header). The symlink target is the holder's PID, so
+# ln -s both takes the lock and records the owner in one atomic step; readlink
+# reads it back. Held by this shell, not a subshell, so $$ is the owner.
+SIM_LOCK_PATH=
+acquire_simulator_lock() {
+  local udid=$1 dir timeout holder err waited=0 announced=0 misses=0
+  dir=${SIM_LOCK_DIR:-${TMPDIR:-/tmp}}
+  timeout=${SIM_LOCK_TIMEOUT:-1800}
+  case "$timeout" in
+    ''|*[!0-9]*) die "SIM_LOCK_TIMEOUT must be a non-negative integer number of seconds (got '$timeout')" ;;
+  esac
+  mkdir -p -- "$dir"
+  SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
+  while ! err=$(ln -s "$$" "$SIM_LOCK_PATH" 2>&1); do
+    if [ -e "$SIM_LOCK_PATH" ] && [ ! -L "$SIM_LOCK_PATH" ]; then
+      die "$SIM_LOCK_PATH exists but is not a lock symlink; remove it to continue"
+    fi
+    holder=$(readlink "$SIM_LOCK_PATH" 2>/dev/null || true)
+    if [ -z "$holder" ]; then
+      # Either released between the failed ln and readlink (retry at once)
+      # or ln keeps failing for another reason (surface it, don't spin).
+      misses=$((misses + 1))
+      if [ "$misses" -ge 3 ]; then
+        SIM_LOCK_PATH=
+        die "cannot create simulator lock: $err"
+      fi
+      continue
+    fi
+    misses=0
+    if ! kill -0 "$holder" 2>/dev/null; then
+      echo "notice: reclaiming stale simulator lock $SIM_LOCK_PATH (holder PID $holder is gone)" >&2
+      rm -f -- "$SIM_LOCK_PATH"
+      continue
+    fi
+    if [ "$waited" -ge "$timeout" ]; then
+      echo "error: timed out after ${timeout}s waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $holder.
+Wait for that run to finish (or raise SIM_LOCK_TIMEOUT), or pick another device with SIM_UDID." >&2
+      SIM_LOCK_PATH=
+      exit "$EXIT_SIM_LOCK_TIMEOUT"
+    fi
+    if [ "$announced" -eq 0 ]; then
+      echo "waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $holder (another xcodebuild.sh test run); giving up after ${timeout}s" >&2
+      announced=1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if [ "$announced" -eq 1 ]; then
+    echo "acquired simulator lock after ${waited}s" >&2
+  fi
+}
+
+release_simulator_lock() {
+  if [ -n "$SIM_LOCK_PATH" ] && [ "$(readlink "$SIM_LOCK_PATH" 2>/dev/null || true)" = "$$" ]; then
+    rm -f -- "$SIM_LOCK_PATH"
+  fi
+  SIM_LOCK_PATH=
+}
+
+# The EXIT trap releases the lock on any exit path; the signal traps turn an
+# interrupt into a normal exit so that the EXIT trap runs.
+trap release_simulator_lock EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Lines xcodebuild prints when the test process itself died or the connection
+# to it was lost, as opposed to a test assertion failing. In both cases
+# xcodebuild exits 65 and lists whatever tests were in flight under "Failing
+# tests", which is what makes a crash look like a test failure (ios#238) and
+# a concurrent-run corruption look like flaky tests (intent#4563).
+TEST_CRASH_PATTERN='Restarting after unexpected exit, crash, or test timeout|Test crashed with signal|Early unexpected exit, operation never finished bootstrapping|Lost connection to the test manager service|Test runner (exited|never began executing|crashed)|The test runner exited with code'
+
+# $1 = xcodebuild status, $2 = log path. Returns the status to exit with:
+# EXIT_TEST_PROCESS_CRASHED when the log shows a test-process crash or
+# termination (the log is kept and named), else xcodebuild's status unchanged.
+report_test_outcome() {
+  local status=$1 log=$2 crashes
+  crashes=$(grep -E "$TEST_CRASH_PATTERN" "$log" | awk '!seen[$0]++' | head -n 40 || true)
+  if [ -z "$crashes" ]; then
+    rm -f -- "$log"
+    return "$status"
+  fi
+  if [ "$status" -eq 0 ]; then
+    echo "notice: the test process was restarted at least once during this run (see below) although xcodebuild exited 0:" >&2
+    echo "$crashes" >&2
+    rm -f -- "$log"
+    return 0
+  fi
+  cat >&2 <<EOF
+
+error: the xcodebuild test process crashed or was terminated (exit $status is NOT a plain test failure).
+The lines below name the test that was executing when the process died:
+EOF
+  echo "$crashes" | sed 's/^/  /' >&2
+  cat >&2 <<EOF
+Any "Failing tests" list above may name tests that were merely running at the time.
+Full xcodebuild output kept at: $log
+Next steps: re-run the named suite alone with ONLY_TESTING='Target/Class' scripts/xcodebuild.sh test-without-building;
+if another test run may have shared this simulator, that is the cause the simulator lock exists to prevent (see the script header).
+Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not $status.
+EOF
+  return "$EXIT_TEST_PROCESS_CRASHED"
+}
+
 cmd_resolve() {
   run_xcodebuild -resolvePackageDependencies "${PROJECT_ARGS[@]}"
 }
@@ -212,19 +362,27 @@ parse_only_testing() {
 # Positional arguments are test-selection flags supplied by the subcommand
 # dispatch below (test-ios-unit passes -skip-testing:IntentUITests); they are
 # appended after the unconditional flags, as are the ONLY_TESTING arguments.
+#
+# The simulator lock is taken before the device is touched (boot, defaults,
+# tests) and released as soon as xcodebuild returns; the outcome is then
+# classified from the captured log (see report_test_outcome).
 cmd_test_without_building() {
-  local udid extra=()
+  local udid extra=() log status=0
   parse_only_testing
   udid=$(pick_simulator)
+  acquire_simulator_lock "$udid"
   enable_simulator_accessibility "$udid"
   if [ -n "${RESULT_BUNDLE:-}" ]; then
     rm -rf -- "${RESULT_BUNDLE:?}"
     extra+=(-resultBundlePath "$RESULT_BUNDLE")
   fi
-  run_xcodebuild test-without-building "${PROJECT_ARGS[@]}" \
+  log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
+  run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
-    ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@"
+    ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
+  release_simulator_lock
+  report_test_outcome "$status" "$log"
 }
 
 [ $# -ge 1 ] || usage
