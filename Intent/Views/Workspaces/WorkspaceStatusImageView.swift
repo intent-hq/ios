@@ -90,7 +90,11 @@ struct WorkspaceStatusImageView: View {
                     loader.forgetAssetFailure(workspaceId: workspaceId, assetId: assetId)
                 }
                 do {
-                    image = try await loader.assetImage(workspaceId: workspaceId, assetId: assetId)
+                    let loaded = try await loader.assetImage(workspaceId: workspaceId, assetId: assetId)
+                    // A replaced asset re-keys the task; never let the
+                    // superseded fetch overwrite the newer image.
+                    guard !Task.isCancelled else { return }
+                    image = loaded
                     loadedKey = key
                 } catch is CancellationError {
                     // Row scrolled away / workspace changed mid-fetch.

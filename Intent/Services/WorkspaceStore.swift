@@ -410,7 +410,8 @@ import Observation
             agentSummaryCount: ws.agentSummaryCount,
             agentSummaryAgents: ws.agentSummaryAgents,
             pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            activePullRequest: ws.activePullRequest,
+            statusImageAssetId: ws.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -447,7 +448,8 @@ import Observation
             agentSummaryCount: ws.agentSummaryCount,
             agentSummaryAgents: ws.agentSummaryAgents,
             pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            activePullRequest: ws.activePullRequest,
+            statusImageAssetId: ws.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -485,7 +487,8 @@ import Observation
             agentSummaryCount: ws.agentSummaryCount,
             agentSummaryAgents: ws.agentSummaryAgents,
             pullRequests: ws.pullRequests,
-            activePullRequest: ws.activePullRequest
+            activePullRequest: ws.activePullRequest,
+            statusImageAssetId: ws.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
