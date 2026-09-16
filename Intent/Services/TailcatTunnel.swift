@@ -76,11 +76,7 @@ nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable
     /// The continuation is deliberately not cancellation-aware: a cancelled
     /// caller must still release the handles, so teardown always completes.
     func close() async {
-        lock.lock()
-        let alreadyClosed = closed
-        closed = true
-        lock.unlock()
-        guard !alreadyClosed else { return }
+        guard markClosed() else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             // Captures self (lock-guarded) rather than the non-Sendable
             // gomobile handles, as `DialHandle.cancel` does.
@@ -90,6 +86,16 @@ nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable
                 continuation.resume()
             }
         }
+    }
+
+    /// Flips `closed`; true for the one caller that owns teardown. Synchronous
+    /// because `NSLock.lock()` is unavailable from asynchronous contexts.
+    private func markClosed() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if closed { return false }
+        closed = true
+        return true
     }
 }
 

@@ -123,25 +123,31 @@ struct TailcatTunnelSessionTests {
     /// The gomobile closes can block for seconds (Go-side startup mutex); a
     /// `close()` awaited from the main actor must park the blocking call on
     /// a global queue, leaving the main actor free to run other work.
-    /// nonisolated: the probe below is judged from off the main actor, so a
-    /// stalled main actor fails the test instead of hanging it. Expectations
-    /// are recorded only after the gate is released: while the main thread is
-    /// parked inside the fake, the test harness itself can stall.
-    @Test nonisolated func blockingCloseDoesNotStallCallersExecutor() async {
+    /// The probe is driven from a detached task: the test body itself may run
+    /// on the main actor (a `nonisolated` async test inherits the runner's
+    /// isolation), and a regression that parks the main thread inside the
+    /// fake would otherwise stall the judge along with it. Expectations are
+    /// recorded only after the gate is released for the same reason.
+    @Test func blockingCloseDoesNotStallCallersExecutor() async {
         let log = OSAllocatedUnfairLock<[String]>(initialState: [])
         let gate = DispatchSemaphore(value: 0)
         let client = FakeHandle("client", log: log, blockingOn: gate)
         let session = TailcatTunnelSession(client: client, forwarder: nil)
 
-        let closing = Task { @MainActor in await session.close() }
-        let entered = await Self.eventually(within: .seconds(5)) { client.closeEntered }
+        let verdict = Task.detached { () -> (entered: Bool, mainResponsive: Bool) in
+            let closing = Task { @MainActor in await session.close() }
+            let entered = await Self.eventually(within: .seconds(5)) { client.closeEntered }
 
-        let probeRan = OSAllocatedUnfairLock(initialState: false)
-        Task { @MainActor in probeRan.withLock { $0 = true } }
-        let mainResponsive = await Self.eventually(within: .seconds(2)) { probeRan.withLock { $0 } }
+            let probeRan = OSAllocatedUnfairLock(initialState: false)
+            Task { @MainActor in probeRan.withLock { $0 = true } }
+            let mainResponsive = await Self.eventually(within: .seconds(2)) { probeRan.withLock { $0 } }
 
-        gate.signal()
-        await closing.value
+            gate.signal()
+            await closing.value
+            return (entered, mainResponsive)
+        }
+        let (entered, mainResponsive) = await verdict.value
+
         #expect(entered, "fake close never entered")
         #expect(mainResponsive, "blocking close ran on the main actor and stalled it")
         #expect(client.closeCount == 1)
