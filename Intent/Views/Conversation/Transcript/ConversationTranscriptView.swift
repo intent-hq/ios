@@ -547,6 +547,7 @@ private extension ConversationTranscriptView {
             switch ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
                 isInteracting: scrollMomentumProxy.isInteracting,
+                isFollowing: isFollowing,
                 hasInitiallyScrolled: hasInitiallyScrolled,
                 userIsScrolledAway: userIsScrolledAway
             ) {

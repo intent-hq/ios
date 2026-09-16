@@ -149,16 +149,21 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     /// The settle re-check of a container re-pin deferred while interacting.
-    /// Still interacting, it is deferred again. Settled, the viewport is
-    /// followed to the bottom when it is still following and rests short of
-    /// the bottom within the at-bottom band — a row shorter than the threshold
-    /// leaves exactly that gap under the last message, with no Go to End and
-    /// no further geometry edge to close it. A fling that carried the user
-    /// past the threshold applied its edge on the way and is left where it
-    /// stopped; an unknown distance (no scroll view) proves nothing.
+    /// Still interacting, or with a follow in flight that another settle
+    /// source (`bottomBandRePinDecision`, the past-end clamp) already issued
+    /// — the re-pin would cancel it mid-animation and re-issue the same
+    /// scroll — it is deferred again and reads the landed distance instead.
+    /// Settled, the viewport is followed to the bottom when it is still
+    /// following and rests short of the bottom within the at-bottom band — a
+    /// row shorter than the threshold leaves exactly that gap under the last
+    /// message, with no Go to End and no further geometry edge to close it.
+    /// A fling that carried the user past the threshold applied its edge on
+    /// the way and is left where it stopped; an unknown distance (no scroll
+    /// view) proves nothing.
     static func deferredContainerRePinDecision(
         distanceToBottom: CGFloat?,
         isInteracting: Bool,
+        isFollowing: Bool = false,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool,
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
@@ -168,7 +173,7 @@ enum ConversationTranscriptScrollPolicy {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
-        if isInteracting { return .deferred }
+        if isInteracting || isFollowing { return .deferred }
         guard let distanceToBottom, isDriftedWithinBottomBand(
             distanceToBottom: distanceToBottom,
             driftTolerance: driftTolerance,

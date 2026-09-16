@@ -25,12 +25,14 @@ extension ConversationTranscriptScrollPolicyTests {
     private func deferredContainerRePin(
         distanceToBottom: CGFloat?,
         isInteracting: Bool = false,
+        isFollowing: Bool = false,
         hasInitiallyScrolled: Bool = true,
         userIsScrolledAway: Bool = false
     ) -> ContainerRePin {
         ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
             distanceToBottom: distanceToBottom,
             isInteracting: isInteracting,
+            isFollowing: isFollowing,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway,
             driftTolerance: 1,
@@ -78,12 +80,16 @@ extension ConversationTranscriptScrollPolicyTests {
     /// A 36 pt hooks row landing during the bounce back leaves the settled
     /// viewport 36 pt short of the bottom: under the threshold, so no Go to
     /// End and no further edge to close the gap — the settle re-check does.
-    /// Still interacting it waits again; a viewport that already rests at
-    /// the bottom, or that the fling carried past the threshold (its edge
+    /// Still interacting it waits again, as it does while another settle
+    /// source's follow is in flight (#346) rather than cancelling and
+    /// re-issuing the same scroll; a viewport that already rests at the
+    /// bottom, or that the fling carried past the threshold (its edge
     /// applied on the way), is left where it is.
     @Test func deferredContainerRePinFollowsOnSettleWithinBottomBand() {
         #expect(deferredContainerRePin(distanceToBottom: 36) == .rePin)
         #expect(deferredContainerRePin(distanceToBottom: 36, isInteracting: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 36, isFollowing: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 36, isFollowing: true, userIsScrolledAway: true) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 0) == .none)
         #expect(deferredContainerRePin(distanceToBottom: -80) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 400) == .none)
