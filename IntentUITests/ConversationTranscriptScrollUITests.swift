@@ -40,9 +40,32 @@ import XCTest
 /// transcript from the workspace row with the "Waiting for all" footer
 /// already under it. That workspace's `hook.list` fixture waits on
 /// `DemoFixtures.longConversationHookListGate` — a delay by default, or a
-/// trigger file the test creates — so its hooks row lands only after the
-/// transcript has been observed settled.
+/// trigger file — and every test here launches with the trigger file, so
+/// the hooks row never lands on its own clock: only the footer test
+/// releases it, once the transcript has been observed settled. On its
+/// default clock the row lands ~4 s after entry, inside every test's
+/// settle and quiet windows, and a row landing right after an entry had
+/// settled left the transcript blank with Go to End hidden on CI
+/// (intent-hq/ios#338) — a second event, a container resize, with its own
+/// outcome, in tests that measure the entry, a tap or a send.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
+
+    /// The file the fixture's hooks-row gate waits on (see
+    /// `Fixture.hooksRowTriggerFileArgumentPrefix`): one path per test
+    /// (XCTest instantiates the case per test method), never created unless
+    /// the test releases the row.
+    private let hooksRowTriggerFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try super.tearDownWithError()
+    }
 
     private enum Fixture {
         static let workspaceTitle = "Deflake payment integration tests"
@@ -94,12 +117,12 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let hooksRowLabel = "Running hooks"
         static let hookName = "Wait for CI on flake fix"
         // Holds the hooks row back: the fixture waits for this file to exist
-        // (polled every 100 ms). The footer test creates it once it has
-        // recorded a steady baseline; the cold-entry test never does, so the
-        // row cannot land inside its windows (#338). The runner and the app
-        // share the simulator filesystem, so a temporary-directory path
-        // works. A clock-based delay raced the CI simulator's render time
-        // (#285).
+        // (polled every 100 ms). Every launch passes `hooksRowTriggerFile`;
+        // only the footer test creates it, once it has recorded a steady
+        // baseline, so in every other test the row cannot land inside the
+        // windows (#338). The runner and the app share the simulator
+        // filesystem, so a temporary-directory path works. A clock-based
+        // delay raced the CI simulator's render time (#285).
         static let hooksRowTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
         static let hooksRowTimeout: TimeInterval = 15
         // Slack for the last message to sit at the same distance from the
@@ -206,12 +229,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// the shrunk transcript, still passes a midpoint visibility check.
     @MainActor
     func testFooterRowAppearanceKeepsTranscriptAtBottomAndGoToEndHidden() throws {
-        let triggerFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
-        try? FileManager.default.removeItem(at: triggerFile)
-        defer { try? FileManager.default.removeItem(at: triggerFile) }
-
-        let app = launchDemoApp(extraArguments: [Fixture.hooksRowTriggerFileArgumentPrefix + triggerFile.path])
+        let app = launchDemoApp()
         let opened = openLongConversation(in: app)
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
@@ -239,7 +257,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "hooks row was already present when the baseline gap was recorded; the fixture trigger file did not hold it back")
 
         // 2. Release the hooks row; it appears and shrinks the transcript from below.
-        try Data().write(to: triggerFile)
+        try Data().write(to: hooksRowTriggerFile)
         XCTAssertTrue(
             hooksRow.waitForExistence(timeout: Fixture.hooksRowTimeout),
             "hooks row never appeared under the transcript after the trigger file was created")
@@ -364,24 +382,15 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// fresh launch each cycle, as a return through the workspace list would
     /// mount the cached transcript.
     ///
-    /// The hooks row is held back for the whole test (trigger file never
-    /// created): on its default clock it lands ~4 s after entry, inside this
-    /// test's settle and quiet windows, and that landing is a second event —
-    /// a container resize — with its own outcome. Landing right after a cold
-    /// entry had settled it left the transcript blank with Go to End hidden
-    /// on CI (intent-hq/ios#338; the "last paragraph not in the accessibility
-    /// hierarchy" failure of intent-hq/ios#313 attempt 1). The row's re-pin
-    /// on a settled transcript is `testFooterRowAppearance…`'s subject.
+    /// The hooks row is held back like everywhere else; here the test also
+    /// asserts the gate held, as this is where its landing blanked the
+    /// transcript on CI (intent-hq/ios#338; the "last paragraph not in the
+    /// accessibility hierarchy" failure of intent-hq/ios#313 attempt 1).
     @MainActor
     func testFirstOpenOfLongConversationShowsLastMessageWithNoBlankBand() throws {
-        let triggerFile = FileManager.default.temporaryDirectory
-            .appendingPathComponent("transcript-cold-entry-\(UUID().uuidString).trigger")
-        try? FileManager.default.removeItem(at: triggerFile)
-        defer { try? FileManager.default.removeItem(at: triggerFile) }
-
         for cycle in 1...Fixture.entryCycles {
             let context = "cold entry \(cycle)/\(Fixture.entryCycles)"
-            let app = launchDemoApp(extraArguments: [Fixture.hooksRowTriggerFileArgumentPrefix + triggerFile.path])
+            let app = launchDemoApp()
             let opened = enterLongConversation(in: app, context: context)
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
@@ -487,10 +496,15 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     // MARK: - Helpers
 
+    /// Launches the demo app with the hooks row held back behind
+    /// `hooksRowTriggerFile` (see the class comment).
     @MainActor
-    private func launchDemoApp(extraArguments: [String] = []) -> XCUIApplication {
+    private func launchDemoApp() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--demo-data"] + extraArguments
+        app.launchArguments += [
+            "--demo-data",
+            Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path,
+        ]
         app.launch()
         return app
     }
