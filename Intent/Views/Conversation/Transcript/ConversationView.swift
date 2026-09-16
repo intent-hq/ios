@@ -163,15 +163,13 @@ private struct ConversationViewContent: View {
             }
     }
 
-    /// Navigation bar title, background, and toolbar.
+    /// Navigation bar title and toolbar; the bar background is the system default.
     private var conversationChrome: some View {
         conversationColumn
             .navigationTitle(viewModel.agentName)
             .toolbarTitleDisplayMode(.inline)
             .workspaceNavigationSubtitle(
                 title: viewModel.agentName, workspaceId: viewModel.workspaceId)
-            .toolbarBackground(Theme.card(for: colorScheme), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     agentMenu
