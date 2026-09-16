@@ -116,6 +116,15 @@ private extension ConversationTranscriptView {
                     userIsScrolledAway: userIsScrolledAway
                 ) {
                     scrollToBottom(proxy: proxy, forced: true)
+                } else if !isStreaming {
+                    // The last delta and the thinking indicator leaving can
+                    // rest a short transcript inside the band (#346).
+                    scheduleBottomBandRePinIfNeeded(
+                        geometryAway: scrollMomentumProxy.distanceToBottom.map {
+                            ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: $0)
+                        } ?? false,
+                        proxy: proxy
+                    )
                 }
             }
             .onChange(of: viewModel.store.streamingUpdateCount) { _, _ in
@@ -221,6 +230,7 @@ private extension ConversationTranscriptView {
                 from: old.containerHeight, to: new.containerHeight, proxy: proxy
             ) { return }
             applyScrolledAwayEdge(geometryAway: new.isScrolledAway, proxy: proxy)
+            scheduleBottomBandRePinIfNeeded(geometryAway: new.isScrolledAway, proxy: proxy)
         }
         // A user-driven phase beginning takes over whatever follow is pending
         // (see `takeOverPendingFollowIfGesture`). A gesture's last geometry
@@ -272,6 +282,7 @@ private extension ConversationTranscriptView {
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelUnrealizedEndRecovery()
+            cancelBottomBandRePin()
         }
     }
 
@@ -553,6 +564,60 @@ private extension ConversationTranscriptView {
     private func cancelDeferredContainerRePin() {
         scrollState.containerRePinTask?.cancel()
         scrollState.containerRePinTask = nil
+    }
+
+    /// A band-observer edge (or streaming ending) reading within the
+    /// at-bottom band on a pinned, settled transcript with no follow in
+    /// flight can be a short transcript that grew past one page and came to
+    /// rest a line or two short of the end (#346; see
+    /// `ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge`).
+    /// Scheduled only from those two sources, never from a follow draining:
+    /// a follow that lands a rounding error short would otherwise re-check
+    /// and re-scroll itself without bound.
+    private func scheduleBottomBandRePinIfNeeded(geometryAway: Bool, proxy: ScrollViewProxy) {
+        guard ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge(
+            geometryAway: geometryAway,
+            isInteracting: isUserInteracting,
+            isFollowing: isFollowing,
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        ) else { return }
+        scheduleBottomBandRePin(proxy: proxy)
+    }
+
+    /// Re-checks the live distance once the geometry has had time to settle
+    /// (the rows the edge's growth realized may still be laying out), and
+    /// re-checks again while a gesture or a follow is in progress; a viewport
+    /// still following that rests within the band is followed to the bottom
+    /// through the ordinary automatic follow, which re-validates the
+    /// geometry when it runs.
+    private func scheduleBottomBandRePin(proxy: ScrollViewProxy) {
+        scrollState.bottomBandRePinTask?.cancel()
+        scrollState.bottomBandRePinTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+            guard !Task.isCancelled else { return }
+            scrollState.bottomBandRePinTask = nil
+            switch ConversationTranscriptScrollPolicy.bottomBandRePinDecision(
+                distanceToBottom: scrollMomentumProxy.distanceToBottom,
+                isInteracting: isUserInteracting,
+                isFollowing: isFollowing,
+                hasInitiallyScrolled: hasInitiallyScrolled,
+                userIsScrolledAway: userIsScrolledAway
+            ) {
+            case .deferred:
+                scheduleBottomBandRePin(proxy: proxy)
+            case .rePin:
+                AppLog.ui.debug("[SCROLL] Pinned viewport rests within the at-bottom band after settle; following to the bottom")
+                scrollToBottom(proxy: proxy, forced: false)
+            case .none:
+                break
+            }
+        }
+    }
+
+    private func cancelBottomBandRePin() {
+        scrollState.bottomBandRePinTask?.cancel()
+        scrollState.bottomBandRePinTask = nil
     }
 
     /// Applies a geometry edge to `userIsScrolledAway` under the rule that

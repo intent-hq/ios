@@ -177,6 +177,76 @@ enum ConversationTranscriptScrollPolicy {
         return .rePin
     }
 
+    enum BottomBandRePinDecision: Equatable {
+        /// Not following, or the viewport rests within `driftTolerance` of
+        /// the bottom, past `atBottomThreshold`, or at an unknown distance.
+        case none
+        /// Following, but under the finger, decelerating, or with a follow
+        /// in flight; re-check on settle.
+        case deferred
+        case rePin
+    }
+
+    /// A new conversation's transcript starts shorter than its container, at
+    /// a negative distance, and its first reply grows it past one page. The
+    /// bottom anchor takes the pin over mid-growth and the viewport comes to
+    /// rest a line or two short of the end (#346): under `atBottomThreshold`,
+    /// so Go to End stays hidden, and with no gesture, so the away edge never
+    /// fires. Streaming deltas read the distance before their content is
+    /// laid out and are rate-limited, and streaming ending issues no scroll,
+    /// so nothing closes the gap. The growth does cross from a negative band
+    /// into band 0, and that edge — read within the band on a pinned,
+    /// settled transcript with no follow in flight — schedules a settle
+    /// re-check (`bottomBandRePinDecision`). An away edge is content growth
+    /// past the band and is re-pinned at once by
+    /// `shouldRePinAfterContentGrowth`; under the finger the edge is a
+    /// gesture, not growth; a follow in flight lands on its own; before the
+    /// entry scroll the viewport is not following yet.
+    static func shouldRecheckBottomBandAfterEdge(
+        geometryAway: Bool,
+        isInteracting: Bool,
+        isFollowing: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool
+    ) -> Bool {
+        !geometryAway && !isInteracting && !isFollowing && shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    /// The settle re-check scheduled by `shouldRecheckBottomBandAfterEdge`,
+    /// and when streaming ends. Interacting, or with a follow in flight that
+    /// a re-pin would land under, it is deferred again. Settled, a viewport
+    /// still following that rests short of the bottom within the at-bottom
+    /// band — past `driftTolerance`, so layout rounding is left alone — is
+    /// followed there through the ordinary automatic follow, which
+    /// re-validates the geometry when it runs. Past `atBottomThreshold` the
+    /// away edge owns the decision; an unknown distance (no scroll view)
+    /// proves nothing; scrolled away or before the entry scroll nothing is
+    /// following.
+    static func bottomBandRePinDecision(
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool,
+        isFollowing: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool,
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
+        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+    ) -> BottomBandRePinDecision {
+        guard shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        ) else { return .none }
+        if isInteracting || isFollowing { return .deferred }
+        guard let distanceToBottom, isDriftedWithinBottomBand(
+            distanceToBottom: distanceToBottom,
+            driftTolerance: driftTolerance,
+            atBottomThreshold: atBottomThreshold
+        ) else { return .none }
+        return .rePin
+    }
+
     /// The scrolled-away flag driving "Go to End" and follow-to-bottom, on a
     /// geometry edge. Once pinned, the transcript stays pinned until the user
     /// drags it up (#281): the only transition to "scrolled away" is a
