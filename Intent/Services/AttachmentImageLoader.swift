@@ -28,7 +28,7 @@ final class AttachmentImageLoader {
     /// grows only with distinct attachments the transcript actually
     /// rendered, at ~280 B per entry measured by
     /// `SessionCacheBoundsMeasurementTests`, so even a 10k-attachment
-    /// session retains ~2.7 MiB; evicting would only re-run an immutable
+    /// session retains ~2.6 MiB; evicting would only re-run an immutable
     /// `file.getAttachmentInfo` resolution.
     private(set) var pathCache: [String: String] = [:]
     /// In-flight resolutions, so concurrent requests for the same
