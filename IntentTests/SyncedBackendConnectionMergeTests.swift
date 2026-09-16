@@ -75,6 +75,7 @@ struct SyncedBackendConnectionMergeTests {
         }
         for bad in [
             "", "  ", "a b", "host/path", "host:1", "user@host", "host?q", "host#f", "[::1", "[]",
+            "::::", "2001::db8::1", "[2001::db8::1]", ":", "12345::1",
         ] {
             #expect(
                 SyncedBackendConnectionMerge.usableHost(bad) == nil, "expected unusable: \(bad)")

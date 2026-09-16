@@ -1465,6 +1465,27 @@ struct ConnectionManagerTests {
         #expect(ConnectionManager.mergeHosts(existing: ["a", "b"], reported: []) == ["a", "b"])
     }
 
+    /// ios#254: daemon-reported routes are untrusted. Only plain DNS names,
+    /// IPv4 addresses and IPv6 literals survive; URL metacharacters, ports,
+    /// paths and credentials are dropped before the list is raced or
+    /// persisted. Raw IPv6 forms are bracket-normalized and deduped against
+    /// their bracketed twin; existing hosts are still never dropped.
+    @Test @MainActor func mergeHostsRejectsInvalidReportedHostsAndNormalizesIPv6() {
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["daemon.local", "[fe80::1]"],
+            reported: [
+                "192.168.1.10", "2001:db8::1", "fe80::1", "[2001:db8::1]",
+                "host.example.com", "my-mac_2.local",
+                "192.168.1.10:4242", "evil.com/path", "user@evil.com", "evil.com?x=1",
+                "http://evil.com", "[::1", "::1]", "[]", "a b", "",
+                "::::", "2001::db8::1", "[2001::db8::1]",
+            ])
+        #expect(merged == [
+            "daemon.local", "[fe80::1]", "192.168.1.10", "[2001:db8::1]",
+            "host.example.com", "my-mac_2.local",
+        ])
+    }
+
     @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
         // Reviewer scenario: the stored record holds a NAT hostname the current
         // session didn't connect with. The persisted list is the stored hosts
@@ -1708,6 +1729,11 @@ struct ConnectionManagerTests {
             var isOpen: Bool
             var acceptedTotal = 0
             var pingsReceived = 0
+            // Requests seen per JSON-RPC method, and how many of the next
+            // requests per method are answered with an error instead of the
+            // empty-object result — the subscription retry tests' seam.
+            var requestCounts: [String: Int] = [:]
+            var scriptedFailures: [String: Int] = [:]
         }
 
         private let listener: NWListener
@@ -1723,6 +1749,17 @@ struct ConnectionManagerTests {
         /// Sockets the listener has accepted so far (including ones cancelled
         /// since): non-zero proves a client reached this plaintext server.
         var acceptedCount: Int { state.withLock { $0.acceptedTotal } }
+
+        /// Requests carrying `method` received so far, across all sockets.
+        func requestCount(method: String) -> Int {
+            state.withLock { $0.requestCounts[method] ?? 0 }
+        }
+
+        /// Answers the next `count` requests for `method` with a JSON-RPC
+        /// error (`-32000`), then falls back to the empty-object result.
+        func failNextRequests(_ count: Int, method: String) {
+            state.withLock { $0.scriptedFailures[method] = count }
+        }
 
         private init(listener: NWListener, gated: Bool, pongs: PongPolicy) {
             self.listener = listener
@@ -1824,9 +1861,21 @@ struct ConnectionManagerTests {
                 } else if let data,
                    let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                    let id = json["id"] {
-                    let response: [String: Any] = [
-                        "jsonrpc": "2.0", "id": id, "result": [String: Any](),
-                    ]
+                    let method = json["method"] as? String ?? ""
+                    let fails = self.state.withLock { state -> Bool in
+                        state.requestCounts[method, default: 0] += 1
+                        guard let remaining = state.scriptedFailures[method], remaining > 0 else {
+                            return false
+                        }
+                        state.scriptedFailures[method] = remaining - 1
+                        return true
+                    }
+                    var response: [String: Any] = ["jsonrpc": "2.0", "id": id]
+                    if fails {
+                        response["error"] = ["code": -32000, "message": "scripted failure"]
+                    } else {
+                        response["result"] = [String: Any]()
+                    }
                     if let payload = try? JSONSerialization.data(withJSONObject: response) {
                         let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
                         let context = NWConnection.ContentContext(
@@ -2920,6 +2969,209 @@ struct ConnectionManagerTests {
         #expect(disconnects.count == 0)
         #expect(monitor.cancelCount == 0)
         #expect(monitors.monitors.count == 1)
+    }
+
+    // MARK: - Global subscription retry (ios#254)
+
+    private static let subscribeMethod = "events.subscribe"
+
+    private static func isSubscriptionFailed(_ state: ConnectionManager.GlobalSubscriptionState) -> Bool {
+        if case .failed = state { return true }
+        return false
+    }
+
+    @Test func globalSubscriptionBackoffGrowsAndCaps() {
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 1) == .seconds(1))
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 2) == .seconds(2))
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 3) == .seconds(4))
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 4) == .seconds(8))
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 9) == .seconds(8))
+        #expect(ConnectionManager.globalSubscriptionBackoff(afterAttempt: 0) == .seconds(1))
+    }
+
+    /// ios#254: a daemon that rejects the first `events.subscribe` calls no
+    /// longer leaves the connection blind. The loop backs off through the
+    /// injected clock (1 s, 2 s, ...) and reaches `.subscribed` once the
+    /// daemon accepts; a successful connection is never torn down for it.
+    @Test @MainActor func globalSubscriptionRetriesUntilTheDaemonAccepts() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start()
+        server.failNextRequests(2, method: Self.subscribeMethod)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        let disconnects = DisconnectCounter(manager)
+
+        try await Self.settle { clock.pendingDurations.contains(.seconds(1)) }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 1)
+        #expect(manager.globalSubscriptionState == .subscribing(attempt: 2))
+
+        clock.advance(by: .seconds(1))
+        try await Self.settle { clock.pendingDurations.contains(.seconds(2)) }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 2)
+        #expect(manager.globalSubscriptionState == .subscribing(attempt: 3))
+
+        clock.advance(by: .seconds(2))
+        try await Self.settle { manager.globalSubscriptionState == .subscribed }
+        #expect(manager.globalSubscriptionState == .subscribed)
+        #expect(server.requestCount(method: Self.subscribeMethod) == 3)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+        #expect(disconnects.count == 0)
+        #expect(manager.connectionState == .connected)
+    }
+
+    /// After `globalSubscriptionMaxAttempts` failures the loop stops and
+    /// surfaces `.failed` (the actionable state), sending nothing more on its
+    /// own; `retryGlobalSubscription()` starts a fresh loop that subscribes.
+    @Test @MainActor func globalSubscriptionExhaustionSurfacesFailureAndRetriesOnRequest() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start()
+        let maxAttempts = ConnectionManager.globalSubscriptionMaxAttempts
+        server.failNextRequests(maxAttempts, method: Self.subscribeMethod)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+
+        for attempt in 1..<maxAttempts {
+            let backoff = ConnectionManager.globalSubscriptionBackoff(afterAttempt: attempt)
+            try await Self.settle { clock.pendingDurations.contains(backoff) }
+            #expect(server.requestCount(method: Self.subscribeMethod) == attempt)
+            #expect(manager.globalSubscriptionState == .subscribing(attempt: attempt + 1))
+            clock.advance(by: backoff)
+        }
+        // The backoffs sum to exactly one heartbeat interval, so the cadence
+        // probe fires alongside the last attempt; wait for it to re-arm too.
+        try await Self.settle {
+            Self.isSubscriptionFailed(manager.globalSubscriptionState)
+                && clock.pendingDurations == [ConnectionManager.heartbeatInterval]
+        }
+        #expect(
+            manager.globalSubscriptionState
+                == .failed(attempts: maxAttempts, lastError: "scripted failure (-32000)"))
+        #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts)
+        #expect(clock.pendingDurations == [ConnectionManager.heartbeatInterval])
+        #expect(manager.connectionState == .connected)
+
+        // Exhausted: time passing sends nothing more.
+        clock.advance(by: .seconds(1))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts)
+
+        // The window reads the failure and routes its Retry through the
+        // session connection surface, not the concrete manager.
+        let sessionConnection: any SessionConnectionManaging = manager
+        #expect(Self.isSubscriptionFailed(sessionConnection.globalSubscriptionState))
+        sessionConnection.retryGlobalSubscription()
+        try await Self.settle { manager.globalSubscriptionState == .subscribed }
+        #expect(manager.globalSubscriptionState == .subscribed)
+        #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts + 1)
+    }
+
+    /// A retry parked in its backoff belongs to the socket that started it:
+    /// `disconnect()` retires it (state back to `.idle`, no further request
+    /// even when the clock moves on), and a connect to another daemon runs
+    /// its own loop against that daemon only.
+    @Test @MainActor func globalSubscriptionRetryIsRetiredByNewGeneration() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let serverA = try await LoopbackWebSocketServer.start()
+        let serverB = try await LoopbackWebSocketServer.start()
+        serverA.failNextRequests(10, method: Self.subscribeMethod)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            serverA.stop()
+            serverB.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverA.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        try await Self.settle { clock.pendingDurations.contains(.seconds(1)) }
+        #expect(serverA.requestCount(method: Self.subscribeMethod) == 1)
+        #expect(manager.globalSubscriptionState == .subscribing(attempt: 2))
+        let retired = try #require(manager.globalSubscriptionTask)
+
+        manager.disconnect()
+        #expect(manager.globalSubscriptionState == .idle)
+        #expect(manager.globalSubscriptionTask == nil)
+        _ = await retired.value
+        #expect(clock.pendingDurations.isEmpty)
+
+        clock.advance(by: .seconds(30))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(serverA.requestCount(method: Self.subscribeMethod) == 1)
+        #expect(manager.globalSubscriptionState == .idle)
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "token-b")
+        try await Self.settle { manager.globalSubscriptionState == .subscribed }
+        #expect(manager.globalSubscriptionState == .subscribed)
+        #expect(serverB.requestCount(method: Self.subscribeMethod) == 1)
+        #expect(serverA.requestCount(method: Self.subscribeMethod) == 1)
+    }
+
+    /// The automatic reconnect keeps the generation, so the socket identity
+    /// is what retires a loop mid-backoff: the replacement socket subscribes
+    /// with its own loop and the retired one never sends again.
+    @Test @MainActor func globalSubscriptionRetryIsRetiredByReconnect() async throws {
+        let plaintextWasAllowed = Self.enablePlaintextLoopback()
+        defer { Self.restorePlaintextLoopback(plaintextWasAllowed) }
+        let manager = ConnectionManager.shared
+        let clock = ManualHeartbeatClock()
+        let server = try await LoopbackWebSocketServer.start()
+        server.failNextRequests(1, method: Self.subscribeMethod)
+        let originalClock = manager.heartbeatClock
+        manager.heartbeatClock = clock
+        defer {
+            manager.disconnect()
+            manager.heartbeatClock = originalClock
+            server.stop()
+        }
+
+        try await manager.connect(hosts: ["127.0.0.1"], port: server.port, token: "token")
+        #expect(manager.connectionState == .connected)
+        try await Self.settle { clock.pendingDurations.contains(.seconds(1)) }
+        #expect(server.requestCount(method: Self.subscribeMethod) == 1)
+        let retired = try #require(manager.globalSubscriptionTask)
+        let disconnects = DisconnectCounter(manager)
+
+        server.dropClients()
+        try await Self.settle(timeout: .seconds(5)) {
+            manager.connectionState == .connected && manager.globalSubscriptionState == .subscribed
+        }
+        #expect(disconnects.count == 1)
+        #expect(manager.globalSubscriptionState == .subscribed)
+        #expect(manager.globalSubscriptionTask != retired)
+        _ = await retired.value
+        #expect(server.requestCount(method: Self.subscribeMethod) == 2)
+
+        clock.advance(by: .seconds(10))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(server.requestCount(method: Self.subscribeMethod) == 2)
+        #expect(manager.globalSubscriptionState == .subscribed)
     }
 }
 

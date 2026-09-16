@@ -19,6 +19,11 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     var certMismatchPublisher: AnyPublisher<Bool, Never> { get }
     /// Dialer used to probe a server certificate over a Tailcat tunnel.
     var tunnelDialer: any TunnelDialing { get }
+    /// Where the live socket's global event subscription stands; `.failed`
+    /// once its bounded retries are exhausted, which the window surfaces
+    /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
+    var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+    func retryGlobalSubscription()
 
     func connect(
         hosts: [String], port: Int, token: String, certFingerprint: String?,

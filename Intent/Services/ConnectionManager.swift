@@ -156,9 +156,17 @@ nonisolated enum InboundFrame: Sendable {
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     /// Read by tests as a completion barrier for a retired heartbeat.
     @ObservationIgnored private(set) var heartbeatTask: Task<Void, Never>?
-    /// Time source for the heartbeat cadence and probe deadline. Injectable
-    /// so tests step the heartbeat deterministically; defaults to the
-    /// monotonic `ContinuousClock` (never wall-clock `Date`, see ios#253).
+    /// The global `events.subscribe` retry loop of the live socket (ios#254);
+    /// cancelled with the socket. Read by tests as a completion barrier.
+    @ObservationIgnored private(set) var globalSubscriptionTask: Task<Void, Never>?
+    /// Where the live socket's global event subscription stands. `.failed`
+    /// after the bounded retries are exhausted is the actionable state the
+    /// UI surfaces; `retryGlobalSubscription()` starts the loop again.
+    var globalSubscriptionState: GlobalSubscriptionState = .idle
+    /// Time source for the heartbeat cadence and probe deadline, and for the
+    /// global subscription retry backoff. Injectable so tests step both
+    /// deterministically; defaults to the monotonic `ContinuousClock` (never
+    /// wall-clock `Date`, see ios#253).
     @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
     /// Produces the network-path monitor that watches the live socket's path
     /// (intent#3765). Injectable so tests drive path transitions with a fake;
@@ -404,6 +412,7 @@ nonisolated enum InboundFrame: Sendable {
         connectionGeneration += 1
         stopHeartbeat()
         stopPathMonitor()
+        stopGlobalSubscription()
         reconnectTask?.cancel()
         reconnectTask = nil
         lastSuccessfulConnectAt = nil
@@ -723,15 +732,21 @@ nonisolated enum InboundFrame: Sendable {
 
     /// Merges daemon-reported IPs into the existing host list: existing hosts
     /// (originally paired/entered) keep their order and are never dropped;
-    /// reported IPs not already present are appended, deduped.
+    /// reported IPs not already present are appended, deduped. Reported
+    /// entries are untrusted input (ios#254): each must be a plain DNS name,
+    /// IPv4 address or IPv6 literal per `SyncedBackendConnectionMerge
+    /// .usableHost` — raw IPv6 forms are bracket-normalized before the
+    /// dedupe — and anything else (URL metacharacters, ports, paths,
+    /// credentials) is rejected before it can be raced or persisted.
     static func mergeHosts(existing: [String], reported: [String]) -> [String] {
         var merged = existing
         var seen = Set(existing)
         for ip in reported {
             let trimmed = ip.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !seen.contains(trimmed) else { continue }
-            merged.append(trimmed)
-            seen.insert(trimmed)
+            guard let host = SyncedBackendConnectionMerge.usableHost(trimmed),
+                  !seen.contains(host) else { continue }
+            merged.append(host)
+            seen.insert(host)
         }
         return merged
     }
@@ -1179,6 +1194,7 @@ nonisolated enum InboundFrame: Sendable {
         }
         stopHeartbeat()
         stopPathMonitor()
+        stopGlobalSubscription()
         let oldSocket = socket
         socket = nil
         let oldTunnel = activeTunnel
@@ -1313,18 +1329,104 @@ nonisolated enum InboundFrame: Sendable {
     /// `IntentTests/EventCatalogCoverageTests.swift`.
     nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
 
+    /// Where the live socket's global `events.subscribe` stands (ios#254).
+    nonisolated enum GlobalSubscriptionState: Equatable, Sendable {
+        /// No live socket, or the subscription was retired with its socket.
+        case idle
+        case subscribing(attempt: Int)
+        case subscribed
+        /// Every attempt failed; the connection is up but receives no
+        /// global events until `retryGlobalSubscription()` succeeds.
+        case failed(attempts: Int, lastError: String)
+    }
+
+    /// `events.subscribe` attempts per socket before giving up.
+    nonisolated static let globalSubscriptionMaxAttempts = 5
+    nonisolated static let globalSubscriptionBackoffMaximum: Duration = .seconds(8)
+
+    /// Backoff before the attempt following a failed `attempt`: 1 s, 2 s,
+    /// 4 s, 8 s, capped.
+    nonisolated static func globalSubscriptionBackoff(afterAttempt attempt: Int) -> Duration {
+        let exponent = min(max(attempt, 1) - 1, 3)
+        let backoff: Duration = .seconds(1 << exponent)
+        return min(backoff, globalSubscriptionBackoffMaximum)
+    }
+
+    /// Subscribes the live socket to the global event list, retrying a
+    /// bounded number of times with backoff (ios#254): a daemon still
+    /// warming up right after a reconnect answers the first request with an
+    /// error or times out, and a connection without this subscription is
+    /// silently blind to every store's live updates. The loop is bound to
+    /// the connection generation AND the socket that started it (the
+    /// automatic reconnect keeps the generation), so an attempt whose socket
+    /// was retired mid-flight neither reports nor retries against the
+    /// replacement — which runs its own loop. Exhaustion is surfaced as
+    /// `globalSubscriptionState == .failed`.
     private func subscribeToAllEvents() {
-        Task {
-            do {
-                let _ = try await self.request("events.subscribe", params: [
-                    "eventTypes": Self.globalEventTypes,
-                    "replaceGroup": "global"
-                ])
-                AppLog.connection.debug("[ConnectionManager] Subscribed to all events")
-            } catch {
-                AppLog.connection.error("[ConnectionManager] Failed to subscribe to events: \(error)")
+        globalSubscriptionTask?.cancel()
+        guard let currentSocket = socket else {
+            globalSubscriptionState = .idle
+            return
+        }
+        let myGeneration = connectionGeneration
+        let clock = heartbeatClock
+        globalSubscriptionState = .subscribing(attempt: 1)
+        globalSubscriptionTask = Task { [weak self] in
+            var attempt = 1
+            while true {
+                guard !Task.isCancelled, let self,
+                      self.connectionGeneration == myGeneration, self.socket === currentSocket else {
+                    return
+                }
+                do {
+                    _ = try await self.request("events.subscribe", params: [
+                        "eventTypes": Self.globalEventTypes,
+                        "replaceGroup": "global"
+                    ])
+                    guard !Task.isCancelled,
+                          self.connectionGeneration == myGeneration, self.socket === currentSocket else {
+                        return
+                    }
+                    self.globalSubscriptionState = .subscribed
+                    AppLog.connection.debug("[ConnectionManager] Subscribed to all events (attempt \(attempt))")
+                    return
+                } catch {
+                    guard !Task.isCancelled,
+                          self.connectionGeneration == myGeneration, self.socket === currentSocket else {
+                        return
+                    }
+                    if attempt >= Self.globalSubscriptionMaxAttempts {
+                        AppLog.connection.error("[ConnectionManager] Failed to subscribe to events after \(attempt) attempts: \(error)")
+                        self.globalSubscriptionState = .failed(
+                            attempts: attempt, lastError: error.localizedDescription)
+                        return
+                    }
+                    let backoff = Self.globalSubscriptionBackoff(afterAttempt: attempt)
+                    AppLog.connection.warning("[ConnectionManager] Failed to subscribe to events (attempt \(attempt)): \(error); retrying in \(backoff)")
+                    attempt += 1
+                    self.globalSubscriptionState = .subscribing(attempt: attempt)
+                    do {
+                        try await clock.sleep(for: backoff)
+                    } catch {
+                        return
+                    }
+                }
             }
         }
+    }
+
+    /// Starts the global subscription loop again after it gave up
+    /// (`globalSubscriptionState == .failed`). A no-op without a live socket:
+    /// the next connect subscribes on its own.
+    func retryGlobalSubscription() {
+        guard connectionState == .connected, socket != nil else { return }
+        subscribeToAllEvents()
+    }
+
+    private func stopGlobalSubscription() {
+        globalSubscriptionTask?.cancel()
+        globalSubscriptionTask = nil
+        globalSubscriptionState = .idle
     }
 
     // MARK: - Heartbeat
