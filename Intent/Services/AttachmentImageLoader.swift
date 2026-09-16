@@ -24,8 +24,13 @@ final class AttachmentImageLoader {
     private let connection: ConnectionManagerRouting
     private let fileLoader: WorkspaceFileImageLoader
     /// Session cache of resolved workspace-relative paths, keyed by
-    /// (workspaceId, attachmentId).
-    private var pathCache: [String: String] = [:]
+    /// (workspaceId, attachmentId). Intentionally uncapped (ios#264): it
+    /// grows only with distinct attachments the transcript actually
+    /// rendered, at ~280 B per entry measured by
+    /// `SessionCacheBoundsMeasurementTests`, so even a 10k-attachment
+    /// session retains ~2.7 MiB; evicting would only re-run an immutable
+    /// `file.getAttachmentInfo` resolution.
+    private(set) var pathCache: [String: String] = [:]
     /// In-flight resolutions, so concurrent requests for the same
     /// attachment share one `file.getAttachmentInfo` round-trip.
     private var inFlight: [String: Task<String, Error>] = [:]
