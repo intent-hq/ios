@@ -200,23 +200,24 @@ enum ConversationTranscriptScrollPolicy {
     /// fires. Streaming deltas read the distance before their content is
     /// laid out and are rate-limited, and streaming ending issues no scroll,
     /// so nothing closes the gap. The growth does cross from a negative band
-    /// into band 0, and that edge — read within the band on a pinned,
-    /// settled transcript — schedules a settle re-check
-    /// (`bottomBandRePinDecision`). A follow in flight does not suppress it:
-    /// the last rows may lay out during that follow's completion window and
-    /// its drain re-pins only on an away edge, so the request is kept and
-    /// the re-check defers until the follow lands. An away edge is content
-    /// growth past the band and is re-pinned at once by
-    /// `shouldRePinAfterContentGrowth`; under the finger the edge is a
+    /// into band 0, and that edge — read on a pinned, settled transcript —
+    /// schedules a settle re-check (`bottomBandRePinDecision`). A follow in
+    /// flight does not suppress it: the last rows may lay out during that
+    /// follow's completion window and its drain re-pins only on an away
+    /// edge, so the request is kept and the re-check defers until the
+    /// follow lands. An away edge without a gesture is content growth past
+    /// the band: `shouldRePinAfterContentGrowth` re-pins it at once, and the
+    /// re-check validates that single scroll once the growth has settled
+    /// (a reply ending with several suggested prompts swaps in more than
+    /// `atBottomThreshold` at stream end). Under the finger the edge is a
     /// gesture, not growth; before the entry scroll the viewport is not
     /// following yet.
     static func shouldRecheckBottomBandAfterEdge(
-        geometryAway: Bool,
         isInteracting: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
     ) -> Bool {
-        !geometryAway && !isInteracting && shouldFollowToBottom(
+        !isInteracting && shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
@@ -225,32 +226,30 @@ enum ConversationTranscriptScrollPolicy {
     /// The settle re-check scheduled by `shouldRecheckBottomBandAfterEdge`,
     /// and when streaming ends. Interacting, or with a follow in flight that
     /// a re-pin would land under, it is deferred again. Settled, a viewport
-    /// still following that rests short of the bottom within the at-bottom
-    /// band — past `driftTolerance`, so layout rounding is left alone — is
-    /// followed there through the ordinary automatic follow, which
-    /// re-validates the geometry when it runs. Past `atBottomThreshold` the
-    /// away edge owns the decision; an unknown distance (no scroll view)
-    /// proves nothing; scrolled away or before the entry scroll nothing is
-    /// following.
+    /// still following that rests short of the bottom — past
+    /// `driftTolerance`, so layout rounding is left alone — is followed
+    /// there through the ordinary automatic follow, which re-validates the
+    /// geometry when it runs: within the at-bottom band it scrolls, and past
+    /// `atBottomThreshold` its drain re-pins the distance as content growth
+    /// (`shouldRePinAfterContentGrowth`) — with no gesture the flag cannot
+    /// have been raised. Content still shorter than the container rests at
+    /// a negative distance that the past-end clamp owns (#271); an unknown
+    /// distance (no scroll view) proves nothing; scrolled away or before the
+    /// entry scroll nothing is following.
     static func bottomBandRePinDecision(
         distanceToBottom: CGFloat?,
         isInteracting: Bool,
         isFollowing: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool,
-        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
-        atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance
     ) -> BottomBandRePinDecision {
         guard shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
         if isInteracting || isFollowing { return .deferred }
-        guard let distanceToBottom, isDriftedWithinBottomBand(
-            distanceToBottom: distanceToBottom,
-            driftTolerance: driftTolerance,
-            atBottomThreshold: atBottomThreshold
-        ) else { return .none }
+        guard let distanceToBottom, distanceToBottom > driftTolerance else { return .none }
         return .rePin
     }
 
