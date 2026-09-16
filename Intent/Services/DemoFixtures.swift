@@ -168,6 +168,97 @@ enum DemoFixtures {
         }
     }
 
+    // MARK: - Short conversation that grows past one page (intent-hq/ios#346)
+
+    /// Workspace whose `agent.list` returns the single `shortConversationAgents`
+    /// row (the "Rename the nightly billing cron" workspace): a two-message
+    /// conversation shorter than an iPhone screen whose reply grows on demand,
+    /// so the short-to-past-one-page growth of #346 can be exercised against
+    /// `--demo-data` (`ConversationTranscriptScrollUITests`).
+    static let shortConversationWorkspaceId = "demo-ws-cron-rename"
+
+    /// Agent whose `agent.getConversation` returns
+    /// `shortConversationMessages(lineCount:)` ("Cron Renamer", idle).
+    static let shortConversationAgentId = "demo-agent-cron-rename"
+
+    static let shortConversationWorkspaceTitle = "Rename the nightly billing cron"
+
+    /// Lines of the fenced code block in the reply when no growth file is
+    /// present (or it holds nothing usable): a transcript well short of one
+    /// page on an iPhone.
+    static let shortConversationBaselineLineCount = 2
+
+    /// `--demo-short-conversation-growth-file=<path>`: the file whose
+    /// contents (an integer) set the code block's line count. The fixture
+    /// reads it on every `agent.getConversation` for
+    /// `shortConversationAgentId`, and `startShortConversationGrowthWatcher`
+    /// polls it: a change in its contents is delivered as an
+    /// `agent:stream:end` event for that agent, which makes an open
+    /// conversation refetch — the legacy path a streamed reply ending takes
+    /// when no chat channel is live (`ConversationStore.handleStreamEnd`), so
+    /// the growth reaches the transcript the way a live reply's does. A UI
+    /// test writes the file when it has observed the short transcript settled,
+    /// for the same reason the hooks row waits on a trigger file.
+    static let shortConversationGrowthFileArgumentPrefix = "--demo-short-conversation-growth-file="
+
+    static let shortConversationGrowthFile = shortConversationGrowthFile(from: ProcessInfo.processInfo.arguments)
+
+    /// The last non-empty `--demo-short-conversation-growth-file=<path>`, or nil.
+    static func shortConversationGrowthFile(from arguments: [String]) -> URL? {
+        arguments
+            .filter { $0.hasPrefix(shortConversationGrowthFileArgumentPrefix) }
+            .map { String($0.dropFirst(shortConversationGrowthFileArgumentPrefix.count)) }
+            .last { !$0.isEmpty }
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    /// The line count a growth file's contents ask for: a positive integer
+    /// (surrounding whitespace ignored); anything else, including no file,
+    /// is `shortConversationBaselineLineCount`.
+    static func shortConversationLineCount(parsing contents: String?) -> Int {
+        guard let contents,
+              let count = Int(contents.trimmingCharacters(in: .whitespacesAndNewlines)),
+              count > 0 else { return shortConversationBaselineLineCount }
+        return count
+    }
+
+    /// The current line count from `shortConversationGrowthFile`.
+    static func shortConversationLineCount() -> Int {
+        shortConversationLineCount(parsing: shortConversationGrowthFile.flatMap {
+            try? String(contentsOf: $0, encoding: .utf8)
+        })
+    }
+
+    /// The `events.event` notification the growth watcher dispatches: a
+    /// terminal `agent:stream:end` for `shortConversationAgentId` in the
+    /// daemon's envelope (PROTOCOL §6, §7).
+    static let shortConversationGrowthNotification = """
+        {"jsonrpc":"2.0","method":"events.event","params":{"event":{"type":"agent:stream:end",\
+        "data":{"agentId":"\(shortConversationAgentId)","workspaceId":"\(shortConversationWorkspaceId)"}}}}
+        """
+
+    @MainActor private static var shortConversationGrowthWatcher: Task<Void, Never>?
+
+    /// Starts polling `shortConversationGrowthFile` (every
+    /// `triggerFilePollInterval`) once per process; no-op without the launch
+    /// argument. Each change of the file's contents dispatches
+    /// `shortConversationGrowthNotification` into `connection` as if the
+    /// daemon had sent it.
+    @MainActor
+    static func startShortConversationGrowthWatcher(dispatchingTo connection: ConnectionManager) {
+        guard let file = shortConversationGrowthFile, shortConversationGrowthWatcher == nil else { return }
+        shortConversationGrowthWatcher = Task { @MainActor in
+            var lastContents = try? String(contentsOf: file, encoding: .utf8)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: triggerFilePollInterval)
+                let contents = try? String(contentsOf: file, encoding: .utf8)
+                guard contents != lastContents else { continue }
+                lastContents = contents
+                connection.dispatchMessage(shortConversationGrowthNotification)
+            }
+        }
+    }
+
     /// Fixture response for a JSON-RPC method. Unknown methods return an
     /// empty dictionary, which every call site parses as "no data" safely.
     static func response(for method: String, params: [String: Any]) -> Any {
@@ -195,14 +286,23 @@ enum DemoFixtures {
             ] as [String: Any]
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
+            if workspaceId == shortConversationWorkspaceId { return ["agents": shortConversationAgents] }
             return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
         case "agent.get":
             let agentId = params["agentId"] as? String
-            let agent = (agents + longConversationAgents).first { ($0["id"] as? String) == agentId } ?? agents[0]
+            let agent = (agents + longConversationAgents + shortConversationAgents)
+                .first { ($0["id"] as? String) == agentId } ?? agents[0]
             return ["agent": agent]
         case "agent.getConversation":
             let agentId = params["agentId"] as? String
-            let messages = agentId == longConversationAgentId ? longConversationMessages : conversationMessages
+            let messages: [[String: Any]]
+            if agentId == longConversationAgentId {
+                messages = longConversationMessages
+            } else if agentId == shortConversationAgentId {
+                messages = shortConversationMessages(lineCount: shortConversationLineCount())
+            } else {
+                messages = conversationMessages
+            }
             return [
                 "messages": messages,
                 "truncated": false,
@@ -352,6 +452,34 @@ enum DemoFixtures {
                             "status": "idle",
                             "specialist": "implementor",
                             "lastActivity": iso(minutesAgo: 42),
+                        ],
+                    ] as [[String: Any]],
+                ] as [String: Any],
+            ],
+            [
+                "id": shortConversationWorkspaceId,
+                "title": shortConversationWorkspaceTitle,
+                "branch": "chore/rename-billing-cron",
+                "baseRef": "main",
+                "status": "active",
+                "activity": "idle",
+                "displayStatus": "idle",
+                "attention": "none",
+                "lastActivity": iso(minutesAgo: 130),
+                "updatedAt": iso(minutesAgo: 130),
+                "repositoryOwner": "nova-labs",
+                "repositoryName": "billing",
+                "diffSummary": ["totalFiles": 3],
+                "taskStats": ["total": 1, "completed": 1, "inProgress": 0],
+                "agentSummary": [
+                    "count": 1,
+                    "agents": [
+                        [
+                            "id": shortConversationAgentId,
+                            "name": "Cron Renamer",
+                            "status": "idle",
+                            "specialist": "implementor",
+                            "lastActivity": iso(minutesAgo: 130),
                         ],
                     ] as [[String: Any]],
                 ] as [String: Any],
@@ -628,6 +756,93 @@ enum DemoFixtures {
                         Longer ranges will get a background job + email link in the \
                         follow-up task. The streaming encoder and cap are in — running \
                         the integration tests now.
+                        """,
+                    ],
+                ],
+            ],
+        ]
+    }
+
+    /// `agent.list` for `shortConversationWorkspaceId`: one idle foreground
+    /// agent, so the workspace row opens straight into its transcript.
+    static var shortConversationAgents: [[String: Any]] {
+        [
+            [
+                "id": shortConversationAgentId,
+                "name": "Cron Renamer",
+                "status": "idle",
+                "createdAt": iso(minutesAgo: 140),
+                "updatedAt": iso(minutesAgo: 130),
+                "lastActivity": iso(minutesAgo: 130),
+                "lastMessageRole": "assistant",
+                "digest": "Renamed the nightly billing cron and its runbook.",
+                "metadata": ["specialist": "implementor"],
+            ],
+        ]
+    }
+
+    /// Sentence that closes the last (assistant) message of
+    /// `shortConversationMessages(lineCount:)`, after the code block; stable
+    /// anchor for UI tests.
+    static let shortConversationLastSentence =
+        "End of the cron rename: the runbook carries the new name."
+
+    /// Suggested prompts carried by the last (assistant) message of
+    /// `shortConversationMessages(lineCount:)` — three, like
+    /// `longConversationSuggestedPrompts`, so the same prompt row is the
+    /// transcript's final content row in both fixtures.
+    static let shortConversationSuggestedPrompts = [
+        "Open a PR for the cron rename",
+        "Show the runbook diff",
+        "Check the alert routes",
+    ]
+
+    /// One line of the reply's code block: short enough never to wrap on an
+    /// iPhone, so every line adds one line height to the transcript.
+    static func shortConversationCodeLine(_ index: Int) -> String {
+        let day = String(format: "%02d", index % 28 + 1)
+        let seconds = 38 + (index * 7) % 11
+        return "2026-09-\(day) 02:00  ok   \(seconds)s"
+    }
+
+    /// A two-message conversation — a user request and one assistant reply —
+    /// whose reply carries a fenced code block of `lineCount` lines between
+    /// its opening paragraph and `shortConversationLastSentence`, followed
+    /// only by the stripped `shortConversationSuggestedPrompts` block. The
+    /// message ids do not change with `lineCount`, so a refetch merges the
+    /// grown reply into the open transcript's existing row.
+    static func shortConversationMessages(lineCount: Int) -> [[String: Any]] {
+        let codeBlock = (["```"] + (0..<max(lineCount, 1)).map(shortConversationCodeLine) + ["```"])
+            .joined(separator: "\n")
+        let suggestedPromptsBlock = (["<!-- suggested-prompts"] + shortConversationSuggestedPrompts + ["-->"])
+            .joined(separator: "\n")
+        return [
+            [
+                "id": "demo-short-msg-1",
+                "role": "user",
+                "timestamp": iso(minutesAgo: 140),
+                "contentBlocks": [
+                    [
+                        "type": "text",
+                        "text": "Rename the nightly billing cron to `billing-nightly`.",
+                    ],
+                ],
+            ],
+            [
+                "id": "demo-short-msg-2",
+                "role": "assistant",
+                "timestamp": iso(minutesAgo: 130),
+                "contentBlocks": [
+                    [
+                        "type": "text",
+                        "text": """
+                        Renamed the job and its runbook. Recent runs under the new name:
+
+                        \(codeBlock)
+
+                        \(shortConversationLastSentence)
+
+                        \(suggestedPromptsBlock)
                         """,
                     ],
                 ],

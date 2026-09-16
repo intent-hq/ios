@@ -33,6 +33,9 @@ struct ConnectingView: View {
             // stores run their normal on-connected fetches (served from
             // DemoFixtures under --demo-data) and go straight to the app.
             session.connection.connectionState = .connected
+            if DemoMode.isEnabled, let connection = session.connection as? ConnectionManager {
+                DemoFixtures.startShortConversationGrowthWatcher(dispatchingTo: connection)
+            }
         } else {
             guard let connection = coordinator.windowConnection else {
                 if coordinator.backendID != nil {

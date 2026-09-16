@@ -63,14 +63,22 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     private let hooksRowTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
 
+    /// The file whose contents set the short conversation's code block line
+    /// count (see `Fixture.growthFileArgumentPrefix`): one path per test,
+    /// never written unless the test grows the reply.
+    private let growthFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("transcript-short-growth-\(UUID().uuidString).count")
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: growthFile)
     }
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: growthFile)
         try super.tearDownWithError()
     }
 
@@ -175,6 +183,44 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let pendingFollowReport = "lastForcedFollow=pending"
         // Cadence of every poll.
         static let pollInterval: TimeInterval = 0.25
+
+        // The short conversation (intent-hq/ios#346): DemoFixtures.
+        // shortConversationWorkspaceTitle, a distinctive substring of
+        // shortConversationLastSentence, and its three suggested prompts —
+        // the same `endRowIdentifier` is its final content row.
+        static let shortWorkspaceTitle = "Rename the nightly billing cron"
+        static let shortLastMessageFragment = "End of the cron rename"
+        // Sets the reply's code block line count: the fixture reads the
+        // file's contents on every conversation fetch and polls it (every
+        // 100 ms); a change is delivered to the open conversation as the
+        // reply's streaming ending, which refetches. Every launch passes
+        // `growthFile`; only the growth test writes it (see the class
+        // comment on the hooks row trigger file for why a file, not a clock).
+        static let growthFileArgumentPrefix = "--demo-short-conversation-growth-file="
+        // DemoFixtures.shortConversationBaselineLineCount: the code block's
+        // lines while the file is absent.
+        static let shortBaselineLineCount = 2
+        // Lines added first, while the transcript stays short of one page,
+        // to measure one code line's height on this simulator: the fixture
+        // cannot know the container, and a line height guessed from a font
+        // size would miss the band on another device or text size.
+        static let calibrationLines = 3
+        // Bounds on one code line's height. With `calibrationLines` and
+        // `calibrationRoomMargin`, the upper bound is the room the short
+        // transcript must leave below its end row for the calibration
+        // growth to stay short of one page.
+        static let maxLineHeight: CGFloat = 28
+        static let minLineHeight: CGFloat = 8
+        static let calibrationRoomMargin: CGFloat = 20
+        // Constants.Conversation.Transcript.atBottomThreshold: the growth
+        // past one page must stay under it (no Go to End, no away edge) and
+        // over `endGapTolerance` (a rest that far short must fail
+        // `isAtEnd`), so it aims for the middle of the band.
+        static let atBottomThreshold: CGFloat = 50
+        static let targetOvershoot: CGFloat = 25
+        // Upper bound on a written line count reaching the transcript: the
+        // fixture's 100 ms poll, the refetch, and the grown row re-laying out.
+        static let growthTimeout: TimeInterval = 15
     }
 
     /// The conversation's elements once the transcript has settled at the bottom.
@@ -547,16 +593,112 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             in: opened, context: context)
     }
 
+    /// A conversation that opens shorter than the screen and whose reply then
+    /// grows the transcript to just past one page — by less than the
+    /// at-bottom band, so Go to End never shows and no away edge fires — must
+    /// come to rest at the end: the end row at its end gap, Go to End hidden,
+    /// and both holding over the quiet window (intent-hq/ios#346). Before the
+    /// fix the viewport rested a line or two short of the end with nothing to
+    /// close the gap.
+    ///
+    /// The growth is the fixture's code block gaining lines through
+    /// `growthFile`, delivered to the store the way a streamed reply ending
+    /// is (a refetch that merges the grown message into its row). How far
+    /// past one page it lands is aimed, not guessed: the free room below the
+    /// end row is measured on the settled short transcript, a first growth
+    /// that keeps it short measures one code line's height on this
+    /// simulator, and the final line count is chosen from both to overshoot
+    /// the fold by `Fixture.targetOvershoot`.
+    @MainActor
+    func testShortConversationGrowingPastOnePageRestsAtBottomWithGoToEndHidden() throws {
+        let app = launchDemoApp()
+        let opened = openShortConversation(in: app)
+        let lastMessage = opened.lastMessage
+        let transcript = opened.transcript
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
+        let roomBelowEndRow = { self.freeRoom(below: endRow, in: transcript) }
+
+        // 1. Settle short of one page: the entry follow has reported and the
+        //    last message rests inside the transcript. The room between the
+        //    end row's end gap and the bottom edge is what the growth has to
+        //    fill; it must be there (a transcript already at one page, or one
+        //    not resting at the top, cannot run this scenario) and hold room
+        //    for the calibration growth to stay short.
+        guard waitUntilSettled(
+            on: lastMessage, named: "last assistant paragraph",
+            in: opened, context: "before the reply grew",
+            alsoReporting: (endRow.element, endRow.name)
+        ) else { return }
+        XCTAssertFalse(
+            opened.goToEnd.exists,
+            "Go to End is shown on the short transcript — " + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        guard let shortRoom = waitUntilSteady(timeout: 5, tolerance: Fixture.rePinTolerance, roomBelowEndRow) else {
+            return XCTFail("the short transcript kept moving after it settled; no steady free room below the end row — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+        }
+        let calibrationRoom = CGFloat(Fixture.calibrationLines) * Fixture.maxLineHeight + Fixture.calibrationRoomMargin
+        guard shortRoom >= calibrationRoom else {
+            return XCTFail("the short transcript leaves \(shortRoom) pt free below the end row, under the "
+                + "\(calibrationRoom) pt the calibration growth needs to stay short of one page: the fixture reply "
+                + "must be shorter, or the short content is not resting at the top — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+        }
+
+        // 2. Calibrate: grow by a few lines that keep the transcript short and
+        //    read one code line's height off how much room they took.
+        var lineCount = Fixture.shortBaselineLineCount + Fixture.calibrationLines
+        try grow(to: lineCount)
+        guard let calibratedRoom = waitUntilRoomChanged(
+            from: shortRoom, roomBelowEndRow, below: endRow, in: opened, context: "after the calibration growth"
+        ) else { return }
+        let lineHeight = (shortRoom - calibratedRoom) / CGFloat(Fixture.calibrationLines)
+        guard lineHeight >= Fixture.minLineHeight, lineHeight <= Fixture.maxLineHeight, calibratedRoom > 0 else {
+            return XCTFail("the calibration growth of \(Fixture.calibrationLines) code lines took the free room from "
+                + "\(shortRoom) to \(calibratedRoom) pt (\(lineHeight) pt per line), outside what one code line can measure — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+        }
+
+        // 3. Grow past one page by about `targetOvershoot`: inside the
+        //    at-bottom band, well past `isAtEnd`'s tolerance.
+        let extraLines = Int(((calibratedRoom + Fixture.targetOvershoot) / lineHeight).rounded())
+        let overshoot = CGFloat(extraLines) * lineHeight - calibratedRoom
+        guard overshoot > Fixture.endGapTolerance + Fixture.rePinTolerance,
+              overshoot < Fixture.atBottomThreshold - Fixture.rePinTolerance else {
+            return XCTFail("\(extraLines) more code lines of \(lineHeight) pt would grow the transcript \(overshoot) pt past "
+                + "one page, outside the at-bottom band this scenario needs")
+        }
+        lineCount += extraLines
+        try grow(to: lineCount)
+
+        // 4. Rests at the end, then stays: the growth's within-band edge
+        //    re-pins the viewport, so the end row comes to its end gap with
+        //    Go to End hidden and holds over the quiet window. The re-pin
+        //    is an automatic follow, not a forced one, so it is polled on
+        //    the geometry it restores rather than on a report.
+        let context = "after the reply grew the transcript \(Int(overshoot.rounded())) pt past one page "
+            + "(\(lineCount) code lines of \(lineHeight) pt)"
+        XCTAssertTrue(
+            waitUntil(timeout: Fixture.settleTimeout) { isAtEnd(endRow, in: transcript) },
+            "\(context): the transcript did not come to rest at the end within \(Int(Fixture.settleTimeout)) s — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened) + "; "
+                + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
+        assertStaysAtBottom(
+            lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
+            in: opened, context: context)
+    }
+
     // MARK: - Helpers
 
     /// Launches the demo app with the hooks row held back behind
-    /// `hooksRowTriggerFile` (see the class comment).
+    /// `hooksRowTriggerFile` and the short conversation's growth bound to
+    /// `growthFile` (see the class comment and `Fixture.growthFileArgumentPrefix`).
     @MainActor
     private func launchDemoApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [
             "--demo-data",
             Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path,
+            Fixture.growthFileArgumentPrefix + growthFile.path,
         ]
         app.launch()
         return app
@@ -576,11 +718,37 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         return opened
     }
 
+    /// `openLongConversation` for the short conversation (intent-hq/ios#346).
+    @MainActor
+    private func openShortConversation(in app: XCUIApplication, context: String = "after opening") -> OpenConversation {
+        let opened = enterConversation(
+            in: app, workspaceTitle: Fixture.shortWorkspaceTitle,
+            lastMessageFragment: Fixture.shortLastMessageFragment, context: context)
+        XCTAssertTrue(
+            opened.lastMessage.waitForExistence(timeout: 15),
+            "\(context): last transcript message of the short conversation never appeared — "
+                + restingState(of: opened.lastMessage, named: "last assistant paragraph", in: opened))
+        return opened
+    }
+
     /// `openLongConversation` without waiting for the last message, so a
     /// test can observe the transcript's very first settled state.
     @MainActor
     private func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConversation {
-        let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
+        enterConversation(
+            in: app, workspaceTitle: Fixture.workspaceTitle,
+            lastMessageFragment: Fixture.lastMessageFragment, context: context)
+    }
+
+    /// Taps the workspace row titled `workspaceTitle` (a workspace whose
+    /// single foreground agent opens straight into its transcript) and waits
+    /// for the transcript scroll view; the last message and Go to End are
+    /// returned as handles without waiting for them.
+    @MainActor
+    private func enterConversation(
+        in app: XCUIApplication, workspaceTitle: String, lastMessageFragment: String, context: String
+    ) -> OpenConversation {
+        let workspaceRow = app.staticTexts[workspaceTitle].firstMatch
         if !workspaceRow.waitForExistence(timeout: 30) {
             // Same fallback as AppStoreScreenshotTests: a collapsed iPad
             // sidebar hides the workspace list behind the first nav button.
@@ -589,11 +757,53 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         }
         workspaceRow.tap()
 
-        let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
+        let lastMessage = message(in: app, containing: lastMessageFragment)
         let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
         let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
         XCTAssertTrue(transcript.waitForExistence(timeout: 5), "\(context): transcript scroll view not found")
         return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+    }
+
+    /// Sets the short conversation's code block line count: the fixture
+    /// picks the change up within its poll interval and the open transcript
+    /// refetches. Written atomically so the fixture never reads a half-written count.
+    private func grow(to lineCount: Int) throws {
+        try Data(String(lineCount).utf8).write(to: growthFile, options: .atomic)
+    }
+
+    /// Points between the end of the content — `endRow`'s frame bottom plus
+    /// its end gap — and the transcript's bottom edge: positive while the
+    /// content is shorter than one page and resting at the top, 0 at the
+    /// end, negative when the end row rests below the bottom edge (short of
+    /// the end); NaN while the row is not realized.
+    @MainActor
+    private func freeRoom(below endRow: EndRow, in transcript: XCUIElement) -> CGFloat {
+        guard let rowFrame = frame(of: endRow.element) else { return .nan }
+        return transcript.frame.maxY - (rowFrame.maxY + Fixture.endRowGap + endRow.labelInset)
+    }
+
+    /// Waits for a growth to reach the transcript — `freeRoom` moving off
+    /// `previous` by more than `rePinTolerance` — and then for it to hold
+    /// still across two polls, returning the settled value. Fails the test
+    /// (with `endRow`'s resting state) and returns nil when either does not
+    /// happen in time.
+    @MainActor
+    private func waitUntilRoomChanged(
+        from previous: CGFloat, _ freeRoom: () -> CGFloat, below endRow: EndRow, in opened: OpenConversation,
+        context: String
+    ) -> CGFloat? {
+        guard waitUntil(timeout: Fixture.growthTimeout, { abs(freeRoom() - previous) > Fixture.rePinTolerance }) else {
+            XCTFail("\(context): the transcript did not grow within \(Int(Fixture.growthTimeout)) s of writing the "
+                + "growth file; the free room below the end row stayed at \(previous) pt — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+            return nil
+        }
+        guard let settled = waitUntilSteady(timeout: 5, tolerance: Fixture.rePinTolerance, freeRoom) else {
+            XCTFail("\(context): the transcript kept moving after it grew; no steady free room below the end row — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+            return nil
+        }
+        return settled
     }
 
     /// The transcript's static-text rows whose frames intersect its own

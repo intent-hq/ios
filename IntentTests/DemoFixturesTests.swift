@@ -44,7 +44,7 @@ struct DemoFixturesTests {
     @Test func workspaceListFixtureParses() {
         let result = DemoFixtures.response(for: "workspace.list", params: [:])
         let workspaces = WorkspaceStore.parseWorkspaces(from: result)
-        #expect(workspaces.count == 4)
+        #expect(workspaces.count == 5)
         #expect(workspaces.allSatisfy { !$0.title.isEmpty })
         // At least one workspace carries an agent summary for the detail screen
         #expect(workspaces.contains { ($0.agentSummaryAgents?.count ?? 0) > 0 })
@@ -180,6 +180,77 @@ struct DemoFixturesTests {
         #expect(long.items.filter { text(of: $0).contains(DemoFixtures.longConversationLastSentence) }.count == 1)
     }
 
+    /// The short conversation (intent-hq/ios#346): two messages whose reply
+    /// carries a code block of `lineCount` lines between its opening
+    /// paragraph and the closing sentence, then the suggested prompts —
+    /// under stable ids, so a regrown reply merges into its existing row.
+    @Test func shortConversationRoutesByAgentIdAndGrowsByLineCount() throws {
+        let short = try conversationMessages(agentId: DemoFixtures.shortConversationAgentId)
+        #expect(short.items.count == 2)
+        #expect(short.total == 2)
+        let messages = short.items.compactMap { ConversationMessage.parseMessage($0) }
+        #expect(messages.map(\.role) == [.user, .assistant])
+        #expect(!short.items.contains { text(of: $0).contains("more than 90 days") })
+
+        let last = try #require(short.items.last)
+        let lastText = text(of: last)
+        #expect(SuggestedPrompts.parse(lastText) == DemoFixtures.shortConversationSuggestedPrompts)
+        #expect(DemoFixtures.shortConversationSuggestedPrompts.count == 3)
+        #expect(SuggestedPrompts.stripBlocks(from: lastText)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasSuffix(DemoFixtures.shortConversationLastSentence))
+        #expect(short.items.filter { text(of: $0).contains(DemoFixtures.shortConversationLastSentence) }.count == 1)
+
+        func codeLines(lineCount: Int) -> [String] {
+            let reply = DemoFixtures.shortConversationMessages(lineCount: lineCount).last.map(text(of:)) ?? ""
+            let fenced = reply.components(separatedBy: "```")
+            return fenced.count == 3 ? fenced[1].split(separator: "\n").map(String.init) : []
+        }
+        // No growth file in the test runner: the baseline count is rendered.
+        #expect(codeLines(lineCount: DemoFixtures.shortConversationLineCount()).count
+            == DemoFixtures.shortConversationBaselineLineCount)
+        #expect(codeLines(lineCount: 7).count == 7)
+        #expect(codeLines(lineCount: 40).count == 40)
+        #expect(codeLines(lineCount: 40).allSatisfy { $0.count < 40 })
+        let baselineIds = DemoFixtures.shortConversationMessages(lineCount: 2).map { $0["id"] as? String }
+        #expect(DemoFixtures.shortConversationMessages(lineCount: 40).map { $0["id"] as? String } == baselineIds)
+    }
+
+    @Test func shortConversationGrowthFileComesFromTheLaunchArgument() {
+        #expect(DemoFixtures.shortConversationGrowthFile(from: ["--demo-data"]) == nil)
+        #expect(DemoFixtures.shortConversationGrowthFile(from: ["--demo-short-conversation-growth-file="]) == nil)
+        #expect(DemoFixtures.shortConversationGrowthFile(from: [
+            "--demo-short-conversation-growth-file=/tmp/a.count",
+            "--demo-short-conversation-growth-file=/tmp/b.count",
+            "--demo-short-conversation-growth-file=",
+        ]) == URL(fileURLWithPath: "/tmp/b.count"))
+        // The test runner never passes the argument.
+        #expect(DemoFixtures.shortConversationGrowthFile == nil)
+    }
+
+    @Test func shortConversationLineCountParsesAPositiveIntegerOrFallsBack() {
+        let baseline = DemoFixtures.shortConversationBaselineLineCount
+        #expect(DemoFixtures.shortConversationLineCount(parsing: nil) == baseline)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "") == baseline)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "0") == baseline)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "-3") == baseline)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "many") == baseline)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: "12") == 12)
+        #expect(DemoFixtures.shortConversationLineCount(parsing: " 12\n") == 12)
+    }
+
+    @Test func shortConversationGrowthNotificationIsATerminalStreamEndForItsAgent() throws {
+        let data = try #require(DemoFixtures.shortConversationGrowthNotification.data(using: .utf8))
+        let envelope = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(envelope["method"] as? String == "events.event")
+        let params = try #require(envelope["params"] as? [String: Any])
+        let event = try #require(params["event"] as? [String: Any])
+        #expect(event["type"] as? String == "agent:stream:end")
+        let payload = try #require(event["data"] as? [String: Any])
+        #expect(payload["agentId"] as? String == DemoFixtures.shortConversationAgentId)
+        #expect(payload["workspaceId"] as? String == DemoFixtures.shortConversationWorkspaceId)
+    }
+
     /// The long transcript is coordinator-shaped (intent-hq/ios#304, #305):
     /// paired tool calls, agent-to-agent report rows attributed to the
     /// delegates the coordinator waits on, thinking blocks, and markdown
@@ -250,13 +321,19 @@ struct DemoFixturesTests {
         #expect(try agentIds(workspaceId: "demo-ws-dashboard").contains("demo-agent-implementor"))
         #expect(try agentIds(workspaceId: DemoFixtures.longConversationWorkspaceId)
             == [DemoFixtures.longConversationAgentId] + DemoFixtures.longConversationDelegateIds)
+        // The short conversation's workspace has one idle foreground agent,
+        // so its row opens straight into the transcript (intent-hq/ios#346).
+        #expect(try agentIds(workspaceId: DemoFixtures.shortConversationWorkspaceId)
+            == [DemoFixtures.shortConversationAgentId])
 
-        let result = DemoFixtures.response(
-            for: "agent.get", params: ["agentId": DemoFixtures.longConversationAgentId])
-        let dict = try #require(result as? [String: Any])
-        let agentDict = try #require(dict["agent"] as? [String: Any])
-        #expect(agentDict["id"] as? String == DemoFixtures.longConversationAgentId)
-        #expect(agentDict["status"] as? String == "idle")
+        for agentId in [DemoFixtures.longConversationAgentId, DemoFixtures.shortConversationAgentId] {
+            let result = DemoFixtures.response(for: "agent.get", params: ["agentId": agentId])
+            let dict = try #require(result as? [String: Any])
+            let agentDict = try #require(dict["agent"] as? [String: Any])
+            #expect(agentDict["id"] as? String == agentId)
+            #expect(agentDict["status"] as? String == "idle")
+            #expect(agentDict["isBackground"] as? Bool != true)
+        }
     }
 
     /// The delegates are background sub-agents of the coordinator, so the
