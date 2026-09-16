@@ -44,19 +44,22 @@
 #   SIM_LOCK_TIMEOUT      Seconds to wait for the simulator lock (below) before
 #                         giving up; default 1800. 0 fails immediately when held.
 #   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
-#                         (falling back to /tmp).
+#                         (falling back to /tmp). Must be a local filesystem.
 #
 # Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
 # test run. Two runs driving one device concurrently (two agents in one
 # checkout, or two checkouts picking the same device) kill each other's test
 # processes and produce disjoint, false "Failing tests" lists
-# (intent-hq/intent#4563). The lock is a symlink
-# <SIM_LOCK_DIR>/xcodebuild-sim-<UDID>.lock -> <holder PID>, created atomically
-# with ln -s (stock macOS Bash 3.2 has no flock). A waiter prints who holds the
-# lock and polls once a second; a lock whose holder PID no longer exists is
-# stale and reclaimed. CI runs one job per VM, so the lock is never contended
-# there.
+# (intent-hq/intent#4563). The lock is a kernel flock(2) on
+# <SIM_LOCK_DIR>/xcodebuild-sim-<UDID>.lock, taken by a small python3 keeper
+# process (python3 ships with Xcode's Command Line Tools; stock macOS Bash 3.2
+# has no flock) that holds it until this script's fd 9 closes, i.e. until the
+# run ends by any means including SIGKILL. There is therefore no stale-lock
+# state and nothing is ever reclaimed: the file persists (empty when free,
+# holding the owner's PID while held) and is harmless. A waiter prints who
+# holds the lock and polls once a second. CI runs one job per VM, so the lock
+# is never contended there.
 #
 # Exit codes: xcodebuild's own status is passed through (65 = build or test
 # failure) except for these wrapper-specific codes, chosen outside sysexits(3)
@@ -186,72 +189,121 @@ run_xcodebuild_logged() {
   shift
   while IFS= read -r arg; do extra+=("$arg"); done < <(common_args)
   (
+    exec 9>&-
     set -x
     xcodebuild "$@" ${extra+"${extra[@]}"}
-  ) 2>&1 | tee "$log"
+  ) 2>&1 | tee "$log" 9>&-
 }
 
-# Simulator lock (see the header). The symlink target is the holder's PID, so
-# ln -s both takes the lock and records the owner in one atomic step; readlink
-# reads it back. Held by this shell, not a subshell, so $$ is the owner.
+# Simulator lock (see the header). A python3 "keeper" process takes an
+# exclusive flock(2) on the lock file, records the owning shell's PID in it,
+# and then blocks on its stdin, which is this shell's fd 9. The flock lives
+# exactly as long as the keeper, and the keeper lives exactly as long as
+# fd 9 has a writer: closing fd 9 (release_simulator_lock) or this shell
+# dying by any means, SIGKILL included, ends both, so no stale lock can exist
+# and nothing is ever reclaimed or deleted. Children that outlive a run must
+# not inherit fd 9, which is why every command run under the lock closes it.
+#
+# Keeper protocol on stdout, one line each: "waiting <holder>" once if the
+# lock was busy, then "acquired <keeper pid> <seconds waited>" or
+# "timeout <holder>"; <holder> is the PID recorded in the file or "unknown".
+SIM_LOCK_KEEPER_PY='
+import errno, fcntl, os, sys, time
+path, owner, timeout = sys.argv[1], sys.argv[2], int(sys.argv[3])
+fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+def holder():
+    os.lseek(fd, 0, os.SEEK_SET)
+    return os.read(fd, 64).decode("ascii", "replace").strip() or "unknown"
+def say(line):
+    sys.stdout.write(line + "\n")
+    sys.stdout.flush()
+start = time.time()
+announced = False
+while True:
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except OSError as e:
+        if e.errno not in (errno.EAGAIN, errno.EACCES, errno.EWOULDBLOCK):
+            raise
+    if timeout == 0 or time.time() - start >= timeout:
+        say("timeout " + holder())
+        sys.exit(0)
+    if not announced:
+        say("waiting " + holder())
+        announced = True
+    time.sleep(min(1, timeout - (time.time() - start)))
+os.ftruncate(fd, 0)
+os.write(fd, (owner + "\n").encode("ascii"))
+say("acquired %d %d" % (os.getpid(), int(time.time() - start)))
+while os.read(0, 4096):
+    pass
+os.ftruncate(fd, 0)
+'
 SIM_LOCK_PATH=
+SIM_LOCK_KEEPER=
 acquire_simulator_lock() {
-  local udid=$1 dir timeout holder err waited=0 announced=0 misses=0
+  local udid=$1 dir timeout fifo kind arg1 arg2 announced=0
   dir=${SIM_LOCK_DIR:-${TMPDIR:-/tmp}}
   timeout=${SIM_LOCK_TIMEOUT:-1800}
   case "$timeout" in
     ''|*[!0-9]*) die "SIM_LOCK_TIMEOUT must be a non-negative integer number of seconds (got '$timeout')" ;;
   esac
+  command -v python3 >/dev/null 2>&1 \
+    || die "python3 is required for the simulator lock (on macOS it ships with Xcode's Command Line Tools)"
   mkdir -p -- "$dir"
   SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
-  while ! err=$(ln -s "$$" "$SIM_LOCK_PATH" 2>&1); do
-    if [ -e "$SIM_LOCK_PATH" ] && [ ! -L "$SIM_LOCK_PATH" ]; then
-      die "$SIM_LOCK_PATH exists but is not a lock symlink; remove it to continue"
-    fi
-    holder=$(readlink "$SIM_LOCK_PATH" 2>/dev/null || true)
-    if [ -z "$holder" ]; then
-      # Either released between the failed ln and readlink (retry at once)
-      # or ln keeps failing for another reason (surface it, don't spin).
-      misses=$((misses + 1))
-      if [ "$misses" -ge 3 ]; then
-        SIM_LOCK_PATH=
-        die "cannot create simulator lock: $err"
-      fi
-      continue
-    fi
-    misses=0
-    if ! kill -0 "$holder" 2>/dev/null; then
-      echo "notice: reclaiming stale simulator lock $SIM_LOCK_PATH (holder PID $holder is gone)" >&2
-      rm -f -- "$SIM_LOCK_PATH"
-      continue
-    fi
-    if [ "$waited" -ge "$timeout" ]; then
-      echo "error: timed out after ${timeout}s waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $holder.
-Wait for that run to finish (or raise SIM_LOCK_TIMEOUT), or pick another device with SIM_UDID." >&2
+  fifo=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-lock.XXXXXX")/status
+  mkfifo "$fifo"
+  exec 9> >(python3 -c "$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" > "$fifo")
+  exec 8< "$fifo"
+  rm -rf -- "${fifo%/status}"
+  while :; do
+    if ! read -r kind arg1 arg2 <&8; then
+      exec 8<&- 9>&-
       SIM_LOCK_PATH=
-      exit "$EXIT_SIM_LOCK_TIMEOUT"
+      die "the simulator lock keeper exited without reporting (see any python3 error above)"
     fi
-    if [ "$announced" -eq 0 ]; then
-      echo "waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $holder (another xcodebuild.sh test run); giving up after ${timeout}s" >&2
-      announced=1
-    fi
-    sleep 1
-    waited=$((waited + 1))
+    case "$kind" in
+      waiting)
+        echo "waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $arg1 (another xcodebuild.sh test run); giving up after ${timeout}s" >&2
+        announced=1 ;;
+      acquired)
+        SIM_LOCK_KEEPER=$arg1
+        [ "$announced" -eq 0 ] || echo "acquired simulator lock after ${arg2}s" >&2
+        break ;;
+      timeout)
+        exec 8<&- 9>&-
+        echo "error: timed out after ${timeout}s waiting for simulator $udid: lock $SIM_LOCK_PATH is held by PID $arg1.
+Wait for that run to finish (or raise SIM_LOCK_TIMEOUT), or pick another device with SIM_UDID." >&2
+        SIM_LOCK_PATH=
+        exit "$EXIT_SIM_LOCK_TIMEOUT" ;;
+      *)
+        exec 8<&- 9>&-
+        SIM_LOCK_PATH=
+        die "unexpected simulator lock keeper output: $kind $arg1 $arg2" ;;
+    esac
   done
-  if [ "$announced" -eq 1 ]; then
-    echo "acquired simulator lock after ${waited}s" >&2
-  fi
+  exec 8<&-
 }
 
+# Closing fd 9 is the release; the flock drops when the keeper exits, which
+# is waited for briefly so the next run never sees a lock in mid-release.
 release_simulator_lock() {
-  if [ -n "$SIM_LOCK_PATH" ] && [ "$(readlink "$SIM_LOCK_PATH" 2>/dev/null || true)" = "$$" ]; then
-    rm -f -- "$SIM_LOCK_PATH"
-  fi
+  local i=0
+  [ -n "$SIM_LOCK_PATH" ] || return 0
+  exec 9>&-
+  while [ -n "$SIM_LOCK_KEEPER" ] && kill -0 "$SIM_LOCK_KEEPER" 2>/dev/null && [ "$i" -lt 100 ]; do
+    sleep 0.05 2>/dev/null || sleep 1
+    i=$((i + 1))
+  done
   SIM_LOCK_PATH=
+  SIM_LOCK_KEEPER=
 }
 
 # The EXIT trap releases the lock on any exit path; the signal traps turn an
-# interrupt into a normal exit so that the EXIT trap runs.
+# interrupt into a normal exit so that the EXIT trap runs. (Neither is needed
+# for correctness: a shell killed outright drops fd 9 and the lock with it.)
 trap release_simulator_lock EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
@@ -261,15 +313,18 @@ trap 'exit 143' TERM
 # to it was lost, as opposed to a test assertion failing. In both cases
 # xcodebuild exits 65 and lists whatever tests were in flight under "Failing
 # tests", which is what makes a crash look like a test failure (ios#238) and
-# a concurrent-run corruption look like flaky tests (intent#4563).
-TEST_CRASH_PATTERN='Restarting after unexpected exit, crash, or test timeout|Test crashed with signal|Early unexpected exit, operation never finished bootstrapping|Lost connection to the test manager service|Test runner (exited|never began executing|crashed)|The test runner exited with code'
+# a concurrent-run corruption look like flaky tests (intent#4563). Matched
+# case-insensitively; the wording has varied across Xcode releases ("Lost
+# connection to the test manager service" vs "Test operation failure: Lost
+# connection to test manager service", "Lost connection to test runner").
+TEST_CRASH_PATTERN='Restarting after unexpected exit, crash, or test timeout|Test crashed with signal|Early unexpected exit, operation never finished bootstrapping|Lost connection to (the )?test (manager service|runner)|Test runner (exited|never began executing|crashed)|The test runner exited with code'
 
 # $1 = xcodebuild status, $2 = log path. Returns the status to exit with:
 # EXIT_TEST_PROCESS_CRASHED when the log shows a test-process crash or
 # termination (the log is kept and named), else xcodebuild's status unchanged.
 report_test_outcome() {
   local status=$1 log=$2 crashes
-  crashes=$(grep -E "$TEST_CRASH_PATTERN" "$log" | awk '!seen[$0]++' | head -n 40 || true)
+  crashes=$(grep -iE "$TEST_CRASH_PATTERN" "$log" | awk '!seen[$0]++' | head -n 40 || true)
   if [ -z "$crashes" ]; then
     rm -f -- "$log"
     return "$status"
@@ -330,14 +385,17 @@ cmd_build_for_testing() {
 #
 # bootstatus output is left visible: it shows how long the boot wait took,
 # which otherwise disappears into a silent gap inside xcodebuild.
+#
+# Runs under the simulator lock, so fd 9 is closed on every command (see
+# acquire_simulator_lock).
 enable_simulator_accessibility() {
   local udid=$1
-  xcrun simctl boot "$udid" 2>&1 | grep -v 'current state: Booted' || true
-  xcrun simctl bootstatus "$udid" -b || true
+  xcrun simctl boot "$udid" 2>&1 9>&- | grep -v 'current state: Booted' || true
+  xcrun simctl bootstatus "$udid" -b 9>&- || true
   xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
-    ApplicationAccessibilityEnabled -bool true
+    ApplicationAccessibilityEnabled -bool true 9>&-
   xcrun simctl spawn "$udid" defaults write com.apple.Accessibility \
-    AccessibilityEnabled -bool true
+    AccessibilityEnabled -bool true 9>&-
 }
 
 # ONLY_TESTING narrows a test run: whitespace-separated Target[/Class[/method]]

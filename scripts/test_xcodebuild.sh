@@ -20,14 +20,26 @@ cat > "$stubs/xcrun" <<'EOF'
 exit 0
 EOF
 
-# STUB_MODE picks the canned xcodebuild outcome; STUB_SLEEP holds the
-# "device" for that many seconds; STUB_LOG records start/end epoch seconds.
+# STUB_MODE picks the canned xcodebuild outcome (marker prints STUB_MARKER as
+# the only crash line); STUB_SLEEP holds the "device" for that many seconds;
+# STUB_LOG records start/end epoch seconds; STUB_LINGER leaves a detached
+# child (like xcodebuild's helper daemons) alive for that many seconds with
+# every inherited fd except stdout/stderr still open.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
+[ -z "${STUB_LINGER:-}" ] || (sleep "$STUB_LINGER" >/dev/null 2>&1 &)
 sleep "${STUB_SLEEP:-0}"
 [ -z "${STUB_LOG:-}" ] || echo "end $(date +%s) $$" >> "$STUB_LOG"
 case "${STUB_MODE:-pass}" in
+  marker)
+    echo "Test Suite 'FooTests' started"
+    echo "$STUB_MARKER"
+    echo "Failing tests:"
+    echo "	IntentTests:"
+    echo "		FooTests.testBar()"
+    echo "** TEST EXECUTE FAILED **"
+    exit 65 ;;
   pass)
     echo "Test Suite 'All tests' passed"
     echo "** TEST EXECUTE SUCCEEDED **"
@@ -84,19 +96,45 @@ run_wrapper() {
   "$SCRIPT" "$2" > "$1" 2>&1 || status=$?
   echo "$status"
 }
+# The lock is a flock(2), so "free" means a non-blocking exclusive flock succeeds.
+lock_is_free() {
+  python3 -c 'import fcntl, os, sys
+fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT)
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$lock" 2>/dev/null
+}
+assert_lock_free() { if lock_is_free; then pass "$1"; else fail "$1: lock still held"; fi; }
+# hold_lock: background process that takes the flock, records its own PID as
+# the holder (as the wrapper would), and keeps it until killed. Sets $holder.
+hold_lock() {
+  python3 -c 'import fcntl, os, sys, time
+fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT)
+fcntl.flock(fd, fcntl.LOCK_EX)
+os.ftruncate(fd, 0); os.write(fd, ("%d\n" % os.getpid()).encode())
+open(sys.argv[2], "w").close()
+time.sleep(120)' "$lock" "$work/held" &
+  holder=$!
+  while [ ! -e "$work/held" ]; do sleep 0.1; done
+  rm -f "$work/held"
+}
+# kept_log <outfile>: the retained log path named in a crash diagnostic.
+kept_log() { sed -n 's/^Full xcodebuild output kept at: //p' "$1"; }
+
+mkdir -p "$SIM_LOCK_DIR"
 
 echo "# passing run"
 status=$(STUB_MODE=pass run_wrapper "$work/pass.out" test-without-building)
 assert_eq "passing run exits 0" "$status" 0
 assert_lacks "passing run prints no crash diagnostic" "$(cat "$work/pass.out")" "crashed or was terminated"
-[ ! -L "$lock" ] && pass "lock released after passing run" || fail "lock left behind after passing run"
+assert_lock_free "lock released after passing run"
+assert_eq "lock file is left empty when free" "$(cat "$lock")" ""
+assert_eq "passing run keeps no log" "$(ls "$work" | grep -c '^xcodebuild-test\.')" 0
 
 echo "# failing tests"
 status=$(STUB_MODE=fail run_wrapper "$work/fail.out" test-without-building)
 assert_eq "failing tests pass xcodebuild's 65 through" "$status" 65
 assert_lacks "failing tests are not reported as a crash" "$(cat "$work/fail.out")" "crashed or was terminated"
 assert_contains "failing tests keep xcodebuild's own report" "$(cat "$work/fail.out")" "Failing tests:"
-[ ! -L "$lock" ] && pass "lock released after failing run" || fail "lock left behind after failing run"
+assert_lock_free "lock released after failing run"
 
 echo "# test-process crash"
 status=$(STUB_MODE=crash run_wrapper "$work/crash.out" test-without-building)
@@ -106,9 +144,36 @@ assert_contains "crash prints the distinguishing diagnostic" "$out" "crashed or 
 assert_contains "crash names the test that was running" "$out" "IntentTests.AppCoordinatorTests/testBoot()"
 assert_contains "crash quotes the signal line" "$out" "Test crashed with signal kill."
 assert_contains "crash keeps the full log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+[ -s "$(kept_log "$work/crash.out")" ] && pass "crash log file exists and is non-empty" || fail "crash log file missing"
 assert_eq "crash diagnostic dedupes repeated restart lines" \
   "$(grep -c 'Restarting after unexpected exit' "$work/crash.out")" 3
-[ ! -L "$lock" ] && pass "lock released after crash" || fail "lock left behind after crash"
+assert_lock_free "lock released after crash"
+
+echo "# each termination marker alone is classified as a crash"
+markers=(
+  "Restarting after unexpected exit, crash, or test timeout in IntentTests.FooTests/testBar(); summary will include totals from previous launches."
+  "Test crashed with signal segv."
+  "Early unexpected exit, operation never finished bootstrapping - no restart will be attempted."
+  "Lost connection to the test manager service"
+  "Test operation failure: Lost connection to test manager service."
+  "Test operation failure: Lost connection to test runner"
+  "lost connection to test runner"
+  "Test runner exited before starting test execution."
+  "Test runner never began executing tests after launching."
+  "Test runner crashed before starting test execution."
+  "The test runner exited with code 137 before finishing running tests."
+)
+i=0
+for marker in "${markers[@]}"; do
+  i=$((i + 1))
+  status=$(STUB_MODE=marker STUB_MARKER=$marker run_wrapper "$work/marker$i.out" test-without-building)
+  out=$(cat "$work/marker$i.out")
+  assert_eq "marker $i exits 80: $marker" "$status" 80
+  assert_contains "marker $i is quoted in the diagnostic" "$out" "  $marker"
+  [ -s "$(kept_log "$work/marker$i.out")" ] && pass "marker $i keeps the log file" || fail "marker $i: log file missing"
+done
+status=$(STUB_MODE=marker STUB_MARKER="Test Suite 'Lost connection test' passed" run_wrapper "$work/nomarker.out" test-without-building)
+assert_eq "a look-alike line without a marker stays a plain 65" "$status" 65
 
 echo "# two concurrent runs serialize on the simulator lock"
 STUB_LOG=$work/timeline
@@ -131,27 +196,58 @@ assert_contains "waiter announces who holds the lock" "$(cat "$work/b.out")" "wa
 assert_contains "waiter reports acquisition" "$(cat "$work/b.out")" "acquired simulator lock after"
 assert_lacks "holder never waits" "$(cat "$work/a.out")" "waiting for simulator"
 
+echo "# four competing runs never overlap"
+STUB_LOG=$work/timeline4
+for n in 1 2 3 4; do
+  STUB_LOG=$STUB_LOG STUB_SLEEP=1 "$SCRIPT" test-without-building > "$work/c$n.out" 2>&1 &
+  pids[$n]=$!
+done
+ok=1
+for n in 1 2 3 4; do wait "${pids[$n]}" || ok=0; done
+assert_eq "all four competing runs exit 0" "$ok" 1
+assert_eq "all four stub runs completed" "$(grep -c '^end ' "$STUB_LOG")" 4
+overlaps=$(awk '$1 == "start" { if (active) bad++; active = 1 } $1 == "end" { active = 0 } END { print bad + 0 }' "$STUB_LOG")
+assert_eq "no stub run started while another was active" "$overlaps" 0
+
 echo "# lock timeout"
-sleep 30 &
-holder=$!
-mkdir -p "$SIM_LOCK_DIR"
-ln -s "$holder" "$lock"
+hold_lock
 status=$(SIM_LOCK_TIMEOUT=1 run_wrapper "$work/timeout.out" test-without-building)
-kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null || true
 assert_eq "lock timeout exits 81" "$status" 81
 assert_contains "lock timeout names the holder" "$(cat "$work/timeout.out")" "timed out after 1s waiting for simulator $SIM_UDID: lock $lock is held by PID $holder"
 assert_contains "lock timeout says how to proceed" "$(cat "$work/timeout.out")" "SIM_LOCK_TIMEOUT"
-[ "$(readlink "$lock")" = "$holder" ] && pass "timed-out waiter leaves the holder's lock alone" || fail "timed-out waiter disturbed the lock"
-rm -f "$lock"
+status=$(SIM_LOCK_TIMEOUT=0 run_wrapper "$work/timeout0.out" test-without-building)
+assert_eq "SIM_LOCK_TIMEOUT=0 gives up at once" "$status" 81
+assert_lacks "SIM_LOCK_TIMEOUT=0 never announces a wait" "$(cat "$work/timeout0.out")" "giving up after"
+assert_contains "SIM_LOCK_TIMEOUT=0 still names the holder" "$(cat "$work/timeout0.out")" "lock $lock is held by PID $holder"
+lock_is_free && fail "timed-out waiters released the holder's lock" || pass "timed-out waiters leave the holder's lock alone"
+assert_eq "timed-out waiters leave the holder's PID record alone" "$(cat "$lock")" "$holder"
+kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null || true
 
-echo "# stale lock is reclaimed"
+echo "# a SIGKILLed run releases the lock with nothing to reclaim"
+STUB_SLEEP=20 "$SCRIPT" test-without-building > "$work/victim.out" 2>&1 &
+victim=$!
+for _ in $(seq 1 100); do [ "$(cat "$lock" 2>/dev/null)" = "$victim" ] && break; sleep 0.1; done
+assert_eq "holder records its PID in the lock file" "$(cat "$lock")" "$victim"
+kill -9 "$victim"; wait "$victim" 2>/dev/null || true
+status=$(SIM_LOCK_TIMEOUT=0 run_wrapper "$work/afterkill.out" test-without-building)
+assert_eq "next run proceeds at once after the holder was SIGKILLed" "$status" 0
+assert_lacks "no reclaim or wait was needed after SIGKILL" "$(cat "$work/afterkill.out")" "waiting for simulator"
+
+echo "# a leftover PID in an unlocked file is not a lock"
 true & dead=$!
 wait "$dead"
-ln -s "$dead" "$lock"
-status=$(run_wrapper "$work/stale.out" test-without-building)
-assert_eq "stale lock does not block the run" "$status" 0
-assert_contains "stale lock reclaim is announced" "$(cat "$work/stale.out")" "reclaiming stale simulator lock $lock (holder PID $dead is gone)"
-[ ! -L "$lock" ] && pass "lock released after reclaimed run" || fail "lock left behind after reclaimed run"
+echo "$dead" > "$lock"
+status=$(SIM_LOCK_TIMEOUT=0 run_wrapper "$work/stale.out" test-without-building)
+assert_eq "an unlocked file with a stale PID does not block the run" "$status" 0
+assert_lacks "no wait is announced for an unlocked file" "$(cat "$work/stale.out")" "waiting for simulator"
+assert_eq "the stale PID is cleared after the run" "$(cat "$lock")" ""
+
+echo "# a child that outlives xcodebuild does not keep the lock"
+status=$(STUB_LINGER=15 run_wrapper "$work/linger.out" test-without-building)
+assert_eq "run whose xcodebuild leaves a lingering child exits 0" "$status" 0
+assert_lock_free "lock is free while the lingering child is still alive"
+status=$(SIM_LOCK_TIMEOUT=0 run_wrapper "$work/afterlinger.out" test-without-building)
+assert_eq "next run proceeds at once despite the lingering child" "$status" 0
 
 echo "# knob validation"
 status=$(SIM_LOCK_TIMEOUT=soon run_wrapper "$work/knob.out" test-without-building)
