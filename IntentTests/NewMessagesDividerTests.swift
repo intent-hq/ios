@@ -1184,32 +1184,80 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 300), isFollowing: true, correctionsSpent: 1) == .settling)
     }
 
+    private typealias RecoveryDrain = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryDrain
+
+    private func drain(_ outcome: RecoveryStep, isFollowing: Bool = false) -> RecoveryDrain {
+        ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(outcome: outcome, isFollowing: isFollowing)
+    }
+
     /// A correction in flight counts as a follow, so the growth re-pin stays
-    /// suppressed while it lands; the drain — recovered, given up, or
-    /// yielded — replays the live edge with the flag released, so a
-    /// viewport the correction left short of the end inside the pin is
+    /// suppressed while it lands; a drain that recovered (the end row
+    /// realized) or yielded replays the live edge with the flag released,
+    /// so a viewport the correction left short of a realized end row is
     /// re-pinned by the growth path rather than left short with Go to End
-    /// hidden, and a give-up under the finger reads the edge as the gesture
+    /// hidden, and a yield under the finger reads the edge as the gesture
     /// it is: Go to End shown, no re-pin over it.
     @Test func recoveryDrainReplaysTheEdgeTheCorrectionSuppressed() {
         // Correction in flight: the away edge is neither a scroll away nor a
         // re-pin.
         #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
         #expect(!rePinAfterGrowth(isFollowing: true))
-        // Drained at rest short of the end: the pin is kept and followed.
+        // Recovered — end row realized — at rest short of the end: the pin
+        // is kept and followed to the realized row.
+        #expect(recovery(geometry(offsetY: 180), isEndRealized: true, correctionsSpent: 1) == .none)
+        #expect(drain(.none) == .replayEdge)
         #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
         #expect(rePinAfterGrowth(isFollowing: false))
-        // Given up under the finger, short of the end: scrolled away, Go to
+        // Yielded under the finger, short of the end: scrolled away, Go to
         // End shown, nothing scrolls the user back.
-        #expect(recovery(geometry(offsetY: 300), isInteracting: true, timedOut: true) == .giveUp)
+        #expect(drain(.yieldToUser) == .replayEdge)
         #expect(transition(current: false, distanceToBottom: 120, isInteracting: true))
         #expect(!rePinAfterGrowth(isInteracting: true))
         #expect(!rePinAfterGrowth(userIsScrolledAway: true))
-        // Drained at the bottom: the edge re-pins nothing and clears nothing.
+        // Yielded to a follow that claimed the viewport: its landing is the
+        // follow's to verify, and the replay re-pins nothing over it.
+        #expect(drain(.yieldToUser, isFollowing: true) == .replayEdge)
+        #expect(!rePinAfterGrowth(isFollowing: true))
+        // Recovered at the bottom: the edge re-pins nothing and clears
+        // nothing.
         #expect(!transition(current: false, distanceToBottom: 10, isInteracting: false))
         #expect(!rePinAfterGrowth(geometryAway: false))
         #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
             outcome: .yieldToUser, corrections: 1) == "endRecovery=yieldToUser corrections=1")
+    }
+
+    /// A give-up leaves the end row unrealized with the budget spent, so a
+    /// replayed edge would re-pin blind — a direct scroll to a row that is
+    /// not there, with no landing verified and nothing left to arm, leaving
+    /// the viewport short with Go to End hidden (the blank in a corner).
+    /// The give-up shows Go to End instead, whether the viewport reads
+    /// short of the end or at the bottom: the tap follows through the
+    /// verified path and re-arms the recovery from the level. A follow in
+    /// flight at the give-up owns the viewport and re-arms from its own
+    /// drain; flagging the viewport away would cancel it as a takeover.
+    @Test func recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind() {
+        // Budget spent short of the end inside the band, and timed out at
+        // the bottom over the blank: both give up.
+        #expect(recovery(geometry(offsetY: 260), correctionsLeft: 0, correctionsSpent: 2) == .giveUp)
+        #expect(recovery(geometry(offsetY: 300), correctionsSpent: 2, timedOut: true) == .giveUp)
+        #expect(recovery(geometry(offsetY: 300), isInteracting: true, timedOut: true) == .giveUp)
+        #expect(drain(.giveUp) == .showGoToEnd)
+        // The edge alone would not have shown the button, and would have
+        // re-pinned without a gesture — the outcome the give-up overrides.
+        #expect(!transition(current: false, distanceToBottom: 40, isInteracting: false))
+        #expect(!transition(current: false, distanceToBottom: 0, isInteracting: false))
+        #expect(rePinAfterGrowth(isFollowing: false))
+        // Scrolled away, the growth path re-pins nothing over the button,
+        // and the tap's follow re-arms the recovery from the level.
+        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
+        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(goToEndRequested: true))
+        #expect(ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
+            executed: true, isEndRealized: false))
+        // A follow in flight owns the viewport: its drain re-arms.
+        #expect(drain(.giveUp, isFollowing: true) == .replayEdge)
+        #expect(!rePinAfterGrowth(isFollowing: true))
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: .giveUp, corrections: 2) == "endRecovery=giveUp corrections=2")
     }
 
     /// An explicit follow cancels a recovery in flight, and the recovery is

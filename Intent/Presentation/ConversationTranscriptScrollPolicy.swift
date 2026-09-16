@@ -468,7 +468,8 @@ enum ConversationTranscriptScrollPolicy {
         /// follow that changed nothing: page the offset up to `pageOffsetY`
         /// so the lazy stack realizes rows again, then follow back to the end.
         case recover(pageOffsetY: CGFloat)
-        /// Timed out, or the bounded corrections are spent: leave the pin.
+        /// Timed out, or the bounded corrections are spent, with the end row
+        /// still unrealized: show Go to End (see `unrealizedEndRecoveryDrain`).
         case giveUp
         /// A gesture, a rest away or a follow requested meanwhile claimed
         /// the viewport while a correction had it paged up: it is theirs.
@@ -552,6 +553,40 @@ enum ConversationTranscriptScrollPolicy {
         isFollowing: Bool
     ) -> Bool {
         !isInteracting && !userIsScrolledAway && !isFollowing
+    }
+
+    enum UnrealizedEndRecoveryDrain: Equatable {
+        /// Replay the live geometry edge with the follow flag released: the
+        /// end row is realized (or the viewport is a gesture's or a follow's),
+        /// so a viewport short of the end is re-pinned by the growth path.
+        case replayEdge
+        /// Show Go to End: the viewport is treated as scrolled away, with no
+        /// further scroll issued over it.
+        case showGoToEnd
+    }
+
+    /// How the recovery drains. Its follow flag suppressed the growth re-pin
+    /// while a correction landed, so the drain replays the live edge — the
+    /// automatic follow's drain does the same. A give-up is the exception:
+    /// the budget is spent and the end row is still unrealized, so a re-pin
+    /// from that edge would scroll blind to a row that is not there, with
+    /// no landing verified and nothing left to arm — the viewport would rest
+    /// short with Go to End hidden, the blank it set out to fix. It surfaces
+    /// Go to End instead: the tap follows through `scrollToBottom`, whose
+    /// drain verifies the landing and re-arms the recovery from the level.
+    /// A follow already in flight at the give-up owns the viewport and
+    /// re-arms from its own drain; flagging the viewport away would cancel
+    /// it as a takeover, so that give-up replays the edge like the rest.
+    static func unrealizedEndRecoveryDrain(
+        outcome: UnrealizedEndRecoveryStep,
+        isFollowing: Bool
+    ) -> UnrealizedEndRecoveryDrain {
+        switch outcome {
+        case .giveUp:
+            return isFollowing ? .replayEdge : .showGoToEnd
+        case .none, .yieldToUser, .settling, .followToEnd, .recover:
+            return .replayEdge
+        }
     }
 
     /// The recovery is armed by the end row derealizing — an edge — and an

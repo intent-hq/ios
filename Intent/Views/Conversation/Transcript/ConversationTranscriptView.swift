@@ -325,10 +325,13 @@ struct ConversationTranscriptView: View {
     }
 
     /// Drains the recovery: records the outcome once it has corrected the
-    /// viewport, releases the follow flag, and replays the live edge the
-    /// flag suppressed while a correction was in flight, so a viewport the
-    /// correction left short of the end is re-pinned by the growth path (or,
-    /// under the finger, is read as the gesture it is).
+    /// viewport, releases the follow flag, and either replays the live edge
+    /// the flag suppressed while a correction was in flight (a viewport the
+    /// correction left short of a realized end row is re-pinned by the
+    /// growth path; under the finger it is read as the gesture it is) or,
+    /// once the budget is spent over a still-unrealized row, shows Go to
+    /// End rather than scroll blind (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain`).
     private func finishUnrealizedEndRecovery(
         outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep,
         corrections: Int,
@@ -340,7 +343,16 @@ struct ConversationTranscriptView: View {
         }
         scrollState.isRecoveringUnrealizedEnd = false
         scrollState.unrealizedEndRecoveryTask = nil
-        applyLiveScrolledAwayEdge(proxy: proxy)
+        switch ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(
+            outcome: outcome,
+            isFollowing: scrollDebounceTask != nil || isScrollingToBottom
+        ) {
+        case .replayEdge:
+            applyLiveScrolledAwayEdge(proxy: proxy)
+        case .showGoToEnd:
+            AppLog.ui.debug("[SCROLL] End recovery gave up over an unrealized end row; showing Go to End")
+            userIsScrolledAway = true
+        }
     }
 
     private func cancelUnrealizedEndRecovery() {
