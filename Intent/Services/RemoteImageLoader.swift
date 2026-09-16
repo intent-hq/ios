@@ -27,7 +27,11 @@ final class RemoteImageLoader {
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: URLs whose fetch/decode failed, so a
     /// persistently broken image doesn't refetch on every scroll-into-view.
-    private var failedKeys: Set<String> = []
+    /// Intentionally uncapped (ios#264): it grows only with distinct failed
+    /// URLs the transcript actually rendered, at ~140 B per entry measured
+    /// by `SessionCacheBoundsMeasurementTests`, so even a 10k-URL session
+    /// retains ~1.3 MiB — noise next to the decoded-image cost limit.
+    private(set) var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let fetchData: DataFetcher
 

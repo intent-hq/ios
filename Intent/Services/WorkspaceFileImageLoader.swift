@@ -65,7 +65,11 @@ final class WorkspaceFileImageLoader {
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
     /// persistently broken link doesn't refetch on every scroll-into-view.
-    private var failedKeys: Set<String> = []
+    /// Intentionally uncapped (ios#264): it grows only with distinct failed
+    /// links the transcript actually rendered, at ~160 B per entry measured
+    /// by `SessionCacheBoundsMeasurementTests`, so even a 10k-link session
+    /// retains ~1.5 MiB — noise next to one `cacheTotalCostLimit`.
+    private(set) var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let chunkRequester: ChunkRequester
 
