@@ -59,10 +59,10 @@ extension ConnectionManagerTests {
         return nil
     }
 
-    @Test func assemblerReturnsCompleteTextMessageImmediately() {
+    @Test func assemblerReturnsCompleteTextMessageImmediately() throws {
         var assembler = WebSocketConnection.MessageAssembler()
 
-        let message = assembler.consume(
+        let message = try assembler.consume(
             kind: .text,
             data: Data("hello".utf8),
             isComplete: true
@@ -71,23 +71,23 @@ extension ConnectionManagerTests {
         #expect(text(of: message) == "hello")
     }
 
-    @Test func assemblerReassemblesFragmentedTextAcrossContinuations() {
+    @Test func assemblerReassemblesFragmentedTextAcrossContinuations() throws {
         var assembler = WebSocketConnection.MessageAssembler()
         // "héllo" with the two-byte UTF-8 encoding of "é" split across
         // fragments — decoding must wait for the complete message.
         let bytes = Array("héllo".utf8)
 
-        #expect(assembler.consume(
+        #expect(try assembler.consume(
             kind: .text,
             data: Data(bytes[0..<2]),
             isComplete: false
         ) == nil)
-        #expect(assembler.consume(
+        #expect(try assembler.consume(
             kind: .continuation,
             data: Data(bytes[2..<4]),
             isComplete: false
         ) == nil)
-        let message = assembler.consume(
+        let message = try assembler.consume(
             kind: .continuation,
             data: Data(bytes[4...]),
             isComplete: true
@@ -96,15 +96,15 @@ extension ConnectionManagerTests {
         #expect(text(of: message) == "héllo")
     }
 
-    @Test func assemblerReassemblesFragmentedBinaryMessages() {
+    @Test func assemblerReassemblesFragmentedBinaryMessages() throws {
         var assembler = WebSocketConnection.MessageAssembler()
 
-        #expect(assembler.consume(
+        #expect(try assembler.consume(
             kind: .binary,
             data: Data([0x01, 0x02]),
             isComplete: false
         ) == nil)
-        let message = assembler.consume(
+        let message = try assembler.consume(
             kind: .continuation,
             data: Data([0x03]),
             isComplete: true
@@ -113,16 +113,16 @@ extension ConnectionManagerTests {
         #expect(data(of: message) == Data([0x01, 0x02, 0x03]))
     }
 
-    @Test func assemblerDropsStrayContinuationFrames() {
+    @Test func assemblerDropsStrayContinuationFrames() throws {
         var assembler = WebSocketConnection.MessageAssembler()
 
-        #expect(assembler.consume(
+        #expect(try assembler.consume(
             kind: .continuation,
             data: Data([0xff]),
             isComplete: true
         ) == nil)
         // A well-formed message afterwards is unaffected.
-        let message = assembler.consume(
+        let message = try assembler.consume(
             kind: .text,
             data: Data("ok".utf8),
             isComplete: true
@@ -130,15 +130,15 @@ extension ConnectionManagerTests {
         #expect(text(of: message) == "ok")
     }
 
-    @Test func assemblerResetsBetweenMessages() {
+    @Test func assemblerResetsBetweenMessages() throws {
         var assembler = WebSocketConnection.MessageAssembler()
 
-        let first = assembler.consume(
+        let first = try assembler.consume(
             kind: .text,
             data: Data("first".utf8),
             isComplete: true
         )
-        let second = assembler.consume(
+        let second = try assembler.consume(
             kind: .text,
             data: Data("second".utf8),
             isComplete: true
@@ -146,6 +146,25 @@ extension ConnectionManagerTests {
 
         #expect(text(of: first) == "first")
         #expect(text(of: second) == "second")
+    }
+
+    @Test func assemblerRejectsInvalidUTF8AndResets() throws {
+        var assembler = WebSocketConnection.MessageAssembler()
+
+        #expect(throws: WebSocketConnection.MessageAssemblyError.invalidTextEncoding) {
+            try assembler.consume(
+                kind: .text,
+                data: Data([0xe2, 0x82]),
+                isComplete: true
+            )
+        }
+        let message = try assembler.consume(
+            kind: .text,
+            data: Data("valid after failure".utf8),
+            isComplete: true
+        )
+
+        #expect(text(of: message) == "valid after failure")
     }
 
     @Test @MainActor func certificateMismatchErrorIncludesReceivedFingerprint() {

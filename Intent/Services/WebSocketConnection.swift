@@ -25,6 +25,7 @@ actor WebSocketConnection {
     private static let maximumMessageSize =
         maximumMessageSizeMebibytes * kibibytesPerMebibyte * bytesPerKibibyte
     private static let abnormalClosureCode = 1006
+    private static let invalidFramePayloadCode = 1007
     private static let missingCloseStatusCode = 1005
 
     private init(
@@ -302,7 +303,12 @@ extension WebSocketConnection {
             }
             switch frame {
             case let .fragment(kind, data, isComplete):
-                if let message = assembler.consume(kind: kind, data: data, isComplete: isComplete) {
+                if let message = try assembledMessage(
+                    kind: kind,
+                    data: data,
+                    isComplete: isComplete,
+                    assembler: &assembler
+                ) {
                     return message
                 }
             case let .closed(code, reason):
@@ -319,6 +325,29 @@ extension WebSocketConnection {
             case .control:
                 continue
             }
+        }
+    }
+
+    private func assembledMessage(
+        kind: FragmentKind,
+        data: Data,
+        isComplete: Bool,
+        assembler: inout MessageAssembler
+    ) throws -> URLSessionWebSocketTask.Message? {
+        do {
+            return try assembler.consume(kind: kind, data: data, isComplete: isComplete)
+        } catch MessageAssemblyError.invalidTextEncoding {
+            Self.close(
+                connection,
+                didOpen: didOpen,
+                code: .protocolCode(.invalidFramePayloadData),
+                queue: queue
+            )
+            throw WebSocketTransportError.disconnected(
+                host: host,
+                code: Self.invalidFramePayloadCode,
+                reason: "Invalid UTF-8 text payload"
+            )
         }
     }
 

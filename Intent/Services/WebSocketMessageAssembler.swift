@@ -7,6 +7,10 @@ nonisolated private enum PendingMessageKind: Sendable {
 }
 
 extension WebSocketConnection {
+    nonisolated enum MessageAssemblyError: Error, Equatable, Sendable {
+        case invalidTextEncoding
+    }
+
     nonisolated enum FragmentKind: Sendable {
         case text
         case binary
@@ -26,7 +30,7 @@ extension WebSocketConnection {
             kind: FragmentKind,
             data: Data,
             isComplete: Bool
-        ) -> URLSessionWebSocketTask.Message? {
+        ) throws -> URLSessionWebSocketTask.Message? {
             switch kind {
             case .text:
                 pendingKind = .text
@@ -47,7 +51,10 @@ extension WebSocketConnection {
             }
             switch pendingKind {
             case .text:
-                return .string(String(decoding: buffer, as: UTF8.self))
+                guard let text = String(bytes: buffer, encoding: .utf8) else {
+                    throw MessageAssemblyError.invalidTextEncoding
+                }
+                return .string(text)
             case .binary:
                 return .data(buffer)
             case .none:
