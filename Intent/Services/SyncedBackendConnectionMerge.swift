@@ -1,4 +1,5 @@
 import Foundation
+import Network
 
 /// Merges the iCloud-synced backend registry (read by
 /// `SyncedBackendRegistry.listBackends()`) into the app's saved connections.
@@ -153,9 +154,12 @@ enum SyncedBackendConnectionMerge {
             }
             return usable ? raw : nil
         }
-        // IPv6 literal (bare or bracketed): hex digits and colons only.
-        return inner.allSatisfy { $0.isHexDigit && $0.isASCII || $0 == ":" }
-            ? "[\(inner)]" : nil
+        // IPv6 literal (bare or bracketed): hex digits and colons only, and
+        // structurally valid — the character allowlist alone admits `::::`.
+        guard inner.allSatisfy({ $0.isHexDigit && $0.isASCII || $0 == ":" }),
+            IPv6Address(String(inner)) != nil
+        else { return nil }
+        return "[\(inner)]"
     }
 
     /// Display name mirroring the desktop convention: the record label

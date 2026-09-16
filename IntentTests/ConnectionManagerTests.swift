@@ -1478,6 +1478,7 @@ struct ConnectionManagerTests {
                 "host.example.com", "my-mac_2.local",
                 "192.168.1.10:4242", "evil.com/path", "user@evil.com", "evil.com?x=1",
                 "http://evil.com", "[::1", "::1]", "[]", "a b", "",
+                "::::", "2001::db8::1", "[2001::db8::1]",
             ])
         #expect(merged == [
             "daemon.local", "[fe80::1]", "192.168.1.10", "[2001:db8::1]",
