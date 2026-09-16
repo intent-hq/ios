@@ -135,7 +135,7 @@ enum CertFingerprintProbe {
     /// QR payload probes hosts sequentially, so a hung host would otherwise
     /// stall the pairing spinner for minutes. 4s matches the websocket
     /// timeout ConnectionManager.raceHosts uses per host.
-    static let probeTimeout: Duration = .seconds(4)
+    nonisolated static let probeTimeout: Duration = .seconds(4)
 
     /// Validated NWEndpoint.Port for a user-supplied port number, or nil when
     /// the value is outside 1...65535 (pure, unit-testable).
