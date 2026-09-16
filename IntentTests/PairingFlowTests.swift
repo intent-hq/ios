@@ -29,7 +29,7 @@ struct PairingFlowTests {
             for: payload(fingerprint: "ab:cd")
         ) { _, _ in
             probed = true
-            return nil
+            return .noCertificate
         }
         #expect(resolution == .pinned("ab:cd"))
         #expect(!probed, "A payload fingerprint must be pinned without probing")
@@ -41,7 +41,7 @@ struct PairingFlowTests {
         ) { hosts, port in
             #expect(hosts == ["127.0.0.1"])
             #expect(port == 5181)
-            return "12:34"
+            return .fingerprint("12:34")
         }
         #expect(resolution == .needsUserConfirmation("12:34"))
     }
@@ -49,9 +49,26 @@ struct PairingFlowTests {
     @Test @MainActor func failedProbeAbortsInsteadOfConnectingUnpinned() async {
         let resolution = await PairingFlow.resolveFingerprint(
             for: payload(fingerprint: nil)
-        ) { _, _ in nil }
+        ) { _, _ in .noCertificate }
         #expect(resolution == .failed(
-            message: CertFingerprintProbe.noCertErrorMessage))
+            message: CertFingerprintProbe.ProbeResult.noCertificate.abortMessage))
+    }
+
+    /// The probe's failure stage (unreachable / timeout / TLS) reaches the
+    /// QR and deep-link error surface instead of a generic message (ios#233).
+    @Test @MainActor func failedProbeSurfacesTheFailureStage() async {
+        let refused = CertFingerprintProbe.ProbeResult.unreachable(
+            cause: .init(domain: .posix, code: POSIXErrorCode.ECONNREFUSED.rawValue))
+        let unreachable = await PairingFlow.resolveFingerprint(
+            for: payload(fingerprint: nil)
+        ) { _, _ in refused }
+        #expect(unreachable == .failed(message: refused.abortMessage))
+
+        let timedOut = await PairingFlow.resolveFingerprint(
+            for: payload(fingerprint: nil)
+        ) { _, _ in .timeout }
+        #expect(timedOut == .failed(message: CertFingerprintProbe.ProbeResult.timeout.abortMessage))
+        #expect(timedOut != unreachable)
     }
 
     @Test @MainActor func failedNewPairSaveDisconnectsAndPublishesNoPairing() async {
