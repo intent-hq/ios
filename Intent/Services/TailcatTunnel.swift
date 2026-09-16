@@ -51,11 +51,13 @@ nonisolated extension TailcatkitForwarder: TunnelForwarderHandle {}
 
 /// TailcatKit-backed session: owns the gomobile client and its loopback
 /// forwarder. `@unchecked Sendable`: the gomobile projections are thread-safe
-/// handles to Go objects.
+/// handles to Go objects and `closed` is lock-guarded.
 nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable {
     let localPort: Int
     private let client: any TunnelClientHandle
     private let forwarder: (any TunnelForwarderHandle)?
+    private let lock = NSLock()
+    private var closed = false
 
     /// `forwarder` is nil for a partially constructed session (client dialed,
     /// no forwarder started): its `localPort` is 0 and `close()` tears down
@@ -66,9 +68,28 @@ nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable
         self.localPort = forwarder?.port() ?? 0
     }
 
+    /// Exactly-once: the first caller tears down and awaits it; later callers
+    /// return immediately. The gomobile closes run OFF the caller's executor
+    /// for the reason documented on `DialHandle.cancel`: `close()` takes the
+    /// Go startup mutex and can block for seconds, which on a cooperative
+    /// executor (or the main actor) would park that thread for the duration.
+    /// The continuation is deliberately not cancellation-aware: a cancelled
+    /// caller must still release the handles, so teardown always completes.
     func close() async {
-        try? forwarder?.close()
-        try? client.close()
+        lock.lock()
+        let alreadyClosed = closed
+        closed = true
+        lock.unlock()
+        guard !alreadyClosed else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Captures self (lock-guarded) rather than the non-Sendable
+            // gomobile handles, as `DialHandle.cancel` does.
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                try? forwarder?.close()
+                try? client.close()
+                continuation.resume()
+            }
+        }
     }
 }
 
