@@ -60,10 +60,13 @@ struct SplashPlaybackTests {
         #expect(playback.elapsedTime == 0)
         clock.advance(by: 1.5)
         #expect(playback.elapsedTime == 1.5)
-        // A clock stepped backwards clamps rather than going negative or
-        // rewinding the GIF.
+        // The production clock is monotonic and never regresses; should an
+        // injected one step backwards, the arithmetic clamps at zero rather
+        // than producing a negative playback time.
         clock.advance(by: -10)
         #expect(playback.elapsedTime == 0)
+        clock.advance(by: 10)
+        #expect(playback.elapsedTime == 1.5)
     }
 
     // MARK: - Pause / resume
