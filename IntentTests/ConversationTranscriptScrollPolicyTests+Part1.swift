@@ -129,14 +129,12 @@ extension ConversationTranscriptScrollPolicyTests {
     private func recheckBottomBandAfterEdge(
         geometryAway: Bool = false,
         isInteracting: Bool = false,
-        isFollowing: Bool = false,
         hasInitiallyScrolled: Bool = true,
         userIsScrolledAway: Bool = false
     ) -> Bool {
         ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge(
             geometryAway: geometryAway,
             isInteracting: isInteracting,
-            isFollowing: isFollowing,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
@@ -163,8 +161,8 @@ extension ConversationTranscriptScrollPolicyTests {
     /// Regression (#346): a new conversation's transcript grows from shorter
     /// than the container (a negative distance) past one page, and the band
     /// observer delivers the crossing into band 0 reading within the band.
-    /// On a pinned, settled transcript with no follow in flight that edge
-    /// schedules the settle re-check; an away edge is content growth that
+    /// On a pinned, settled transcript that edge schedules the settle
+    /// re-check; an away edge is content growth that
     /// `shouldRePinAfterContentGrowth` re-pins at once.
     @Test func withinBandEdgeOnPinnedSettledTranscriptSchedulesRecheck() {
         #expect(ConversationTranscriptScrollPolicy.distanceBand(distanceToBottom: -120) == -3)
@@ -173,12 +171,14 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(!recheckBottomBandAfterEdge(geometryAway: true))
     }
 
-    /// Not under the finger (a gesture, not growth), not while a follow is
-    /// landing there on its own, not before the entry scroll has decided, and
-    /// not for a reader who scrolled away.
-    @Test func withinBandEdgeRecheckYieldsToGesturesFollowsAndTheEntryDecision() {
+    /// Not under the finger (a gesture, not growth), not before the entry
+    /// scroll has decided, and not for a reader who scrolled away. A follow
+    /// in flight is not a reason to drop the request: the last rows can lay
+    /// out during its completion window and its drain re-pins only on an
+    /// away edge, so the edge still schedules and the settle re-check defers
+    /// (`bottomBandRePinDecision`) until the follow lands.
+    @Test func withinBandEdgeRecheckYieldsToGesturesAndTheEntryDecision() {
         #expect(!recheckBottomBandAfterEdge(isInteracting: true))
-        #expect(!recheckBottomBandAfterEdge(isFollowing: true))
         #expect(!recheckBottomBandAfterEdge(hasInitiallyScrolled: false))
         #expect(!recheckBottomBandAfterEdge(userIsScrolledAway: true))
     }
