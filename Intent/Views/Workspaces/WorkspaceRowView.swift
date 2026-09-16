@@ -40,6 +40,16 @@ struct WorkspaceRowView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Agent-set status screenshot (PROTOCOL §5.1 statusImageAssetId);
+            // mounted only when set so an unset workspace leaves no gap.
+            if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
+                WorkspaceStatusImageView(
+                    workspaceId: workspace.id, assetId: statusImageAssetId, style: .card)
+                    .alignmentGuide(.firstTextBaseline) { dimensions in
+                        dimensions[VerticalAlignment.center]
+                    }
+            }
         }
         .contentShape(Rectangle())
         .padding(.vertical, Constants.WorkspaceRow.verticalPadding)

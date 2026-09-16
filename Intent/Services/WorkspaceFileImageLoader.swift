@@ -46,6 +46,19 @@ final class WorkspaceFileImageLoader {
             else { throw LoadError.malformedResponse }
             return FileChunk(content: content, bytesRead: bytesRead, size: size)
         }
+
+        /// One-shot `note.readAsset` read: the daemon answers the whole
+        /// asset as base64 (`{ assetId, mimeType, data, sizeKb }`).
+        func requestAsset(workspaceId: String, assetId: String) async throws -> String {
+            let result = try await connection.request("note.readAsset", params: [
+                "workspaceId": workspaceId,
+                "asset": assetId,
+            ])
+            guard let dict = result as? [String: Any],
+                  let data = dict["data"] as? String
+            else { throw LoadError.malformedResponse }
+            return data
+        }
     }
 
     /// Bytes requested per `file.readChunk` call (well under the daemon's
@@ -80,7 +93,36 @@ final class WorkspaceFileImageLoader {
 
     /// Cached-or-fetched image for a workspace-relative file path.
     func image(workspaceId: String, path: String) async throws -> UIImage {
-        let key = "\(workspaceId)\u{0}\(path)"
+        try await cachedImage(key: Self.fileKey(workspaceId: workspaceId, path: path)) {
+            [chunkRequester] in
+            try await Self.fetchAndDecode(
+                chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+        }
+    }
+
+    /// Cached-or-fetched image for a workspace asset id (the
+    /// `note.saveAsset` / `workspace-asset://` namespace, e.g. the workspace
+    /// `statusImageAssetId`). Asset ids are content-addressed, so a replaced
+    /// image is a new key and refetches; keys never collide with file paths.
+    func assetImage(workspaceId: String, assetId: String) async throws -> UIImage {
+        try await cachedImage(key: Self.assetKey(workspaceId: workspaceId, assetId: assetId)) {
+            [chunkRequester] in
+            try await Self.fetchAndDecodeAsset(
+                chunkRequester: chunkRequester, workspaceId: workspaceId, assetId: assetId)
+        }
+    }
+
+    private static func fileKey(workspaceId: String, path: String) -> String {
+        "\(workspaceId)\u{0}\(path)"
+    }
+
+    private static func assetKey(workspaceId: String, assetId: String) -> String {
+        "asset\u{0}\(workspaceId)\u{0}\(assetId)"
+    }
+
+    private func cachedImage(
+        key: String, fetch: @escaping @Sendable () async throws -> UIImage
+    ) async throws -> UIImage {
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
@@ -90,9 +132,8 @@ final class WorkspaceFileImageLoader {
         if let task = inFlight[key] {
             return try await task.value
         }
-        let task = Task<UIImage, Error> { [chunkRequester, cache] in
-            let image = try await Self.fetchAndDecode(
-                chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+        let task = Task<UIImage, Error> { [cache] in
+            let image = try await fetch()
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
             cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
@@ -115,7 +156,12 @@ final class WorkspaceFileImageLoader {
     /// Drop a key from the session negative cache so a user-initiated retry
     /// (e.g. tapping a failed attachment placeholder) actually refetches.
     func forgetFailure(workspaceId: String, path: String) {
-        failedKeys.remove("\(workspaceId)\u{0}\(path)")
+        failedKeys.remove(Self.fileKey(workspaceId: workspaceId, path: path))
+    }
+
+    /// `forgetFailure` for the asset namespace (status image retry taps).
+    func forgetAssetFailure(workspaceId: String, assetId: String) {
+        failedKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
     }
 
     /// Approximate decoded byte size, used as the NSCache cost (shared with
@@ -134,6 +180,23 @@ final class WorkspaceFileImageLoader {
     ) async throws -> UIImage {
         let data = try await fetchBytes(
             chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+        guard let image = decodeImage(data) else {
+            throw LoadError.notAnImage
+        }
+        return image
+    }
+
+    /// `fetchAndDecode` for the single-round-trip `note.readAsset` payload:
+    /// only the RPC hops to the main actor; base64 and image decode run here.
+    @concurrent
+    private nonisolated static func fetchAndDecodeAsset(
+        chunkRequester: ChunkRequester, workspaceId: String, assetId: String
+    ) async throws -> UIImage {
+        let base64 = try await chunkRequester.requestAsset(workspaceId: workspaceId, assetId: assetId)
+        guard let data = Data(base64Encoded: base64) else {
+            throw LoadError.malformedResponse
+        }
+        guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }
         guard let image = decodeImage(data) else {
             throw LoadError.notAnImage
         }

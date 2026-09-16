@@ -136,10 +136,12 @@ struct Workspace: Codable, Identifiable, Equatable {
     let agentSummaryAgents: [WorkspaceAgentInfo]?
     let pullRequests: [WorkspacePullRequest]?  // detected-PR pool (§5.1); nil on older daemons
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
+    let statusImageAssetId: String?  // agent-set status screenshot asset (§5.1); omitted until set
 
     /// Explicit initializer so `attention` / `waiting` / `createdAt` /
-    /// `pullRequests` / `activePullRequest` can default — existing call sites
-    /// (and test fixtures) that predate the fields stay valid.
+    /// `pullRequests` / `activePullRequest` / `statusImageAssetId` can
+    /// default — existing call sites (and test fixtures) that predate the
+    /// fields stay valid.
     init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
          activity: String?, displayStatus: String?, attention: String? = nil,
          waiting: Bool = false,
@@ -150,7 +152,8 @@ struct Workspace: Codable, Identifiable, Equatable {
          taskStatsInProgress: Int?, agentSummaryCount: Int?,
          agentSummaryAgents: [WorkspaceAgentInfo]?,
          pullRequests: [WorkspacePullRequest]? = nil,
-         activePullRequest: WorkspacePullRequest? = nil) {
+         activePullRequest: WorkspacePullRequest? = nil,
+         statusImageAssetId: String? = nil) {
         self.id = id
         self.title = title
         self.branch = branch
@@ -175,6 +178,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.agentSummaryAgents = agentSummaryAgents
         self.pullRequests = pullRequests
         self.activePullRequest = activePullRequest
+        self.statusImageAssetId = statusImageAssetId
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -206,6 +210,8 @@ struct Workspace: Codable, Identifiable, Equatable {
         agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
         pullRequests = try c.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
         activePullRequest = try c.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
+        statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
+            try c.decodeIfPresent(String.self, forKey: .statusImageAssetId))
     }
 }
 

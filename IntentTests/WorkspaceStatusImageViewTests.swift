@@ -5,6 +5,7 @@ import Testing
 /// Pure mapping behind the workspace status image (intent-hq/intent#3868):
 /// which workspaces render one, how the fetch is keyed so replacements and
 /// removals refresh, and how each placement degrades when the asset fails.
+@MainActor
 struct WorkspaceStatusImageViewTests {
     private typealias Layout = WorkspaceStatusImageLayout
 

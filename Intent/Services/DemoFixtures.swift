@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Launch-argument-driven demo mode for screenshot UI tests: with
 /// `--demo-data` the app skips pairing, serves fixture data from
@@ -64,6 +65,38 @@ enum DemoFixtures {
     /// `longConversationAgentId`. Rendered as a chip in the hooks row above
     /// the composer; the row's own label is "Running hooks".
     static let longConversationHookName = "Wait for CI on flake fix"
+
+    /// The one workspace whose `workspace.list` row carries a
+    /// `statusImageAssetId` (the "Dark mode for settings screens" workspace:
+    /// no agents, so its row opens the detail header rather than a
+    /// conversation), and the asset id `note.readAsset` answers with
+    /// `statusImagePNG` (intent-hq/intent#3868).
+    static let statusImageWorkspaceId = "demo-ws-dark-mode"
+    static let statusImageAssetId = "m9demo00-5e771n65.png"
+
+    /// Rendered once per process: a mock "settings in dark mode" screenshot
+    /// (16:9) so the fixture needs no bundled image file.
+    static let statusImagePNG: Data = {
+        let size = CGSize(width: 640, height: 360)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.pngData { ctx in
+            UIColor(red: 0.11, green: 0.11, blue: 0.13, alpha: 1).setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            let rowFill = UIColor(red: 0.18, green: 0.18, blue: 0.21, alpha: 1)
+            let accent = UIColor(red: 0.29, green: 0.56, blue: 0.99, alpha: 1)
+            for row in 0..<5 {
+                let y = 48 + CGFloat(row) * 60
+                rowFill.setFill()
+                UIBezierPath(
+                    roundedRect: CGRect(x: 32, y: y, width: 576, height: 44), cornerRadius: 10
+                ).fill()
+                (row % 2 == 0 ? accent : rowFill).setFill()
+                UIBezierPath(
+                    roundedRect: CGRect(x: 548, y: y + 10, width: 44, height: 24), cornerRadius: 12
+                ).fill()
+            }
+        }
+    }()
 
     /// What `hook.list` for `longConversationWorkspaceId` waits on before
     /// answering, so the hooks row appears under an already-settled
@@ -147,6 +180,19 @@ enum DemoFixtures {
             let noteId = params["noteId"] as? String
             let note = notes.first { ($0["id"] as? String) == noteId } ?? notes[0]
             return ["note": note]
+        case "note.readAsset":
+            // Only the status-image asset exists; anything else is the
+            // empty "no data" dictionary, which the loader rejects as
+            // malformed (a broken asset id), same as an unknown method.
+            guard params["workspaceId"] as? String == statusImageWorkspaceId,
+                  params["asset"] as? String == statusImageAssetId else { return [String: Any]() }
+            let base64 = statusImagePNG.base64EncodedString()
+            return [
+                "assetId": statusImageAssetId,
+                "mimeType": "image/png",
+                "data": base64,
+                "sizeKb": Int((Double(base64.utf8.count) / 1024).rounded()),
+            ] as [String: Any]
         case "agent.list":
             let workspaceId = params["workspaceId"] as? String
             return ["agents": workspaceId == longConversationWorkspaceId ? longConversationAgents : agents]
@@ -280,6 +326,7 @@ enum DemoFixtures {
                 "diffSummary": ["totalFiles": 9],
                 "taskStats": ["total": 4, "completed": 4, "inProgress": 0],
                 "agentSummary": ["count": 0, "agents": [[String: Any]]()] as [String: Any],
+                "statusImageAssetId": statusImageAssetId,
             ],
             [
                 "id": "demo-ws-flaky-tests",

@@ -310,6 +310,7 @@ extension Constants.WorkspaceDetail {
     static let remainingProgressOpacity: Double = 0.2
     static let progressHeight: CGFloat = 4
     static let progressBottomPadding: CGFloat = 8
+    static let statusImageBottomPadding: CGFloat = 8
     static let emptyStateSpacing: CGFloat = 12
     static let tabVerticalPadding: CGFloat = 8
     // visionOS deliberate confirmation sheets for destructive/irreversible

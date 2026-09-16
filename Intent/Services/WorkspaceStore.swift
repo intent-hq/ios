@@ -571,7 +571,9 @@ import Observation
             agentSummaryCount: agentSummary?["count"] as? Int,
             agentSummaryAgents: agentInfos,
             pullRequests: pullRequests,
-            activePullRequest: activePullRequest
+            activePullRequest: activePullRequest,
+            statusImageAssetId: WorkspaceStatusImageLayout.normalizedAssetId(
+                dict["statusImageAssetId"] as? String)
         )
     }
 }

@@ -61,6 +61,16 @@ struct WorkspaceDetailView: View {
                         .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
                 }
 
+                // Agent-set status screenshot (PROTOCOL §5.1 statusImageAssetId):
+                // tap opens the lightbox. Mounted only when set, so an unset
+                // workspace leaves no gap.
+                if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
+                    WorkspaceStatusImageView(
+                        workspaceId: workspaceId, assetId: statusImageAssetId, style: .detail)
+                        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                        .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
+                }
+
                 // Task progress bar
                 if let total = workspace?.taskStatsTotal,
                    let progress = WorkspaceTaskProgressLayout(
