@@ -1406,6 +1406,15 @@ nonisolated enum InboundFrame: Sendable {
     /// moves to a different interface (Wi-Fi → cellular) tears the socket
     /// down and enters the normal reconnect path; a satisfied → satisfied
     /// report on the same interface is a no-op.
+    ///
+    /// The first report is not necessarily the path the socket was
+    /// established on: an interface switch can land between the handshake
+    /// and that callback (ios#328). So when the socket's own physical
+    /// interface is known (`socketInterface`), every report — the first
+    /// included — is also checked against it: a satisfied path that no
+    /// longer lists that interface means the link under the socket is gone.
+    /// Membership, not the preferred interface, is what counts, so a VPN
+    /// tunnel preferred over the Wi-Fi the socket rides on is not a switch.
     private func handlePathUpdate(_ snapshot: NetworkPathSnapshot, monitorID: Int) {
         guard pathMonitorID == monitorID, pathMonitor != nil else { return }
         let previous = lastPathSnapshot
@@ -1421,7 +1430,13 @@ nonisolated enum InboundFrame: Sendable {
             pathDied = !snapshot.isSatisfied
             interfaceChanged = false
         }
-        guard pathDied || interfaceChanged else { return }
+        let socketInterfaceLost: Bool
+        if let socketInterface, snapshot.isSatisfied {
+            socketInterfaceLost = !snapshot.availableInterfaces.contains(socketInterface)
+        } else {
+            socketInterfaceLost = false
+        }
+        guard pathDied || interfaceChanged || socketInterfaceLost else { return }
         AppLog.connection.debug("[ConnectionManager] Network path changed (\(String(describing: previous)) -> \(String(describing: snapshot))), reconnecting")
         handleDisconnection()
     }
