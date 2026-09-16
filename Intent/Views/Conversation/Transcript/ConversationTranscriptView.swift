@@ -361,18 +361,18 @@ struct ConversationTranscriptView: View {
     }
 
     /// A band-observer edge (or streaming ending) reading within the
-    /// at-bottom band on a pinned, settled transcript with no follow in
-    /// flight can be a short transcript that grew past one page and came to
-    /// rest a line or two short of the end (#346; see
+    /// at-bottom band on a pinned, settled transcript can be a short
+    /// transcript that grew past one page and came to rest a line or two
+    /// short of the end (#346; see
     /// `ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge`).
-    /// Scheduled only from those two sources, never from a follow draining:
+    /// A follow in flight defers the re-check rather than dropping it. It is
+    /// scheduled only from those two sources, never from a follow draining:
     /// a follow that lands a rounding error short would otherwise re-check
     /// and re-scroll itself without bound.
     private func scheduleBottomBandRePinIfNeeded(geometryAway: Bool, proxy: ScrollViewProxy) {
         guard ConversationTranscriptScrollPolicy.shouldRecheckBottomBandAfterEdge(
             geometryAway: geometryAway,
             isInteracting: isUserInteracting,
-            isFollowing: isFollowing,
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return }

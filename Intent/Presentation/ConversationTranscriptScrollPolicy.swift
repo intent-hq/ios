@@ -192,20 +192,22 @@ enum ConversationTranscriptScrollPolicy {
     /// laid out and are rate-limited, and streaming ending issues no scroll,
     /// so nothing closes the gap. The growth does cross from a negative band
     /// into band 0, and that edge — read within the band on a pinned,
-    /// settled transcript with no follow in flight — schedules a settle
-    /// re-check (`bottomBandRePinDecision`). An away edge is content growth
-    /// past the band and is re-pinned at once by
+    /// settled transcript — schedules a settle re-check
+    /// (`bottomBandRePinDecision`). A follow in flight does not suppress it:
+    /// the last rows may lay out during that follow's completion window and
+    /// its drain re-pins only on an away edge, so the request is kept and
+    /// the re-check defers until the follow lands. An away edge is content
+    /// growth past the band and is re-pinned at once by
     /// `shouldRePinAfterContentGrowth`; under the finger the edge is a
-    /// gesture, not growth; a follow in flight lands on its own; before the
-    /// entry scroll the viewport is not following yet.
+    /// gesture, not growth; before the entry scroll the viewport is not
+    /// following yet.
     static func shouldRecheckBottomBandAfterEdge(
         geometryAway: Bool,
         isInteracting: Bool,
-        isFollowing: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool
     ) -> Bool {
-        !geometryAway && !isInteracting && !isFollowing && shouldFollowToBottom(
+        !geometryAway && !isInteracting && shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         )
