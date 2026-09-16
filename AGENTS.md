@@ -31,6 +31,19 @@ non-gating `iOS Filtered Tests` job. iOS builds link the gitignored prebuilt
 `TailcatKit/build_xcframework.sh` when Go is on PATH and otherwise exits naming that
 script; `TAILCATKIT_AUTOBUILD=0` disables the auto-build.
 
+The test subcommands hold an exclusive per-simulator lock, so two runs against one
+device (two agents in one checkout, or two checkouts picking the same simulator)
+serialise instead of killing each other's test processes; a waiter prints the
+holder's PID and gives up after `SIM_LOCK_TIMEOUT` seconds (default 1800) with exit
+81 — pick another device with `SIM_UDID` rather than sharing one. The lock is a
+kernel `flock(2)` held by a python3 keeper (no stale state; a killed wrapper's
+xcodebuild is terminated before the lock is released). Exit 80 means the
+test process crashed or was terminated rather than a test failing: xcodebuild's
+"Failing tests" list then names whichever tests were running, and the wrapper prints
+the crash lines and keeps the full log instead. Both behaviours are covered by
+`scripts/test_xcodebuild.sh` (bash + python3, stubbed xcodebuild; run it after editing the
+wrapper — CI runs it on the Linux job).
+
 ## Where to look
 
 - Thread-hopping ObjC callback APIs (registry + `@Sendable` guard): `IntentTests/ObjCCallbackIsolationTests.swift` — closures passed to these are inferred MainActor-isolated and crash on device when invoked off-main unless explicitly `@Sendable`.
