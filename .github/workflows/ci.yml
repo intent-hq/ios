@@ -224,12 +224,42 @@ jobs:
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
         run: scripts/xcodebuild.sh test-without-building
 
+      # InfoPlistSyncTests and PlatformGuardAllowlistTests inspect repository
+      # files at runtime. They must read the copies packaged into
+      # IntentTests.xctest, never the checkout the bundle was compiled in: that
+      # path does not exist on a physical device (intent-hq/ios#320). Re-run
+      # just those suites against the same build with the source tree moved
+      # aside, so they can only pass by reading the bundled copies. Empty
+      # stand-in directories keep the project's synchronized folders
+      # resolvable for xcodebuild; a separate result bundle preserves the
+      # full run's for the artifact upload.
+      - name: Source-independence check (ios#320)
+        env:
+          RESULT_BUNDLE: TestResults-source-moved
+          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests
+        run: |
+          moved="$RUNNER_TEMP/source-moved"
+          mkdir -p "$moved"
+          restore() {
+            for p in Intent IntentTests Info-visionOS.plist; do
+              [ -e "$moved/$p" ] || continue
+              if [ -d "$p" ]; then rmdir "$p"; fi
+              mv "$moved/$p" "$p"
+            done
+          }
+          trap restore EXIT
+          mv Intent IntentTests Info-visionOS.plist "$moved/"
+          mkdir Intent IntentTests
+          scripts/xcodebuild.sh test-without-building
+
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: ios-test-results
-          path: TestResults
+          path: |
+            TestResults
+            TestResults-source-moved
 
       # See the job comment: turns a go-test failure into a failure of this
       # (the only ruleset-required) job. go-test normally finishes minutes
