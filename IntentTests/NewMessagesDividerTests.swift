@@ -1150,6 +1150,68 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(rounds * roundMilliseconds < Double(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds))
     }
 
+    private func mayFollowBack(
+        isInteracting: Bool = false,
+        userIsScrolledAway: Bool = false,
+        isFollowing: Bool = false
+    ) -> Bool {
+        ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
+            isInteracting: isInteracting,
+            userIsScrolledAway: userIsScrolledAway,
+            isFollowing: isFollowing)
+    }
+
+    /// A correction that paged the viewport up follows back only to a
+    /// viewport nothing claimed while the rows realized: a gesture that
+    /// began meanwhile, a rest it left away, or a follow requested meanwhile
+    /// (the user's message, Go to End, content) owns the viewport, and the
+    /// correction yields rather than scroll over it. The gesture also takes
+    /// the correction over outright, as it does a pending follow.
+    @Test func pagedUpRecoveryYieldsToAGestureOrAFollowThatClaimedTheViewport() {
+        #expect(mayFollowBack())
+        #expect(!mayFollowBack(isInteracting: true))
+        #expect(!mayFollowBack(userIsScrolledAway: true))
+        #expect(!mayFollowBack(isFollowing: true))
+        #expect(!mayFollowBack(isInteracting: true, userIsScrolledAway: true, isFollowing: true))
+        #expect(ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
+            isInteracting: true, isFollowing: true))
+        #expect(!ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
+            isInteracting: false, isFollowing: true))
+        // The yield ends the recovery like a give-up: no further correction
+        // is owed to a viewport the user or a follow now owns.
+        #expect(recovery(geometry(offsetY: 300), isInteracting: true, correctionsSpent: 1) == .settling)
+        #expect(recovery(geometry(offsetY: 300), userIsScrolledAway: true, correctionsSpent: 1) == .none)
+        #expect(recovery(geometry(offsetY: 300), isFollowing: true, correctionsSpent: 1) == .settling)
+    }
+
+    /// A correction in flight counts as a follow, so the growth re-pin stays
+    /// suppressed while it lands; the drain — recovered, given up, or
+    /// yielded — replays the live edge with the flag released, so a
+    /// viewport the correction left short of the end inside the pin is
+    /// re-pinned by the growth path rather than left short with Go to End
+    /// hidden, and a give-up under the finger reads the edge as the gesture
+    /// it is: Go to End shown, no re-pin over it.
+    @Test func recoveryDrainReplaysTheEdgeTheCorrectionSuppressed() {
+        // Correction in flight: the away edge is neither a scroll away nor a
+        // re-pin.
+        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
+        #expect(!rePinAfterGrowth(isFollowing: true))
+        // Drained at rest short of the end: the pin is kept and followed.
+        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
+        #expect(rePinAfterGrowth(isFollowing: false))
+        // Given up under the finger, short of the end: scrolled away, Go to
+        // End shown, nothing scrolls the user back.
+        #expect(recovery(geometry(offsetY: 300), isInteracting: true, timedOut: true) == .giveUp)
+        #expect(transition(current: false, distanceToBottom: 120, isInteracting: true))
+        #expect(!rePinAfterGrowth(isInteracting: true))
+        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
+        // Drained at the bottom: the edge re-pins nothing and clears nothing.
+        #expect(!transition(current: false, distanceToBottom: 10, isInteracting: false))
+        #expect(!rePinAfterGrowth(geometryAway: false))
+        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+            outcome: .yieldToUser, corrections: 1) == "endRecovery=yieldToUser corrections=1")
+    }
+
     /// The recovery reports next to the forced follow's report under demo
     /// data once it has corrected the viewport, and never on the pending
     /// report the UI tests compare whole.

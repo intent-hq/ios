@@ -470,6 +470,9 @@ enum ConversationTranscriptScrollPolicy {
         case recover(pageOffsetY: CGFloat)
         /// Timed out, or the bounded corrections are spent: leave the pin.
         case giveUp
+        /// A gesture, a rest away or a follow requested meanwhile claimed
+        /// the viewport while a correction had it paged up: it is theirs.
+        case yieldToUser
     }
 
     /// Every re-pin judges the viewport by geometry alone, and the geometry
@@ -537,6 +540,20 @@ enum ConversationTranscriptScrollPolicy {
         return .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
     }
 
+    /// A correction that paged the viewport up follows back to the end only
+    /// if nothing claimed the viewport while the rows realized: a gesture
+    /// (the finger, or the deceleration after it), a rest the gesture left
+    /// away, or a follow requested meanwhile (the user's message, Go to End,
+    /// content) each own it from here and would be scrolled over by the
+    /// follow back; the correction yields instead.
+    static func unrealizedEndRecoveryMayFollowBack(
+        isInteracting: Bool,
+        userIsScrolledAway: Bool,
+        isFollowing: Bool
+    ) -> Bool {
+        !isInteracting && !userIsScrolledAway && !isFollowing
+    }
+
     /// The transcript's accessibility value under `--demo-data`: the last
     /// forced follow's outcome and the corrections it spent, e.g.
     /// `lastForcedFollow=landed corrections=1`, or
@@ -576,6 +593,7 @@ enum ConversationTranscriptScrollPolicy {
         switch outcome {
         case .none: name = "recovered"
         case .giveUp: name = "giveUp"
+        case .yieldToUser: name = "yieldToUser"
         case .settling: name = "settling"
         case .followToEnd, .recover: name = "recovering"
         }
