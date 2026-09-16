@@ -21,10 +21,16 @@ import XCTest
 /// samples 0.25 s apart also agree while the follow waits out its debounce
 /// or between two of its landing corrections, and the correction that then
 /// ran moved the rows under the assertions (intent-hq/ios#313,
-/// intent-hq/ios#307, intent-hq/intent#5109). Frames are read from single
-/// snapshots (`frame(of:)`): `exists` followed by `frame` resolves the
-/// query twice and a row the lazy stack derealizes in between fails the
-/// test outright.
+/// intent-hq/ios#307, intent-hq/intent#5109). The report is
+/// synchronization only — its outcome is not asserted, as CI simulators
+/// exhaust the landing budget (`giveUp`) with the viewport at the end — so
+/// the end itself is asserted on geometry: the transcript's final content
+/// row (`EndRow`) rests `Fixture.endRowGap` above the bottom edge
+/// (`assertAtEnd`), which a viewport stalled past the end over a blank band
+/// or short of the end fails where containment alone would not. Frames are
+/// read from single snapshots (`frame(of:)`): `exists` followed by `frame`
+/// resolves the query twice and a row the lazy stack derealizes in between
+/// fails the test outright.
 ///
 /// Every "rests at the bottom" failure message reports the follow's report,
 /// whether Go to End is present and where the last row's frame lies
@@ -82,18 +88,35 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         static let firstSuggestedPromptIdentifier = "transcript.suggestedPrompt.0"
         static let firstSuggestedPrompt = "Open a PR for the deflake changes"
         // The last of DemoFixtures.longConversationSuggestedPrompts (three
-        // prompts): the transcript's final content row, 20 pt above the end
-        // of the content (the bottom marker's spacer and padding). A
-        // transcript resting with it inside its frame has reached the end;
-        // one that stopped on the last message with the prompt rows still
-        // below the viewport has not (#304, #305). The first prompt alone
-        // cannot tell the two apart: it fits inside a viewport resting two
-        // prompt rows short.
+        // prompts): the transcript's final content row while no send is in
+        // flight. A transcript resting with it inside its frame, `endRowGap`
+        // above the bottom edge, has reached the end; one that stopped on the
+        // last message with the prompt rows still below the viewport has not
+        // (#304, #305). The first prompt alone cannot tell the two apart: it
+        // fits inside a viewport resting two prompt rows short.
         static let endRowIdentifier = "transcript.suggestedPrompt.2"
         // ConversationTranscriptView.thinkingIndicatorView's label: the last
         // transcript row once a send is in flight (demo `agent.sendMessage`
         // answers `{}`, so the indicator stays and no reply ever streams).
+        // The label sits inside the row's `.padding(.vertical, 4)`, so its
+        // frame's bottom edge is that much above the row's.
         static let thinkingIndicatorLabel = "Thinking..."
+        static let thinkingIndicatorLabelInset: CGFloat = 4
+        // Where the final content row's bottom edge rests above the
+        // transcript's bottom edge when the viewport is at the end: the
+        // LazyVStack's 16 pt spacing, then the `scroll-bottom` marker's 8 pt
+        // spacer and 12 pt bottom padding (ConversationTranscriptView). The
+        // transcript sits above the footer rows and the composer in
+        // ConversationColumnView's VStack, so it has no bottom content inset
+        // to add. Containment alone accepts a viewport stalled past the end
+        // — the last rows inside, a blank band below them, Go to End hidden
+        // — so the gap is bounded on both sides: larger is a blank band,
+        // smaller is the marker (and rows under it) short of the viewport.
+        static let endRowGap: CGFloat = 36
+        // Slack on `endRowGap`: the follow lands within 1 pt
+        // (Constants.Conversation.Transcript.followLandingTolerance) and
+        // accessibility frames round to the pixel grid.
+        static let endGapTolerance: CGFloat = 4
         // Entry symptoms are intermittent; each cycle is a fresh entry.
         static let entryCycles = 5
         // Upper bound on a forced follow (entry, Go to End, a send) reporting
@@ -161,6 +184,30 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let transcript: XCUIElement
     }
 
+    /// The transcript's final content row — the row whose gap from the
+    /// bottom edge is `Fixture.endRowGap` when the viewport is at the end —
+    /// and how far its accessibility frame's bottom edge sits above the
+    /// row's own (a label inside a padded row).
+    private struct EndRow {
+        let element: XCUIElement
+        let name: String
+        let labelInset: CGFloat
+
+        @MainActor
+        static func lastSuggestedPrompt(in app: XCUIApplication) -> EndRow {
+            EndRow(
+                element: app.buttons[Fixture.endRowIdentifier].firstMatch,
+                name: "last suggested prompt", labelInset: 0)
+        }
+
+        @MainActor
+        static func thinkingIndicator(in app: XCUIApplication) -> EndRow {
+            EndRow(
+                element: app.staticTexts[Fixture.thinkingIndicatorLabel].firstMatch,
+                name: "thinking indicator", labelInset: Fixture.thinkingIndicatorLabelInset)
+        }
+    }
+
     @MainActor
     func testGoToEndAppearsWhenScrolledUpAndHidesAtBottom() throws {
         let app = launchDemoApp()
@@ -168,14 +215,15 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
 
         // 1. At rest at the bottom the button must stay hidden: the entry
-        //    follow reports and the last message rests inside the transcript,
-        //    then the button must not appear over the quiet window —
-        //    waitForNonExistence would pass immediately before the transcript
-        //    had measured anything.
+        //    follow reports and the last message rests inside the transcript
+        //    with the end row at the end, then the button must not appear
+        //    over the quiet window — waitForNonExistence would pass
+        //    immediately before the transcript had measured anything.
         assertRestsAtBottom(
-            lastRow: lastMessage, named: "last assistant paragraph",
+            lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
             in: opened, context: "after opening")
 
         // 2. Scrolling up (content moves down) reveals it.
@@ -185,11 +233,15 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "Go to End did not appear after scrolling the transcript up")
 
         // 3. Tapping it returns to the bottom and hides it: the tap's forced
-        //    follow reports with the last message inside the transcript.
+        //    follow reports with the last message inside the transcript and
+        //    the end row at the end.
         goToEnd.tap()
-        waitUntilSettled(
+        guard waitUntilSettled(
             on: lastMessage, named: "last assistant paragraph",
-            in: opened, context: "after Go to End")
+            in: opened, context: "after Go to End",
+            alsoReporting: (endRow.element, endRow.name)
+        ) else { return }
+        assertAtEnd(endRow, in: opened, context: "after Go to End")
         XCTAssertTrue(
             goToEnd.waitForNonExistence(timeout: 5),
             "Go to End stayed visible after tapping it — "
@@ -231,14 +283,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
 
         // 1. Settle at the bottom while the hooks row is held back by the
         //    trigger file: the entry follow has reported and the last message
-        //    rests inside the transcript, so the baseline gap is not a sample
-        //    taken during a still-animating follow or its landing retry.
-        waitUntilSettled(
+        //    rests inside the transcript with the end row at the end, so the
+        //    baseline gap is not a sample taken during a still-animating
+        //    follow or its landing retry, nor one of a viewport past the end.
+        guard waitUntilSettled(
             on: lastMessage, named: "last assistant paragraph",
-            in: opened, context: "before the hooks row")
+            in: opened, context: "before the hooks row",
+            alsoReporting: (endRow.element, endRow.name)
+        ) else { return }
+        assertAtEnd(endRow, in: opened, context: "before the hooks row")
         let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
         XCTAssertFalse(
             hooksRow.exists,
@@ -269,10 +326,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "transcript did not shrink when the hooks row appeared (\(transcript.frame.maxY) vs \(bottomBeforeRow))")
 
         // 3. Re-pinned: the last message sits at the same distance from the
-        //    (new) bottom edge as before the row, then no Go to End and the
-        //    last message inside the transcript over the quiet window. The
-        //    re-pin is a container-shrink correction, not a forced follow, so
-        //    it is polled on the gap it restores rather than on a report.
+        //    (new) bottom edge as before the row, then no Go to End, the
+        //    last message inside the transcript and the end row at the end
+        //    over the quiet window. The re-pin is a container-shrink
+        //    correction, not a forced follow, so it is polled on the gap it
+        //    restores rather than on a report.
         var gapAfterRow = gapToBottom()
         XCTAssertTrue(
             waitUntil(timeout: 5) {
@@ -283,7 +341,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 + "last message sat \(gapAfterRow) pt above the bottom edge, \(gapBeforeRow) pt before the row — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
         assertStaysAtBottom(
-            lastRow: lastMessage, named: "last assistant paragraph",
+            lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
             in: opened, context: "after the hooks row shrank the transcript")
     }
 
@@ -307,6 +365,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         // 1. Settled at the bottom with the prompt rows on screen.
         assertRestsAtBottom(
             lastRow: opened.lastMessage, named: "last assistant paragraph",
+            endRow: EndRow.lastSuggestedPrompt(in: app),
             in: opened, context: "before tapping the suggested prompt")
         let prompt = app.buttons[Fixture.firstSuggestedPromptIdentifier].firstMatch
         XCTAssertTrue(
@@ -321,23 +380,24 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             prompt.waitForNonExistence(timeout: 5),
             "suggested prompt rows stayed in the transcript after tapping one")
         let sentRow = message(in: app, containing: Fixture.firstSuggestedPrompt)
-        let thinkingIndicator = app.staticTexts[Fixture.thinkingIndicatorLabel].firstMatch
+        let thinkingIndicator = EndRow.thinkingIndicator(in: app)
 
         // 3. Still pinned: the send's forced follow reports with the
-        //    indicator (the last row) inside the transcript, the sent row is
-        //    on screen too, and both hold over the quiet window with no Go
-        //    to End.
+        //    indicator (now the final content row) at the end of the
+        //    transcript, the sent row is on screen too, and both hold over
+        //    the quiet window with no Go to End.
         guard waitUntilSettled(
-            on: thinkingIndicator, named: "thinking indicator",
+            on: thinkingIndicator.element, named: thinkingIndicator.name,
             in: opened, context: "after tapping the suggested prompt",
             alsoReporting: (sentRow, "sent prompt row")
         ) else { return }
+        assertAtEnd(thinkingIndicator, in: opened, context: "after tapping the suggested prompt")
         XCTAssertTrue(
             isVisible(sentRow, in: transcript),
             "sent prompt row is not on screen after the transcript settled on the thinking indicator — "
                 + restingState(of: sentRow, named: "sent prompt row", in: opened))
         assertStaysAtBottom(
-            lastRow: thinkingIndicator, named: "thinking indicator",
+            lastRow: thinkingIndicator.element, named: thinkingIndicator.name, endRow: thinkingIndicator,
             in: opened, context: "after tapping the suggested prompt")
         XCTAssertTrue(
             isVisible(sentRow, in: transcript),
@@ -354,10 +414,11 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     @MainActor
     func testEnteringConversationRepeatedlyRestsAtBottomWithGoToEndHidden() throws {
         let app = launchDemoApp()
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
         for cycle in 1...Fixture.entryCycles {
             let opened = openLongConversation(in: app, context: "entry cycle \(cycle)")
             assertRestsAtBottom(
-                lastRow: opened.lastMessage, named: "last assistant paragraph",
+                lastRow: opened.lastMessage, named: "last assistant paragraph", endRow: endRow,
                 in: opened, context: "entry cycle \(cycle)")
             leaveConversation(in: app)
         }
@@ -367,13 +428,15 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// must settle with the last message inside the transcript, over a
     /// non-empty visible band, having reached the very end: the last prompt
     /// row under the last message — the transcript's final content row — is
-    /// laid out and on screen too. A transcript that rests on the last
-    /// message with the prompt rows never laid out is short of the end with
-    /// Go to End hidden (the state the coordinator-shaped fixture reproduces
-    /// on CI; intent-hq/ios#304). The checks run once the entry follow has
+    /// laid out and rests `Fixture.endRowGap` above the bottom edge. A
+    /// transcript that rests on the last message with the prompt rows never
+    /// laid out is short of the end with Go to End hidden (the state the
+    /// coordinator-shaped fixture reproduces on CI; intent-hq/ios#304); one
+    /// whose end row sits higher than that is past the end over a blank band
+    /// (intent-hq/ios#271). The checks run once the entry follow has
     /// reported and the last message holds still — its landing corrections
     /// are the follow's own work, not a symptom — and the end row must stay
-    /// on screen with Go to End absent over the quiet window that follows.
+    /// at the end with Go to End absent over the quiet window that follows.
     /// The symptom is intermittent (on CI it showed at cold entry in one run
     /// and only after a send in the next), so the cold entry is repeated — a
     /// fresh launch each cycle, as a return through the workspace list would
@@ -391,7 +454,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             let opened = enterLongConversation(in: app, context: context)
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
-            let endRow = app.buttons[Fixture.endRowIdentifier].firstMatch
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
 
             // 1. Settled: the entry follow has reported and the last message
             //    rests inside the transcript. An unrealized last message (the
@@ -400,7 +463,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             let settled = waitUntilSettled(
                 on: lastMessage, named: "last assistant paragraph",
                 in: opened, context: context,
-                alsoReporting: (endRow, "last suggested prompt"))
+                alsoReporting: (endRow.element, endRow.name))
             let visibleBand = rows(intersecting: transcript)
             XCTAssertFalse(
                 visibleBand.isEmpty,
@@ -410,21 +473,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
                 app.terminate()
                 continue
             }
-            XCTAssertTrue(
-                isInside(endRow, transcript),
-                "\(context): the settled transcript is short of the end — the prompt rows under the last message "
-                    + "are not on screen (\(visibleBand.count) row(s) in the visible band) — "
-                    + restingState(of: endRow, named: "last suggested prompt", in: opened))
+            //    At the end: the end row on screen, `endRowGap` above the
+            //    bottom edge — neither the prompt rows below the viewport
+            //    nor a blank band under them.
+            assertAtEnd(
+                endRow, in: opened,
+                context: "\(context) (\(visibleBand.count) row(s) in the visible band)")
 
             // 2. Go to End never appears over the quiet window, and the last
-            //    message and the end row are still on screen at the end of it.
+            //    message stays inside the transcript with the end row at the
+            //    end throughout.
             assertStaysAtBottom(
-                lastRow: lastMessage, named: "last assistant paragraph",
+                lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
                 in: opened, context: context)
-            XCTAssertTrue(
-                isInside(endRow, transcript),
-                "\(context): the transcript is short of the end after the quiet window — "
-                    + restingState(of: endRow, named: "last suggested prompt", in: opened))
             XCTAssertFalse(
                 app.staticTexts[Fixture.hooksRowLabel].exists,
                 "\(context): the hooks row landed during the cold entry; the fixture trigger file did not hold it back")
@@ -434,7 +495,8 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     /// From the very top of the long transcript a single tap on Go to End
     /// must land at the very end: the last message and the prompt rows under
-    /// it come on screen, the button disappears and stays gone over the quiet
+    /// it come on screen with the end row `Fixture.endRowGap` above the
+    /// bottom edge, the button disappears and stays gone over the quiet
     /// window — no second tap (intent-hq/ios#305).
     @MainActor
     func testGoToEndFromTopOfLongTranscriptLandsAtEndInOneTap() throws {
@@ -443,9 +505,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage = opened.lastMessage
         let goToEnd = opened.goToEnd
         let transcript = opened.transcript
-        let endRow = app.buttons[Fixture.endRowIdentifier].firstMatch
+        let endRow = EndRow.lastSuggestedPrompt(in: app)
         assertRestsAtBottom(
-            lastRow: lastMessage, named: "last assistant paragraph",
+            lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
             in: opened, context: "before scrolling to the top")
 
         // 1. Scroll to the very top: swipe down (content moves down) until
@@ -465,30 +527,24 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
             "Go to End is absent at the top of the transcript")
 
         // 2. One tap, then no further interaction: the tap's forced follow
-        //    reports with the last message resting inside the transcript,
-        //    the button goes, and both hold over the quiet window with the
-        //    end row on screen.
+        //    reports with the last message resting inside the transcript
+        //    and the end row at the end, the button goes, and both hold
+        //    over the quiet window.
         goToEnd.tap()
+        let context = "after one tap on Go to End from the top (after \(swipes) swipes)"
         guard waitUntilSettled(
             on: lastMessage, named: "last assistant paragraph",
-            in: opened, context: "after one tap on Go to End from the top (after \(swipes) swipes)",
-            alsoReporting: (endRow, "last suggested prompt")
+            in: opened, context: context,
+            alsoReporting: (endRow.element, endRow.name)
         ) else { return }
         XCTAssertTrue(
             goToEnd.waitForNonExistence(timeout: 5),
             "Go to End stayed visible after one tap from the top — "
                 + restingState(of: lastMessage, named: "last assistant paragraph", in: opened))
-        XCTAssertTrue(
-            isInside(endRow, transcript),
-            "one tap from the top stopped short of the end: the prompt rows under the last message are not "
-                + "on screen — " + restingState(of: endRow, named: "last suggested prompt", in: opened))
+        assertAtEnd(endRow, in: opened, context: context)
         assertStaysAtBottom(
-            lastRow: lastMessage, named: "last assistant paragraph",
-            in: opened, context: "after one tap on Go to End from the top")
-        XCTAssertTrue(
-            isInside(endRow, transcript),
-            "the transcript left the end over the quiet window after one tap from the top — "
-                + restingState(of: endRow, named: "last suggested prompt", in: opened))
+            lastRow: lastMessage, named: "last assistant paragraph", endRow: endRow,
+            in: opened, context: context)
     }
 
     // MARK: - Helpers
@@ -582,14 +638,19 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         }
     }
 
-    /// Asserts the transcript rests at the bottom with `lastRow` as its last
-    /// row: `waitUntilSettled` and then `assertStaysAtBottom`.
+    /// Asserts the transcript rests at the end with `lastRow` as its last
+    /// row: `waitUntilSettled`, then `assertAtEnd` on `endRow`, then
+    /// `assertStaysAtBottom`.
     @MainActor
     private func assertRestsAtBottom(
-        lastRow: XCUIElement, named rowName: String, in opened: OpenConversation, context: String
+        lastRow: XCUIElement, named rowName: String, endRow: EndRow, in opened: OpenConversation, context: String
     ) {
-        guard waitUntilSettled(on: lastRow, named: rowName, in: opened, context: context) else { return }
-        assertStaysAtBottom(lastRow: lastRow, named: rowName, in: opened, context: context)
+        guard waitUntilSettled(
+            on: lastRow, named: rowName, in: opened, context: context,
+            alsoReporting: (endRow.element, endRow.name)
+        ) else { return }
+        assertAtEnd(endRow, in: opened, context: context)
+        assertStaysAtBottom(lastRow: lastRow, named: rowName, endRow: endRow, in: opened, context: context)
     }
 
     /// The one settlement wait. Polls until the transcript has come to rest
@@ -629,23 +690,52 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         return settled
     }
 
+    /// The settled transcript's outcome check, independent of what the
+    /// follow reported: `endRow` rests at the end (`isAtEnd`). The follow's
+    /// report is synchronization only — on CI simulators it is `giveUp`
+    /// with the viewport at the end — so a `giveUp` that left the viewport
+    /// stalled past the end, the last rows inside over a blank band with Go
+    /// to End hidden, is caught here rather than by containment.
+    @MainActor
+    private func assertAtEnd(_ endRow: EndRow, in opened: OpenConversation, context: String) {
+        XCTAssertTrue(
+            isAtEnd(endRow, in: opened.transcript),
+            "\(context): the settled transcript is not at the end — the \(endRow.name), its final content row, "
+                + "does not rest \(Int(Fixture.endRowGap + endRow.labelInset)) ± \(Int(Fixture.endGapTolerance)) pt "
+                + "above the bottom edge — " + restingState(of: endRow.element, named: endRow.name, in: opened))
+    }
+
     /// Over `Fixture.quietWindow` after the transcript has settled, Go to
-    /// End must never appear and `lastRow` must stay inside the transcript's
-    /// frame: a late correction, re-pin or automatic follow that moves the
-    /// rows shows up here. The failure message carries `restingState`.
+    /// End must never appear, `lastRow` must stay inside the transcript's
+    /// frame and `endRow` must stay at the end: a late correction, re-pin
+    /// or automatic follow that moves the rows shows up here. The failure
+    /// message carries `restingState`.
     @MainActor
     private func assertStaysAtBottom(
-        lastRow: XCUIElement, named rowName: String, in opened: OpenConversation, context: String
+        lastRow: XCUIElement, named rowName: String, endRow: EndRow, in opened: OpenConversation, context: String
     ) {
         let transcript = opened.transcript
         let goToEnd = opened.goToEnd
         let broke = waitUntil(timeout: Fixture.quietWindow) {
-            goToEnd.exists || !isInside(lastRow, transcript)
+            goToEnd.exists || !isInside(lastRow, transcript) || !isAtEnd(endRow, in: transcript)
         }
         XCTAssertFalse(
             broke,
-            "\(context): transcript left the bottom within the quiet window after settling — "
-                + restingState(of: lastRow, named: rowName, in: opened))
+            "\(context): transcript left the end within the quiet window after settling — "
+                + restingState(of: lastRow, named: rowName, in: opened) + "; "
+                + restingState(of: endRow.element, named: endRow.name, in: opened))
+    }
+
+    /// True when `endRow` is realized, lies inside the transcript and its
+    /// frame's bottom edge sits `Fixture.endRowGap` (plus the row's label
+    /// inset) above the transcript's bottom edge, within
+    /// `Fixture.endGapTolerance`: the viewport is at the end — not short of
+    /// it with the marker (or rows) below, not past it over a blank band.
+    @MainActor
+    private func isAtEnd(_ endRow: EndRow, in transcript: XCUIElement) -> Bool {
+        guard let rowFrame = frame(of: endRow.element), isInside(rowFrame, transcript) else { return false }
+        let gap = transcript.frame.maxY - rowFrame.maxY
+        return abs(gap - (Fixture.endRowGap + endRow.labelInset)) <= Fixture.endGapTolerance
     }
 
     /// The transcript's accessibility value: the last forced follow's report
@@ -689,7 +779,8 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     /// Diagnostic sentence for failure messages: the last forced follow's
     /// report, Go to End presence and where `row`'s frame lies relative to
     /// the transcript's frame — ABOVE it means the viewport rests past the
-    /// end (blank band), BELOW it means the viewport rests short of the end.
+    /// end (blank band), BELOW it means the viewport rests short of the end
+    /// — with the row's gap from the transcript's bottom edge.
     @MainActor
     private func restingState(of row: XCUIElement, named rowName: String, in opened: OpenConversation) -> String {
         let transcriptFrame = opened.transcript.frame
@@ -710,7 +801,9 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         } else {
             position = "clipped by the transcript's bottom edge (partly short of the end)"
         }
-        return "\(state); \(rowName) frame \(rowFrame) is \(position); transcript frame \(transcriptFrame)"
+        let gap = transcriptFrame.maxY - rowFrame.maxY
+        return "\(state); \(rowName) frame \(rowFrame) is \(position), its bottom edge \(gap) pt above "
+            + "the transcript's; transcript frame \(transcriptFrame)"
     }
 
     @MainActor
