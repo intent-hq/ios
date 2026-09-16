@@ -98,7 +98,11 @@ enum DemoFixtures {
     /// (16:9) so the fixture needs no bundled image file.
     static let statusImagePNG: Data = {
         let renderer = UIGraphicsImageRenderer(size: statusImageSize)
-        return renderer.pngData(actions: drawStatusImage)
+        return renderer.pngData { context in
+            MainActor.assumeIsolated {
+                drawStatusImage(in: context)
+            }
+        }
     }()
 
     private static func drawStatusImage(in context: UIGraphicsImageRendererContext) {

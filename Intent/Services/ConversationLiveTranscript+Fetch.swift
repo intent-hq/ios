@@ -1,7 +1,7 @@
 import Foundation
 
 extension ConversationLiveTranscript {
-    private func bind(agentId newAgentId: String, workspaceId: String?) {
+    func bind(agentId newAgentId: String, workspaceId: String?) {
         if agentId != newAgentId {
             bindingGeneration &+= 1
         }
