@@ -2,7 +2,8 @@
 # Self-tests for scripts/xcodebuild.sh: the simulator lock and the
 # crash-vs-failure classification of a test run. xcrun and xcodebuild are
 # replaced by stubs on PATH, so this runs anywhere with bash (including the
-# stock macOS Bash 3.2) and never touches a real simulator.
+# stock macOS Bash 3.2) plus python3 (which the lock keeper needs) and never
+# touches a real simulator.
 #
 # Usage: scripts/test_xcodebuild.sh
 set -euo pipefail
@@ -24,10 +25,14 @@ EOF
 # the only crash line); STUB_SLEEP holds the "device" for that many seconds;
 # STUB_LOG records start/end epoch seconds; STUB_LINGER leaves a detached
 # child (like xcodebuild's helper daemons) alive for that many seconds with
-# every inherited fd except stdout/stderr still open.
+# every inherited fd except stdout/stderr still open; STUB_WATCH=<pid> records
+# at start whether that peer process is still alive.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 [ -z "${STUB_LOG:-}" ] || echo "start $(date +%s) $$" >> "$STUB_LOG"
+if [ -n "${STUB_WATCH:-}" ]; then
+  if kill -0 "$STUB_WATCH" 2>/dev/null; then echo "peer alive" >> "$STUB_LOG"; else echo "peer dead" >> "$STUB_LOG"; fi
+fi
 [ -z "${STUB_LINGER:-}" ] || (sleep "$STUB_LINGER" >/dev/null 2>&1 &)
 sleep "${STUB_SLEEP:-0}"
 [ -z "${STUB_LOG:-}" ] || echo "end $(date +%s) $$" >> "$STUB_LOG"
@@ -223,15 +228,38 @@ lock_is_free && fail "timed-out waiters released the holder's lock" || pass "tim
 assert_eq "timed-out waiters leave the holder's PID record alone" "$(cat "$lock")" "$holder"
 kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null || true
 
-echo "# a SIGKILLed run releases the lock with nothing to reclaim"
-STUB_SLEEP=20 "$SCRIPT" test-without-building > "$work/victim.out" 2>&1 &
+echo "# a SIGKILLed wrapper takes its running xcodebuild down before the lock is released"
+STUB_LOG=$work/timeline-kill
+STUB_LOG=$STUB_LOG STUB_SLEEP=60 "$SCRIPT" test-without-building > "$work/victim.out" 2>&1 &
 victim=$!
-for _ in $(seq 1 100); do [ "$(cat "$lock" 2>/dev/null)" = "$victim" ] && break; sleep 0.1; done
+for _ in $(seq 1 100); do grep -q '^start ' "$STUB_LOG" 2>/dev/null && break; sleep 0.1; done
+victim_xcodebuild=$(grep '^start ' "$STUB_LOG" | cut -d' ' -f3)
 assert_eq "holder records its PID in the lock file" "$(cat "$lock")" "$victim"
+[ -n "$victim_xcodebuild" ] && kill -0 "$victim_xcodebuild" && pass "stub xcodebuild is running under the SIGKILL victim" || fail "stub xcodebuild not running"
+STUB_LOG=$STUB_LOG STUB_WATCH=$victim_xcodebuild SIM_LOCK_TIMEOUT=30 "$SCRIPT" test-without-building > "$work/afterkill.out" 2>&1 &
+waiter=$!
+for _ in $(seq 1 100); do grep -q 'waiting for simulator' "$work/afterkill.out" 2>/dev/null && break; sleep 0.1; done
+assert_contains "second run is waiting on the victim's lock" "$(cat "$work/afterkill.out")" "held by PID $victim"
 kill -9 "$victim"; wait "$victim" 2>/dev/null || true
-status=$(SIM_LOCK_TIMEOUT=0 run_wrapper "$work/afterkill.out" test-without-building)
-assert_eq "next run proceeds at once after the holder was SIGKILLed" "$status" 0
-assert_lacks "no reclaim or wait was needed after SIGKILL" "$(cat "$work/afterkill.out")" "waiting for simulator"
+wait "$waiter" && pass "waiter exits 0 once the orphaned xcodebuild is gone" || fail "waiter failed"
+kill -0 "$victim_xcodebuild" 2>/dev/null && fail "orphaned stub xcodebuild $victim_xcodebuild is still alive" || pass "orphaned stub xcodebuild was terminated"
+assert_eq "the orphaned stub never reached its end marker" "$(grep -c "^end .* $victim_xcodebuild\$" "$STUB_LOG")" 0
+assert_eq "the second run's xcodebuild started only after the orphan was dead" "$(grep -c '^peer dead' "$STUB_LOG")" 1
+assert_eq "the second run's xcodebuild never saw the orphan alive" "$(grep -c '^peer alive' "$STUB_LOG")" 0
+assert_contains "the keeper reports the termination on the victim's stderr" "$(cat "$work/victim.out")" \
+  "PID $victim died while xcodebuild PID $victim_xcodebuild was still running; terminating it before releasing the simulator lock"
+assert_lock_free "lock released after the orphaned run was terminated"
+assert_eq "lock file is empty after the orphaned run was terminated" "$(cat "$lock")" ""
+
+echo "# a SIGKILLed wrapper whose xcodebuild already returned terminates nothing"
+STUB_LOG=$work/timeline-kill2
+STUB_LOG=$STUB_LOG STUB_LINGER=15 "$SCRIPT" test-without-building > "$work/victim2.out" 2>&1 &
+victim=$!
+for _ in $(seq 1 100); do grep -q '^end ' "$STUB_LOG" 2>/dev/null && break; sleep 0.1; done
+kill -9 "$victim" 2>/dev/null || true; wait "$victim" 2>/dev/null || true
+assert_lacks "no termination is reported when xcodebuild had finished" "$(cat "$work/victim2.out")" "terminating it before releasing"
+status=$(SIM_LOCK_TIMEOUT=5 run_wrapper "$work/afterkill2.out" test-without-building)
+assert_eq "next run proceeds after the finished holder was SIGKILLed" "$status" 0
 
 echo "# a leftover PID in an unlocked file is not a lock"
 true & dead=$!
@@ -253,6 +281,9 @@ echo "# knob validation"
 status=$(SIM_LOCK_TIMEOUT=soon run_wrapper "$work/knob.out" test-without-building)
 assert_eq "non-numeric SIM_LOCK_TIMEOUT is refused" "$status" 1
 assert_contains "non-numeric SIM_LOCK_TIMEOUT names the knob" "$(cat "$work/knob.out")" "SIM_LOCK_TIMEOUT must be a non-negative integer"
+status=$(SIM_LOCK_KILL_GRACE=-1 run_wrapper "$work/knob2.out" test-without-building)
+assert_eq "non-numeric SIM_LOCK_KILL_GRACE is refused" "$status" 1
+assert_contains "non-numeric SIM_LOCK_KILL_GRACE names the knob" "$(cat "$work/knob2.out")" "SIM_LOCK_KILL_GRACE must be a non-negative integer"
 
 echo
 if [ "$failures" -eq 0 ]; then

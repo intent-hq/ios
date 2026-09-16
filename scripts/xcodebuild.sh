@@ -45,6 +45,8 @@
 #                         giving up; default 1800. 0 fails immediately when held.
 #   SIM_LOCK_DIR          Directory holding simulator lock files; default $TMPDIR
 #                         (falling back to /tmp). Must be a local filesystem.
+#   SIM_LOCK_KILL_GRACE   Seconds an xcodebuild orphaned by this script's death
+#                         gets to exit after SIGTERM before SIGKILL; default 30.
 #
 # Simulator lock: test-without-building (and so test-ios / test-ios-unit) holds
 # an exclusive lock on the chosen simulator for the duration of the xcodebuild
@@ -55,7 +57,10 @@
 # <SIM_LOCK_DIR>/xcodebuild-sim-<UDID>.lock, taken by a small python3 keeper
 # process (python3 ships with Xcode's Command Line Tools; stock macOS Bash 3.2
 # has no flock) that holds it until this script's fd 9 closes, i.e. until the
-# run ends by any means including SIGKILL. There is therefore no stale-lock
+# run ends by any means including SIGKILL. If the script dies while xcodebuild
+# is still running, the keeper terminates that xcodebuild (and its helpers)
+# first and only then releases, so the device is never handed to the next run
+# while a test process is still driving it. There is therefore no stale-lock
 # state and nothing is ever reclaimed: the file persists (empty when free,
 # holding the owner's PID while held) and is harmless. A waiter prints who
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
@@ -183,33 +188,46 @@ run_xcodebuild() {
 
 # Same as run_xcodebuild, but stderr is merged into stdout and everything is
 # tee'd to the log file at $1 so the test outcome can be classified afterwards.
-# pipefail makes the pipeline report xcodebuild's own status.
+# pipefail makes the pipeline report xcodebuild's own status. Only valid under
+# the simulator lock: the subshell tells the keeper on fd 9 which PID is about
+# to become xcodebuild (exec keeps the PID; Bash 3.2 has no $BASHPID, hence
+# the sh -c trick) and then closes fd 9 so xcodebuild's helpers cannot hold
+# the lock open, and the caller reports "done" once xcodebuild has returned.
 run_xcodebuild_logged() {
   local log=$1 extra=()
   shift
   while IFS= read -r arg; do extra+=("$arg"); done < <(common_args)
   (
+    echo "run $(sh -c 'echo $PPID')" >&9
     exec 9>&-
     set -x
-    xcodebuild "$@" ${extra+"${extra[@]}"}
+    exec xcodebuild "$@" ${extra+"${extra[@]}"}
   ) 2>&1 | tee "$log" 9>&-
 }
 
 # Simulator lock (see the header). A python3 "keeper" process takes an
 # exclusive flock(2) on the lock file, records the owning shell's PID in it,
-# and then blocks on its stdin, which is this shell's fd 9. The flock lives
-# exactly as long as the keeper, and the keeper lives exactly as long as
+# and then reads its stdin, which is this shell's fd 9, until EOF. The flock
+# lives exactly as long as the keeper, and the keeper lives exactly as long as
 # fd 9 has a writer: closing fd 9 (release_simulator_lock) or this shell
 # dying by any means, SIGKILL included, ends both, so no stale lock can exist
 # and nothing is ever reclaimed or deleted. Children that outlive a run must
 # not inherit fd 9, which is why every command run under the lock closes it.
 #
+# The shell writes "run <pid>" on fd 9 when xcodebuild starts and "done" when
+# it has returned. EOF between the two means the shell died mid-run while
+# xcodebuild kept going: the keeper then SIGTERMs that process tree, waits up
+# to SIM_LOCK_KILL_GRACE seconds for the PID to exit, SIGKILLs what is left,
+# and releases only afterwards, so the next run never shares the device with
+# an orphaned test process (and helpers that merely outlive a completed
+# xcodebuild are never touched).
+#
 # Keeper protocol on stdout, one line each: "waiting <holder>" once if the
 # lock was busy, then "acquired <keeper pid> <seconds waited>" or
 # "timeout <holder>"; <holder> is the PID recorded in the file or "unknown".
 SIM_LOCK_KEEPER_PY='
-import errno, fcntl, os, sys, time
-path, owner, timeout = sys.argv[1], sys.argv[2], int(sys.argv[3])
+import errno, fcntl, os, signal, subprocess, sys, time
+path, owner, timeout, grace = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
 fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
 def holder():
     os.lseek(fd, 0, os.SEEK_SET)
@@ -217,6 +235,49 @@ def holder():
 def say(line):
     sys.stdout.write(line + "\n")
     sys.stdout.flush()
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+def process_tree(root):
+    children = {}
+    try:
+        out = subprocess.run(["ps", "-axo", "pid=,ppid="], capture_output=True, text=True).stdout
+    except Exception:
+        out = ""
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+            children.setdefault(int(parts[1]), []).append(int(parts[0]))
+    tree, stack = [root], [root]
+    while stack:
+        for child in children.get(stack.pop(), []):
+            tree.append(child)
+            stack.append(child)
+    return tree
+def kill_tree(root, sig):
+    for pid in process_tree(root):
+        try:
+            os.kill(pid, sig)
+        except (ProcessLookupError, PermissionError):
+            pass
+def terminate_orphaned_run(pid):
+    sys.stderr.write("xcodebuild.sh: PID %s died while xcodebuild PID %d was still running; terminating it before releasing the simulator lock\n" % (owner, pid))
+    sys.stderr.flush()
+    kill_tree(pid, signal.SIGTERM)
+    deadline = time.time() + grace
+    while alive(pid) and time.time() < deadline:
+        time.sleep(0.1)
+    if alive(pid):
+        sys.stderr.write("xcodebuild.sh: xcodebuild PID %d ignored SIGTERM for %ds; sending SIGKILL\n" % (pid, grace))
+        sys.stderr.flush()
+        kill_tree(pid, signal.SIGKILL)
+        while alive(pid):
+            time.sleep(0.1)
 start = time.time()
 announced = False
 while True:
@@ -236,18 +297,29 @@ while True:
 os.ftruncate(fd, 0)
 os.write(fd, (owner + "\n").encode("ascii"))
 say("acquired %d %d" % (os.getpid(), int(time.time() - start)))
-while os.read(0, 4096):
-    pass
+running = None
+for line in sys.stdin:
+    words = line.split()
+    if len(words) == 2 and words[0] == "run" and words[1].isdigit():
+        running = int(words[1])
+    elif words == ["done"]:
+        running = None
+if running is not None and alive(running):
+    terminate_orphaned_run(running)
 os.ftruncate(fd, 0)
 '
 SIM_LOCK_PATH=
 SIM_LOCK_KEEPER=
 acquire_simulator_lock() {
-  local udid=$1 dir timeout fifo kind arg1 arg2 announced=0
+  local udid=$1 dir timeout grace fifo kind arg1 arg2 announced=0
   dir=${SIM_LOCK_DIR:-${TMPDIR:-/tmp}}
   timeout=${SIM_LOCK_TIMEOUT:-1800}
+  grace=${SIM_LOCK_KILL_GRACE:-30}
   case "$timeout" in
     ''|*[!0-9]*) die "SIM_LOCK_TIMEOUT must be a non-negative integer number of seconds (got '$timeout')" ;;
+  esac
+  case "$grace" in
+    ''|*[!0-9]*) die "SIM_LOCK_KILL_GRACE must be a non-negative integer number of seconds (got '$grace')" ;;
   esac
   command -v python3 >/dev/null 2>&1 \
     || die "python3 is required for the simulator lock (on macOS it ships with Xcode's Command Line Tools)"
@@ -255,7 +327,7 @@ acquire_simulator_lock() {
   SIM_LOCK_PATH="${dir%/}/xcodebuild-sim-$udid.lock"
   fifo=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-lock.XXXXXX")/status
   mkfifo "$fifo"
-  exec 9> >(python3 -c "$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" > "$fifo")
+  exec 9> >(python3 -c "$SIM_LOCK_KEEPER_PY" "$SIM_LOCK_PATH" "$$" "$timeout" "$grace" > "$fifo")
   exec 8< "$fifo"
   rm -rf -- "${fifo%/status}"
   while :; do
@@ -439,6 +511,7 @@ cmd_test_without_building() {
     -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO ${extra+"${extra[@]}"} \
     ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
+  echo done >&9
   release_simulator_lock
   report_test_outcome "$status" "$log"
 }

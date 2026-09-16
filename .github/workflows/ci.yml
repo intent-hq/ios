@@ -58,7 +58,7 @@ jobs:
         run: go test -timeout 300s ./...
 
       # Exercises the simulator lock and crash classification in
-      # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs only bash.
+      # scripts/xcodebuild.sh against stubbed xcrun/xcodebuild; needs bash + python3.
       - name: xcodebuild.sh self-tests
         run: scripts/test_xcodebuild.sh
 
