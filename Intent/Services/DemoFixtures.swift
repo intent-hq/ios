@@ -662,11 +662,11 @@ enum DemoFixtures {
         "Schedule the worker scaling follow-up",
     ]
 
-    /// Tool rows the slim projection truncates (PROTOCOL §5.5), each its own
-    /// tool-only assistant message of `longConversationMessages` right
-    /// before a text message — the first entry before the very last message,
-    /// the second before the assistant message of the exchange before it: a
-    /// `view` of `file` whose
+    /// Tool rows the slim projection truncates (PROTOCOL §5.5) near the end
+    /// of `longConversationMessages`, seated per
+    /// `longConversationSlimToolRowLayout` — the first entry with the very
+    /// last assistant text message, the second with the assistant text
+    /// message of the exchange before it: a `view` of `file` whose
     /// `tool_result` is served as a bounded preview with `outputTruncated`,
     /// and whose full listing `agent.getMessageBlock` returns through
     /// `longConversationBlockHydrationGate`. Expanding the row re-measures
@@ -679,6 +679,39 @@ enum DemoFixtures {
 
     /// Characters of the full `tool_result` output the slim row keeps.
     static let longConversationTruncatedOutputPreviewLength = 160
+
+    /// Where `longConversationMessages` seats each of
+    /// `longConversationTruncatedToolCalls` relative to its assistant text
+    /// message.
+    enum LongConversationSlimToolRowLayout: String, CaseIterable {
+        /// Opening the text message: the row is its first block, the
+        /// paragraphs follow — the shape of a coordinator turn on the
+        /// daemon, and the only one that has reproduced intent-hq/ios#338
+        /// on the CI filtered lane (run 35100409278, through the hooks-row
+        /// tests of `ConversationTranscriptScrollUITests`). The default.
+        case leading
+        /// Its own tool-only assistant message right before the text
+        /// message. A text-bearing assistant row sits under the message copy
+        /// context-menu overlay, which claims taps meant for plain SwiftUI
+        /// content such as the row's header (intent-hq/ios#344), so a UI test
+        /// that expands the row needs this layout.
+        case standalone
+    }
+
+    /// `--demo-long-slim-tool-rows=<leading|standalone>`; the last
+    /// well-formed one wins, `.leading` otherwise.
+    static let longConversationSlimToolRowLayout = slimToolRowLayout(from: ProcessInfo.processInfo.arguments)
+
+    static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
+
+    static func slimToolRowLayout(from arguments: [String]) -> LongConversationSlimToolRowLayout {
+        arguments
+            .filter { $0.hasPrefix(slimToolRowLayoutArgumentPrefix) }
+            .compactMap {
+                LongConversationSlimToolRowLayout(rawValue: String($0.dropFirst(slimToolRowLayoutArgumentPrefix.count)))
+            }
+            .last ?? .leading
+    }
 
     /// The full `tool_result` block (no truncation flags) for one of
     /// `longConversationTruncatedToolCalls` by its result block id, or nil.
@@ -750,8 +783,13 @@ enum DemoFixtures {
     /// heights. The first message begins with `longConversationFirstSentence`
     /// and the last one's rendered text ends with
     /// `longConversationLastSentence`, followed only by the stripped
-    /// `longConversationSuggestedPrompts` block.
+    /// `longConversationSuggestedPrompts` block. The slim-truncated tool
+    /// rows near the end sit per `longConversationSlimToolRowLayout`.
     static var longConversationMessages: [[String: Any]] {
+        longConversationMessages(slimToolRows: longConversationSlimToolRowLayout)
+    }
+
+    static func longConversationMessages(slimToolRows layout: LongConversationSlimToolRowLayout) -> [[String: Any]] {
         let suggestedPromptsBlock = (["<!-- suggested-prompts"] + longConversationSuggestedPrompts + ["-->"])
             .joined(separator: "\n")
         let exchanges: [(user: String, assistant: String)] = [
@@ -1008,22 +1046,23 @@ enum DemoFixtures {
         var rows: [LongConversationRow] = []
         for (index, exchange) in exchanges.enumerated() {
             rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
-            // The last assistant text messages are each preceded by a
-            // tool-only assistant message carrying a slim-truncated tool row
-            // (see `longConversationTruncatedToolCalls`). Its own message,
-            // not a block of the text message: a text-bearing assistant row
-            // sits under the message copy context-menu overlay, which claims
-            // taps meant for plain SwiftUI content such as the row's header
-            // (`CopyContextMenuOverlay`), so a UI test could not expand it.
-            // Sitting right above the text message it also rests below the
-            // navigation bar once the transcript is at the end.
+            // The last assistant text messages each carry a slim-truncated
+            // tool row (see `longConversationTruncatedToolCalls`): opening
+            // the message, or as a tool-only message right before it.
             let truncatedCallIndex = exchanges.count - 1 - index
-            if truncatedCallIndex < longConversationTruncatedToolCalls.count {
+            let truncatedBlocks = truncatedCallIndex < longConversationTruncatedToolCalls.count
+                ? truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
+                : []
+            switch layout {
+            case .leading:
                 rows.append(LongConversationRow(
-                    role: "assistant",
-                    contentBlocks: truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])))
+                    role: "assistant", contentBlocks: truncatedBlocks + [textBlock(exchange.assistant)]))
+            case .standalone:
+                if !truncatedBlocks.isEmpty {
+                    rows.append(LongConversationRow(role: "assistant", contentBlocks: truncatedBlocks))
+                }
+                rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
             }
-            rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
             if index < exchanges.count - 1 {
                 rows += longConversationRound(index)
             }

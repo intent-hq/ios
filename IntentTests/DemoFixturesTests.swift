@@ -390,34 +390,74 @@ struct DemoFixturesTests {
             == .delay(DemoFixtures.defaultHookListDelay))
     }
 
-    @Test func lastAssistantMessagesCarrySlimTruncatedToolRowsThatHydrateInFull() throws {
-        let long = try conversationMessages(agentId: DemoFixtures.longConversationAgentId)
-        let messages = long.items.compactMap { ConversationMessage.parseMessage($0) }
+    @Test func slimToolRowLayoutComesFromTheLaunchArguments() {
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-data"]) == .leading)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-data", "--demo-long-slim-tool-rows=standalone"])
+            == .standalone)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=leading"]) == .leading)
+        // The last well-formed value wins; unknown values are ignored.
+        #expect(DemoFixtures.slimToolRowLayout(from: [
+            "--demo-long-slim-tool-rows=standalone",
+            "--demo-long-slim-tool-rows=sideways",
+            "--demo-long-slim-tool-rows=",
+        ]) == .standalone)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
+        // `agent.getConversation` serves the process default.
+        let served = DemoFixtures.response(
+            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId])
+        let items = (served as? [String: Any])?["messages"] as? [[String: Any]]
+        let expected = DemoFixtures.longConversationMessages(slimToolRows: DemoFixtures.longConversationSlimToolRowLayout)
+        #expect(items?.compactMap { $0["id"] as? String } == expected.compactMap { $0["id"] as? String })
+        #expect(items?.count == expected.count)
+    }
+
+    @Test(arguments: DemoFixtures.LongConversationSlimToolRowLayout.allCases)
+    func lastAssistantMessagesCarrySlimTruncatedToolRowsThatHydrateInFull(
+        layout: DemoFixtures.LongConversationSlimToolRowLayout
+    ) throws {
+        let items = DemoFixtures.longConversationMessages(slimToolRows: layout)
+        let messages = items.compactMap { ConversationMessage.parseMessage($0) }
+        #expect(messages.count == items.count)
+        #expect(Set(items.compactMap { $0["id"] as? String }).count == items.count)
         let calls = DemoFixtures.longConversationTruncatedToolCalls
         #expect(calls.count == 2)
 
-        // The message right before the last one carries the first call, the
-        // one before the assistant text message of the exchange before it
-        // the second; no other row is truncated.
+        // The first call sits with the very last (assistant text) message,
+        // the second with the assistant text message of the exchange before
+        // it; no other row is truncated.
         let truncatedIndices = messages.indices.filter { index in
             messages[index].contentBlocks?.contains { $0.isSlimTruncated } == true
         }
         #expect(truncatedIndices.count == calls.count)
-        #expect(truncatedIndices.last == messages.count - 2)
         let last = try #require(messages.last)
         #expect(last.role == .assistant)
-        #expect(last.contentBlocks?.allSatisfy { $0.type == .text } == true)
+        switch layout {
+        case .leading:
+            #expect(truncatedIndices.last == messages.count - 1)
+        case .standalone:
+            #expect(truncatedIndices.last == messages.count - 2)
+            #expect(last.contentBlocks?.allSatisfy { $0.type == .text } == true)
+        }
 
         for (call, index) in zip(calls, truncatedIndices.reversed()) {
             let message = messages[index]
             let blocks = try #require(message.contentBlocks)
-            // A tool-only assistant message (no text, so no copy context-menu
-            // overlay claims the row's taps) right before a text message.
             #expect(message.role == .assistant)
-            #expect(blocks.allSatisfy { $0.type == .toolUse || $0.type == .toolResult })
-            let following = messages[index + 1]
-            #expect(following.role == .assistant)
-            #expect(following.contentBlocks?.contains { $0.type == .text } == true)
+            switch layout {
+            case .leading:
+                // The row opens a text-bearing message — the shape that
+                // reproduced intent-hq/ios#338 (CI run 35100409278).
+                #expect(blocks.first?.id == call.id)
+                #expect(blocks.last?.type == .text)
+            case .standalone:
+                // A tool-only assistant message (no text, so no copy
+                // context-menu overlay claims the row's taps, intent-hq/ios#344)
+                // right before a text message.
+                #expect(blocks.allSatisfy { $0.type == .toolUse || $0.type == .toolResult })
+                let following = messages[index + 1]
+                #expect(following.role == .assistant)
+                #expect(following.contentBlocks?.contains { $0.type == .text } == true)
+            }
             let toolUse = try #require(blocks.first { $0.id == call.id })
             #expect(toolUse.type == .toolUse)
             #expect(toolUse.inputTruncated != true)
