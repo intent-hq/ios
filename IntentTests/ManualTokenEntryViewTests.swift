@@ -498,6 +498,28 @@ struct ManualTokenEntryViewTests {
         #expect(tunnel.isClosed)
     }
 
+    /// An out-of-range remote port is rejected as `.invalidPort` before the
+    /// tunnel is dialed — the manual Tailcat path gets the same classification
+    /// as the direct path instead of burning the tunnel establishment timeout
+    /// and surfacing a dial failure.
+    @Test(arguments: [0, -1, 65_536]) func probeViaTunnelRejectsInvalidPortWithoutDialing(port: Int) async throws {
+        let tunnel = FakeTunnelSession(localPort: 1)
+        let dialer = FakeTunnelDialer(result: .success(tunnel))
+        let probed = OSAllocatedUnfairLock(initialState: false)
+
+        let result = try await CertFingerprintProbe.probeViaTunnel(
+            dialer: dialer, tcAddress: Self.syntheticSDKConnBlob, remotePort: port
+        ) { _, _ in
+            probed.withLock { $0 = true }
+            return .fingerprint("ab:cd:ef")
+        }
+
+        #expect(result == .invalidPort)
+        #expect(dialer.observed.withLock { $0 }.isEmpty)
+        #expect(!probed.withLock { $0 })
+        #expect(!tunnel.isClosed)
+    }
+
     /// A failed tunnel dial (invalid or unreachable tc address) throws so the
     /// view can surface a tunnel-specific error instead of the misleading
     /// no-certificate message.
