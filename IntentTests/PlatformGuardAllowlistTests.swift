@@ -64,8 +64,8 @@ struct PlatformGuardAllowlistTests {
                     && isDirectory.boolValue,
                 """
                 scan root \(directory)/ is missing or not a directory at \
-                \(root.path); check the IntentTests target's Copy Bundle \
-                Resources phase ("Test Source Inputs" in Intent.xcodeproj).
+                \(root.path); check the IntentTests target's "Copy Test \
+                Source Inputs" phase in Intent.xcodeproj.
                 """
             )
             let enumerator = try #require(

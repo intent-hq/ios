@@ -9,9 +9,9 @@
 /* Begin PBXBuildFile section */
 		AB000003AAAA000000000003 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
 		AB000004AAAA000000000004 /* TailcatKit/build/TailcatKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */; platformFilter = ios; };
-		AC000011AAAA000000000011 /* Intent in Resources */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
-		AC000012AAAA000000000012 /* IntentTests in Resources */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
-		AC000013AAAA000000000013 /* Info-visionOS.plist in Resources */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
+		AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000001AAAA000000000001 /* Intent */; };
+		AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000002AAAA000000000002 /* IntentTests */; };
+		AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */ = {isa = PBXBuildFile; fileRef = AC000003AAAA000000000003 /* Info-visionOS.plist */; };
 		EBA9EC852F6A8A8D00B8AB08 /* Textual in Frameworks */ = {isa = PBXBuildFile; productRef = AA000001AAAA000000000001 /* Textual */; };
 /* End PBXBuildFile section */
 
@@ -31,6 +31,22 @@
 			remoteInfo = Intent;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AC000021AAAA000000000021 /* Copy Test Source Inputs */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = TestSourceInputs;
+			dstSubfolderSpec = 7;
+			files = (
+				AC000011AAAA000000000011 /* Intent in Copy Test Source Inputs */,
+				AC000012AAAA000000000012 /* IntentTests in Copy Test Source Inputs */,
+				AC000013AAAA000000000013 /* Info-visionOS.plist in Copy Test Source Inputs */,
+			);
+			name = "Copy Test Source Inputs";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		AB000001AAAA000000000001 /* TailcatKit/build/TailcatKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = TailcatKit/build/TailcatKit.xcframework; sourceTree = "<group>"; };
@@ -166,6 +182,7 @@
 				EB655ED62F669E6C00176730 /* Sources */,
 				EB655ED72F669E6C00176730 /* Frameworks */,
 				EB655ED82F669E6C00176730 /* Resources */,
+				AC000021AAAA000000000021 /* Copy Test Source Inputs */,
 			);
 			buildRules = (
 			);
@@ -264,9 +281,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AC000011AAAA000000000011 /* Intent in Resources */,
-				AC000012AAAA000000000012 /* IntentTests in Resources */,
-				AC000013AAAA000000000013 /* Info-visionOS.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

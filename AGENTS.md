@@ -13,8 +13,8 @@ visionOS is a destination of the single `Intent` target. `#if os(visionOS)` and
 may carry each guard; extend the allowlist there when a new guard is deliberate. Every
 visionOS branch must leave an iOS branch identical to the prior behaviour. The scan (and
 `InfoPlistSyncTests`) reads the copies of `Intent/`, `IntentTests/` and
-`Info-visionOS.plist` packaged into `IntentTests.xctest` by the target's Copy Bundle
-Resources phase ("Test Source Inputs"), resolved via `IntentTests/TestSourceInputs.swift`
+`Info-visionOS.plist` packaged under `IntentTests.xctest/TestSourceInputs/` by the
+target's "Copy Test Source Inputs" phase, resolved via `IntentTests/TestSourceInputs.swift`
 — never the checkout through `#filePath`, which does not exist on a device (ios#320).
 
 ## Building and testing
