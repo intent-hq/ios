@@ -1,6 +1,6 @@
-@testable import Intent
 import SwiftUI
 import Testing
+@testable import Intent
 
 struct CreateWorkspaceParamsTests {
     private func makeSpecialist(
@@ -9,11 +9,8 @@ struct CreateWorkspaceParamsTests {
         resolvedProvider: String? = nil
     ) -> SpecialistInfo {
         SpecialistInfo(
-            id: id,
-            name: "Implementor",
-            description: "Implements tasks",
-            resolvedModel: resolvedModel,
-            resolvedProvider: resolvedProvider
+            id: id, name: "Implementor", description: "Implements tasks",
+            resolvedModel: resolvedModel, resolvedProvider: resolvedProvider
         )
     }
 
@@ -21,10 +18,7 @@ struct CreateWorkspaceParamsTests {
         ModelInfo(id: id, name: "\(id) (balanced)", provider: provider)
     }
 
-    private func makeProvider(
-        id: String = "auggie",
-        authenticated: ProviderAuthentication = .signedIn
-    ) -> ProviderInfo {
+    private func makeProvider(id: String = "auggie", authenticated: Bool? = true) -> ProviderInfo {
         ProviderInfo(id: id, authenticated: authenticated)
     }
 
@@ -39,12 +33,10 @@ struct CreateWorkspaceParamsTests {
             githubUrl: "https://github.com/intent-hq/intentd",
             baseRef: baseRef,
             idempotencyKey: "key-123",
-            initialAgent: CreateWorkspaceView.InitialAgentInput(
-                specialist: specialist,
-                model: model,
-                message: message,
-                provider: provider
-            )
+            specialist: specialist,
+            provider: provider,
+            model: model,
+            message: message
         )
     }
 
@@ -144,8 +136,7 @@ struct CreateWorkspaceParamsTests {
         let descriptions = CreateWorkspaceView.creationContextRows(
             repositoryFullName: repository,
             branch: branch
-        )
-        .map(CreateWorkspaceView.creationContextAccessibilityDescription)
+        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
 
         #expect(descriptions == ["Repository: \(repository)", "Branch: \(branch)"])
     }
@@ -154,8 +145,7 @@ struct CreateWorkspaceParamsTests {
         let descriptions = CreateWorkspaceView.creationContextRows(
             repositoryFullName: "",
             branch: ""
-        )
-        .map(CreateWorkspaceView.creationContextAccessibilityDescription)
+        ).map(CreateWorkspaceView.creationContextAccessibilityDescription)
 
         #expect(descriptions == ["Repository: Not specified", "Branch: Not specified"])
     }
@@ -270,40 +260,425 @@ struct CreateWorkspaceParamsTests {
         #expect(initialAgent["provider"] == nil)
         #expect(initialAgent["model"] as? String == "sonnet4.5")
     }
-}
 
-extension CreateWorkspaceParamsTests {
-    // MARK: - modelFetchOutcome (stale-response guard)
+    // MARK: - pickerSpecialists (cached catalog → picker list)
 
-    @Test func modelFetchOutcomeDropsStaleProviderResults() {
-        // Provider A's catalog must not apply after the user switched to B.
-        let outcome = CreateWorkspaceView.modelFetchOutcome(
-            fetched: [makeModel(id: "grok-4", provider: "grok")],
-            requestedProviderId: "grok",
-            selectedProviderId: "claude-code"
-        )
-        #expect(outcome == nil)
+    private func makeCatalogSpecialist(
+        id: String, name: String, hidden: Bool = false, role: String? = nil
+    ) -> SpecialistInfo {
+        SpecialistInfo(id: id, name: name, description: "", hidden: hidden, role: role)
     }
 
-    @Test func modelFetchOutcomeResetsToDaemonDefaultRow() throws {
-        // A fresh catalog resets the selection to the daemon-default row (nil)
-        // — the daemon's resolver decides unless the user explicitly picks.
-        let fetched = [makeModel(id: "sonnet4.5"), makeModel(id: "opus4.6")]
-        let outcome = try #require(CreateWorkspaceView.modelFetchOutcome(
-            fetched: fetched,
-            requestedProviderId: "auggie",
-            selectedProviderId: "auggie"
-        ))
-        #expect(outcome.models.map(\.id) == ["sonnet4.5", "opus4.6"])
-        #expect(outcome.selectedModel == nil)
+    @Test func pickerSpecialistsDropsHiddenAndInternalAndPinsOrchestratorFirst() {
+        let catalog = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "secret", name: "Aardvark", hidden: true),
+            makeCatalogSpecialist(id: "helper", name: "Abacus", role: "internal"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+            makeCatalogSpecialist(id: "coordinator", name: "Zeta", role: "orchestrator"),
+        ]
+        #expect(CreateWorkspaceView.pickerSpecialists(catalog).map(\.id)
+                == ["coordinator", "implementor", "verifier"])
+        #expect(CreateWorkspaceView.pickerSpecialists([]).isEmpty)
+    }
+
+    // MARK: - preselectedSpecialist
+
+    @Test func preselectedSpecialistDefaultsToOrchestratorElseFirst() {
+        let withOrchestrator = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: nil, catalog: withOrchestrator)?.id == "coordinator")
+        let plain = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: nil, catalog: plain)?.id == "implementor")
+    }
+
+    @Test func preselectedSpecialistKeepsStillListedSelectionAndRedefaultsWhenGone() {
+        let specialists = [
+            makeCatalogSpecialist(id: "verifier", name: "Verifier"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "verifier"), catalog: specialists)?.id == "verifier")
+        // A background refresh dropped the selected specialist: re-default
+        // to the first pickable entry (name order).
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "retired"), catalog: specialists)?.id == "implementor")
+    }
+
+    @Test func preselectedSpecialistRebindsSurvivingSelectionToFreshMetadata() {
+        // A background refresh returns the same ids with a new default-model
+        // preview: the selection must carry the fresh DTO, not the stale one.
+        let stale = makeSpecialist(id: "implementor", resolvedModel: "sonnet4.5", resolvedProvider: "auggie")
+        let refreshed = [
+            makeSpecialist(id: "verifier"),
+            makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie"),
+        ]
+        let kept = CreateWorkspaceView.preselectedSpecialist(current: stale, catalog: refreshed)
+        #expect(kept?.id == "implementor")
+        #expect(kept?.resolvedModel == "opus4.6")
+        #expect(kept == refreshed[1])
+    }
+
+    @Test func preselectedSpecialistRedefaultsWhenSelectionTurnsHiddenUnderSameIds() {
+        // Identical catalog ids, but the selected specialist flipped to
+        // hidden: it leaves the picker list, so the selection re-defaults.
+        let selected = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        let refreshed = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true),
+        ]
+        #expect(refreshed.map(\.id) == ["coordinator", "implementor"])
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: selected, catalog: refreshed)?.id == "coordinator")
+        // The same catalog with the role flipped to internal behaves alike.
+        let internalised = [
+            makeCatalogSpecialist(id: "coordinator", name: "Coordinator", role: "orchestrator"),
+            makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal"),
+        ]
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: selected, catalog: internalised)?.id == "coordinator")
+    }
+
+    @Test func preselectedSpecialistClearsWhenSolePickableSpecialistTurnsHidden() {
+        // The selected specialist was the only pickable one; a background
+        // refresh marks it hidden. The catalog is authoritative (non-empty)
+        // yet lists nothing pickable, so the selection clears rather than
+        // letting a hidden id reach buildCreateWorkspaceParams.
+        let selected = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        let hiddenOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true)]
+        #expect(CreateWorkspaceView.pickerSpecialists(hiddenOnly).isEmpty)
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: hiddenOnly) == nil)
+        let internalOnly = [makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")]
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: selected, catalog: internalOnly) == nil)
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: hiddenOnly) == nil)
+    }
+
+    @Test func specialistCatalogEqualityTracksMetadataNotJustIds() {
+        // The view observes the cached catalog by value: a same-id change in
+        // hidden / role / default preview must compare unequal so the
+        // observer fires and reconciliation runs.
+        let base = makeCatalogSpecialist(id: "implementor", name: "Implementor")
+        #expect([base] == [makeCatalogSpecialist(id: "implementor", name: "Implementor")])
+        #expect([base] != [makeCatalogSpecialist(id: "implementor", name: "Implementor", hidden: true)])
+        #expect([base] != [makeCatalogSpecialist(id: "implementor", name: "Implementor", role: "internal")])
+        #expect([base] != [makeSpecialist(id: "implementor", resolvedModel: "opus4.6", resolvedProvider: "auggie")])
+    }
+
+    @Test func preselectedSpecialistKeepsSelectionAcrossAnEmptyCatalog() {
+        // A reconnect clears the cache before reloading it: the selection
+        // survives the empty interim (and nil stays nil). Only an empty
+        // catalog is transient — a non-empty one is authoritative.
+        #expect(CreateWorkspaceView.preselectedSpecialist(
+            current: makeSpecialist(id: "implementor"), catalog: [])?.id == "implementor")
+        #expect(CreateWorkspaceView.preselectedSpecialist(current: nil, catalog: []) == nil)
+    }
+
+    // MARK: - showsOptionsLoading (cached reopen never spins; warm-before-load clears)
+
+    @Test func showsOptionsLoadingOnlyWhileColdOrStoreLoading() {
+        // Cold cache, sheet's load not yet settled: loading.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: false))
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: true, storeHasLoaded: false, settled: false))
+        // Warm cache (cached reopen): never loading, even during an SWR
+        // revalidation, which the store runs without touching isLoading.
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: false))
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: true))
+        // A settled cold load that failed shows the empty state, not a spinner.
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: true))
+        // A reconnect hard-clear reloads cold: loading drives back on.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: true, storeHasLoaded: false, settled: true))
+    }
+
+    @Test func showsOptionsLoadingClearsWhenCacheWarmsBetweenConstructionAndLoad() {
+        // The sheet was constructed over a cold cache (loading), then another
+        // sheet / the reconnect reload warmed the shared store before this
+        // sheet's specialist step ran its load: the state is derived from
+        // the store, so it clears without the sheet's own load settling.
+        #expect(CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: false, settled: false))
+        #expect(!CreateWorkspaceView.showsOptionsLoading(
+            storeIsLoading: false, storeHasLoaded: true, settled: false))
+    }
+
+    // MARK: - showsModelCatalogLoading (Create waits for the first catalog; warm catalog is instant)
+
+    @Test func modelCatalogLoadingGatesCreateUntilFirstCatalogSettles() {
+        // Selected provider, catalog not cached, sheet's first load not
+        // settled: the catalog is still resolving, Create stays disabled.
+        #expect(CreateWorkspaceView.showsModelCatalogLoading(catalogCached: false, settled: false))
+        // Warm catalog (cached reopen / provider already loaded): instant.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: true, settled: false))
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: true, settled: true))
+        // No selected provider: nothing to wait on.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: nil, settled: false))
+        // Settled with the catalog still missing (the load failed): the
+        // daemon default applies, not an indefinite gate.
+        #expect(!CreateWorkspaceView.showsModelCatalogLoading(catalogCached: false, settled: true))
+    }
+
+    @Test func createDisabledWhileFirstModelCatalogResolves() {
+        let catalogLoading = CreateWorkspaceView.showsModelCatalogLoading(
+            catalogCached: false, settled: false)
+        #expect(isCreateDisabled(isLoadingProviders: catalogLoading, providers: [makeProvider()]))
+        let catalogWarm = CreateWorkspaceView.showsModelCatalogLoading(
+            catalogCached: true, settled: false)
+        #expect(!isCreateDisabled(isLoadingProviders: catalogWarm, providers: [makeProvider()]))
+    }
+
+    // MARK: - Create gate sequencing (per selected provider + store generation)
+
+    /// The sheet's Create gate for `providerId`, exactly as
+    /// `CreateWorkspaceView.isLoadingSelectedModelCatalog` derives it from
+    /// the store's cache slot and the sheet's per-provider settled markers.
+    @MainActor
+    private func catalogGate(
+        _ providerId: String, store: CreationOptionsStore, settled: SpecialistPickerView.SettledLoads
+    ) -> Bool {
+        CreateWorkspaceView.showsModelCatalogLoading(
+            catalogCached: store.models(for: providerId) != nil,
+            settled: settled.modelProviders.contains(providerId))
+    }
+
+    /// Mirrors `CreateWorkspaceView.loadModels(for:)`: load, then settle
+    /// only in the generation the load started in.
+    @MainActor
+    private func loadModels(
+        _ providerId: String, store: CreationOptionsStore, settled: inout SpecialistPickerView.SettledLoads
+    ) async {
+        let generation = store.loadGeneration
+        await store.loadModelsIfNeeded(providerId: providerId)
+        settled.settleModels(for: providerId, startedAt: generation, current: store.loadGeneration)
+    }
+
+    @MainActor
+    private func waitForModelsListCalls(_ fake: FakeConnectionManager, count: Int) async throws {
+        for _ in 0..<200 where fake.paramsForMethod("models.list").count < count {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(fake.paramsForMethod("models.list").count == count)
+    }
+
+    @MainActor
+    @Test func switchingToUncachedProviderReArmsCreateGateUntilItSettles() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["models.list"] = ["models": [["id": "m", "name": "m", "provider": "auggie"]]]
+        let store = CreationOptionsStore(connectionManager: fake)
+        var settled = SpecialistPickerView.SettledLoads()
+
+        // Provider A settles: Create enabled for A.
+        await loadModels("auggie", store: store, settled: &settled)
+        #expect(!catalogGate("auggie", store: store, settled: settled))
+
+        // The user picks uncached B: A's settlement must not enable Create
+        // for B while B's catalog is unresolved.
+        #expect(catalogGate("codex", store: store, settled: settled))
+        await loadModels("codex", store: store, settled: &settled)
+        #expect(!catalogGate("codex", store: store, settled: settled))
+        // Switching back to the warm A is instant.
+        #expect(!catalogGate("auggie", store: store, settled: settled))
+    }
+
+    @MainActor
+    @Test func providerSwitchWhileFirstLoadPendingKeepsCreateGatedUntilNewProviderSettles() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["models.list"]
+        let store = CreationOptionsStore(connectionManager: fake)
+        var settled = SpecialistPickerView.SettledLoads()
+
+        // A's load is in flight when the user picks B; A resolves first.
+        let loadA = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        try await waitForModelsListCalls(fake, count: 1)
+        let generationA = store.loadGeneration
+        let loadB = Task { await store.loadModelsIfNeeded(providerId: "codex") }
+        try await waitForModelsListCalls(fake, count: 2)
+        let generationB = store.loadGeneration
+
+        fake.resolvePending("models.list", with: ["models": [["id": "a", "name": "a", "provider": "auggie"]]])
+        await loadA.value
+        settled.settleModels(for: "auggie", startedAt: generationA, current: store.loadGeneration)
+        // A settled, but B (the selection) is still unresolved: Create stays disabled.
+        #expect(!catalogGate("auggie", store: store, settled: settled))
+        #expect(catalogGate("codex", store: store, settled: settled))
+        #expect(isCreateDisabled(
+            isLoadingProviders: catalogGate("codex", store: store, settled: settled),
+            providers: [makeProvider(id: "codex")]))
+
+        fake.resolvePending("models.list", with: ["models": [["id": "b", "name": "b", "provider": "codex"]]])
+        await loadB.value
+        settled.settleModels(for: "codex", startedAt: generationB, current: store.loadGeneration)
+        #expect(!catalogGate("codex", store: store, settled: settled))
+    }
+
+    @MainActor
+    @Test func reconnectDuringPendingCatalogLoadIgnoresOldSettlementAndReArmsGate() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["models.list"]
+        let store = CreationOptionsStore(connectionManager: fake)
+        var settled = SpecialistPickerView.SettledLoads()
+
+        let oldGeneration = store.loadGeneration
+        let oldLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        try await waitForModelsListCalls(fake, count: 1)
+
+        // Reconnect: the store hard-clears and the sheet drops its markers.
+        store.invalidate()
+        settled.reset()
+        let freshGeneration = store.loadGeneration
+        let freshLoad = Task { await store.loadModelsIfNeeded(providerId: "auggie") }
+        try await waitForModelsListCalls(fake, count: 2)
+
+        // The pre-reconnect request answers first: it settles nothing and
+        // Create stays disabled on the still-pending fresh load.
+        fake.resolvePending("models.list", with: ["models": [["id": "stale", "name": "stale", "provider": "auggie"]]])
+        await oldLoad.value
+        let oldPublished = settled.settleModels(
+            for: "auggie", startedAt: oldGeneration, current: store.loadGeneration)
+        #expect(!oldPublished)
+        #expect(store.models(for: "auggie") == nil)
+        #expect(catalogGate("auggie", store: store, settled: settled))
+
+        // A failed fresh load still settles (daemon default), a success too.
+        fake.resolvePending("models.list", with: ["models": [["id": "fresh", "name": "fresh", "provider": "auggie"]]])
+        await freshLoad.value
+        let freshPublished = settled.settleModels(
+            for: "auggie", startedAt: freshGeneration, current: store.loadGeneration)
+        #expect(freshPublished)
+        #expect(store.models(for: "auggie")?.map(\.id) == ["fresh"])
+        #expect(!catalogGate("auggie", store: store, settled: settled))
+    }
+
+    @MainActor
+    @Test func failedCatalogLoadSettlesOnlyItsProviderAndGeneration() async {
+        let fake = FakeConnectionManager()
+        fake.errorMap["models.list"] = NSError(domain: "t", code: -1)
+        let store = CreationOptionsStore(connectionManager: fake)
+        var settled = SpecialistPickerView.SettledLoads()
+
+        await loadModels("auggie", store: store, settled: &settled)
+        // Failure settles A (daemon default, Create enabled) but not B.
+        #expect(store.models(for: "auggie") == nil)
+        #expect(!catalogGate("auggie", store: store, settled: settled))
+        #expect(catalogGate("codex", store: store, settled: settled))
+
+        // A reconnect re-arms A's gate until a fresh load for it settles.
+        store.invalidate()
+        settled.reset()
+        #expect(catalogGate("auggie", store: store, settled: settled))
+    }
+
+    // MARK: - preselectedProvider
+
+    @Test func preselectedProviderPrefersSelectableAuggieThenFirstSelectable() {
+        let providers = [
+            makeProvider(id: "codex", authenticated: true),
+            makeProvider(id: "auggie", authenticated: true),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: providers)?.id == "auggie")
+        let auggieSignedOut = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "grok", authenticated: nil),
+            makeProvider(id: "codex", authenticated: true),
+        ]
+        // nil (unknown) stays selectable since probes can fail transiently
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: nil, providers: auggieSignedOut)?.id == "grok")
+    }
+
+    @Test func preselectedProviderKeepsStillSelectableSelectionAndRedefaultsWhenNot() {
+        let providers = [
+            makeProvider(id: "auggie", authenticated: true),
+            makeProvider(id: "codex", authenticated: true),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: providers)?.id == "codex")
+        // The selected provider signed out under a background refresh.
+        let codexSignedOut = [
+            makeProvider(id: "auggie", authenticated: true),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: codexSignedOut)?.id == "auggie")
+    }
+
+    @Test func preselectedProviderRebindsSurvivingSelectionAndEqualityTracksAuth() {
+        // Same provider ids, auth state changed: the arrays compare unequal
+        // (so the observer fires) and the kept selection carries the fresh
+        // tri-state rather than the stale DTO.
+        let cached = [makeProvider(id: "auggie", authenticated: true), makeProvider(id: "codex", authenticated: nil)]
+        let refreshed = [makeProvider(id: "auggie", authenticated: true), makeProvider(id: "codex", authenticated: true)]
+        #expect(cached.map(\.id) == refreshed.map(\.id))
+        #expect(cached != refreshed)
+        let kept = CreateWorkspaceView.preselectedProvider(current: cached[1], providers: refreshed)
+        #expect(kept == refreshed[1])
+        #expect(kept?.authenticated == true)
+    }
+
+    @Test func preselectedProviderIsNilWhenNoneSelectableAndKeepsSelectionAcrossAnEmptyList() {
+        let allSignedOut = [
+            makeProvider(id: "auggie", authenticated: false),
+            makeProvider(id: "codex", authenticated: false),
+        ]
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: allSignedOut) == nil)
+        #expect(CreateWorkspaceView.preselectedProvider(
+            current: makeProvider(id: "codex"), providers: [])?.id == "codex")
+        #expect(CreateWorkspaceView.preselectedProvider(current: nil, providers: []) == nil)
+    }
+
+    // MARK: - reconciledModel (explicit model vs. the displayed catalog)
+
+    @Test func reconciledModelKeepsAndRebindsWhileStillListedForSameProvider() {
+        let refreshed = [
+            makeModel(id: "sonnet4.5", provider: "auggie"),
+            ModelInfo(id: "opus4.6", name: "opus4.6 (renamed)", provider: "auggie", isDefault: true),
+        ]
+        let kept = CreateWorkspaceView.reconciledModel(
+            current: makeModel(id: "opus4.6", provider: "auggie"), models: refreshed)
+        #expect(kept == refreshed[1])
+        #expect(kept?.name == "opus4.6 (renamed)")
+        #expect(CreateWorkspaceView.reconciledModel(current: nil, models: refreshed) == nil)
+    }
+
+    @Test func reconciledModelDropsRetiredOrClearedCatalogEntries() {
+        let current = makeModel(id: "opus4.6", provider: "auggie")
+        #expect(CreateWorkspaceView.reconciledModel(
+            current: current, models: [makeModel(id: "sonnet4.5", provider: "auggie")]) == nil)
+        // Reconnect clear / catalog not loaded yet: daemon default applies.
+        #expect(CreateWorkspaceView.reconciledModel(current: current, models: []) == nil)
+    }
+
+    @Test func reconciledModelDropsExplicitModelAcrossProviderSwitchWithSharedBareId() {
+        // Two cached provider catalogs share a bare model id. After an
+        // automatic provider switch the old explicit pick must not survive
+        // into the new provider's catalog: the daemon default applies.
+        let codexCatalog = [makeModel(id: "sonnet4.5", provider: "codex"), makeModel(id: "gpt-5", provider: "codex")]
+        let auggieCatalog = [makeModel(id: "sonnet4.5", provider: "auggie")]
+        #expect(codexCatalog.map(\.id).contains("sonnet4.5") && auggieCatalog.map(\.id).contains("sonnet4.5"))
+        let pickedOnCodex = codexCatalog[0]
+        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: auggieCatalog) == nil)
+        // Staying on the same provider keeps it.
+        #expect(CreateWorkspaceView.reconciledModel(current: pickedOnCodex, models: codexCatalog) == pickedOnCodex)
     }
 
     // MARK: - isCreateDisabled (Create unavailable in the guidance state, monorepo#1003)
 
     private func isCreateDisabled(
-        providers: [ProviderInfo],
         isCreating: Bool = false,
-        isLoadingProviders: Bool = false
+        isLoadingProviders: Bool = false,
+        providers: [ProviderInfo]
     ) -> Bool {
         CreateWorkspaceView.isCreateDisabled(
             isCreating: isCreating,
@@ -315,7 +690,7 @@ extension CreateWorkspaceParamsTests {
     @Test func createDisabledWhenNoProviderSelectable() {
         let providers = [
             makeProvider(id: "auggie", authenticated: false),
-            makeProvider(id: "codex", authenticated: false)
+            makeProvider(id: "codex", authenticated: false),
         ]
         #expect(isCreateDisabled(providers: providers))
     }
@@ -323,7 +698,7 @@ extension CreateWorkspaceParamsTests {
     @Test func createEnabledWhenAProviderIsSelectable() {
         #expect(!isCreateDisabled(providers: [makeProvider()]))
         // nil (unknown) stays selectable since probes can fail transiently
-        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: .unknown)]))
+        #expect(!isCreateDisabled(providers: [makeProvider(id: "grok", authenticated: nil)]))
     }
 
     @Test func createEnabledWhenProviderListEmptyAfterLoad() {
@@ -332,45 +707,35 @@ extension CreateWorkspaceParamsTests {
     }
 
     @Test func createDisabledWhileCreatingOrLoadingProviders() {
-        #expect(isCreateDisabled(providers: [makeProvider()], isCreating: true))
+        #expect(isCreateDisabled(isCreating: true, providers: [makeProvider()]))
         // An empty in-flight list can't be told apart from a seat with no providers
-        #expect(isCreateDisabled(providers: [], isLoadingProviders: true))
+        #expect(isCreateDisabled(isLoadingProviders: true, providers: []))
     }
 
     // MARK: - preselectedBranch
 
     @Test func preselectedBranchKeepsStillValidSelection() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: "dev",
-            branches: ["main", "dev"],
-            defaultBranch: "main"
+            current: "dev", branches: ["main", "dev"], defaultBranch: "main"
         ) == "dev")
     }
 
     @Test func preselectedBranchPrefersDefaultWhenSelectionInvalid() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil,
-            branches: ["dev", "main"],
-            defaultBranch: "main"
+            current: nil, branches: ["dev", "main"], defaultBranch: "main"
         ) == "main")
         // A stale selection from a previously picked repo is dropped
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: "feature/x",
-            branches: ["dev", "main"],
-            defaultBranch: "main"
+            current: "feature/x", branches: ["dev", "main"], defaultBranch: "main"
         ) == "main")
     }
 
     @Test func preselectedBranchFallsBackToFirstBranch() {
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil,
-            branches: ["dev", "main"],
-            defaultBranch: nil
+            current: nil, branches: ["dev", "main"], defaultBranch: nil
         ) == "dev")
         #expect(CreateWorkspaceView.preselectedBranch(
-            current: nil,
-            branches: [],
-            defaultBranch: "main"
+            current: nil, branches: [], defaultBranch: "main"
         ) == nil)
     }
 
@@ -378,8 +743,7 @@ extension CreateWorkspaceParamsTests {
 
     @Test func orderedBranchesPinsDefaultFirstAndDedupes() {
         #expect(CreateWorkspaceView.orderedBranches(
-            ["dev", "main", "feature/x"],
-            defaultBranch: "main"
+            ["dev", "main", "feature/x"], defaultBranch: "main"
         ) == ["main", "dev", "feature/x"])
     }
 
@@ -387,8 +751,7 @@ extension CreateWorkspaceParamsTests {
         // "main" can fall outside the fetched page (alphabetical 50-branch
         // cap); it is still pinned first so it stays visible and selectable.
         #expect(CreateWorkspaceView.orderedBranches(
-            ["a", "b"],
-            defaultBranch: "main"
+            ["a", "b"], defaultBranch: "main"
         ) == ["main", "a", "b"])
     }
 
@@ -396,19 +759,16 @@ extension CreateWorkspaceParamsTests {
         // An empty repo can still report a default_branch in metadata; no
         // nonexistent ref is fabricated for it.
         #expect(CreateWorkspaceView.orderedBranches(
-            [],
-            defaultBranch: "main"
-        ).isEmpty)
+            [], defaultBranch: "main"
+        ) == [])
     }
 
     @Test func orderedBranchesWithoutDefaultLeavesOrderUnchanged() {
         #expect(CreateWorkspaceView.orderedBranches(
-            ["b", "a"],
-            defaultBranch: nil
+            ["b", "a"], defaultBranch: nil
         ) == ["b", "a"])
         #expect(CreateWorkspaceView.orderedBranches(
-            ["b", "a"],
-            defaultBranch: ""
+            ["b", "a"], defaultBranch: ""
         ) == ["b", "a"])
     }
 
@@ -416,20 +776,15 @@ extension CreateWorkspaceParamsTests {
 
     @Test func displayedBranchesEmptyQueryShowsDefaultFirst() {
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["dev", "main"],
-            defaultBranch: "main",
-            query: "  ",
-            searchResults: ["ignored"],
-            completedQuery: nil
+            loaded: ["dev", "main"], defaultBranch: "main",
+            query: "  ", searchResults: ["ignored"], completedQuery: nil
         ) == ["main", "dev"])
     }
 
     @Test func displayedBranchesUsesServerResultsWhenQueryAnswered() {
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["main", "dev"],
-            defaultBranch: "main",
-            query: "feature/",
-            searchResults: ["feature/x", "feature/y"],
+            loaded: ["main", "dev"], defaultBranch: "main",
+            query: "feature/", searchResults: ["feature/x", "feature/y"],
             completedQuery: "feature/"
         ) == ["feature/x", "feature/y"])
     }
@@ -438,11 +793,8 @@ extension CreateWorkspaceParamsTests {
         // Stale results (answering an older query) are never shown; the
         // loaded page is locally prefix-filtered as an interim instead.
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["main", "dev", "develop"],
-            defaultBranch: "main",
-            query: "dev",
-            searchResults: ["feature/x"],
-            completedQuery: "feature/"
+            loaded: ["main", "dev", "develop"], defaultBranch: "main",
+            query: "dev", searchResults: ["feature/x"], completedQuery: "feature/"
         ) == ["dev", "develop"])
     }
 
@@ -451,11 +803,8 @@ extension CreateWorkspaceParamsTests {
         // out-of-page default branch matches while the search is in flight
         // (and if the server search fails).
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: ["a", "b"],
-            defaultBranch: "main",
-            query: "ma",
-            searchResults: [],
-            completedQuery: nil
+            loaded: ["a", "b"], defaultBranch: "main",
+            query: "ma", searchResults: [], completedQuery: nil
         ) == ["main"])
     }
 
@@ -463,11 +812,8 @@ extension CreateWorkspaceParamsTests {
         // Graceful fallback: a daemon that ignores `prefix` returns the
         // unfiltered page, so the local prefix filter applies on top.
         #expect(CreateWorkspaceView.displayedBranches(
-            loaded: [],
-            defaultBranch: nil,
-            query: "dev",
-            searchResults: ["main", "dev"],
-            completedQuery: "dev"
+            loaded: [], defaultBranch: nil,
+            query: "dev", searchResults: ["main", "dev"], completedQuery: "dev"
         ) == ["dev"])
     }
 }

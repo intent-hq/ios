@@ -1,7 +1,14 @@
 import Foundation
 
 class PersistenceManager {
-    static let shared = PersistenceManager()
+    static let shared = DemoMode.isEnabled ? PersistenceManager.ephemeral() : PersistenceManager()
+
+    static func ephemeral() -> PersistenceManager {
+        let suiteName = "com.intent.companion.demo-data"
+        let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+        defaults.removePersistentDomain(forName: suiteName)
+        return PersistenceManager(defaults: defaults, keychainStorage: EphemeralKeychainStorage())
+    }
 
     let serverKey = "pairedServer"
     private let keychainService = "com.intent.companion"
@@ -36,6 +43,10 @@ extension PersistenceManager {
         return loadConnectionsLocked()
     }
 
+    func isConnectionRegistryUndecodable() -> Bool {
+        readConnectionsLocked() == nil
+    }
+
     /// Inserts the connection, or updates the existing entry in place (preserving its
     /// id) when one at the same port shares at least one host or carries the same
     /// tailcat tunnel address. Returns the stored value.
@@ -61,9 +72,11 @@ extension PersistenceManager {
     @discardableResult
     func upsertConnectionWithOutcome(
         _ connection: StoredConnection
-    ) -> (connection: StoredConnection, persisted: Bool) {
+    ) -> (connection: StoredConnection, persisted: Bool, registryUndecodable: Bool) {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else {
+            return (connection, false, true)
+        }
         let stored: StoredConnection
         if let index = connections.firstIndex(where: { storedConnection in
             storedConnection.server.port == connection.server.port
@@ -102,7 +115,7 @@ extension PersistenceManager {
             stored = connection
             connections.append(stored)
         }
-        return (stored, saveConnectionsLocked(connections))
+        return (stored, saveConnectionsLocked(connections), false)
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
@@ -124,7 +137,7 @@ extension PersistenceManager {
     @discardableResult
     func updateConnectionHosts(id: UUID, hosts: [String]) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -145,7 +158,7 @@ extension PersistenceManager {
     @discardableResult
     func updateConnectionTcAddress(id: UUID, tcAddress: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         let server = connections[index].server
         connections[index].server = PairedServer(
@@ -166,7 +179,7 @@ extension PersistenceManager {
     @discardableResult
     func updateConnectionDisplayName(id: UUID, displayName: String) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].displayName = displayName
         return saveConnectionsLocked(connections)
@@ -175,7 +188,7 @@ extension PersistenceManager {
     @discardableResult
     func deleteConnection(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard connections.contains(where: { $0.id == id }) else { return true }
         connections.removeAll { $0.id == id }
         guard saveConnectionsLocked(connections) else { return false }
@@ -211,7 +224,7 @@ extension PersistenceManager {
     @discardableResult
     func touchLastConnected(id: UUID) -> Bool {
         migrateLegacyPairingIfNeeded()
-        var connections = loadConnectionsLocked()
+        guard var connections = readConnectionsLocked() else { return false }
         guard let index = connections.firstIndex(where: { $0.id == id }) else { return false }
         connections[index].lastConnectedAt = Date()
         return saveConnectionsLocked(connections)
@@ -228,7 +241,11 @@ extension PersistenceManager {
     @discardableResult
     func mergeSyncedBackends(records: [SyncedBackendRecord]) -> SyncedBackendMergeOutcome {
         migrateLegacyPairingIfNeeded()
-        let connections = loadConnectionsLocked()
+        guard let connections = readConnectionsLocked() else {
+            return SyncedBackendMergeOutcome(
+                addedIds: [], updatedIds: [], removedIds: [],
+                removedActiveConnection: false, registryUndecodable: true)
+        }
         let result = SyncedBackendConnectionMerge.merge(records: records, into: connections)
         var removedActive = false
         if result.changed {
@@ -254,12 +271,15 @@ extension PersistenceManager {
         )
     }
 
-    private func loadConnectionsLocked() -> [StoredConnection] {
-        guard let data = loadDataFromKeychain(account: keychainAccountConnections),
-              let connections = try? JSONDecoder().decode([StoredConnection].self, from: data) else {
+    private func readConnectionsLocked() -> [StoredConnection]? {
+        guard let data = loadDataFromKeychain(account: keychainAccountConnections) else {
             return []
         }
-        return connections
+        return try? JSONDecoder().decode([StoredConnection].self, from: data)
+    }
+
+    private func loadConnectionsLocked() -> [StoredConnection] {
+        readConnectionsLocked() ?? []
     }
 
     @discardableResult

@@ -9,19 +9,26 @@ struct MarkdownTextView: View {
     /// Intent-file images render even when nil if the link carries its own
     /// workspace ID (long form).
     var workspaceId: String?
+    /// `text` with GFM task-list markers swapped for glyphs, derived once per
+    /// view value in `init` instead of on every `body` evaluation (the body
+    /// also re-runs on lightbox state changes).
+    private let markdownSource: String
     @Environment(\.colorScheme) var colorScheme
     /// The window's session, when present: intent-file images then load over
     /// its backend connection rather than the shared (default) loader.
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
 
-    private static let taskListTopSpacing: CGFloat = 2
-    private static let taskListBottomSpacing: CGFloat = 4
-    private static let maximumBlockIndent = 3
-    private static let minimumFenceLength = 3
-    private static let indentedCodeWidth = 4
-    private static let listContinuationIndent = 2
-    private static let tabWidth = 4
+    init(
+        text: String,
+        onOpenURL: ((URL) -> OpenURLAction.Result)? = nil,
+        workspaceId: String? = nil
+    ) {
+        self.text = text
+        self.onOpenURL = onOpenURL
+        self.workspaceId = workspaceId
+        self.markdownSource = Self.replacingTaskListMarkers(text)
+    }
 
     /// Intent-file image fetcher bound to the session's loader when one is in
     /// the environment, else the shared (default-backend) loader.
@@ -33,20 +40,17 @@ struct MarkdownTextView: View {
     }
 
     var body: some View {
-        let markdownView = StructuredText(markdown: Self.replacingTaskListMarkers(text))
+        let markdownView = StructuredText(markdown: markdownSource)
             .textual.structuredTextStyle(.compact)
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
-                    workspaceId: workspaceId,
-                    fallback: .image(),
-                    fileImage: fileImageFetcher
-                )
+                    workspaceId: workspaceId, fallback: .image(),
+                    fileImage: fileImageFetcher)
             )
             .textual.listItemSpacing(
                 .fontScaled(
-                    top: Self.taskListTopSpacing / CompactMarkdownStyle.baseFontSize,
-                    bottom: Self.taskListBottomSpacing / CompactMarkdownStyle.baseFontSize
-                )
+                    top: 2 / CompactMarkdownStyle.baseFontSize,
+                    bottom: 4 / CompactMarkdownStyle.baseFontSize)
             )
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
@@ -94,19 +98,17 @@ struct MarkdownTextView: View {
         guard text.contains("[") else { return text }
         var fenceMarker: Character?
         var inList = false
-        func replaceMarker(in line: String) -> String {
+        return text.components(separatedBy: "\n").map { line -> String in
             let indent = leadingIndentWidth(of: line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
             if let marker = fenceMarker {
-                if indent <= Self.maximumBlockIndent,
-                   trimmed.count >= Self.minimumFenceLength,
-                   trimmed.allSatisfy({ $0 == marker }) {
+                if indent <= 3, trimmed.count >= 3, trimmed.allSatisfy({ $0 == marker }) {
                     fenceMarker = nil
                 }
                 return line
             }
-            if indent <= Self.maximumBlockIndent || inList {
+            if indent <= 3 || inList {
                 if trimmed.hasPrefix("```") {
                     fenceMarker = "`"
                     return line
@@ -117,7 +119,7 @@ struct MarkdownTextView: View {
                 }
             }
             if trimmed.isEmpty { return line }
-            if indent >= Self.indentedCodeWidth, !inList { return line }
+            if indent >= 4, !inList { return line }
 
             if let match = line.prefixMatch(of: taskListMarker) {
                 inList = true
@@ -126,14 +128,11 @@ struct MarkdownTextView: View {
             }
             if line.prefixMatch(of: listItemMarker) != nil {
                 inList = true
-            } else if indent < Self.listContinuationIndent {
+            } else if indent < 2 {
                 inList = false
             }
             return line
-        }
-        return text.components(separatedBy: "\n")
-            .map(replaceMarker)
-            .joined(separator: "\n")
+        }.joined(separator: "\n")
     }
 
     /// Leading indentation in columns; a tab advances to the next multiple
@@ -144,7 +143,7 @@ struct MarkdownTextView: View {
             if char == " " {
                 width += 1
             } else if char == "\t" {
-                width += Self.tabWidth - width % Self.tabWidth
+                width += 4 - width % 4
             } else {
                 break
             }

@@ -7,58 +7,62 @@ struct AssistantMessageView: View {
     var hydratingBlockIds: Set<String>
     var onHydrateBlock: ((_ blockId: String) -> Void)?
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 4
-    }
+    /// Derived once per message value in `init` rather than on every `body`
+    /// evaluation: the raw blocks, the prompt-stripped blocks grouped into
+    /// render blocks, and the copy-menu text.
+    private let blocks: [ContentBlock]
+    private let renderBlocks: [RenderBlock]
+    private let copyText: String
 
-    private var blocks: [ContentBlock] { message.contentBlocks }
-    private var renderBlocks: [RenderBlock] {
+    init(
+        message: ConversationMessage,
+        workspaceId: String,
+        onNavigateToNote: ((_ noteId: String, _ workspaceId: String, _ noteTitle: String) -> Void)?,
+        hydratingBlockIds: Set<String>,
+        onHydrateBlock: ((_ blockId: String) -> Void)?
+    ) {
+        self.message = message
+        self.workspaceId = workspaceId
+        self.onNavigateToNote = onNavigateToNote
+        self.hydratingBlockIds = hydratingBlockIds
+        self.onHydrateBlock = onHydrateBlock
+        let blocks = message.contentBlocks
+        self.blocks = blocks
         let strippedBlocks = SuggestedPrompts.parse(contentBlocks: blocks).contentBlocks
-        return MessageBlockPartitioning.groupContentBlocks(
-            strippedBlocks,
-            isStreaming: message.isStreaming
-        )
+        self.renderBlocks = MessageBlockPartitioning.groupContentBlocks(
+            strippedBlocks, isStreaming: message.isStreaming == true)
+        self.copyText = MessageBlockPartitioning.assistantCopyText(from: blocks)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(renderBlocks.enumerated()), id: \.element.id) { index, renderBlock in
                 switch renderBlock {
                 case .contentBlock(let block):
                     ContentBlockView(
-                        block: block,
-                        allBlocks: blocks,
-                        workspaceId: workspaceId,
+                        block: block, allBlocks: blocks, workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         hydratingBlockIds: hydratingBlockIds,
-                        onHydrateBlock: onHydrateBlock
-                    )
+                        onHydrateBlock: onHydrateBlock)
                 case .group(let group):
+                    let isLastGroup = !renderBlocks.suffix(from: index + 1).contains(where: {
+                        if case .group = $0 { return true }
+                        return false
+                    })
                     ResponseGroupView(
-                        group: group,
-                        isLast: isLastGroup(after: index),
-                        workspaceId: workspaceId,
+                        group: group, isLast: isLastGroup, workspaceId: workspaceId,
                         onNavigateToNote: onNavigateToNote,
                         hydratingBlockIds: hydratingBlockIds,
-                        onHydrateBlock: onHydrateBlock
-                    )
+                        onHydrateBlock: onHydrateBlock)
                 }
             }
         }
-        .padding(.vertical, Layout.verticalPadding)
+        .padding(.vertical, 4)
         .modifier(MessageCopyContextMenu(
-            text: MessageBlockPartitioning.assistantCopyText(from: blocks),
+            text: copyText,
             userStyled: false,
-            isStreaming: message.isStreaming
+            isStreaming: message.isStreaming == true
         ))
-    }
-
-    private func isLastGroup(after index: Int) -> Bool {
-        !renderBlocks.suffix(from: index + 1).contains { candidate in
-            if case .group = candidate { return true }
-            return false
-        }
     }
 }
 
@@ -66,25 +70,17 @@ struct ErrorMessageView: View {
     let message: ConversationMessage
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 6
-        static let containerPadding: CGFloat = 10
-        static let backgroundOpacity: Double = 0.1
-        static let cornerRadius: CGFloat = 8
-    }
-
     var body: some View {
-        HStack(spacing: Layout.contentSpacing) {
+        HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Theme.destructive(for: colorScheme))
-                .accessibilityHidden(true)
             Text(message.error ?? "An error occurred")
                 .font(.callout)
                 .foregroundStyle(Theme.destructive(for: colorScheme))
         }
-        .padding(Layout.containerPadding)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.destructive(for: colorScheme).opacity(Layout.backgroundOpacity))
-        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
+        .background(Theme.destructive(for: colorScheme).opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

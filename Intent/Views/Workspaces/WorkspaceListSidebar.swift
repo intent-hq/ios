@@ -29,7 +29,7 @@ struct WorkspaceListSidebar: View {
             ZStack {
                 Theme.sidebar(for: colorScheme).ignoresSafeArea()
 
-                if viewModel.isLoading, viewModel.workspaces.isEmpty {
+                if viewModel.isLoading && viewModel.workspaces.isEmpty {
                     ProgressView("Loading workspaces...")
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 } else if viewModel.filteredWorkspaces.isEmpty {
@@ -94,74 +94,76 @@ struct WorkspaceListSidebar: View {
         )
     }
 
-    private var workspaceList: some View {
-        List(selection: workspaceSelection) { workspaceSections }
-            .listStyle(.sidebar)
-            #if !os(visionOS)
-            .scrollDismissesKeyboard(.immediately)
-            #endif
-            .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
-    }
-
-    private var workspaceSelection: Binding<String?> {
-        Binding(
-            get: { coordinator.selectedWorkspaceId },
-            set: selectWorkspace
-        )
-    }
-
-    private func selectWorkspace(_ newId: String?) {
-        searchFocused = false
-        if let id = newId {
-            coordinator.onSelectWorkspace(id)
-        } else {
-            coordinator.selectedWorkspaceId = nil
-        }
-    }
-
     @ViewBuilder
-    private var workspaceSections: some View {
-        switch viewModel.viewMode {
-        case .recent:
-            ForEach(viewModel.filteredWorkspaces) { workspace in
-                workspaceRow(workspace)
+    private var workspaceList: some View {
+        List(selection: Binding(
+            get: { coordinator.selectedWorkspaceId },
+            set: { newId in
+                searchFocused = false
+                if let id = newId {
+                    coordinator.onSelectWorkspace(id)
+                } else {
+                    coordinator.selectedWorkspaceId = nil
+                }
             }
-        case .repo:
-            ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
-                Section {
-                    ForEach(workspaces) { workspace in
-                        workspaceRow(workspace, showRepo: false)
-                    }
-                } header: {
-                    HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
+        )) {
+            switch viewModel.viewMode {
+            case .recent:
+                ForEach(viewModel.filteredWorkspaces) { workspace in
+                    sidebarRow(workspace)
+                }
+            case .repo:
+                ForEach(viewModel.groupedByRepo, id: \.0) { repoName, workspaces in
+                    Section(header: HStack(spacing: Constants.WorkspaceList.sidebarSectionSpacing) {
                         RepoOwnerAvatarView(
                             owner: workspaces.first?.repositoryOwner,
-                            size: Constants.WorkspaceList.sidebarSectionAvatarSize
-                        )
+                            size: Constants.WorkspaceList.sidebarSectionAvatarSize)
                         Text(repoName)
+                    }) {
+                        ForEach(workspaces) { workspace in
+                            sidebarRow(workspace, showRepo: false)
+                        }
                     }
                 }
-            }
-        case .status:
-            ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
-                Section(header: Text(statusLabel)) {
-                    ForEach(workspaces) { workspace in
-                        workspaceRow(workspace)
+            case .status:
+                ForEach(viewModel.groupedByStatus, id: \.0) { statusLabel, workspaces in
+                    Section(header: Text(statusLabel)) {
+                        ForEach(workspaces) { workspace in
+                            sidebarRow(workspace)
+                        }
                     }
                 }
             }
         }
+        .listStyle(.sidebar)
+        #if !os(visionOS)
+        // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
+        .scrollDismissesKeyboard(.immediately)
+        #endif
+        .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
     }
 
-    private func workspaceRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
+    /// Shared row modifiers for every view mode. The explicit row background
+    /// replaces the sidebar list's accent-tinted selection with a neutral grey.
+    private func sidebarRow(_ workspace: Workspace, showRepo: Bool = true) -> some View {
         WorkspaceRowView(workspace: workspace, colorScheme: colorScheme, showRepo: showRepo)
             .tag(workspace.id)
             .listRowInsets(EdgeInsets(
                 top: Constants.WorkspaceList.sidebarRowInset,
                 leading: Constants.WorkspaceList.sidebarRowInset,
                 bottom: Constants.WorkspaceList.sidebarRowInset,
-                trailing: Constants.WorkspaceList.sidebarRowInset
-            ))
+                trailing: Constants.WorkspaceList.sidebarRowInset))
             .listRowSeparator(.hidden)
+            .listRowBackground(
+                RoundedRectangle(
+                    cornerRadius: Constants.WorkspaceList.sidebarSelectionCornerRadius,
+                    style: .continuous)
+                    .fill(Self.rowSelectionBackground(
+                        isSelected: coordinator.selectedWorkspaceId == workspace.id,
+                        colorScheme: colorScheme)))
+    }
+
+    static func rowSelectionBackground(isSelected: Bool, colorScheme: ColorScheme) -> Color {
+        isSelected ? Theme.sidebarSelection(for: colorScheme) : .clear
     }
 }

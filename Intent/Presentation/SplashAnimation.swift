@@ -4,12 +4,9 @@ import ImageIO
 /// Decoded frames and source timing for the bundled launch splash GIF.
 struct SplashAnimation {
     static let resourceName = "IntentSplash"
-    static let bundled: Self? = {
-        guard let url = Bundle.main.url(forResource: resourceName, withExtension: "gif") else {
-            return nil
-        }
-        return Self(url: url)
-    }()
+    static var bundledURL: URL? {
+        Bundle.main.url(forResource: resourceName, withExtension: "gif")
+    }
 
     private static let fallbackFrameDuration: TimeInterval = 0.1
 
@@ -65,9 +62,9 @@ struct SplashAnimation {
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any]
         else { return fallbackFrameDuration }
 
-        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? Double
-            ?? gif[kCGImagePropertyGIFDelayTime] as? Double
-        let duration = value ?? fallbackFrameDuration
+        let value = gif[kCGImagePropertyGIFUnclampedDelayTime] as? NSNumber
+            ?? gif[kCGImagePropertyGIFDelayTime] as? NSNumber
+        let duration = value?.doubleValue ?? fallbackFrameDuration
         return duration > 0 ? duration : fallbackFrameDuration
     }
 
@@ -75,8 +72,43 @@ struct SplashAnimation {
         guard
             let properties = CGImageSourceCopyProperties(source, nil) as? [CFString: Any],
             let gif = properties[kCGImagePropertyGIFDictionary] as? [CFString: Any],
-            let count = gif[kCGImagePropertyGIFLoopCount] as? Int
+            let count = gif[kCGImagePropertyGIFLoopCount] as? NSNumber
         else { return nil }
-        return count
+        return count.intValue
+    }
+}
+
+/// Keeps one decoded `SplashAnimation` alive for as long as the owner holds it.
+final class SplashAnimationLease {
+    let animation: SplashAnimation
+
+    fileprivate init(animation: SplashAnimation) {
+        self.animation = animation
+    }
+}
+
+/// Bounds the decoded frames' lifetime to their owners (ios#256): concurrent
+/// owners share one decode, and the frames are released with the last lease
+/// instead of living for the whole process.
+final class SplashAnimationStore {
+    static let shared = SplashAnimationStore {
+        SplashAnimation.bundledURL.flatMap { SplashAnimation(url: $0) }
+    }
+
+    private let load: () -> SplashAnimation?
+    private weak var current: SplashAnimationLease?
+
+    init(load: @escaping () -> SplashAnimation?) {
+        self.load = load
+    }
+
+    var isRetainingFrames: Bool { current != nil }
+
+    func lease() -> SplashAnimationLease? {
+        if let current { return current }
+        guard let animation = load() else { return nil }
+        let lease = SplashAnimationLease(animation: animation)
+        current = lease
+        return lease
     }
 }

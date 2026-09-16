@@ -101,16 +101,28 @@ extension ConversationViewModel {
         }
     }
 
-    private func fetchCurrentModel() async {
+    func fetchCurrentModel() async {
         do {
-            let result = try await connection.request(
+            var generation = optionsStore.loadGeneration
+            var result = try await connection.request(
                 "agent.get",
                 params: ["agentId": agentId]
             )
+            while generation != optionsStore.loadGeneration {
+                generation = optionsStore.loadGeneration
+                result = try await connection.request(
+                    "agent.get",
+                    params: ["agentId": agentId]
+                )
+            }
+            modelMetadataGeneration = generation
             if let dict = result as? [String: Any],
                let agent = dict["agent"] as? [String: Any] {
                 if let model = agent["model"] as? String {
                     currentModelId = model
+                }
+                if let provider = agent["provider"] as? String, !provider.isEmpty {
+                    currentProviderId = provider
                 }
                 if let metadata = agent["metadata"] as? [String: Any],
                    let specialistId = metadata["specialist"] as? String {

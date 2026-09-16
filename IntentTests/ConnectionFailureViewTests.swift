@@ -27,6 +27,14 @@ struct ConnectionFailureViewTests {
         ))
     }
 
+    /// ios#251: a saved record refused for having no trusted pin lands on
+    /// the re-pair path — no auto-retry (which would re-dial the same
+    /// pin-less record), "Re-pair Device" offered, saved record kept.
+    @Test func missingPinRefusalRoutesToCertPath() {
+        let error = WebSocketTransportError.missingCertificatePin(host: "10.0.0.1")
+        #expect(ConnectionFailureView.isCertificateMismatchMessage(error.localizedDescription))
+    }
+
     @Test func genericFailuresDoNotRouteToCertPath() {
         #expect(!ConnectionFailureView.isCertificateMismatchMessage(
             "Connection to 192.168.1.42 timed out"
@@ -34,6 +42,30 @@ struct ConnectionFailureViewTests {
         #expect(!ConnectionFailureView.isCertificateMismatchMessage(
             "The server at 192.168.1.42:5179 is not responding."
         ))
+    }
+
+    // MARK: - Auto-retry decision
+
+    /// ios#235: a failed Log Off (`.manualLogOff`) never auto-reconnects;
+    /// certificate failures route to re-pairing; only an ordinary failure
+    /// under `.automaticConnection` retries on its own.
+    @Test func shouldAutoRetryOnlyForOrdinaryAutomaticFailures() {
+        #expect(ConnectionFailureView.shouldAutoRetry(
+            retryPolicy: .automaticConnection, isCertMismatch: false))
+        #expect(!ConnectionFailureView.shouldAutoRetry(
+            retryPolicy: .automaticConnection, isCertMismatch: true))
+        #expect(!ConnectionFailureView.shouldAutoRetry(
+            retryPolicy: .manualLogOff, isCertMismatch: false))
+        #expect(!ConnectionFailureView.shouldAutoRetry(
+            retryPolicy: .manualLogOff, isCertMismatch: true))
+    }
+
+    @Test func retryBackoffIsExponentialAndCapped() {
+        #expect(ConnectionFailureView.retryBackoff(attempt: 1) == .seconds(2))
+        #expect(ConnectionFailureView.retryBackoff(attempt: 2) == .seconds(4))
+        #expect(ConnectionFailureView.retryBackoff(attempt: 4) == .seconds(16))
+        #expect(ConnectionFailureView.retryBackoff(attempt: 5) == .seconds(30))
+        #expect(ConnectionFailureView.retryBackoff(attempt: 10) == .seconds(30))
     }
 
     // MARK: - Auto-retry dial target (window model v2)

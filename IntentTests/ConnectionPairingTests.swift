@@ -105,4 +105,35 @@ struct ConnectionPairingTests {
         #expect(setup.manager.activeConnection()?.id == old.id)
         #expect(fake.refreshHostRoutesCallCount == 0)
     }
+
+    /// A pairing over an undecodable saved-connections blob must not replace
+    /// it with a one-entry list; it fails with a distinct, recoverable error
+    /// and leaves the blob and active pointer alone (intent-hq/ios#265).
+    @Test @MainActor func pairingOverUndecodableRegistryPreservesBlob() async {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let manager = setup.manager
+        let undecodable = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)
+        #expect(manager.saveDataToKeychain(
+            data: undecodable, account: manager.keychainAccountConnections))
+        let fake = FakeConnectionManager()
+        fake.responseMap["host.status"] = ["prettyHostname": "New Mac"]
+        let server = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+            certFingerprint: "aa:bb")
+
+        await #expect(throws: ConnectionPairing.PersistenceError.registryUndecodable) {
+            try await ConnectionPairing.finalize(
+                server: server, token: "new-token", connection: fake,
+                persistence: manager)
+        }
+
+        #expect(manager.loadDataFromKeychain(
+            account: manager.keychainAccountConnections) == undecodable)
+        #expect(manager.isConnectionRegistryUndecodable())
+        #expect(manager.activeConnection() == nil)
+        #expect(manager.defaults.string(forKey: manager.activeConnectionIdKey) == nil)
+        #expect(fake.refreshHostRoutesCallCount == 0)
+    }
 }

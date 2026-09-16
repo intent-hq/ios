@@ -167,6 +167,7 @@ struct Workspace: Codable, Identifiable, Equatable {
     let agentSummaryWasReported: Bool
     let pullRequestsWereReported: Bool
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
+    let statusImageAssetId: String?
 
     private enum CodingKeys: String, CodingKey {
         case activePullRequest
@@ -187,6 +188,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         case repositoryName
         case repositoryOwner
         case status
+        case statusImageAssetId
         case taskStatsCompleted
         case taskStatsInProgress
         case taskStatsTotal
@@ -224,7 +226,8 @@ struct Workspace: Codable, Identifiable, Equatable {
         pullRequests: [WorkspacePullRequest] = [],
         agentSummaryWasReported: Bool = false,
         pullRequestsWereReported: Bool = false,
-        activePullRequest: WorkspacePullRequest? = nil
+        activePullRequest: WorkspacePullRequest? = nil,
+        statusImageAssetId: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -252,6 +255,7 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.agentSummaryWasReported = agentSummaryWasReported || !agentSummaryAgents.isEmpty
         self.pullRequestsWereReported = pullRequestsWereReported || !pullRequests.isEmpty
         self.activePullRequest = activePullRequest
+        self.statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(statusImageAssetId)
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
@@ -295,6 +299,8 @@ struct Workspace: Codable, Identifiable, Equatable {
             pullRequestsWereReported = false
         }
         activePullRequest = try container.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
+        statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
+            try container.decodeIfPresent(String.self, forKey: .statusImageAssetId))
     }
 
     func encode(to encoder: Encoder) throws {
@@ -323,11 +329,12 @@ struct Workspace: Codable, Identifiable, Equatable {
         if agentSummaryWasReported { try container.encode(agentSummaryAgents, forKey: .agentSummaryAgents) }
         if pullRequestsWereReported { try container.encode(pullRequests, forKey: .pullRequests) }
         try container.encodeIfPresent(activePullRequest, forKey: .activePullRequest)
+        try container.encodeIfPresent(statusImageAssetId, forKey: .statusImageAssetId)
     }
 }
 
 /// A model available for the agent.
-struct ModelInfo: Identifiable {
+struct ModelInfo: Identifiable, Equatable {
     let id: String       // model id (e.g. "sonnet4.5")
     let name: String     // display name (e.g. "sonnet4.5 (balanced)")
     let provider: String // provider id (e.g. "auggie")

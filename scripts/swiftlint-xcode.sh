@@ -99,7 +99,8 @@ check_input_parity() {
   local failed=0
 
   if ! actual_sources="$(find "$repo_root/Intent" "$repo_root/IntentTests" "$repo_root/IntentUITests" \
-    \( -path "$repo_root/Intent/Resources" -o -path "$repo_root/Intent/Assets.xcassets" \) -prune -o \
+    \( -path "$repo_root/Intent/Resources" -o -path "$repo_root/Intent/Assets.xcassets" \
+      -o -path "$repo_root/IntentTests/Fixtures" \) -prune -o \
     -type f -name '*.swift' -print | LC_ALL=C sort)"; then
     warning "SwiftLint diagnostics could not enumerate configured Swift sources; update the sandbox inputs"
     return 1

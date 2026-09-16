@@ -9,19 +9,6 @@ struct ConversationColumnView: View {
     @State private var questionWizardCollapsed = false
     @State private var conversationHeight: CGFloat = 0
     @State private var transcriptScrollState = ConversationTranscriptScrollState()
-
-    private enum Layout {
-        static let questionBannerBackgroundOpacity: Double = 0.4
-        static let questionBannerCornerRadius: CGFloat = 12
-        static let questionBannerHorizontalPadding: CGFloat = 8
-        static let questionBannerVerticalPadding: CGFloat = 8
-        static let questionWizardHorizontalPadding: CGFloat = 8
-        static let questionWizardTopPadding: CGFloat = 8
-        static let collapsedQuestionWizardBottomPadding: CGFloat = 4
-        static let expandedQuestionWizardBottomPadding: CGFloat = 8
-        static let questionSheetPadding: CGFloat = 24
-    }
-
     #if os(visionOS)
     // visionOS presents structured questions as a deliberate sheet instead
     // of the inline composer-slot wizard; the inline slot shows an opener.
@@ -58,16 +45,13 @@ struct ConversationColumnView: View {
         .background(Theme.background(for: colorScheme).ignoresSafeArea())
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.store.isWaitingForAgents
-        )
+            value: viewModel.store.isWaitingForAgents)
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.activeAgentHooks.map(\.hookId)
-        )
+            value: viewModel.activeAgentHooks.map(\.hookId))
         .animation(
             .easeInOut(duration: Constants.Conversation.Column.chromeAnimationDuration),
-            value: viewModel.activeAgentMonitors.map(\.monitorId)
-        )
+            value: viewModel.activeAgentMonitors.map(\.monitorId))
     }
 
     @ViewBuilder
@@ -77,7 +61,7 @@ struct ConversationColumnView: View {
             Divider()
         }
 
-        if viewModel.isLoading, viewModel.filteredMessages.isEmpty {
+        if viewModel.isLoading && viewModel.filteredMessages.isEmpty {
             ConversationLoadingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if viewModel.filteredMessages.isEmpty {
@@ -144,10 +128,10 @@ struct ConversationColumnView: View {
                 onExpand: { questionSheetPresented = true },
                 onDismiss: {}
             )
-            .background(Theme.muted(for: colorScheme).opacity(Layout.questionBannerBackgroundOpacity))
-            .clipShape(RoundedRectangle(cornerRadius: Layout.questionBannerCornerRadius))
-            .padding(.horizontal, Layout.questionBannerHorizontalPadding)
-            .padding(.vertical, Layout.questionBannerVerticalPadding)
+            .background(Theme.muted(for: colorScheme).opacity(0.4))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
             #else
             QuestionWizardView(
                 questions: pendingSet.questions,
@@ -157,9 +141,7 @@ struct ConversationColumnView: View {
                     let answeredId = pendingSet.messageId
                     Task {
                         await viewModel.submitQuestionAnswers(
-                            answers,
-                            answeredQuestionsMessageId: answeredId
-                        )
+                            answers, answeredQuestionsMessageId: answeredId)
                     }
                 },
                 onDismiss: {
@@ -170,14 +152,9 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(.horizontal, Layout.questionWizardHorizontalPadding)
-            .padding(.top, Layout.questionWizardTopPadding)
-            .padding(
-                .bottom,
-                questionWizardCollapsed
-                    ? Layout.collapsedQuestionWizardBottomPadding
-                    : Layout.expandedQuestionWizardBottomPadding
-            )
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            .padding(.bottom, questionWizardCollapsed ? 4 : 8)
             #endif
         }
 
@@ -186,7 +163,7 @@ struct ConversationColumnView: View {
         // or the daemon clears/replaces the marker (FE parity: ChatPanel's
         // `pendingQuestionRecoveryLoading`). Collapse still reveals the
         // composer, as with a rendered wizard.
-        if viewModel.isPendingQuestionRecoveryLoading, !questionWizardCollapsed {
+        if viewModel.isPendingQuestionRecoveryLoading && !questionWizardCollapsed {
             PendingQuestionRecoveryPlaceholder()
         }
 
@@ -226,9 +203,7 @@ struct ConversationColumnView: View {
                     questionSheetPresented = false
                     Task {
                         await viewModel.submitQuestionAnswers(
-                            answers,
-                            answeredQuestionsMessageId: answeredId
-                        )
+                            answers, answeredQuestionsMessageId: answeredId)
                     }
                 },
                 onDismiss: {
@@ -240,7 +215,7 @@ struct ConversationColumnView: View {
                 }
             )
             .id(pendingSet.messageId)
-            .padding(Layout.questionSheetPadding)
+            .padding(24)
             .presentationDetents([.medium, .large])
         }
     }
@@ -250,13 +225,8 @@ struct ConversationColumnView: View {
 private struct PendingQuestionRecoveryPlaceholder: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 8
-        static let verticalPadding: CGFloat = 12
-    }
-
     var body: some View {
-        HStack(spacing: Layout.contentSpacing) {
+        HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
             Text("Loading questions...")
@@ -264,7 +234,7 @@ private struct PendingQuestionRecoveryPlaceholder: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Layout.verticalPadding)
+        .padding(.vertical, 12)
         .accessibilityElement(children: .combine)
     }
 }
@@ -272,12 +242,8 @@ private struct PendingQuestionRecoveryPlaceholder: View {
 private struct ConversationLoadingView: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-    }
-
     var body: some View {
-        VStack(spacing: Layout.contentSpacing) {
+        VStack(spacing: 12) {
             ProgressView()
             Text("Loading conversation...")
                 .font(.subheadline)
@@ -290,20 +256,12 @@ private struct ConversationEmptyView: View {
     let viewModel: ConversationViewModel
     @Environment(\.colorScheme) private var colorScheme
 
-    private enum Layout {
-        static let contentSpacing: CGFloat = 12
-        static let descriptionHorizontalPadding: CGFloat = 32
-        static let modelCaptionOpacity: Double = 0.7
-        static let modelCaptionTopPadding: CGFloat = 4
-    }
-
     var body: some View {
         if let name = viewModel.specialistName {
-            VStack(spacing: Layout.contentSpacing) {
+            VStack(spacing: 12) {
                 Image(systemName: "person.crop.circle.badge.checkmark")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
                 Text(name)
                     .font(.headline)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
@@ -312,34 +270,31 @@ private struct ConversationEmptyView: View {
                         .font(.subheadline)
                         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, Layout.descriptionHorizontalPadding)
+                        .padding(.horizontal, 32)
                 }
-                if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
+                if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
-                        .padding(.top, Layout.modelCaptionTopPadding)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
+                        .padding(.top, 4)
                 }
             }
         } else {
-            VStack(spacing: Layout.contentSpacing) {
+            VStack(spacing: 12) {
                 Image(systemName: "bubble.left.and.bubble.right")
                     .font(.largeTitle)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    .accessibilityHidden(true)
                 Text("No messages yet")
                     .font(.headline)
                     .foregroundStyle(Theme.foreground(for: colorScheme))
                 Text("Messages will appear here as the agent works.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                if let modelId = viewModel.currentModelId {
-                    let displayName = viewModel.availableModels.first { $0.id == modelId }?.name ?? modelId
+                if let displayName = viewModel.currentModelDisplayName {
                     Text("Using \(displayName)")
                         .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Layout.modelCaptionOpacity))
-                        .padding(.top, Layout.modelCaptionTopPadding)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.7))
+                        .padding(.top, 4)
                 }
             }
         }

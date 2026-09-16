@@ -27,6 +27,7 @@ import Observation
 
     /// Optional callback invoked when a note event is received (for detail view refresh)
     var onNoteChanged: (() -> Void)?
+    @ObservationIgnored private var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -34,6 +35,9 @@ import Observation
     }
 
     isolated deinit {
+        for continuation in noteChangeContinuations.values {
+            continuation.finish()
+        }
         // Remove handlers directly while deinit is isolated to MainActor.
         guard eventHandlerId != nil || noteSubscriptionId != nil else { return }
         if let handlerId = eventHandlerId {
@@ -410,17 +414,47 @@ extension NoteStore {
         let eventWorkspaceId = event["workspaceId"] as? String
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
-        switch eventType {
-        case let eventName where eventName.hasPrefix("note:"):
+        switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
+        case .refetch:
             // Only refetch if not in live mode (avoid double-apply)
             if !noteLive {
                 guard let workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
             }
             onNoteChanged?()
-        default:
+            if eventType != "note:created" {
+                for continuation in noteChangeContinuations.values {
+                    continuation.yield()
+                }
+            }
+        case .patchInPlace, .ignore, nil:
             break
         }
+    }
+
+    func noteChanges() -> AsyncStream<Void> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: Void.self, bufferingPolicy: .bufferingNewest(1))
+        noteChangeContinuations[id] = continuation
+        continuation.onTermination = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.noteChangeContinuations[id] = nil
+            }
+        }
+        return stream
+    }
+
+    nonisolated static let handledChannels = ["note:"]
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "note:created", "note:updated", "note:deleted"
+    ]
+    nonisolated static let ignoredEventTypes: Set<String> = []
+
+    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
@@ -435,14 +469,16 @@ extension NoteStore {
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.payload {
-        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
+        switch push.kind {
+        case .snapshot:
+            guard let rawItems = push.snapshot else { return }
             noteLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             notes = reconciler.values()
             AppLog.notes.debug("[NoteStore] Applied snapshot with \(rawItems.count) notes, seq=\(push.seq)")
 
-        case let .delta(delta):
+        case .delta:
+            guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 notes = reconciler.values()
                 AppLog.notes.debug("[NoteStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")

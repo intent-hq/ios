@@ -42,8 +42,20 @@ struct RootView: View {
     /// True while syncNavigationState() tears down the conversation for the iPad
     /// re-push dance, so the user-back onChange handler doesn't misfire.
     @State var programmaticConversationDismiss = false // swiftlint:disable:this private_swiftui_state
+    @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
     // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
     @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
+
+    var conversationDestination: some View {
+        ConversationDestinationView(
+            fallback: conversationAgentId.isEmpty ? nil : ConversationDestinationView.Target(
+                agentId: conversationAgentId,
+                workspaceId: conversationWorkspaceId,
+                agentName: conversationAgentName
+            ),
+            session: session
+        )
+    }
 
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {
@@ -287,6 +299,37 @@ struct RootView: View {
             guard let backendID = session.backendID,
                   let token = selectionHandlerToken else { return }
             notificationManager.removeAgentSelectionHandler(for: backendID, token: token)
+        }
+    }
+}
+
+struct ConversationDestinationView: View {
+    struct Target: Equatable {
+        let agentId: String
+        let workspaceId: String
+        let agentName: String
+    }
+
+    let fallback: Target?
+    let session: BackendSession
+    @Environment(AppCoordinator.self) private var coordinator
+
+    private var target: Target? {
+        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
+            return Target(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+        }
+        return fallback
+    }
+
+    var body: some View {
+        if let target {
+            ConversationView(
+                agentId: target.agentId,
+                workspaceId: target.workspaceId,
+                agentName: target.agentName,
+                session: session
+            )
+            .id(target.agentId)
         }
     }
 }

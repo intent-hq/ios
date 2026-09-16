@@ -264,15 +264,86 @@ extension ConversationCommands {
         _ = try await connectionManager.request("agent.stop", params: ["agentId": agentId])
     }
 
+    /// Replaces the local queue with the daemon's `agent.getQueue` snapshot.
+    ///
+    /// Malformed-envelope policy: when the response is not an object carrying
+    /// a `queue` array, the previous local queue is kept unchanged — the
+    /// daemon told us nothing usable, so blanking would lose entries the user
+    /// can still see and act on. A well-formed empty `queue` is authoritative
+    /// and clears the queue. Elements are decoded one by one (see
+    /// `decodeQueueSnapshot`) so one malformed entry never blanks its siblings.
     func fetchQueue(agentId: String) async throws {
         let result = try await connectionManager.request(
             "agent.getQueue",
             params: ["agentId": agentId]
         )
         guard let response = result as? [String: Any],
-              let items = response["queue"] as? [[String: Any]] else { return }
-        let data = try JSONSerialization.data(withJSONObject: items)
-        queuedMessages = (try? JSONDecoder().decode([QueuedMessage].self, from: data)) ?? []
+              let decoded = Self.decodeQueueSnapshot(response["queue"], source: "agent.getQueue")
+        else {
+            AppLog.conversation.error(
+                "[ConversationStore] agent.getQueue returned a malformed envelope; keeping the "
+                    + "previous queue (\(queuedMessages.count) entries)")
+            return
+        }
+        queuedMessages = decoded
+    }
+
+    /// Element-tolerant decoding shared by the `agent.getQueue` response and
+    /// the `agent:queue:updated` push (PROTOCOL §5.5). Returns `nil` when
+    /// `queue` is not an array (malformed envelope — callers decide the
+    /// policy); otherwise every element that fails to decode is dropped and
+    /// the valid siblings are returned in their original order with their
+    /// identities intact. Only safe metadata (position in the array, error
+    /// shape) is logged — never message content or metadata payloads.
+    static func decodeQueueSnapshot(
+        _ queue: Any?, source: String
+    ) -> [QueuedMessage]? {
+        guard let items = queue as? [Any] else { return nil }
+        let decoder = JSONDecoder()
+        var messages: [QueuedMessage] = []
+        messages.reserveCapacity(items.count)
+        for (index, item) in items.enumerated() {
+            do {
+                guard let dictionary = item as? [String: Any] else {
+                    throw DecodingError.typeMismatch(
+                        [String: Any].self,
+                        DecodingError.Context(
+                            codingPath: [], debugDescription: "element is not an object"))
+                }
+                let data = try JSONSerialization.data(withJSONObject: dictionary)
+                messages.append(try decoder.decode(QueuedMessage.self, from: data))
+            } catch {
+                AppLog.conversation.error(
+                    "[ConversationStore] Dropping undecodable queue element \(index + 1)/"
+                        + "\(items.count) from \(source): \(Self.describeDecodingFailure(error))")
+            }
+        }
+        return messages
+    }
+
+    /// Content-free description of a queue element decoding failure: the
+    /// `DecodingError` case and the coding path that failed, or the error
+    /// type for anything else.
+    private static func describeDecodingFailure(_ error: Error) -> String {
+        guard let decodingError = error as? DecodingError else {
+            return String(describing: type(of: error))
+        }
+        let path: (DecodingError.Context) -> String = { context in
+            context.codingPath.map(\.stringValue).joined(separator: ".")
+        }
+        if case .keyNotFound(let key, let context) = decodingError {
+            return "keyNotFound(\(key.stringValue)) at [\(path(context))]"
+        }
+        if case .typeMismatch(_, let context) = decodingError {
+            return "typeMismatch at [\(path(context))]"
+        }
+        if case .valueNotFound(_, let context) = decodingError {
+            return "valueNotFound at [\(path(context))]"
+        }
+        if case .dataCorrupted(let context) = decodingError {
+            return "dataCorrupted at [\(path(context))]"
+        }
+        return "DecodingError"
     }
 
     func editQueuedMessage(agentId: String, messageId: String, content: String) async throws {

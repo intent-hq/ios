@@ -1,11 +1,13 @@
 import Foundation
+import Network
 
 /// Merges the iCloud-synced backend registry (read by
 /// `SyncedBackendRegistry.listBackends()`) into the app's saved connections.
 /// iOS has no opt-out: every live registry record WITH a cert fingerprint
 /// appears as a saved connection (fingerprint-less records are never
-/// auto-added — no pinned cert means a plain-`ws://` fallback that would
-/// leak the synced token), a newer remote copy overwrites the local fields
+/// auto-added — without a pinned cert the transport refuses to connect
+/// (ios#251), so the record could only ever surface as a re-pair prompt
+/// for a host this device never trusted), a newer remote copy overwrites the local fields
 /// (last-writer-wins on `updatedAt`), and a tombstone removes the matching
 /// local connection — matched by cert fingerprint first, `host:port` as
 /// fallback. Absence is NOT deletion: local-only connections that predate
@@ -70,11 +72,11 @@ enum SyncedBackendConnectionMerge {
                 result.updatedIds.append(existing.id)
             } else {
                 // Never auto-add a fingerprint-less record: without a pinned
-                // cert the socket falls back to plain ws://, which would send
-                // the synced bearer token in cleartext to an unauthenticated
-                // host. (Existing fingerprint-less locals were paired by the
-                // user on this device; the host:port fallback above can still
-                // update them.)
+                // cert the transport refuses to connect (ios#251), so the
+                // record would only ever surface as a re-pair prompt for a
+                // host this device never trusted. (Existing fingerprint-less
+                // locals were paired by the user on this device; the
+                // host:port fallback above can still update them.)
                 guard !normalizeFingerprint(record.fingerprint).isEmpty,
                     !candidateHosts(of: record).isEmpty
                 else { continue }
@@ -155,9 +157,12 @@ enum SyncedBackendConnectionMerge {
             }
             return usable ? raw : nil
         }
-        // IPv6 literal (bare or bracketed): hex digits and colons only.
-        return inner.allSatisfy { $0.isHexDigit && $0.isASCII || $0 == ":" }
-            ? "[\(inner)]" : nil
+        // IPv6 literal (bare or bracketed): hex digits and colons only, and
+        // structurally valid — the character allowlist alone admits `::::`.
+        guard inner.allSatisfy({ $0.isHexDigit && $0.isASCII || $0 == ":" }),
+            IPv6Address(String(inner)) != nil
+        else { return nil }
+        return "[\(inner)]"
     }
 
     /// Display name mirroring the desktop convention: the record label
@@ -232,5 +237,9 @@ struct SyncedBackendMergeOutcome: Equatable {
     /// True when a tombstone removed the connection that was active — the
     /// caller must disconnect and route away from it.
     var removedActiveConnection: Bool
+    /// True when the merge was skipped because the saved-connections blob
+    /// exists but could not be decoded; nothing was written so the original
+    /// blob is preserved (intent-hq/ios#265).
+    var registryUndecodable: Bool = false
     var changed: Bool { !(addedIds.isEmpty && updatedIds.isEmpty && removedIds.isEmpty) }
 }

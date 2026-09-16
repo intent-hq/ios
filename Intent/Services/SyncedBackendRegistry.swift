@@ -260,7 +260,9 @@ struct SyncedBackendRegistry {
     /// List query mirroring the desktop helper's `baseQuery` + list
     /// attributes, scoped to the shared access group. Items are only ever
     /// written with kSecAttrSynchronizable = true; matching "any" is for
-    /// robustness.
+    /// robustness. iOS never writes these records, so it sets no
+    /// accessibility class here — see the credential policy on
+    /// `SecItemKeychainStorage` (ios#263).
     static func listQuery(accessGroup: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,

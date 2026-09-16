@@ -9,6 +9,28 @@ protocol KeychainStorage {
     func delete(service: String, account: String)
 }
 
+final class EphemeralKeychainStorage: KeychainStorage, @unchecked Sendable {
+    private var items: [String: Data] = [:]
+    private let lock = NSLock()
+
+    private func key(_ service: String, _ account: String) -> String {
+        "\(service)\u{1F}\(account)"
+    }
+
+    func save(data: Data, service: String, account: String) -> Bool {
+        lock.withLock { items[key(service, account)] = data }
+        return true
+    }
+
+    func load(service: String, account: String) -> Data? {
+        lock.withLock { items[key(service, account)] }
+    }
+
+    func delete(service: String, account: String) {
+        _ = lock.withLock { items.removeValue(forKey: key(service, account)) }
+    }
+}
+
 /// Production backend over the Security framework.
 struct SecItemKeychainStorage: KeychainStorage {
     struct SecurityCalls {

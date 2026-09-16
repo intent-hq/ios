@@ -9,13 +9,7 @@ extension RootView {
                     if let workspaceId = coordinator.selectedWorkspaceId {
                         WorkspaceDetailView(workspaceId: workspaceId, session: session)
                             .navigationDestination(isPresented: $showingConversation) {
-                                ConversationView(
-                                    agentId: conversationAgentId,
-                                    workspaceId: conversationWorkspaceId,
-                                    agentName: conversationAgentName,
-                                    session: session
-                                )
-                                .id(conversationAgentId)
+                                conversationDestination
                             }
                             .navigationDestination(isPresented: $showingNoteDetail) {
                                 NoteDetailView(
@@ -37,6 +31,9 @@ extension RootView {
             syncNavigationState()
         }
         .onChange(of: coordinator.currentScreenDescription) {
+            syncNavigationState()
+        }
+        .onChange(of: coordinator.conversationRequestId) {
             syncNavigationState()
         }
         .onChange(of: showingWorkspaceDetail) { _, newValue in
@@ -91,6 +88,8 @@ extension RootView {
 
     private func syncAgentConversation(agentId: String, workspaceId: String, agentName: String) {
         let agentChanged = conversationAgentId != agentId
+        let isNewRequest = handledConversationRequestId != coordinator.conversationRequestId
+        handledConversationRequestId = coordinator.conversationRequestId
         conversationAgentId = agentId
         conversationWorkspaceId = workspaceId
         conversationAgentName = agentName
@@ -101,8 +100,14 @@ extension RootView {
             showingWorkspaceDetail = true
             pendingConversationPush = true
         } else if !showingConversation {
-            showingConversation = true
-        } else if agentChanged, sizeClass == .regular {
+            if Self.canPushConversationNow(repushInFlight: programmaticConversationDismiss) {
+                showingConversation = true
+            }
+        } else if Self.needsConversationRepush(
+            agentChanged: agentChanged,
+            isNewRequest: isNewRequest,
+            isRegularWidth: sizeClass == .regular
+        ) {
             // iPad NavigationStack rebuild race: when the workspace detail is
             // rebuilt (different workspace) but showingConversation is still
             // true, SwiftUI may not push the new conversation. Tear down
@@ -184,6 +189,18 @@ extension RootView {
         if showingConversation { showingConversation = false }
         if showingNoteDetail { showingNoteDetail = false }
         if !noteStack.isEmpty { noteStack = NavigationPath() }
+    }
+
+    static func needsConversationRepush(
+        agentChanged: Bool,
+        isNewRequest: Bool,
+        isRegularWidth: Bool
+    ) -> Bool {
+        isRegularWidth && (agentChanged || isNewRequest)
+    }
+
+    static func canPushConversationNow(repushInFlight: Bool) -> Bool {
+        !repushInFlight
     }
 
     /// Guard for the deferred iPad conversation re-push scheduled by the

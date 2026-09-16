@@ -62,6 +62,7 @@ class AppCoordinator {
     /// cold-start connect) restarts the attempt — SwiftUI would otherwise
     /// keep the existing ConnectingView and never re-run its task.
     private(set) var connectionAttemptId = 0
+    var conversationRequestId = 0
 
     var selectedWorkspaceId: String? {
         didSet {

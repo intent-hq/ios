@@ -84,6 +84,78 @@ extension ConversationViewModel {
         }
     }
 
+    var selectableModels: [ModelInfo]? {
+        if let providerId = currentProviderId {
+            return optionsStore.models(for: providerId)
+        }
+        return availableModels
+    }
+
+    var currentModelDisplayName: String? {
+        guard let modelId = currentModelId else { return nil }
+        return Self.modelDisplayName(
+            modelId: modelId,
+            provider: currentProviderId,
+            catalog: selectableModels ?? []
+        )
+    }
+
+    static func modelDisplayName(
+        modelId: String,
+        provider: String?,
+        catalog: [ModelInfo]
+    ) -> String {
+        catalog.first {
+            $0.id == modelId && (provider == nil || $0.provider == provider)
+        }?.name ?? modelId
+    }
+
+    struct ModelCatalogKey: Equatable {
+        let providerId: String?
+        let isCached: Bool
+        let loadGeneration: Int
+    }
+
+    var modelCatalogKey: ModelCatalogKey {
+        ModelCatalogKey(
+            providerId: currentProviderId,
+            isCached: currentProviderId.map { optionsStore.models(for: $0) != nil } ?? false,
+            loadGeneration: optionsStore.loadGeneration
+        )
+    }
+
+    func loadModelCatalogIfNeeded() async {
+        let generation = optionsStore.loadGeneration
+        if let readUnder = modelMetadataGeneration, readUnder != generation {
+            await fetchCurrentModel()
+            guard generation == optionsStore.loadGeneration else { return }
+            guard modelMetadataGeneration == generation else {
+                currentModelId = nil
+                currentProviderId = nil
+                return
+            }
+        }
+        guard let providerId = currentProviderId,
+              optionsStore.models(for: providerId) == nil else { return }
+        await loadProviderCatalog(providerId)
+    }
+
+    func refreshSelectableModels() async {
+        if let providerId = currentProviderId {
+            await loadProviderCatalog(providerId)
+        } else {
+            await fetchModels()
+        }
+    }
+
+    private func loadProviderCatalog(_ providerId: String) async {
+        modelCatalogLoadFailed = false
+        let generation = optionsStore.loadGeneration
+        await optionsStore.loadModelsIfNeeded(providerId: providerId)
+        guard generation == optionsStore.loadGeneration else { return }
+        modelCatalogLoadFailed = optionsStore.models(for: providerId) == nil
+    }
+
     func fetchModels() async {
         do {
             // Backend returns flat: [{ id: "sonnet4.5", name: "sonnet4.5 (balanced)", provider: "auggie" }]

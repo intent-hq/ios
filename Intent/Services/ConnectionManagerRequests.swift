@@ -206,18 +206,74 @@ extension ConnectionManager {
         handleTextMessage(text)
     }
 
+    nonisolated static let globalEventTypes = ["workspace:*", "note:*", "agent:*", "task:*"]
+    nonisolated static let globalSubscriptionMaxAttempts = 5
+    nonisolated static let globalSubscriptionBackoffMaximum: Duration = .seconds(8)
+
+    nonisolated static func globalSubscriptionBackoff(afterAttempt attempt: Int) -> Duration {
+        let exponent = min(max(attempt, 1) - 1, 3)
+        let backoff: Duration = .seconds(1 << exponent)
+        return min(backoff, globalSubscriptionBackoffMaximum)
+    }
+
     func subscribeToAllEvents() {
-        Task {
-            do {
-                _ = try await self.request("events.subscribe", params: [
-                    "eventTypes": ["workspace:*", "note:*", "agent:*"],
-                    "replaceGroup": "global"
-                ])
-                AppLog.connection.debug("[ConnectionManager] Subscribed to all events")
-            } catch {
-                AppLog.connection.error("[ConnectionManager] Failed to subscribe to events: \(error)")
+        globalSubscriptionTask?.cancel()
+        guard let currentSocket = socket else {
+            globalSubscriptionState = .idle
+            return
+        }
+        let generation = connectionGeneration
+        let clock = heartbeatClock
+        globalSubscriptionState = .subscribing(attempt: 1)
+        globalSubscriptionTask = Task { [weak self] in
+            var attempt = 1
+            while true {
+                guard !Task.isCancelled, let self,
+                      self.connectionGeneration == generation,
+                      self.socket === currentSocket else { return }
+                do {
+                    _ = try await self.request("events.subscribe", params: [
+                        "eventTypes": Self.globalEventTypes,
+                        "replaceGroup": "global"
+                    ])
+                    guard !Task.isCancelled,
+                          self.connectionGeneration == generation,
+                          self.socket === currentSocket else { return }
+                    self.globalSubscriptionState = .subscribed
+                    AppLog.connection.debug("[ConnectionManager] Subscribed to all events (attempt \(attempt))")
+                    return
+                } catch {
+                    guard !Task.isCancelled,
+                          self.connectionGeneration == generation,
+                          self.socket === currentSocket else { return }
+                    if attempt >= Self.globalSubscriptionMaxAttempts {
+                        self.globalSubscriptionState = .failed(
+                            attempts: attempt, lastError: error.localizedDescription)
+                        AppLog.connection.error("[ConnectionManager] Failed to subscribe after \(attempt) attempts: \(error)")
+                        return
+                    }
+                    let backoff = Self.globalSubscriptionBackoff(afterAttempt: attempt)
+                    attempt += 1
+                    self.globalSubscriptionState = .subscribing(attempt: attempt)
+                    do {
+                        try await clock.sleep(for: backoff)
+                    } catch {
+                        return
+                    }
+                }
             }
         }
+    }
+
+    func retryGlobalSubscription() {
+        guard connectionState == .connected, socket != nil else { return }
+        subscribeToAllEvents()
+    }
+
+    func stopGlobalSubscription() {
+        globalSubscriptionTask?.cancel()
+        globalSubscriptionTask = nil
+        globalSubscriptionState = .idle
     }
 
     func failAllPending(error message: String) {
@@ -230,5 +286,15 @@ extension ConnectionManager {
                 userInfo: [NSLocalizedDescriptionKey: message]
             ))
         }
+    }
+}
+
+nonisolated protocol HeartbeatClock: Sendable {
+    func sleep(for duration: Duration) async throws
+}
+
+nonisolated struct ContinuousHeartbeatClock: HeartbeatClock {
+    func sleep(for duration: Duration) async throws {
+        try await ContinuousClock().sleep(for: duration)
     }
 }

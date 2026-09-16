@@ -113,7 +113,9 @@ extension WorkspaceStore {
             pullRequests: context.pullRequests,
             agentSummaryWasReported: context.agentSummaryWasReported,
             pullRequestsWereReported: dictionary["pullRequests"] is [[String: Any]],
-            activePullRequest: context.activePullRequest
+            activePullRequest: context.activePullRequest,
+            statusImageAssetId: WorkspaceStatusImageLayout.normalizedAssetId(
+                dictionary["statusImageAssetId"] as? String)
         )
     }
 }

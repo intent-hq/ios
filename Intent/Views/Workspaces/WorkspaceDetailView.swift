@@ -44,7 +44,7 @@ struct WorkspaceDetailView: View {
         return title
     }
 
-    var body: some View {
+    private var lifecycleContent: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
             detailContent
@@ -110,6 +110,10 @@ struct WorkspaceDetailView: View {
                 coordinator.handleMissingWorkspace(workspaceId: workspaceId)
             }
         }
+    }
+
+    var body: some View {
+        lifecycleContent
         #if os(visionOS)
         // Deliberate confirmation sheets (HIG): destructive/irreversible
         // workspace actions get a focused sheet with one primary action.
@@ -146,7 +150,11 @@ struct WorkspaceDetailView: View {
         }
         #endif
         .sheet(isPresented: $showSpecialistPicker) {
-            SpecialistPickerView(workspaceId: workspaceId, agentStore: agentStore)
+            SpecialistPickerView(
+                workspaceId: workspaceId,
+                agentStore: agentStore,
+                optionsStore: session.creationOptionsStore
+            )
                 .environment(coordinator)
         }
         .navigationTitle(workspaceTitle)

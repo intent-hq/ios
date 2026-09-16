@@ -1,7 +1,7 @@
 import Foundation
 
 /// The type of a content block in a conversation message.
-enum ContentBlockType: String, Codable {
+nonisolated enum ContentBlockType: String, Codable {
     case code
     case file
     case image
@@ -21,13 +21,13 @@ enum ContentBlockType: String, Codable {
 /// Nested contents of a standalone `resource` content block (PROTOCOL §7.1):
 /// `{ type: "resource", resource: { uri?, mimeType, text } }`. Decoded leniently —
 /// consumers validate the fields they need (e.g. question parsing is MIME-gated).
-struct ResourceContents: Codable {
+nonisolated struct ResourceContents: Codable, Equatable {
     var uri: String?
     var mimeType: String?
     var text: String?
 }
 
-enum ToolExecutionOutcome: Equatable {
+nonisolated enum ToolExecutionOutcome: Equatable {
     case failed
     case succeeded
     case unreported
@@ -39,7 +39,7 @@ enum ToolExecutionOutcome: Equatable {
     var isFailure: Bool { self == .failed }
 }
 
-enum ProjectionTruncation: Equatable {
+nonisolated enum ProjectionTruncation: Equatable {
     case full
     case truncated
     case unreported
@@ -51,7 +51,7 @@ enum ProjectionTruncation: Equatable {
     var isTruncated: Bool { self == .truncated }
 }
 
-enum ImageDataRepresentation: Equatable {
+nonisolated enum ImageDataRepresentation: Equatable {
     case full
     case thumbnail
     case unreported
@@ -64,7 +64,7 @@ enum ImageDataRepresentation: Equatable {
 /// A content block within a conversation message.
 /// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
 /// with backward-compatible field aliases.
-struct ContentBlock: Identifiable, Codable {
+nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
     /// Auto-generated if not present in JSON
     let id: String
     let type: ContentBlockType
@@ -212,6 +212,11 @@ struct ContentBlock: Identifiable, Codable {
         dataRepresentation = (try? container.decode(Bool.self, forKey: .dataIsThumbnail))
             .map(ImageDataRepresentation.init(reportedThumbnail:)) ?? .unreported
         dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
+    }
+
+    static func decode(_ dictionary: [String: Any]) -> Self? {
+        guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
     }
 
     /// Resolved text content, falling back to legacy `content` field.

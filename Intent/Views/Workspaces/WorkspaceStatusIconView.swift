@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct WorkspaceStatusIconView: View {
-    private static let increasedStrokeScale: CGFloat = 1.5
-    private static let differentiatedIdleGlyphScale: CGFloat = 0.35
-
     let workspace: Workspace
     let colorScheme: ColorScheme
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
@@ -29,14 +26,10 @@ struct WorkspaceStatusIconView: View {
             // Blue dot: server-owned unread attention flag, overlaying the
             // real status; cleared via workspace.markSeen on open.
             if hasUnreadAttention(workspace) {
-                statusDot(
-                    color: kWorkspaceUnreadColor,
-                    differentiatedSymbol: "exclamationmark.triangle.fill"
-                )
-                    .offset(
-                        x: statusCueOffset,
-                        y: hasActiveAgents ? unreadStatusCueStackOffset : -statusCueOffset
-                    )
+                statusDot(color: kWorkspaceUnreadColor,
+                          differentiatedSymbol: "exclamationmark.triangle.fill")
+                    .offset(x: statusCueOffset,
+                            y: hasActiveAgents ? unreadStatusCueStackOffset : -statusCueOffset)
             }
 
             // Grey static dot: orthogonal waiting flag (protocol 6.17).
@@ -60,8 +53,7 @@ struct WorkspaceStatusIconView: View {
     }
 
     private var statusStrokeWidth: CGFloat {
-        Constants.WorkspaceRow.statusStrokeWidth
-            * (colorSchemeContrast == .increased ? Self.increasedStrokeScale : 1)
+        Constants.WorkspaceRow.statusStrokeWidth * (colorSchemeContrast == .increased ? 1.5 : 1)
     }
 
     private var statusCueSize: CGFloat {
@@ -108,7 +100,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -120,7 +111,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "minus")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -132,7 +122,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "exclamationmark")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -143,8 +132,7 @@ struct WorkspaceStatusIconView: View {
                     color.opacity(colorSchemeContrast == .increased
                         ? 1
                         : Constants.WorkspaceRow.inactiveStatusOpacity),
-                    lineWidth: statusStrokeWidth
-                )
+                    lineWidth: statusStrokeWidth)
                 .frame(width: size, height: size)
 
         case .idle:
@@ -154,9 +142,8 @@ struct WorkspaceStatusIconView: View {
                     .strokeBorder(color, lineWidth: statusStrokeWidth)
                 if differentiateWithoutColor {
                     Image(systemName: "pause.fill")
-                        .font(.system(size: size * Self.differentiatedIdleGlyphScale, weight: .bold))
+                        .font(.system(size: size * 0.35, weight: .bold))
                         .foregroundStyle(color)
-                        .accessibilityHidden(true)
                 }
             }
             .frame(width: size, height: size)
@@ -180,7 +167,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -191,7 +177,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -202,7 +187,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: differentiateWithoutColor ? "checkmark" : "arrow.triangle.pull")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -214,7 +198,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "hourglass")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -226,7 +209,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "arrow.triangle.merge")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(.white)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
 
@@ -238,7 +220,6 @@ struct WorkspaceStatusIconView: View {
                 Image(systemName: "questionmark")
                     .font(.system(size: size * Constants.WorkspaceRow.statusGlyphScale, weight: .bold))
                     .foregroundStyle(color)
-                    .accessibilityHidden(true)
             }
             .frame(width: size, height: size)
         }
@@ -251,31 +232,24 @@ struct WorkspaceStatusIconView: View {
                 .font(.system(size: statusCueSize, weight: .bold))
                 .foregroundStyle(color)
                 .frame(width: statusCueSize, height: statusCueSize)
-                .accessibilityHidden(true)
         } else {
             Circle()
                 .fill(color)
-                .frame(
-                    width: Constants.WorkspaceRow.statusDotSize,
-                    height: Constants.WorkspaceRow.statusDotSize
-                )
+                .frame(width: Constants.WorkspaceRow.statusDotSize,
+                       height: Constants.WorkspaceRow.statusDotSize)
         }
     }
 }
 
-nonisolated struct HalfCircle: Shape {
-    private static let startAngle = Angle.radians(-.pi / 2)
-    private static let endAngle = Angle.radians(.pi / 2)
 
+nonisolated struct HalfCircle: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.midY),
-            radius: rect.width / 2,
-            startAngle: Self.startAngle,
-            endAngle: Self.endAngle,
-            clockwise: false
-        )
+        path.addArc(center: CGPoint(x: rect.midX, y: rect.midY),
+                    radius: rect.width / 2,
+                    startAngle: .degrees(-90),
+                    endAngle: .degrees(90),
+                    clockwise: false)
         path.closeSubpath()
         return path
     }

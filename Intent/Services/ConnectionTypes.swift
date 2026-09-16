@@ -2,10 +2,24 @@ import Combine
 import Foundation
 
 enum ConnectionState: Equatable {
-    case connected
-    case connecting
     case disconnected
+    case connecting
+    case connected
     case reconnecting(attempt: Int)
+}
+
+/// How a store reacts to one bus event type (or one discriminating payload
+/// value of it). Each store exposes a pure `classify(type:data:)` returning
+/// `nil` for anything its tables do not name, so the coverage test in
+/// `IntentTests/EventCatalogCoverageTests.swift` can prove every type intentd
+/// emits on the store's channels is a deliberate decision.
+nonisolated enum EventClassification: Equatable, Sendable {
+    /// Refetch the store's list (non-live fallback only).
+    case refetch
+    /// Apply the payload to the row in place; no refetch.
+    case patchInPlace
+    /// Deliberately dropped: no rendered field depends on it.
+    case ignore
 }
 
 /// The subset of ConnectionManager surface that subscribe-channel stores depend on.
@@ -14,7 +28,6 @@ enum ConnectionState: Equatable {
 protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
-
     func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)
@@ -32,22 +45,17 @@ extension ConnectionManagerRouting {
     }
 }
 
-extension NSError {
-    private static let webSocketErrorDomain = "WebSocket"
-    private static let jsonRPCInvalidParamsErrorCode = -32_602
-
+nonisolated extension NSError {
     /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
     static let intentErrorDataCodeKey = "intentErrorDataCode"
 
     /// The JSON-RPC `error.data.code` discriminator attached by the daemon, if any.
     var intentErrorDataCode: String? {
-        userInfo[Self.intentErrorDataCodeKey] as? String
+        userInfo[NSError.intentErrorDataCodeKey] as? String
     }
 
     /// True only for a definitive entity-not-found JSON-RPC error.
     var isEntityNotFound: Bool {
-        domain == Self.webSocketErrorDomain
-            && code == Self.jsonRPCInvalidParamsErrorCode
-            && intentErrorDataCode == "not-found"
+        domain == "WebSocket" && code == -32602 && intentErrorDataCode == "not-found"
     }
 }

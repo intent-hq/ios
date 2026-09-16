@@ -246,14 +246,16 @@ extension WorkspaceStore {
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.payload {
-        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
+        switch push.kind {
+        case .snapshot:
+            guard let rawItems = push.snapshot else { return }
             workspaceLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             publishFetchedWorkspaces(reconciler.values())
             AppLog.workspace.debug("[WorkspaceStore] Applied snapshot with \(rawItems.count) workspaces, seq=\(push.seq)")
 
-        case let .delta(delta):
+        case .delta:
+            guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 publishFetchedWorkspaces(reconciler.values())
                 AppLog.workspace.debug("[WorkspaceStore] Applied delta seq=\(push.seq), added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count)")
@@ -327,7 +329,8 @@ extension WorkspaceStore {
             pullRequests: workspace.pullRequests,
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest
+            activePullRequest: workspace.activePullRequest,
+            statusImageAssetId: workspace.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -366,7 +369,8 @@ extension WorkspaceStore {
             pullRequests: workspace.pullRequests,
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest
+            activePullRequest: workspace.activePullRequest,
+            statusImageAssetId: workspace.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)
@@ -406,7 +410,8 @@ extension WorkspaceStore {
             pullRequests: workspace.pullRequests,
             agentSummaryWasReported: workspace.agentSummaryWasReported,
             pullRequestsWereReported: workspace.pullRequestsWereReported,
-            activePullRequest: workspace.activePullRequest
+            activePullRequest: workspace.activePullRequest,
+            statusImageAssetId: workspace.statusImageAssetId
         )
         workspaces[index] = updated
         workspaceReconciler?.seed(id: updated.id, value: updated)

@@ -1,12 +1,13 @@
 import Foundation
-@testable import Intent
 import Security
 import Testing
+@testable import Intent
 
 /// Tests for PersistenceManager per-workspace screen persistence.
 /// Uses a unique key prefix per test to avoid UserDefaults collisions.
 @Suite(.serialized)
 struct PersistenceManagerTests {
+
     // MARK: - Setup / Teardown helper
 
     /// Clean up UserDefaults keys used by PersistenceManager for workspace screens.
@@ -23,12 +24,9 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation",
-            workspaceId: wsId,
-            agentId: "agent-42",
-            agentName: "Builder",
-            noteId: nil,
-            noteTitle: nil
+            screen: "conversation", workspaceId: wsId,
+            agentId: "agent-42", agentName: "Builder",
+            noteId: nil, noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
@@ -44,12 +42,9 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "note",
-            workspaceId: wsId,
-            agentId: nil,
-            agentName: nil,
-            noteId: "note-123",
-            noteTitle: "My Note"
+            screen: "note", workspaceId: wsId,
+            agentId: nil, agentName: nil,
+            noteId: "note-123", noteTitle: "My Note"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
@@ -75,12 +70,9 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation",
-            workspaceId: wsId,
-            agentId: "a",
-            agentName: "A",
-            noteId: nil,
-            noteTitle: nil
+            screen: "conversation", workspaceId: wsId,
+            agentId: "a", agentName: "A",
+            noteId: nil, noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: screen)
         #expect(PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId) != nil)
@@ -97,20 +89,14 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [ws1, ws2]) }
 
         let screen1 = PersistenceManager.SavedScreen(
-            screen: "conversation",
-            workspaceId: ws1,
-            agentId: "agent-A",
-            agentName: "A",
-            noteId: nil,
-            noteTitle: nil
+            screen: "conversation", workspaceId: ws1,
+            agentId: "agent-A", agentName: "A",
+            noteId: nil, noteTitle: nil
         )
         let screen2 = PersistenceManager.SavedScreen(
-            screen: "note",
-            workspaceId: ws2,
-            agentId: nil,
-            agentName: nil,
-            noteId: "note-B",
-            noteTitle: "B"
+            screen: "note", workspaceId: ws2,
+            agentId: nil, agentName: nil,
+            noteId: "note-B", noteTitle: "B"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws1, screen: screen1)
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws2, screen: screen2)
@@ -129,12 +115,9 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [ws1, ws2]) }
 
         let screen = PersistenceManager.SavedScreen(
-            screen: "conversation",
-            workspaceId: ws1,
-            agentId: "a",
-            agentName: "A",
-            noteId: nil,
-            noteTitle: nil
+            screen: "conversation", workspaceId: ws1,
+            agentId: "a", agentName: "A",
+            noteId: nil, noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws1, screen: screen)
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: ws2, screen: screen)
@@ -151,53 +134,22 @@ struct PersistenceManagerTests {
         defer { cleanup(workspaceIds: [wsId]) }
 
         let first = PersistenceManager.SavedScreen(
-            screen: "conversation",
-            workspaceId: wsId,
-            agentId: "a1",
-            agentName: "First",
-            noteId: nil,
-            noteTitle: nil
+            screen: "conversation", workspaceId: wsId,
+            agentId: "a1", agentName: "First",
+            noteId: nil, noteTitle: nil
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: first)
 
         let second = PersistenceManager.SavedScreen(
-            screen: "note",
-            workspaceId: wsId,
-            agentId: nil,
-            agentName: nil,
-            noteId: "n2",
-            noteTitle: "Second"
+            screen: "note", workspaceId: wsId,
+            agentId: nil, agentName: nil,
+            noteId: "n2", noteTitle: "Second"
         )
         PersistenceManager.shared.saveWorkspaceScreen(workspaceId: wsId, screen: second)
 
         let loaded = PersistenceManager.shared.loadWorkspaceScreen(workspaceId: wsId)
         #expect(loaded?.screen == "note")
         #expect(loaded?.noteId == "n2")
-    }
-
-    @Test func draftsRemainScopedAndEmptySaveClearsOnlyTargetDraft() throws {
-        let suiteName = "PersistenceManagerDraftTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let manager = PersistenceManager(
-            defaults: defaults,
-            keychainStorage: InMemoryKeychainStorage()
-        )
-
-        manager.saveDraft("first", workspaceId: "ws-a", agentId: "agent-a")
-        manager.saveDraft("second", workspaceId: "ws-a", agentId: "agent-b")
-        manager.saveDraft("third", workspaceId: "ws-b", agentId: "agent-a")
-
-        #expect(defaults.string(forKey: "draft_ws-a_agent-a") == "first")
-        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-b") == "second")
-        #expect(manager.loadDraft(workspaceId: "ws-b", agentId: "agent-a") == "third")
-
-        manager.saveDraft("", workspaceId: "ws-a", agentId: "agent-a")
-
-        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-a").isEmpty)
-        #expect(manager.loadDraft(workspaceId: "ws-a", agentId: "agent-b") == "second")
-        #expect(manager.loadDraft(workspaceId: "ws-b", agentId: "agent-a") == "third")
     }
 
     // MARK: - MainActor serialization smoke test
@@ -293,6 +245,108 @@ final class InMemoryKeychainStorage: KeychainStorage, @unchecked Sendable {
     }
 }
 
+@Suite("Ephemeral persistence (--demo-data)", .serialized)
+struct EphemeralPersistenceTests {
+    private func connection() -> StoredConnection {
+        StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+                certFingerprint: "aa:bb"),
+            token: "tok", displayName: "Demo")
+    }
+
+    @Test func startsUnpairedAndForgetsStateAcrossInstances() {
+        let first = PersistenceManager.ephemeral()
+        #expect(first.loadConnections().isEmpty)
+        #expect(first.lastUsedConnection() == nil)
+
+        let stored = first.upsertConnection(connection())
+        first.setActiveConnection(id: stored.id)
+        first.saveLastScreen(
+            PersistenceManager.SavedScreen(
+                screen: "workspaceDetail", workspaceId: "ws-demo",
+                agentId: nil, agentName: nil, noteId: nil, noteTitle: nil),
+            for: stored.id)
+        #expect(first.lastUsedConnection()?.id == stored.id)
+
+        // A relaunch builds a new ephemeral manager: nothing carries over.
+        let second = PersistenceManager.ephemeral()
+        #expect(second.loadConnections().isEmpty)
+        #expect(second.lastUsedConnection() == nil)
+        #expect(second.loadLastScreen(for: stored.id) == nil)
+    }
+
+    @Test func doesNotTouchTheStandardDefaults() {
+        let ephemeral = PersistenceManager.ephemeral()
+        #expect(ephemeral.defaults !== UserDefaults.standard)
+    }
+}
+
+@Suite("Connection persistence failures", .serialized)
+struct ConnectionPersistenceFailureTests {
+    private func makePersistence(
+        storage: InMemoryKeychainStorage
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "ConnectionPersistenceFailureTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
+
+    private func connection(token: String = "old") -> StoredConnection {
+        StoredConnection(
+            server: PairedServer(
+                hosts: ["10.0.0.1"], port: 4242, name: "daemon", pairedAt: Date(),
+                certFingerprint: "aa:bb"),
+            token: token, displayName: "Original")
+    }
+
+    @Test func failedRemovalPreservesRecordAndActivePointer() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        setup.manager.setActiveConnection(id: stored.id)
+        storage.setSaveFailure(true)
+
+        #expect(!setup.manager.deleteConnection(id: stored.id))
+        #expect(setup.manager.loadConnections() == [stored])
+        #expect(setup.manager.activeConnection()?.id == stored.id)
+    }
+
+    @Test func failedSyncedMergePreservesRecordPointerAndReportsNoChange() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        setup.manager.setActiveConnection(id: stored.id)
+        storage.setSaveFailure(true)
+        let tombstone = SyncedBackendRecord(
+            label: "Synced Mac", host: "10.0.0.1", hosts: ["10.0.0.1"], port: 4242,
+            fingerprint: "aa:bb", hostname: nil, detectHosts: true, token: "",
+            updatedAt: Date().timeIntervalSince1970 * 1000, deleted: true,
+            deletedAt: Date().timeIntervalSince1970 * 1000)
+
+        let outcome = setup.manager.mergeSyncedBackends(records: [tombstone])
+
+        #expect(!outcome.changed)
+        #expect(setup.manager.loadConnections() == [stored])
+        #expect(setup.manager.activeConnection()?.id == stored.id)
+    }
+
+    @Test func failedMetadataRefreshKeepsPreviouslySavedRecord() {
+        let storage = InMemoryKeychainStorage()
+        let setup = makePersistence(storage: storage)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let stored = setup.manager.upsertConnection(connection())
+        storage.setSaveFailure(true)
+
+        #expect(!setup.manager.updateConnectionDisplayName(
+            id: stored.id, displayName: "Updated"))
+        #expect(setup.manager.loadConnections() == [stored])
+    }
+}
+
 /// Installs the in-memory Keychain backend exactly once per test process.
 enum TestKeychainStorage {
     static let installed: Void = {
@@ -312,6 +366,10 @@ private final class FakeSecItemStore {
     private(set) var updateCallCount = 0
     private(set) var addCallCount = 0
     private(set) var deleteCallCount = 0
+    /// Raw attribute dictionaries handed to SecItemUpdate / SecItemAdd, so
+    /// policy tests can assert exactly what would reach the Security framework.
+    private(set) var updateCalls: [(query: [String: Any], attributes: [String: Any])] = []
+    private(set) var addQueries: [[String: Any]] = []
 
     init(items: [String: Record] = [:]) {
         self.items = items
@@ -325,6 +383,7 @@ private final class FakeSecItemStore {
         SecItemKeychainStorage.SecurityCalls(
             update: { [self] query, attributes in
                 updateCallCount += 1
+                updateCalls.append((query: query, attributes: attributes))
                 if let updateFailure { return updateFailure }
                 guard let key = key(from: query), var record = items[key] else {
                     return errSecItemNotFound
@@ -338,6 +397,7 @@ private final class FakeSecItemStore {
             },
             add: { [self] query in
                 addCallCount += 1
+                addQueries.append(query)
                 if let addFailure { return addFailure }
                 guard let key = key(from: query), items[key] == nil,
                       let data = query[kSecValueData as String] as? Data,
@@ -372,9 +432,7 @@ struct SecItemKeychainStorageTests {
     private let service = "test.service"
     private let account = "test.account"
     private let original = FakeSecItemStore.Record(
-        data: Data("old".utf8),
-        accessibility: "existing-accessibility"
-    )
+        data: Data("old".utf8), accessibility: "existing-accessibility")
 
     @Test func updateSucceedsWithoutDeleteOrAdd() {
         let fake = FakeSecItemStore(items: ["\(service)\u{1F}\(account)": original])
@@ -384,8 +442,7 @@ struct SecItemKeychainStorageTests {
         #expect(storage.save(data: replacement, service: service, account: account))
         #expect(
             fake.record(service: service, account: account)
-                == .init(data: replacement, accessibility: original.accessibility)
-        )
+                == .init(data: replacement, accessibility: original.accessibility))
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 0)
         #expect(fake.deleteCallCount == 0)
@@ -413,9 +470,7 @@ struct SecItemKeychainStorageTests {
             fake.record(service: service, account: account)
                 == .init(
                     data: data,
-                    accessibility: kSecAttrAccessibleAfterFirstUnlock as String
-                )
-        )
+                    accessibility: kSecAttrAccessibleAfterFirstUnlock as String))
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 1)
         #expect(fake.deleteCallCount == 0)
@@ -433,5 +488,917 @@ struct SecItemKeychainStorageTests {
         #expect(fake.updateCallCount == 1)
         #expect(fake.addCallCount == 1)
         #expect(fake.deleteCallCount == 0)
+    }
+}
+
+/// Pins the credential backup / accessibility policy documented on
+/// `SecItemKeychainStorage` (ios#263): every LOCAL credential class is
+/// `AfterFirstUnlock`, non-synchronizable and app-private; SYNCED backend
+/// records are read as synchronizable shared-group items with no
+/// accessibility constraint of their own. Any drift in these attributes —
+/// including a move to a `ThisDeviceOnly` class — must fail here and come
+/// with an explicit policy decision plus a migration.
+@Suite("Keychain credential backup policy")
+struct KeychainAccessibilityPolicyTests {
+    private func makePersistence(
+        fake: FakeSecItemStore
+    ) -> (manager: PersistenceManager, suiteName: String) {
+        let suiteName = "KeychainAccessibilityPolicyTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let storage = SecItemKeychainStorage(security: fake.securityCalls())
+        return (PersistenceManager(defaults: defaults, keychainStorage: storage), suiteName)
+    }
+
+    @Test func everyLocalCredentialClassIsAfterFirstUnlockAndNeverSynchronizable() {
+        let fake = FakeSecItemStore()
+        let setup = makePersistence(fake: fake)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let pm = setup.manager
+        let localAccounts = [
+            pm.keychainAccountConnections, pm.keychainAccountToken, pm.keychainAccountServer,
+        ]
+
+        for account in localAccounts {
+            #expect(pm.saveDataToKeychain(data: Data(account.utf8), account: account))
+        }
+
+        #expect(fake.addQueries.count == localAccounts.count)
+        #expect(
+            fake.addQueries.compactMap { $0[kSecAttrAccount as String] as? String }
+                == localAccounts)
+        for query in fake.addQueries {
+            #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
+            #expect(query[kSecAttrService as String] as? String == "com.intent.companion")
+            #expect(
+                query[kSecAttrAccessible as String] as? String
+                    == kSecAttrAccessibleAfterFirstUnlock as String)
+            #expect(query[kSecAttrSynchronizable as String] == nil)
+            #expect(query[kSecAttrAccessGroup as String] == nil)
+        }
+    }
+
+    @Test func rewritingALocalCredentialNeverTouchesItsAccessibilityOrSyncScope() {
+        let fake = FakeSecItemStore()
+        let setup = makePersistence(fake: fake)
+        defer { UserDefaults(suiteName: setup.suiteName)?.removePersistentDomain(forName: setup.suiteName) }
+        let pm = setup.manager
+
+        #expect(pm.saveDataToKeychain(data: Data("first".utf8), account: pm.keychainAccountConnections))
+        #expect(pm.saveDataToKeychain(data: Data("second".utf8), account: pm.keychainAccountConnections))
+
+        #expect(fake.addCallCount == 1)
+        #expect(fake.updateCalls.count == 2)
+        for call in fake.updateCalls {
+            #expect(call.query[kSecAttrSynchronizable as String] == nil)
+            #expect(call.query[kSecAttrAccessGroup as String] == nil)
+            #expect(Array(call.attributes.keys) == [kSecValueData as String])
+        }
+        #expect(
+            fake.record(service: "com.intent.companion", account: pm.keychainAccountConnections)?
+                .accessibility == kSecAttrAccessibleAfterFirstUnlock as String)
+    }
+
+    @Test func syncedBackendRecordsAreReadAsSynchronizableSharedGroupItemsOnly() {
+        let group = "T.dev.intentapp.backends"
+        let query = SyncedBackendRegistry.listQuery(accessGroup: group)
+
+        #expect(query[kSecAttrService as String] as? String == "com.cloudlands.intent.backends")
+        #expect(query[kSecAttrAccessGroup as String] as? String == group)
+        #expect(
+            query[kSecAttrSynchronizable as String] as? String
+                == kSecAttrSynchronizableAny as String)
+        #expect(query[kSecAttrAccessible as String] == nil)
+        #expect(query[kSecValueData as String] == nil)
+    }
+}
+
+/// Tests for the multi-connection persistence layer (Keychain-backed connection list,
+/// active-connection pointer, legacy-pairing migration).
+@Suite(.serialized)
+struct ConnectionPersistenceTests {
+
+    private let pm = PersistenceManager.shared
+
+    init() {
+        _ = TestKeychainStorage.installed
+    }
+
+    /// Remove all connection-related state (new blob, legacy entries, active pointer).
+    private func resetConnectionState() {
+        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
+        pm.deleteFromKeychain(account: pm.keychainAccountServer)
+        pm.deleteFromKeychain(account: pm.keychainAccountToken)
+        UserDefaults.standard.removeObject(forKey: pm.activeConnectionIdKey)
+        UserDefaults.standard.removeObject(forKey: pm.serverKey)
+    }
+
+    private func makeServer(
+        hosts: [String] = ["10.0.0.1"], port: Int = 4242, name: String = "daemon"
+    ) -> PairedServer {
+        PairedServer(hosts: hosts, port: port, name: name, pairedAt: Date())
+    }
+
+    // MARK: - Load / upsert
+
+    @Test func loadConnectionsIsEmptyByDefault() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        #expect(pm.loadConnections().isEmpty)
+    }
+
+    @Test func upsertInsertsAndRoundTrips() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let connection = StoredConnection(server: makeServer(), token: "tok-1")
+        pm.upsertConnection(connection)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first == connection)
+        #expect(loaded.first?.displayName == "10.0.0.1:4242")
+    }
+
+    @Test func upsertDedupsSameHostSetAndPortPreservingId() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let original = StoredConnection(
+            server: makeServer(hosts: ["a.local", "10.0.0.1"]),
+            token: "tok-old",
+            lastConnectedAt: Date(timeIntervalSince1970: 1000)
+        )
+        pm.upsertConnection(original)
+
+        // Same host set (reordered) + port: updates in place, preserves id and lastConnectedAt.
+        let updated = StoredConnection(
+            server: makeServer(hosts: ["10.0.0.1", "a.local"]),
+            token: "tok-new"
+        )
+        let stored = pm.upsertConnection(updated)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        #expect(loaded.first?.lastConnectedAt == original.lastConnectedAt)
+    }
+
+    @Test func upsertDifferentPortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(port: 4242), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(port: 4243), token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    @Test func upsertOverlappingHostSetUpdatesInPlaceAndMergesHosts() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // Simulates a re-pair after the route refresh grew the stored host set:
+        // upsert [h], grow to [h, ip] via updateConnectionHosts, then re-pair
+        // with [h] again — must update the grown record, not insert a duplicate.
+        let original = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-old"))
+        pm.updateConnectionHosts(id: original.id, hosts: ["192.168.1.10", "10.0.0.5"])
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok-new"))
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        // Previously known routes are never dropped by a narrower re-pair.
+        #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
+    }
+
+    @Test func upsertDisjointHostSetSamePortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    /// A tunnel-only re-pair (manual tc-address entry) carries no hosts, so
+    /// host overlap can never match — the tcAddress is the record identity.
+    /// Regression: without the tcAddress match key each re-pair inserted a
+    /// duplicate record, including after the record had learned routes.
+    @Test func upsertSameTcAddressUpdatesInPlaceDespiteDisjointHosts() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let original = pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "tok-old"))
+        pm.updateConnectionHosts(id: original.id, hosts: ["10.0.0.1"])
+
+        let stored = pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "tok-new"))
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.token == "tok-new")
+        // Learned routes survive the tunnel-only re-pair.
+        #expect(loaded.first?.server.hosts == ["10.0.0.1"])
+        #expect(loaded.first?.server.tcAddress == "tc-abc123")
+    }
+
+    /// Records without a tcAddress never match on the tunnel key: two
+    /// tunnel-less records with disjoint hosts stay separate (nil == nil must
+    /// not collapse them).
+    @Test func upsertNilTcAddressDoesNotMatchOnTunnelKey() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["a.local"]), token: "t1"))
+        pm.upsertConnection(StoredConnection(server: makeServer(hosts: ["b.local"]), token: "t2"))
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t3"))
+        #expect(pm.loadConnections().count == 3)
+    }
+
+    /// Same tc address on a different port is a different daemon listener —
+    /// port stays part of the identity like it is for host matches.
+    @Test func upsertSameTcAddressDifferentPortCreatesSeparateEntry() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4242, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t1"))
+        pm.upsertConnection(StoredConnection(
+            server: PairedServer(
+                hosts: [], port: 4243, name: "daemon",
+                pairedAt: Date(), tcAddress: "tc-abc123"),
+            token: "t2"))
+        #expect(pm.loadConnections().count == 2)
+    }
+
+    @Test func mergeHostListsKeepsExistingFirstAndAppendsNew() {
+        #expect(PersistenceManager.mergeHostLists(
+            existing: ["nat.example.com", "192.168.1.10"],
+            incoming: ["192.168.1.10", "10.0.0.5"])
+            == ["nat.example.com", "192.168.1.10", "10.0.0.5"])
+        #expect(PersistenceManager.mergeHostLists(existing: [], incoming: ["a"]) == ["a"])
+        #expect(PersistenceManager.mergeHostLists(existing: ["a"], incoming: []) == ["a"])
+    }
+
+    // MARK: - updateConnectionHosts
+
+    @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["192.168.1.10"]), token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["192.168.1.10", "10.0.0.5"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.id == stored.id)
+        #expect(loaded.first?.server.hosts == ["192.168.1.10", "10.0.0.5"])
+        // Everything else on the record is preserved.
+        #expect(loaded.first?.token == "tok")
+        #expect(loaded.first?.server.port == stored.server.port)
+        #expect(loaded.first?.server.name == stored.server.name)
+        #expect(loaded.first?.server.pairedAt == stored.server.pairedAt)
+        #expect(loaded.first?.displayName == stored.displayName)
+    }
+
+    @Test func updateConnectionHostsPreservesCertFingerprint() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), certFingerprint: "ab:cd")
+        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+
+        #expect(pm.loadConnections().first?.server.certFingerprint == "ab:cd")
+    }
+
+    @Test func updateConnectionHostsUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionHosts(id: UUID(), hosts: ["1.2.3.4"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server.hosts == stored.server.hosts)
+    }
+
+    @Test func updateConnectionHostsPreservesTcAddress() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-abc123")
+        let stored = pm.upsertConnection(StoredConnection(server: server, token: "tok"))
+        pm.updateConnectionHosts(id: stored.id, hosts: ["10.0.0.1", "10.0.0.2"])
+
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-abc123")
+    }
+
+    // MARK: - updateConnectionTcAddress
+
+    @Test func updateConnectionTcAddressSetsAndReplaces() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+
+        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-first")
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-first")
+
+        pm.updateConnectionTcAddress(id: stored.id, tcAddress: "tc-second")
+        let loaded = pm.loadConnections().first
+        #expect(loaded?.server.tcAddress == "tc-second")
+        #expect(loaded?.server.hosts == stored.server.hosts)
+        #expect(loaded?.id == stored.id)
+    }
+
+    @Test func updateConnectionTcAddressUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionTcAddress(id: UUID(), tcAddress: "tc-x")
+        #expect(pm.loadConnections().first?.server.tcAddress == nil)
+    }
+
+    /// A re-pair without a tunnel address (manual entry, QR from a daemon
+    /// whose tunnel is down) must not drop the known address.
+    @Test func upsertWithoutTcAddressPreservesExisting() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let withTc = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-known")
+        pm.upsertConnection(StoredConnection(server: withTc, token: "tok-old"))
+
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok-new"))
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server.tcAddress == "tc-known")
+        #expect(loaded.first?.token == "tok-new")
+    }
+
+    @Test func upsertWithTcAddressReplacesExisting() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let old = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-old")
+        pm.upsertConnection(StoredConnection(server: old, token: "tok"))
+
+        let new = PairedServer(
+            hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+            pairedAt: Date(), tcAddress: "tc-new")
+        pm.upsertConnection(StoredConnection(server: new, token: "tok"))
+        #expect(pm.loadConnections().first?.server.tcAddress == "tc-new")
+    }
+
+    // MARK: - updateConnectionDisplayName
+
+    @Test func updateConnectionDisplayNameReplacesNamePreservingRecord() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(server: makeServer(), token: "tok", displayName: "ugly.local-domain"))
+        pm.updateConnectionDisplayName(id: stored.id, displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.id == stored.id)
+        #expect(loaded.first?.displayName == "Pretty Studio")
+        // Everything else on the record is preserved.
+        #expect(loaded.first?.token == "tok")
+        #expect(loaded.first?.server == stored.server)
+    }
+
+    @Test func updateConnectionDisplayNameUnknownIdIsNoOp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        pm.updateConnectionDisplayName(id: UUID(), displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.displayName == stored.displayName)
+    }
+
+    @Test func updateConnectionDisplayNameDoesNotAffectOtherRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
+        let b = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
+        pm.updateConnectionDisplayName(id: a.id, displayName: "Pretty Studio")
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.first { $0.id == a.id }?.displayName == "Pretty Studio")
+        #expect(loaded.first { $0.id == b.id }?.displayName == b.displayName)
+    }
+
+    @Test func updateConnectionHostsDoesNotAffectOtherRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["a.local"], port: 1), token: "a"))
+        let b = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["b.local"], port: 2), token: "b"))
+        pm.updateConnectionHosts(id: a.id, hosts: ["a.local", "10.0.0.9"])
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.first { $0.id == a.id }?.server.hosts == ["a.local", "10.0.0.9"])
+        #expect(loaded.first { $0.id == b.id }?.server.hosts == ["b.local"])
+    }
+
+    // MARK: - Delete
+
+    @Test func deleteRemovesConnectionAndClearsActivePointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        pm.setActiveConnection(id: a.id)
+
+        pm.deleteConnection(id: a.id)
+        #expect(pm.loadConnections().map(\.id) == [b.id])
+        #expect(pm.activeConnection() == nil)
+
+        // Deleting a non-active connection leaves the active pointer alone.
+        pm.setActiveConnection(id: b.id)
+        pm.deleteConnection(id: a.id)
+        #expect(pm.activeConnection()?.id == b.id)
+    }
+
+    // MARK: - Active pointer
+
+    @Test func activeConnectionRoundTrip() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        #expect(pm.activeConnection() == nil)
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+
+        pm.setActiveConnection(id: a.id)
+        #expect(pm.activeConnection()?.id == a.id)
+
+        pm.setActiveConnection(id: b.id)
+        #expect(pm.activeConnection()?.id == b.id)
+    }
+
+    @Test func touchLastConnectedUpdatesTimestamp() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(StoredConnection(server: makeServer(), token: "t"))
+        #expect(stored.lastConnectedAt == nil)
+
+        let before = Date()
+        pm.touchLastConnected(id: stored.id)
+        let loaded = pm.loadConnections().first
+        #expect(loaded?.lastConnectedAt != nil)
+        if let touched = loaded?.lastConnectedAt {
+            #expect(touched >= before)
+        }
+    }
+
+    // MARK: - Launch-seed fallback (window model v2)
+
+    @Test func lastUsedConnectionPrefersLastUsedPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let a = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        pm.touchLastConnected(id: b.id)
+        pm.setActiveConnection(id: a.id)
+
+        #expect(pm.lastUsedConnection()?.id == a.id,
+                "The last-used pointer wins over recency when its record exists")
+    }
+
+    @Test func lastUsedConnectionFallsBackToMostRecentlyConnected() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        _ = pm.upsertConnection(StoredConnection(server: makeServer(port: 1), token: "a"))
+        let b = pm.upsertConnection(StoredConnection(server: makeServer(port: 2), token: "b"))
+        let c = pm.upsertConnection(StoredConnection(server: makeServer(port: 3), token: "c"))
+        pm.touchLastConnected(id: c.id)
+        pm.touchLastConnected(id: b.id)
+
+        #expect(pm.lastUsedConnection()?.id == b.id,
+                "Without a pointer the most recently connected record wins")
+    }
+
+    @Test func lastUsedConnectionIsNilWithoutSavedConnections() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        #expect(pm.lastUsedConnection() == nil)
+    }
+
+    // MARK: - Migration
+
+    @Test func migratesLegacyKeychainPairing() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["legacy.local"], port: 9999)
+        let data = try JSONEncoder().encode(server)
+        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("legacy-token".utf8), account: pm.keychainAccountToken)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server == server)
+        #expect(loaded.first?.token == "legacy-token")
+        #expect(pm.activeConnection()?.id == loaded.first?.id)
+
+        // Legacy entries removed after successful migration.
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == nil)
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountToken) == nil)
+    }
+
+    @Test func migratesLegacyUserDefaultsPairing() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["defaults.local"], port: 8888)
+        UserDefaults.standard.set(try JSONEncoder().encode(server), forKey: pm.serverKey)
+        pm.saveDataToKeychain(data: Data("ud-token".utf8), account: pm.keychainAccountToken)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.server == server)
+        #expect(loaded.first?.token == "ud-token")
+        #expect(pm.activeConnection()?.id == loaded.first?.id)
+        #expect(UserDefaults.standard.data(forKey: pm.serverKey) == nil)
+    }
+
+    @Test func migrationWithoutTokenIsNonDestructive() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["orphan.local"])
+        let data = try JSONEncoder().encode(server)
+        pm.saveDataToKeychain(data: data, account: pm.keychainAccountServer)
+
+        // No token: nothing to migrate, legacy server entry must remain untouched.
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) == data)
+    }
+
+    @Test func migrationRunsOnlyOnce() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["once.local"])
+        pm.saveDataToKeychain(data: try JSONEncoder().encode(server), account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("tok".utf8), account: pm.keychainAccountToken)
+
+        let first = pm.loadConnections()
+        try #require(first.count == 1)
+
+        // Deleting everything from the migrated list must not resurrect the legacy pairing.
+        pm.deleteConnection(id: first[0].id)
+        #expect(pm.loadConnections().isEmpty)
+    }
+
+    // MARK: - Synced-registry merge
+
+    private func syncedRecord(
+        host: String = "10.0.0.1", port: Int = 4242, fingerprint: String = "aa:bb",
+        token: String = "tok-sync", updatedAt: Double = 100, deleted: Bool = false
+    ) -> SyncedBackendRecord {
+        SyncedBackendRecord(
+            label: "Synced Mac", host: host, hosts: [host], port: port,
+            fingerprint: fingerprint, hostname: nil, detectHosts: true,
+            token: deleted ? "" : token, updatedAt: updatedAt,
+            deleted: deleted, deletedAt: deleted ? updatedAt : nil)
+    }
+
+    @Test func mergeSyncedBackendsAddsAndPersistsNewRecords() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord()])
+        #expect(outcome.changed)
+        #expect(outcome.addedIds.count == 1)
+        #expect(!outcome.removedActiveConnection)
+
+        let loaded = pm.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.token == "tok-sync")
+        #expect(loaded.first?.server.certFingerprint == "aa:bb")
+        #expect(loaded.first?.syncUpdatedAt == 100)
+    }
+
+    @Test func mergeSyncedBackendsTombstoneRemovesActiveAndClearsPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let stored = pm.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        pm.setActiveConnection(id: stored.id)
+
+        let outcome = pm.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        #expect(outcome.removedIds == [stored.id])
+        #expect(outcome.removedActiveConnection)
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.activeConnection() == nil)
+    }
+
+    @Test func mergeSyncedBackendsTombstoneOnNonActiveKeepsPointer() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let doomed = pm.upsertConnection(
+            StoredConnection(
+                server: PairedServer(
+                    hosts: ["10.0.0.1"], port: 4242, name: "daemon",
+                    pairedAt: Date(timeIntervalSince1970: 0), certFingerprint: "aa:bb"),
+                token: "tok"))
+        let active = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["other.local"], port: 1), token: "o"))
+        pm.setActiveConnection(id: active.id)
+
+        let outcome = pm.mergeSyncedBackends(
+            records: [syncedRecord(updatedAt: 200, deleted: true)])
+        #expect(outcome.removedIds == [doomed.id])
+        #expect(!outcome.removedActiveConnection)
+        #expect(pm.activeConnection()?.id == active.id)
+    }
+
+    @Test func mergeSyncedBackendsNoChangeWritesNothing() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        let before = pm.loadConnections()
+
+        // Same clock again: no-op.
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord(updatedAt: 100)])
+        #expect(!outcome.changed)
+        #expect(pm.loadConnections() == before)
+    }
+
+    // MARK: - Undecodable registry (intent-hq/ios#265)
+
+    /// A blob that exists but is not a `[StoredConnection]` JSON array —
+    /// e.g. corrupt bytes or a future schema.
+    private let undecodableBlob = Data("{\"v\": 99, \"schema\": \"future\"}".utf8)
+
+    private func seedUndecodableBlob() {
+        #expect(pm.saveDataToKeychain(data: undecodableBlob, account: pm.keychainAccountConnections))
+    }
+
+    private func storedBlob() -> Data? {
+        pm.loadDataFromKeychain(account: pm.keychainAccountConnections)
+    }
+
+    @Test func absentBlobIsNotReportedAsUndecodable() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        #expect(!pm.isConnectionRegistryUndecodable())
+        pm.upsertConnection(StoredConnection(server: makeServer(), token: "tok"))
+        #expect(!pm.isConnectionRegistryUndecodable())
+    }
+
+    @Test func undecodableBlobReadsAsEmptyButIsFlagged() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+
+        #expect(pm.isConnectionRegistryUndecodable())
+        #expect(pm.loadConnections().isEmpty)
+        #expect(pm.activeConnection() == nil)
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func upsertRefusesToOverwriteUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+
+        let outcome = pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok-new"))
+        #expect(!outcome.persisted)
+        #expect(outcome.registryUndecodable)
+        #expect(storedBlob() == undecodableBlob)
+        #expect(pm.isConnectionRegistryUndecodable())
+
+        // The pairing shim reports failure and leaves the pointer alone.
+        #expect(!pm.savePairing(server: makeServer(port: 1), token: "tok"))
+        #expect(pm.defaults.string(forKey: pm.activeConnectionIdKey) == nil)
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func syncedMergeRefusesToOverwriteUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let staleActive = UUID()
+        pm.setActiveConnection(id: staleActive)
+
+        let outcome = pm.mergeSyncedBackends(records: [syncedRecord()])
+        #expect(outcome.registryUndecodable)
+        #expect(!outcome.changed)
+        #expect(!outcome.removedActiveConnection)
+        #expect(storedBlob() == undecodableBlob)
+        // The pointer is not touched either: nothing was merged or removed.
+        #expect(pm.defaults.string(forKey: pm.activeConnectionIdKey) == staleActive.uuidString)
+    }
+
+    @Test func idKeyedWritesAndDeleteRefuseToTouchUndecodableBlob() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let id = UUID()
+
+        #expect(!pm.updateConnectionHosts(id: id, hosts: ["x.local"]))
+        #expect(!pm.updateConnectionTcAddress(id: id, tcAddress: "100.64.0.1"))
+        #expect(!pm.updateConnectionDisplayName(id: id, displayName: "Renamed"))
+        #expect(!pm.touchLastConnected(id: id))
+        // Delete reports failure (unlike an unknown id on a readable list,
+        // which is a successful no-op) so callers do not tear down state.
+        #expect(!pm.deleteConnection(id: id))
+        #expect(storedBlob() == undecodableBlob)
+    }
+
+    @Test func legacyMigrationDoesNotReplaceUndecodableBlob() throws {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        let legacy = makeServer(hosts: ["legacy.local"])
+        pm.saveDataToKeychain(data: try JSONEncoder().encode(legacy), account: pm.keychainAccountServer)
+        pm.saveDataToKeychain(data: Data("legacy-tok".utf8), account: pm.keychainAccountToken)
+
+        #expect(pm.loadConnections().isEmpty)
+        #expect(storedBlob() == undecodableBlob)
+        // Legacy entries survive too: nothing was migrated.
+        #expect(pm.loadDataFromKeychain(account: pm.keychainAccountServer) != nil)
+        #expect(pm.loadStringFromKeychain(account: pm.keychainAccountToken) == "legacy-tok")
+    }
+
+    @Test func writesResumeOnceBlobIsDecodableAgain() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+        seedUndecodableBlob()
+        #expect(!pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok")).persisted)
+
+        // An explicit recovery (here: the user clearing the store) unblocks writes.
+        pm.deleteFromKeychain(account: pm.keychainAccountConnections)
+        #expect(!pm.isConnectionRegistryUndecodable())
+        let outcome = pm.upsertConnectionWithOutcome(
+            StoredConnection(server: makeServer(), token: "tok"))
+        #expect(outcome.persisted)
+        #expect(!outcome.registryUndecodable)
+        #expect(pm.loadConnections().count == 1)
+    }
+
+    // MARK: - Compatibility shims
+
+    @Test func pairingShimsRoundTripOverConnectionsAPI() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        let server = makeServer(hosts: ["shim.local"], port: 7777)
+        pm.savePairing(server: server, token: "shim-token")
+
+        let pairing = pm.loadPairing()
+        #expect(pairing?.server == server)
+        #expect(pairing?.token == "shim-token")
+        #expect(pm.loadConnections().count == 1)
+
+        // Re-pairing the same host:port does not create a duplicate.
+        pm.savePairing(server: server, token: "shim-token-2")
+        #expect(pm.loadConnections().count == 1)
+        #expect(pm.loadPairing()?.token == "shim-token-2")
+
+        // clearPairing forgets only the active connection.
+        let other = pm.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["other.local"], port: 7778), token: "o")
+        )
+        pm.clearPairing()
+        #expect(pm.loadPairing() == nil)
+        #expect(pm.loadConnections().map(\.id) == [other.id])
+    }
+}
+
+/// Keyed last-screen persistence (window model v2: one slot per backend
+/// connection) plus migration of the legacy single-slot screen. Each test
+/// gets its own UserDefaults suite and in-memory keychain, removed again in
+/// deinit.
+@Suite(.serialized)
+final class LastScreenPersistenceTests {
+
+    private let pm: PersistenceManager
+    private let suiteName: String
+
+    init() {
+        _ = TestKeychainStorage.installed
+        suiteName = "LastScreenPersistenceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        pm = PersistenceManager(
+            defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+    }
+
+    deinit {
+        UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+    }
+
+    private func makeScreen(workspaceId: String) -> PersistenceManager.SavedScreen {
+        PersistenceManager.SavedScreen(
+            screen: "workspaceDetail", workspaceId: workspaceId,
+            agentId: nil, agentName: nil, noteId: nil, noteTitle: nil)
+    }
+
+    @Test func roundTripIsKeyedPerConnection() {
+        let a = UUID()
+        let b = UUID()
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+
+        #expect(pm.loadLastScreen(for: a)?.workspaceId == "ws-a")
+        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
+        #expect(pm.loadLastScreen(for: UUID()) == nil)
+    }
+
+    @Test func clearRemovesOnlyThatConnectionsSlot() {
+        let a = UUID()
+        let b = UUID()
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-a"), for: a)
+        pm.saveLastScreen(makeScreen(workspaceId: "ws-b"), for: b)
+
+        pm.clearLastScreen(for: a)
+
+        #expect(pm.loadLastScreen(for: a) == nil)
+        #expect(pm.loadLastScreen(for: b)?.workspaceId == "ws-b")
+    }
+
+    @Test func legacySingleSlotMigratesToTheActiveConnection() {
+        let active = pm.upsertConnection(StoredConnection(
+            server: PairedServer(hosts: ["10.0.0.1"], port: 1, name: "a", pairedAt: Date()),
+            token: "t"))
+        pm.setActiveConnection(id: active.id)
+        pm.defaults.set("workspaceDetail", forKey: "lastScreen")
+        pm.defaults.set("ws-legacy", forKey: "lastWorkspaceId")
+
+        // A different connection must not adopt the legacy slot.
+        #expect(pm.loadLastScreen(for: UUID()) == nil)
+
+        // The connection that was active adopts the legacy slot once, and
+        // the legacy keys are cleared so it cannot migrate twice.
+        let migrated = pm.loadLastScreen(for: active.id)
+        #expect(migrated?.screen == "workspaceDetail")
+        #expect(migrated?.workspaceId == "ws-legacy")
+        #expect(pm.defaults.string(forKey: "lastScreen") == nil,
+                "The legacy slot must be cleared after migration")
+        #expect(pm.loadLastScreen(for: active.id)?.workspaceId == "ws-legacy",
+                "The migrated screen must persist under the keyed slot")
     }
 }

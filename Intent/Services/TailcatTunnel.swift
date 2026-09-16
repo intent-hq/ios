@@ -37,23 +37,67 @@ nonisolated struct UnavailableTunnelDialer: TunnelDialing {
 
 #if canImport(TailcatKit)
 
+/// The gomobile handles a session tears down. Abstracted so teardown can be
+/// tested with injected (blocking) fakes; the TailcatKit projections conform.
+nonisolated protocol TunnelClientHandle {
+    func close() throws
+}
+
+nonisolated protocol TunnelForwarderHandle {
+    func port() -> Int
+    func close() throws
+}
+
+nonisolated extension TailcatkitClient: TunnelClientHandle {}
+nonisolated extension TailcatkitForwarder: TunnelForwarderHandle {}
+
 /// TailcatKit-backed session: owns the gomobile client and its loopback
 /// forwarder. `@unchecked Sendable`: the gomobile projections are thread-safe
-/// handles to Go objects.
+/// handles to Go objects and `closed` is lock-guarded.
 nonisolated final class TailcatTunnelSession: TunnelSession, @unchecked Sendable {
     let localPort: Int
-    private let client: TailcatkitClient
-    private let forwarder: TailcatkitForwarder
+    private let client: any TunnelClientHandle
+    private let forwarder: (any TunnelForwarderHandle)?
+    private let lock = NSLock()
+    private var closed = false
 
-    init(client: TailcatkitClient, forwarder: TailcatkitForwarder) {
+    /// `forwarder` is nil for a partially constructed session (client dialed,
+    /// no forwarder started): its `localPort` is 0 and `close()` tears down
+    /// only the client.
+    init(client: any TunnelClientHandle, forwarder: (any TunnelForwarderHandle)?) {
         self.client = client
         self.forwarder = forwarder
-        self.localPort = forwarder.port()
+        self.localPort = forwarder?.port() ?? 0
     }
 
+    /// Exactly-once: the first caller tears down and awaits it; later callers
+    /// return immediately. The gomobile closes run OFF the caller's executor
+    /// for the reason documented on `DialHandle.cancel`: `close()` takes the
+    /// Go startup mutex and can block for seconds, which on a cooperative
+    /// executor (or the main actor) would park that thread for the duration.
+    /// The continuation is deliberately not cancellation-aware: a cancelled
+    /// caller must still release the handles, so teardown always completes.
     func close() async {
-        try? forwarder.close()
-        try? client.close()
+        guard markClosed() else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            // Captures self (lock-guarded) rather than the non-Sendable
+            // gomobile handles, as `DialHandle.cancel` does.
+            DispatchQueue.global(qos: .userInitiated).async { [self] in
+                try? forwarder?.close()
+                try? client.close()
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Flips `closed`; true for the one caller that owns teardown. Synchronous
+    /// because `NSLock.lock()` is unavailable from asynchronous contexts.
+    private func markClosed() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if closed { return false }
+        closed = true
+        return true
     }
 }
 

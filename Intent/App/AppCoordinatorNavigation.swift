@@ -185,6 +185,7 @@ extension AppCoordinator {
         navigationState.suppressWorkspaceNavigation = true
         selectedWorkspaceId = workspaceId
         navigationState.suppressWorkspaceNavigation = false
+        conversationRequestId += 1
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
         // Save per-workspace sub-screen

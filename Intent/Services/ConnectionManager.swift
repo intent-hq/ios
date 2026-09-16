@@ -5,6 +5,13 @@ import os
 
 @MainActor
 @Observable class ConnectionManager: ConnectionManagerRouting {
+    nonisolated enum GlobalSubscriptionState: Equatable, Sendable {
+        case idle
+        case subscribing(attempt: Int)
+        case subscribed
+        case failed(attempts: Int, lastError: String)
+    }
+
     enum LocalIPsResult: Equatable {
         case unavailable
         case value([String])
@@ -58,9 +65,11 @@ import os
     /// adoption race regardless of which one finishes first.
     @ObservationIgnored private var connectAttempt: Int = 0
     @ObservationIgnored var reconnectTask: Task<Void, Never>?
+    @ObservationIgnored var globalSubscriptionTask: Task<Void, Never>?
     @ObservationIgnored var pingTimer: Timer?
     @ObservationIgnored var lastPongReceived = Date()
     @ObservationIgnored var lastSuccessfulConnectAt: CFAbsoluteTime?
+    @ObservationIgnored var heartbeatClock: any HeartbeatClock = ContinuousHeartbeatClock()
     @ObservationIgnored var lastReconnectAttempt = 0
     nonisolated static let millisecondsPerSecond: CFTimeInterval = 1000
     @ObservationIgnored private(set) var hosts: [String] = []
@@ -84,6 +93,7 @@ import os
     #endif
 
     @ObservationIgnored var eventHandlers: [UUID: (String, Any) -> Void] = [:]
+    var globalSubscriptionState: GlobalSubscriptionState = .idle
 
     /// The candidate label the tunnel route races under (also the host shown
     /// in its transport errors). Not a dialable name: the tunnel connects via
@@ -280,6 +290,7 @@ extension ConnectionManager {
     private func teardownConnection() {
         connectionGeneration += 1
         stopPingTimer()
+        stopGlobalSubscription()
         reconnectTask?.cancel()
         reconnectTask = nil
         lastSuccessfulConnectAt = nil

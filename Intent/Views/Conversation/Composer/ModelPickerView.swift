@@ -7,7 +7,16 @@ struct ModelPickerView: View {
 
     var body: some View {
         NavigationStack {
-            modelList
+            Group {
+                if let models = viewModel.selectableModels {
+                    modelList(models)
+                } else if viewModel.modelCatalogLoadFailed {
+                    loadFailedState
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
             .navigationTitle("Select Model")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -16,42 +25,52 @@ struct ModelPickerView: View {
                 }
             }
             .task {
-                await viewModel.fetchModels()
+                await viewModel.refreshSelectableModels()
             }
         }
     }
 
-    private var modelList: some View {
-        let grouped = Dictionary(grouping: viewModel.availableModels, by: \.provider)
-        let sortedProviders = grouped.keys.sorted()
-        return List {
+    /// The provider's `models.list` failed and nothing is cached: an
+    /// explicit retry instead of an indefinite spinner.
+    private var loadFailedState: some View {
+        ContentUnavailableView {
+            Label("Models Unavailable", systemImage: "exclamationmark.triangle")
+        } description: {
+            Text("The model list could not be loaded.")
+        } actions: {
+            Button("Retry") {
+                Task { await viewModel.refreshSelectableModels() }
+            }
+        }
+    }
+
+    private func modelList(_ models: [ModelInfo]) -> some View {
+        List {
+            let grouped = Dictionary(grouping: models, by: \.provider)
+            let sortedProviders = grouped.keys.sorted()
+
             ForEach(sortedProviders, id: \.self) { provider in
                 Section(header: Text(provider)) {
                     if let models = grouped[provider] {
                         ForEach(models) { model in
-                            modelButton(model)
+                            Button {
+                                Task {
+                                    await viewModel.setModel(model.id)
+                                    dismiss()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(model.name)
+                                        .foregroundStyle(Theme.foreground(for: colorScheme))
+                                    Spacer()
+                                    if viewModel.currentModelId == model.id {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(Theme.primary(for: colorScheme))
+                                    }
+                                }
+                            }
                         }
                     }
-                }
-            }
-        }
-    }
-
-    private func modelButton(_ model: ModelInfo) -> some View {
-        Button {
-            Task {
-                await viewModel.setModel(model.id)
-                dismiss()
-            }
-        } label: {
-            HStack {
-                Text(model.name)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                Spacer()
-                if viewModel.currentModelId == model.id {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(Theme.primary(for: colorScheme))
-                        .accessibilityLabel("Selected model")
                 }
             }
         }

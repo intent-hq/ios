@@ -1,6 +1,6 @@
 import Foundation
 
-enum MessageStreamingState: Equatable {
+nonisolated enum MessageStreamingState: Equatable {
     case complete
     case streaming
     case unreported
@@ -11,7 +11,7 @@ enum MessageStreamingState: Equatable {
 }
 
 /// The role of a message sender.
-enum MessageRole: String, Codable {
+nonisolated enum MessageRole: String, Codable {
     case assistant
     case error
     case system
@@ -25,7 +25,7 @@ enum MessageRole: String, Codable {
 }
 
 /// A tool call within a conversation message.
-struct ToolCall: Identifiable, Codable {
+nonisolated struct ToolCall: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     var arguments: AnyCodable?
@@ -87,7 +87,7 @@ struct ToolCall: Identifiable, Codable {
 }
 
 /// A tool result within a conversation message.
-struct ToolResult: Codable {
+nonisolated struct ToolResult: Codable, Equatable {
     let toolCallId: String
     var content: AnyCodable?
     var errorOutcome: ToolExecutionOutcome
@@ -128,7 +128,7 @@ struct ToolResult: Codable {
 /// (PROTOCOL §5.5): inline base64 `data` (legacy) or an attachment-registry
 /// `attachmentId` reference (monorepo#3338). Synthesized Codable omits nil
 /// keys, so placed references never carry a `data` key on the wire.
-struct ImageBlock: Codable {
+nonisolated struct ImageBlock: Codable {
     let type: String  // "image"
     let data: String?  // base64 (inline arm; nil for placed references)
     let attachmentId: String?  // attachment-registry reference
@@ -143,7 +143,7 @@ struct ImageBlock: Codable {
 }
 
 /// A queued message waiting to be sent to an agent.
-struct QueuedMessage: Identifiable, Codable {
+nonisolated struct QueuedMessage: Identifiable, Codable {
     let id: String
     var content: String
     let queuedAt: String
@@ -235,7 +235,7 @@ struct QueuedMessage: Identifiable, Codable {
 }
 
 /// A single message in an agent conversation.
-struct ConversationMessage: Identifiable, Codable {
+nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     let id: String
     let role: MessageRole
     var contentBlocks: [ContentBlock] {

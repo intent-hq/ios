@@ -37,7 +37,7 @@ final class WorkspaceFileImageLoader {
                 "workspaceId": workspaceId,
                 "path": path,
                 "offset": offset,
-                "length": WorkspaceFileImageLoader.chunkLength
+                "length": WorkspaceFileImageLoader.chunkLength,
             ])
             guard let dict = result as? [String: Any],
                   let content = dict["content"] as? String,
@@ -46,28 +46,43 @@ final class WorkspaceFileImageLoader {
             else { throw LoadError.malformedResponse }
             return FileChunk(content: content, bytesRead: bytesRead, size: size)
         }
+
+        /// One-shot `note.readAsset` read: the daemon answers the whole
+        /// asset as base64 (`{ assetId, mimeType, data, sizeKb }`).
+        func requestAsset(workspaceId: String, assetId: String) async throws -> String {
+            let result = try await connection.request("note.readAsset", params: [
+                "workspaceId": workspaceId,
+                "asset": assetId,
+            ])
+            guard let dict = result as? [String: Any],
+                  let data = dict["data"] as? String
+            else { throw LoadError.malformedResponse }
+            return data
+        }
     }
 
     /// Bytes requested per `file.readChunk` call (well under the daemon's
     /// 16 MiB decoded cap; most images resolve in a single round-trip).
-    static let chunkLength = 4 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    static let chunkLength = 4 * 1024 * 1024
     /// Refuse to assemble files past this size — transcript images should be
     /// far smaller, and this bounds memory on a pathological path.
-    nonisolated static let maxFileBytes = 32 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    nonisolated static let maxFileBytes = 32 * 1024 * 1024
     /// Longest decoded edge in pixels. Decoding goes through ImageIO's
     /// downsampling thumbnail path, so a small compressed file declaring
     /// enormous pixel dimensions cannot balloon decode/render memory.
     nonisolated static let maxPixelSize = 2048
     /// Total decoded-byte budget for the image cache (a 2048×2048 BGRA image
     /// is ~16 MB, so this holds a handful before NSCache evicts).
-    static let cacheTotalCostLimit = 64 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    static let cacheTotalCostLimit = 64 * 1024 * 1024
 
-    // NSCache requires a reference-type key; NSString preserves that Foundation contract.
-    // swiftlint:disable:next legacy_objc_type
     private let cache = NSCache<NSString, UIImage>()
     /// Session-lifetime negative cache: keys whose fetch/decode failed, so a
     /// persistently broken link doesn't refetch on every scroll-into-view.
-    private var failedKeys: Set<String> = []
+    /// Intentionally uncapped (ios#264): it grows only with distinct failed
+    /// links the transcript actually rendered, at ~160 B per entry measured
+    /// by `SessionCacheBoundsMeasurementTests`, so even a 10k-link session
+    /// retains ~1.5 MiB — noise next to one `cacheTotalCostLimit`.
+    private(set) var failedKeys: Set<String> = []
     private var inFlight: [String: Task<UIImage, Error>] = [:]
     private let chunkRequester: ChunkRequester
 
@@ -78,9 +93,36 @@ final class WorkspaceFileImageLoader {
 
     /// Cached-or-fetched image for a workspace-relative file path.
     func image(workspaceId: String, path: String) async throws -> UIImage {
-        let key = "\(workspaceId)\u{0}\(path)"
-        // NSString is the concrete reference key required by NSCache.
-        // swiftlint:disable:next legacy_objc_type
+        try await cachedImage(key: Self.fileKey(workspaceId: workspaceId, path: path)) {
+            [chunkRequester] in
+            try await Self.fetchAndDecode(
+                chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+        }
+    }
+
+    /// Cached-or-fetched image for a workspace asset id (the
+    /// `note.saveAsset` / `workspace-asset://` namespace, e.g. the workspace
+    /// `statusImageAssetId`). Asset ids are content-addressed, so a replaced
+    /// image is a new key and refetches; keys never collide with file paths.
+    func assetImage(workspaceId: String, assetId: String) async throws -> UIImage {
+        try await cachedImage(key: Self.assetKey(workspaceId: workspaceId, assetId: assetId)) {
+            [chunkRequester] in
+            try await Self.fetchAndDecodeAsset(
+                chunkRequester: chunkRequester, workspaceId: workspaceId, assetId: assetId)
+        }
+    }
+
+    private static func fileKey(workspaceId: String, path: String) -> String {
+        "\(workspaceId)\u{0}\(path)"
+    }
+
+    private static func assetKey(workspaceId: String, assetId: String) -> String {
+        "asset\u{0}\(workspaceId)\u{0}\(assetId)"
+    }
+
+    private func cachedImage(
+        key: String, fetch: @escaping @Sendable () async throws -> UIImage
+    ) async throws -> UIImage {
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
@@ -90,16 +132,10 @@ final class WorkspaceFileImageLoader {
         if let task = inFlight[key] {
             return try await task.value
         }
-        let task = Task<UIImage, Error> { [chunkRequester, cache] in
-            let image = try await Self.fetchAndDecode(
-                chunkRequester: chunkRequester,
-                workspaceId: workspaceId,
-                path: path
-            )
+        let task = Task<UIImage, Error> { [cache] in
+            let image = try await fetch()
             // Cache inside the task so an early-cancelled awaiter (view
             // scrolled away) doesn't lose the completed fetch.
-            // NSString is the concrete reference key required by NSCache.
-            // swiftlint:disable:next legacy_objc_type
             cache.setObject(image, forKey: key as NSString, cost: Self.decodedCost(of: image))
             return image
         }
@@ -120,7 +156,12 @@ final class WorkspaceFileImageLoader {
     /// Drop a key from the session negative cache so a user-initiated retry
     /// (e.g. tapping a failed attachment placeholder) actually refetches.
     func forgetFailure(workspaceId: String, path: String) {
-        failedKeys.remove("\(workspaceId)\u{0}\(path)")
+        failedKeys.remove(Self.fileKey(workspaceId: workspaceId, path: path))
+    }
+
+    /// `forgetFailure` for the asset namespace (status image retry taps).
+    func forgetAssetFailure(workspaceId: String, assetId: String) {
+        failedKeys.remove(Self.assetKey(workspaceId: workspaceId, assetId: assetId))
     }
 
     /// Approximate decoded byte size, used as the NSCache cost (shared with
@@ -134,16 +175,28 @@ final class WorkspaceFileImageLoader {
     /// decode run on the global executor — only each `file.readChunk` RPC
     /// hops to the main actor. Keeps large decodes off the UI thread.
     @concurrent
-    nonisolated private static func fetchAndDecode(
-        chunkRequester: ChunkRequester,
-        workspaceId: String,
-        path: String
+    private nonisolated static func fetchAndDecode(
+        chunkRequester: ChunkRequester, workspaceId: String, path: String
     ) async throws -> UIImage {
         let data = try await fetchBytes(
-            chunkRequester: chunkRequester,
-            workspaceId: workspaceId,
-            path: path
-        )
+            chunkRequester: chunkRequester, workspaceId: workspaceId, path: path)
+        guard let image = decodeImage(data) else {
+            throw LoadError.notAnImage
+        }
+        return image
+    }
+
+    /// `fetchAndDecode` for the single-round-trip `note.readAsset` payload:
+    /// only the RPC hops to the main actor; base64 and image decode run here.
+    @concurrent
+    private nonisolated static func fetchAndDecodeAsset(
+        chunkRequester: ChunkRequester, workspaceId: String, assetId: String
+    ) async throws -> UIImage {
+        let base64 = try await chunkRequester.requestAsset(workspaceId: workspaceId, assetId: assetId)
+        guard let data = Data(base64Encoded: base64) else {
+            throw LoadError.malformedResponse
+        }
+        guard data.count <= maxFileBytes else { throw LoadError.fileTooLarge }
         guard let image = decodeImage(data) else {
             throw LoadError.notAnImage
         }
@@ -153,19 +206,14 @@ final class WorkspaceFileImageLoader {
     /// Assemble the file's raw bytes from sequential `file.readChunk` slices
     /// on the global executor, hopping to the main actor only for each RPC.
     @concurrent
-    nonisolated private static func fetchBytes(
-        chunkRequester: ChunkRequester,
-        workspaceId: String,
-        path: String
+    private nonisolated static func fetchBytes(
+        chunkRequester: ChunkRequester, workspaceId: String, path: String
     ) async throws -> Data {
         var data = Data()
         var offset = 0
         while true {
             let result = try await chunkRequester.request(
-                workspaceId: workspaceId,
-                path: path,
-                offset: offset
-            )
+                workspaceId: workspaceId, path: path, offset: offset)
             guard result.size <= maxFileBytes else { throw LoadError.fileTooLarge }
             guard let chunk = Data(base64Encoded: result.content), chunk.count == result.bytesRead
             else { throw LoadError.malformedResponse }
@@ -190,7 +238,7 @@ final class WorkspaceFileImageLoader {
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
         ] as CFDictionary
         guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
             return nil

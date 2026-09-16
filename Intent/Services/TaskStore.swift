@@ -1,5 +1,5 @@
-import Combine
 import Foundation
+import Combine
 import Observation
 
 /// Observable task state for a single workspace.
@@ -158,14 +158,76 @@ import Observation
 
         guard let eventType = event["type"] as? String else { return }
 
-        // Only refetch if not in live mode (avoid double-apply)
         // Scope task:* events to this workspace to avoid cross-workspace refetches
-        if eventType.hasPrefix("task:"), !tasksLive {
-            let eventWorkspaceId = event["workspaceId"] as? String
-            if eventWorkspaceId == workspaceId {
+        let eventWorkspaceId = event["workspaceId"] as? String
+        guard eventWorkspaceId == workspaceId else { return }
+
+        // The refetch runs only in the non-live fallback (no `task.subscribe`
+        // snapshot yet, or after a subscription loss); while live, deltas
+        // arrive via the subscription push and a refetch would double-apply.
+        switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
+        case .refetch:
+            if !tasksLive {
                 Task { await fetchAll() }
             }
+        case .patchInPlace, .ignore, nil:
+            break
         }
+    }
+
+    // MARK: - Event classification
+
+    /// Bus channels this store consumes. Every catalog type on them must be in
+    /// exactly one table below (`IntentTests/EventCatalogCoverageTests.swift`).
+    nonisolated static let handledChannels = ["task:"]
+
+    /// Explicit allowlist (mirrors AgentStore / WorkspaceStore): only events
+    /// that can change a field a `WorkspaceTask` row renders (id, title,
+    /// status, updatedAt) or list membership refetch `task.list`.
+    /// `task:created` changes membership; `task:status-changed` changes
+    /// status/updatedAt.
+    nonisolated static let refetchEventTypes: Set<String> = [
+        "task:created", "task:status-changed",
+    ]
+
+    /// Deliberately ignored: `task:agent-linked` / `task:agent-unlinked` — the
+    /// assignee is not part of the row. Task body/title edits ride
+    /// `note:updated`, not `task:*`, so they never reached this store either
+    /// way.
+    nonisolated static let ignoredEventTypes: Set<String> = [
+        "task:agent-linked", "task:agent-unlinked",
+    ]
+
+    /// `task:ready-tasks-changed` is classified per `data.triggeredBy.reason`
+    /// (the golden's `discriminators` entry for this type). Readiness is not
+    /// rendered: `relations-changed` emissions carry no rendered field —
+    /// except `note-deleted`: intentd's `delete_note` emits no other `task:*`
+    /// type (only `note:deleted`, which this store does not receive), so that
+    /// emission is the only `task:*` signal that a row left the list.
+    nonisolated static let readyTasksChangedReasonClassification: [String: EventClassification] = [
+        "note-deleted": .refetch,
+        "relations-changed": .ignore,
+    ]
+
+    /// The status-change emission has no `reason` (`triggeredBy` is
+    /// `{ noteId, previousStatus, newStatus }`); it always pairs with a
+    /// `task:status-changed` that already refetches.
+    nonisolated static let readyTasksChangedWithoutReason: EventClassification = .ignore
+
+    /// Pure classification of one event; `nil` means the tables above do not
+    /// name the type (or, for `task:ready-tasks-changed`, the reason), which
+    /// `handleEvent` treats as ignore.
+    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+        if refetchEventTypes.contains(type) { return .refetch }
+        if ignoredEventTypes.contains(type) { return .ignore }
+        if type == "task:ready-tasks-changed" {
+            let triggeredBy = data?["triggeredBy"] as? [String: Any]
+            guard let reason = triggeredBy?["reason"] as? String else {
+                return readyTasksChangedWithoutReason
+            }
+            return readyTasksChangedReasonClassification[reason]
+        }
+        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
@@ -180,15 +242,17 @@ import Observation
         // so this handler only receives pushes for our exact subscriptionId.
         // No per-store gate needed (single source of truth is the router)
 
-        switch push.payload {
-        case let .collectionSnapshot(rawItems), let .conversationSnapshot(rawItems, _):
+        switch push.kind {
+        case .snapshot:
+            guard let rawItems = push.snapshot else { return }
             tasksLive = true
             reconciler.applySnapshot(seq: push.seq, rawItems: rawItems)
             tasks = reconciler.values()
             lastUpdated = Date()
             AppLog.tasks.debug("[TaskStore] Applied snapshot with \(rawItems.count) tasks, seq=\(push.seq)")
 
-        case let .delta(delta):
+        case .delta:
+            guard let delta = push.delta else { return }
             if reconciler.applyDelta(seq: push.seq, delta: delta) {
                 tasks = reconciler.values()
                 lastUpdated = Date()
@@ -215,7 +279,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                _ = try await connectionManager.request("task.unsubscribe", params: [
+                let _ = try await connectionManager.request("task.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {

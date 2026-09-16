@@ -25,15 +25,6 @@ enum ConversationConstants {
 
     enum Sending {}
 
-    enum Transcript {
-        static let atBottomThreshold: CGFloat = 50
-        static let initialScrollDelay: Double = 0.1
-        static let initialScrollSettleDelay: Double = 0.2
-        static let dividerProbeDelay: Double = 0.15
-        static let scrollDebounceMilliseconds = 100
-        static let scrollCompletionMilliseconds = 300
-    }
-
     enum QuestionWizard {}
 
     enum ResponseGroup {}
@@ -57,6 +48,32 @@ enum ConversationConstants {
 
     enum ContextMention {
         static let titleMaximumLength = 30
+    }
+
+    enum Transcript {
+        static let atBottomThreshold: CGFloat = 50
+        static let initialScrollDelay: Double = 0.1
+        /// Longest the entry scroll waits for the transcript UIScrollView
+        /// to be found before scrolling anyway.
+        static let initialScrollHostingTimeout: Double = 1.0
+        static let initialScrollSettleDelay: Double = 0.2
+        static let dividerProbeDelay: Double = 0.15
+        static let scrollDebounceMilliseconds = 100
+        static let scrollCompletionMilliseconds = 300
+        /// How many corrections a forced follow issues before giving up.
+        static let followLandingRetries = 3
+        /// Spacing between live geometry reads that verify a forced follow.
+        static let followLandingPollMilliseconds = 50
+        /// Longest a forced follow keeps verifying its landing.
+        static let followLandingTimeoutMilliseconds = 3_000
+        /// Maximum distance from the bottom for a completed forced follow.
+        static let followLandingTolerance: CGFloat = 1
+        /// Minimum spacing between follow-to-bottom streaming scrolls.
+        static let streamingFollowMinimumInterval: TimeInterval = 0.5
+        /// Maximum pinned-viewport drift before a streaming follow scrolls.
+        static let streamingFollowDriftTolerance: CGFloat = 1
+        /// Delay before rechecking geometry that briefly reads past the end.
+        static let pastEndSettleMilliseconds = 150
     }
 
     enum AttentionRequest {
@@ -119,9 +136,12 @@ enum Constants {
     }
 
     enum Connection {
-        static let logPreviewCharacterLimit = 100
+        nonisolated static let logPreviewCharacterLimit = 100
         static let reconnectBackoffExponentCap = 5
         static let reconnectBackoffMaximum: Double = 30
+        /// An inbound frame whose off-main parse or MainActor dispatch takes
+        /// longer than this (one 60 Hz frame) is logged as a slow frame.
+        nonisolated static let slowFrameLogThreshold: TimeInterval = 0.016
     }
 
     enum WebSocket {
@@ -147,7 +167,7 @@ enum Constants {
     enum Root {}
 
     enum Connecting {
-        static let workspaceLoadTimeout: TimeInterval = 5
+        static let workspaceLoadTimeout: Duration = .seconds(5)
         static let workspacePollInterval: Duration = .milliseconds(100)
     }
 

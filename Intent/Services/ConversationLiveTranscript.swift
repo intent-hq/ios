@@ -1,6 +1,10 @@
 import Foundation
 import Observation
 
+nonisolated struct InboundJSONValue: @unchecked Sendable {
+    let value: Any
+}
+
 @MainActor
 @Observable
 final class ConversationLiveTranscript {
@@ -27,13 +31,19 @@ final class ConversationLiveTranscript {
     private let connectionManager: ConnectionManagerRouting
     private var agentId: String?
     private var workspaceId: String?
+    /// Advances whenever the bound agent changes (or on `reset()`), never on a
+    /// same-agent rebind. `whileBound` compares against it so work started
+    /// under an earlier binding cannot publish into a later one.
+    @ObservationIgnored private var bindingGeneration = 0
+    /// Initial fetches (`isLoading = true`) still awaiting their page. A stale
+    /// initial fetch only finishes the load when none is left in flight.
+    @ObservationIgnored private var inFlightInitialLoads = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
     private var chatChannelActive = false
     private var chatSeeded = false
     private var chatExpectedSeq = 0
     private var resnapshotInProgress = false
-    private let blockDecoder = JSONDecoder()
     private let timestampFormatter = ISO8601DateFormatter()
     @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
     @ObservationIgnored private var hydratedBlockOrder: [String] = []
@@ -49,56 +59,139 @@ final class ConversationLiveTranscript {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
     }
-}
 
-extension ConversationLiveTranscript {
-    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
-        self.agentId = agentId
+    // MARK: - Binding
+
+    private func bind(agentId newAgentId: String, workspaceId: String?) {
+        if agentId != newAgentId {
+            bindingGeneration &+= 1
+        }
+        agentId = newAgentId
         if let workspaceId {
             self.workspaceId = workspaceId
         }
+    }
+
+    /// Runs `work` and returns its value only if the transcript is still bound
+    /// to the same agent it was when `work` started; otherwise the value is
+    /// stale and `nil` is returned (after `onStale` had a chance to clean up
+    /// side-effects the value carries, e.g. a server-side subscription).
+    /// Errors thrown by `work` propagate regardless of staleness.
+    func whileBound<T: Sendable>(
+        _ work: () async throws -> T,
+        onStale: (T) async -> Void = { _ in }
+    ) async rethrows -> T? {
+        let generation = bindingGeneration
+        let value = try await work()
+        guard generation == bindingGeneration else {
+            await onStale(value)
+            return nil
+        }
+        return value
+    }
+
+    func fetchConversation(agentId: String, workspaceId: String? = nil) async {
+        bind(agentId: agentId, workspaceId: workspaceId)
         let isInitialLoad = messages.isEmpty
         if isInitialLoad {
             isLoading = true
+            inFlightInitialLoads += 1
         }
 
-        do {
-            var params: [String: Any] = [
-                "agentId": agentId,
-                "projection": "slim"
-            ]
-            if let workspaceId = workspaceId ?? self.workspaceId {
-                params["workspaceId"] = workspaceId
+        var params: [String: Any] = [
+            "agentId": agentId,
+            "projection": "slim",
+        ]
+        if let workspaceId = workspaceId ?? self.workspaceId {
+            params["workspaceId"] = workspaceId
+        }
+        // Both awaits (RPC and off-main decode) yield MainActor; a rebind to
+        // another agent in either window makes this page stale, so it must
+        // not touch the new agent's transcript or streaming state. The error
+        // is carried as a value so a stale failure is dropped with a stale
+        // page: a not-found for the previous agent says nothing about the
+        // current one and must not reach `onFetchError`.
+        let outcome: Result<ConversationPage?, Error>? = await whileBound {
+            do {
+                let result = try await connectionManager.request(
+                    "agent.getConversation",
+                    params: params
+                )
+                return .success(await Self.decodeConversationPage(InboundJSONValue(value: result)))
+            } catch {
+                return .failure(error)
             }
-            let result = try await connectionManager.request(
-                "agent.getConversation",
-                params: params
-            )
-            if let response = result as? [String: Any],
-               let items = response["messages"] as? [[String: Any]] {
-                let fetched = items.compactMap { ConversationMessage.parseMessage($0) }
-                isTruncated = response["truncated"] as? Bool ?? false
-                totalMessageCount = response["totalMessages"] as? Int ?? fetched.count
-                mergeFetchedMessages(fetched)
-                remergeHydratedBlocks()
+        } onStale: { outcome in
+            if case .failure(let error) = outcome {
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped stale fetch failure for a previous binding: \(error)")
+            }
+        }
 
-                if let last = messages.last,
-                   last.role == .assistant,
-                   last.isStreaming == true {
-                    isStreaming = true
-                }
+        switch outcome {
+        case .success(let page?):
+            isTruncated = page.truncated
+            totalMessageCount = page.totalMessages ?? page.messages.count
+            mergeFetchedMessages(page.messages)
+            remergeHydratedBlocks()
+
+            if let last = messages.last,
+               last.role == .assistant,
+               last.isStreaming == true {
+                isStreaming = true
             }
-        } catch {
-            onFetchError?(error)
-            AppLog.conversation.error(
-                "[ConversationStore] Failed to fetch conversation: \(error)"
-            )
+        case .success(nil):
+            break
+        case .failure(let error):
+            reportFetchError(error)
+        case nil:
+            break
         }
 
         if isInitialLoad {
-            onInitialLoadCompleted?()
-            isLoading = false
+            inFlightInitialLoads -= 1
+            // A stale initial fetch must not finish the new binding's own
+            // in-flight initial load; with none pending it still releases
+            // `isLoading` so buffered events are not held forever.
+            if outcome != nil || inFlightInitialLoads == 0 {
+                onInitialLoadCompleted?()
+                isLoading = false
+            }
         }
+    }
+
+    private func reportFetchError(_ error: Error) {
+        onFetchError?(error)
+        AppLog.conversation.error(
+            "[ConversationStore] Failed to fetch conversation: \(error)")
+    }
+
+    /// Decoded `agent.getConversation` response.
+    private nonisolated struct ConversationPage: Sendable {
+        let messages: [ConversationMessage]
+        let truncated: Bool
+        let totalMessages: Int?
+    }
+
+    // MARK: - Off-main decoding (`@concurrent`: the dict→Data→JSONDecoder
+    // round-trip per message/block stays off MainActor; only the merge hops)
+
+    @concurrent
+    private nonisolated static func decodeConversationPage(_ result: InboundJSONValue) async -> ConversationPage? {
+        guard let response = result.value as? [String: Any],
+              let items = response["messages"] as? [[String: Any]] else { return nil }
+        return ConversationPage(
+            messages: items.compactMap { ConversationMessage.parseMessage($0) },
+            truncated: response["truncated"] as? Bool ?? false,
+            totalMessages: response["totalMessages"] as? Int
+        )
+    }
+
+    @concurrent
+    private nonisolated static func decodeMessageBlock(_ result: InboundJSONValue) async -> ContentBlock? {
+        guard let response = result.value as? [String: Any],
+              let blockDictionary = response["block"] as? [String: Any] else { return nil }
+        return ContentBlock.decode(blockDictionary)
     }
 
     private func mergeFetchedMessages(_ fetched: [ConversationMessage]) {
@@ -122,8 +215,8 @@ extension ConversationLiveTranscript {
         }
 
         let order = Dictionary(uniqueKeysWithValues: fetched.enumerated().map { ($1.id, $0) })
-        messages.sort { lhs, rhs in
-            (order[lhs.id] ?? Int.max) < (order[rhs.id] ?? Int.max)
+        messages.sort {
+            (order[$0.id] ?? Int.max) < (order[$1.id] ?? Int.max)
         }
     }
 
@@ -150,31 +243,28 @@ extension ConversationLiveTranscript {
         defer { hydratingBlockKeys.remove(key) }
 
         do {
-            let result = try await connectionManager.request(
-                "agent.getMessageBlock",
-                params: [
-                    "agentId": agentId,
-                    "messageId": messageId,
-                    "blockId": blockId
-                ]
-            )
-            guard self.agentId == agentId else { return }
-            guard let response = result as? [String: Any],
-                  let blockDictionary = response["block"] as? [String: Any],
-                  let data = try? JSONSerialization.data(withJSONObject: blockDictionary),
-                  let block = try? blockDecoder.decode(ContentBlock.self, from: data)
-            else {
-                AppLog.conversation.error(
-                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)"
+            let decoded = try await whileBound {
+                let result = try await connectionManager.request(
+                    "agent.getMessageBlock",
+                    params: [
+                        "agentId": agentId,
+                        "messageId": messageId,
+                        "blockId": blockId,
+                    ]
                 )
+                return await Self.decodeMessageBlock(InboundJSONValue(value: result))
+            }
+            guard let decoded else { return }
+            guard let block = decoded else {
+                AppLog.conversation.error(
+                    "[ConversationStore] getMessageBlock returned no decodable block for \(key)")
                 return
             }
             storeHydratedBlock(block, forKey: key)
             remergeHydratedBlocks()
         } catch {
             AppLog.conversation.error(
-                "[ConversationStore] Failed to hydrate block \(key): \(error)"
-            )
+                "[ConversationStore] Failed to hydrate block \(key): \(error)")
         }
     }
 
@@ -209,30 +299,35 @@ extension ConversationLiveTranscript {
             }
         }
     }
-}
 
-extension ConversationLiveTranscript {
     func subscribe(agentId: String, workspaceId: String? = nil) async {
-        self.agentId = agentId
-        if let workspaceId {
-            self.workspaceId = workspaceId
-        }
+        bind(agentId: agentId, workspaceId: workspaceId)
         chatChannelActive = true
         chatSeeded = false
 
-        do {
-            let result = try await connectionManager.request("chat.subscribe", params: [
-                "agentId": agentId,
-                "replaceGroup": "ios-chat-\(agentId)",
-                "projection": "slim"
-            ])
-            guard let response = result as? [String: Any],
-                  let subscriptionId = response["subscriptionId"] as? String
-            else {
-                clearChannelForLegacyFallback()
-                return
+        // A reply (or failure) that lands after a rebind to another agent must
+        // leave the new binding's channel state untouched, so the error is
+        // carried as a value and only inspected on the still-bound path.
+        let outcome: Result<String?, Error>? = await whileBound {
+            do {
+                let result = try await connectionManager.request("chat.subscribe", params: [
+                    "agentId": agentId,
+                    "replaceGroup": "ios-chat-\(agentId)",
+                    "projection": "slim",
+                ])
+                return .success((result as? [String: Any])?["subscriptionId"] as? String)
+            } catch {
+                return .failure(error)
             }
+        } onStale: { outcome in
+            if case .success(let orphanedId?) = outcome {
+                await releaseOrphanedSubscription(orphanedId)
+            }
+        }
+        guard let outcome else { return }
 
+        switch outcome {
+        case .success(let subscriptionId?):
             if let previous = chatSubscriptionId, previous != subscriptionId {
                 connectionManager.unregisterSubscriptionHandler(id: previous)
             }
@@ -241,13 +336,27 @@ extension ConversationLiveTranscript {
                 self?.handlePush(push)
             }
             AppLog.conversation.info(
-                "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)"
-            )
-        } catch {
+                "[ConversationStore] Subscribed to chat.subscribe: \(subscriptionId)")
+        case .success(nil):
+            clearChannelForLegacyFallback()
+        case .failure(let error):
             clearChannelForLegacyFallback()
             AppLog.conversation.warning(
-                "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy"
-            )
+                "[ConversationStore] chat.subscribe failed: \(error), falling back to legacy")
+        }
+    }
+
+    /// Best-effort release of a subscription the daemon opened for a binding
+    /// we have since left, so it does not keep pushing for the old agent.
+    private func releaseOrphanedSubscription(_ subscriptionId: String) async {
+        guard subscriptionId != chatSubscriptionId else { return }
+        do {
+            _ = try await connectionManager.request("chat.unsubscribe", params: [
+                "subscriptionId": subscriptionId,
+            ])
+        } catch {
+            AppLog.conversation.error(
+                "[ConversationStore] chat.unsubscribe of orphaned \(subscriptionId) failed: \(error)")
         }
     }
 
@@ -270,52 +379,53 @@ extension ConversationLiveTranscript {
             return
         }
 
-        switch push.payload {
-        case let .collectionSnapshot(rows):
-            if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
-            applySnapshot(rows, metadata: [:], seq: push.seq)
-        case let .conversationSnapshot(rows, metadata):
-            if chatSeeded, push.seq + 1 < chatExpectedSeq { return }
-            applySnapshot(rows, metadata: metadata, seq: push.seq)
-        case let .delta(delta):
-            if chatSeeded, push.seq == chatExpectedSeq {
+        switch push.kind {
+        case .snapshot:
+            if chatSeeded && push.seq + 1 < chatExpectedSeq { return }
+            applySnapshot(push)
+        case .delta:
+            guard let delta = push.delta else { return }
+            if chatSeeded && push.seq == chatExpectedSeq {
                 applyDelta(delta)
                 chatExpectedSeq = push.seq + 1
-            } else if chatSeeded, push.seq < chatExpectedSeq {
+            } else if chatSeeded && push.seq < chatExpectedSeq {
                 return
             } else if !resnapshotInProgress {
                 resnapshotInProgress = true
                 AppLog.conversation.warning(
-                    "[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing..."
-                )
+                    "[ConversationStore] Chat sequence gap detected at seq=\(push.seq), resubscribing...")
                 Task { await resnapshot() }
             }
         }
     }
 
-    private func applySnapshot(_ rows: [[String: Any]], metadata: [String: Any], seq: Int) {
+    private func applySnapshot(_ push: SubscriptionPush) {
+        guard let items = push.snapshot else { return }
         chatLive = true
         chatSeeded = true
-        chatExpectedSeq = seq + 1
-        messages = rows.compactMap { ConversationMessage.parseMessage($0) }
+        chatExpectedSeq = push.seq + 1
+        // `parse` pre-decodes off MainActor; the fallback covers pushes built
+        // directly from raw dictionaries (tests).
+        messages = push.snapshotMessages ?? items.compactMap { ConversationMessage.parseMessage($0) }
         remergeHydratedBlocks()
 
-        isTruncated = metadata["truncated"] as? Bool ?? false
-        totalMessageCount = metadata["totalMessages"] as? Int ?? messages.count
+        isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
+        totalMessageCount = push.snapshotMeta?["totalMessages"] as? Int ?? messages.count
         let hasInFlightMessage = messages.contains { $0.isStreaming == true }
-        let isResponding = metadata["isResponding"] as? Bool ?? false
-        let turnInFlight = metadata["turnInFlight"] as? Bool ?? false
+        let isResponding = push.snapshotMeta?["isResponding"] as? Bool ?? false
+        let turnInFlight = push.snapshotMeta?["turnInFlight"] as? Bool ?? false
         isStreaming = hasInFlightMessage || isResponding || turnInFlight
         AppLog.conversation.debug(
-            "[ConversationStore] Applied chat snapshot with \(rows.count) messages, seq=\(seq), streaming=\(isStreaming)"
-        )
+            "[ConversationStore] Applied chat snapshot with \(items.count) messages, seq=\(push.seq), streaming=\(isStreaming)")
         onTranscriptReplaced?()
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
         var sawTerminal = false
         var sawUpsert = false
-        for entity in delta.added + delta.updated {
+        let entities = delta.chatBlocks
+            ?? (delta.added + delta.updated).compactMap { SubscriptionPush.ChatBlockEntity(entity: $0) }
+        for entity in entities {
             let result = upsertBlock(entity)
             sawUpsert = sawUpsert || result.applied
             sawTerminal = sawTerminal || result.terminal
@@ -324,7 +434,6 @@ extension ConversationLiveTranscript {
         if !delta.removedIds.isEmpty {
             let removedIds = Set(delta.removedIds)
             for index in messages.indices {
-                guard messages[index].hasReportedContentBlocks else { continue }
                 var blocks = messages[index].contentBlocks
                 blocks.removeAll { removedIds.contains($0.id) }
                 messages[index].contentBlocks = blocks
@@ -340,39 +449,30 @@ extension ConversationLiveTranscript {
             streamingUpdateCount += 1
         }
         AppLog.conversation.debug(
-            "[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)"
-        )
+            "[ConversationStore] Applied chat delta, added=\(delta.added.count), updated=\(delta.updated.count), removed=\(delta.removedIds.count), terminal=\(sawTerminal)")
         onTranscriptReplaced?()
     }
 
-    private func upsertBlock(_ entity: [String: Any]) -> (applied: Bool, terminal: Bool) {
-        guard let messageId = entity["messageId"] as? String,
-              let blockDictionary = entity["block"] as? [String: Any],
-              let data = try? JSONSerialization.data(withJSONObject: blockDictionary),
-              let block = try? blockDecoder.decode(ContentBlock.self, from: data)
-        else {
-            return (false, false)
-        }
-        let streamingComplete = entity["streamingComplete"] as? Bool ?? false
+    private func upsertBlock(_ entity: SubscriptionPush.ChatBlockEntity) -> (applied: Bool, terminal: Bool) {
+        let messageId = entity.messageId
+        let block = entity.block
+        let streamingComplete = entity.streamingComplete
 
         let messageIndex: Int
         if let existing = messages.firstIndex(where: { $0.id == messageId }) {
             messageIndex = existing
         } else {
-            let role = MessageRole(rawValue: entity["role"] as? String ?? "assistant") ?? .system
             messages.append(ConversationMessage(
                 id: messageId,
-                role: role,
+                role: entity.role,
                 contentBlocks: [],
-                timestamp: entity["timestamp"] as? String
-                    ?? timestampFormatter.string(from: Date()),
-                streamingState: streamingComplete ? .complete : .streaming,
-                contentBlocksWereProvided: true
+                timestamp: entity.timestamp ?? timestampFormatter.string(from: Date()),
+                streamingState: !streamingComplete ? .streaming : .complete
             ))
             messageIndex = messages.count - 1
         }
 
-        if let timestamp = entity["timestamp"] as? String, !timestamp.isEmpty {
+        if let timestamp = entity.timestamp, !timestamp.isEmpty {
             messages[messageIndex].timestamp = timestamp
         }
         var blocks = messages[messageIndex].contentBlocks
@@ -402,7 +502,7 @@ extension ConversationLiveTranscript {
         }
         var merged = incoming
         merged.name = prior.resolvedName
-        merged.inheritInput(from: prior)
+        merged.input = prior.input
         var metadata = merged.metadata
         if let toolKind = prior.metadata["toolKind"] {
             metadata["toolKind"] = toolKind
@@ -410,9 +510,7 @@ extension ConversationLiveTranscript {
         merged.metadata = metadata
         return merged
     }
-}
 
-extension ConversationLiveTranscript {
     private func resnapshot() async {
         resnapshotInProgress = true
         defer { resnapshotInProgress = false }
@@ -423,12 +521,11 @@ extension ConversationLiveTranscript {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
             do {
                 _ = try await connectionManager.request("chat.unsubscribe", params: [
-                    "subscriptionId": subscriptionId
+                    "subscriptionId": subscriptionId,
                 ])
             } catch {
                 AppLog.conversation.error(
-                    "[ConversationStore] chat.unsubscribe failed: \(error)"
-                )
+                    "[ConversationStore] chat.unsubscribe failed: \(error)")
             }
         }
         chatSubscriptionId = nil
@@ -471,6 +568,7 @@ extension ConversationLiveTranscript {
         totalMessageCount = 0
         agentId = nil
         workspaceId = nil
+        bindingGeneration &+= 1
         hydratingBlockKeys = []
         hydratedBlocks = [:]
         hydratedBlockOrder = []

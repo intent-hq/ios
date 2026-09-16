@@ -7,13 +7,7 @@ extension RootView {
             NavigationStack(path: $noteStack) {
                 WorkspaceDetailView(workspaceId: workspaceId, session: session)
                     .navigationDestination(isPresented: $showingConversation) {
-                        ConversationView(
-                            agentId: conversationAgentId,
-                            workspaceId: conversationWorkspaceId,
-                            agentName: conversationAgentName,
-                            session: session
-                        )
-                        .id(conversationAgentId)
+                        conversationDestination
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
@@ -30,6 +24,9 @@ extension RootView {
                 syncNavigationState()
             }
             .onChange(of: coordinator.currentScreenDescription) {
+                syncNavigationState()
+            }
+            .onChange(of: coordinator.conversationRequestId) {
                 syncNavigationState()
             }
             .onChange(of: showingWorkspaceDetail) { _, newValue in
