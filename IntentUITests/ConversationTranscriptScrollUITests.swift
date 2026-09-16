@@ -59,6 +59,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
+        continueAfterFailure = false
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
     }
 
@@ -158,10 +159,6 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         let lastMessage: XCUIElement
         let goToEnd: XCUIElement
         let transcript: XCUIElement
-    }
-
-    override func setUpWithError() throws {
-        continueAfterFailure = false
     }
 
     @MainActor
