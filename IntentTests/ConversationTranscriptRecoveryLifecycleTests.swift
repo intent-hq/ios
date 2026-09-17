@@ -75,8 +75,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         if effects.contains(where: isScroll) {
             #expect(after.owner != .idle, "scroll issued with no owner", sourceLocation: sourceLocation)
         }
-        if case .recoveryStep = event, case .follow = before.owner {
-            #expect(!effects.contains(where: isScroll), "correction scrolled over a follow", sourceLocation: sourceLocation)
+        if case .follow = before.owner {
+            switch event {
+            case .recoveryStep, .recoveryPagedUp:
+                #expect(!effects.contains(where: isScroll), "correction scrolled over a follow", sourceLocation: sourceLocation)
+            default:
+                break
+            }
         }
         // Give-up over an unrealized end resolves (invariant 2).
         if case .recoveryFinished(let token, .giveUp, _) = event, before.currentRecovery == token, !before.isEndRealized {
@@ -677,11 +682,22 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(logs(yielded) == ["[SCROLL] End recovery yielded the paged-up viewport to the user"])
         #expect(owning.owner == .recovery(r1))
         // Demoted under a follow requested meanwhile: the token is current
-        // but no longer owns, so no follow back is issued over the follow.
+        // but no longer owns, so no follow back is issued over the follow,
+        // while its yield is still reported.
         var demoted = state(owner: .follow(f1, forced: true), armed: .demoted(r2))
         let before = demoted
         #expect(step(&demoted, .recoveryPagedUp(r2, mayFollowBack: true)).isEmpty)
         #expect(demoted == before)
+        let demotedYield = step(&demoted, .recoveryPagedUp(r2, mayFollowBack: false))
+        #expect(nonLog(demotedYield).isEmpty)
+        #expect(logs(demotedYield) == ["[SCROLL] End recovery yielded the paged-up viewport to the user"])
+        #expect(demoted == before)
+        // A stale token neither scrolls nor logs.
+        var stale = state(owner: .recovery(r1))
+        let staleBefore = stale
+        #expect(step(&stale, .recoveryPagedUp(r2, mayFollowBack: true)).isEmpty)
+        #expect(step(&stale, .recoveryPagedUp(r2, mayFollowBack: false)).isEmpty)
+        #expect(stale == staleBefore)
     }
 
     // MARK: - recoveryFinished
@@ -1582,7 +1598,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(toFollow.send(.followRequested(forced: false)) == [.startFollowTask(f2, forced: false)])
         #expect(toFollow.state.armedRecovery == .demoted(r1))
         #expect(!toFollow.mayFollowBack())
-        #expect(toFollow.send(.recoveryPagedUp(r1, mayFollowBack: false)).isEmpty)
+        #expect(toFollow.send(.recoveryPagedUp(r1, mayFollowBack: false)) == [Log.recoveryYielded])
         toFollow.distanceToBottom = 120
         #expect(toFollow.send(.recoveryFinished(r1, .yieldToUser, corrections: 2)) == [
             .recordRecoveryOutcome(.yieldToUser, corrections: 2), .replayLiveEdge(isInteracting: nil),
@@ -1592,6 +1608,50 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(!toFollow.userIsScrolledAway)
         #expect(toFollow.rePins == 0)
         #expect(toFollow.scrolls == 1)
+    }
+
+    /// A correction pages up and an automatic follow is requested during
+    /// the settle: the follow owns and the recovery is demoted, so the
+    /// page-up check reads a follow pending and the recovery yields. The
+    /// yield is still logged once — the follow, not the user, has the
+    /// paged-up viewport, so nothing scrolls over it — and the recovery
+    /// finishes with its outcome and the replayed edge, leaving the follow
+    /// the owner and its task live.
+    @Test func aPageUpDemotedByAnAutomaticFollowDuringTheSettleLogsItsYieldWithoutScrolling() {
+        var h = harness()
+        #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
+        #expect(h.poll(blank) == .continue(.recover(pageOffsetY: 1_600)))
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600))) == [Log.pageUp, .pageUp(offsetY: 1_600)])
+        #expect(h.state.owner == .recovery(r1))
+        #expect(h.pageUps == [1_600])
+        #expect(h.send(.followRequested(forced: false)) == [.startFollowTask(f2, forced: false)])
+        #expect(h.state.owner == .follow(f2, forced: false))
+        #expect(h.state.armedRecovery == .demoted(r1))
+        #expect(h.isLive(r1))
+        #expect(h.isLive(f2))
+        h.distanceToBottom = 1_600
+        #expect(!h.mayFollowBack())
+        #expect(h.send(.recoveryPagedUp(r1, mayFollowBack: false)) == [Log.recoveryYielded])
+        #expect(h.state.owner == .follow(f2, forced: false))
+        #expect(h.state.armedRecovery == .demoted(r1))
+        #expect(h.scrolls == 0)
+        #expect(h.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
+            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
+        ])
+        #expect(h.summaries == ["endRecovery=yieldToUser corrections=1"])
+        #expect(h.state.owner == .follow(f2, forced: false))
+        #expect(h.state.armedRecovery == nil)
+        #expect(h.state.currentRecovery == nil)
+        #expect(!h.isLive(r1))
+        #expect(h.isLive(f2))
+        #expect(!h.userIsScrolledAway)
+        #expect(h.rePins == 0)
+        #expect(h.goToEndShown == 0)
+        #expect(h.scrolls == 0)
+        // The finished token's page-up is stale either way.
+        #expect(h.send(.recoveryPagedUp(r1, mayFollowBack: false)).isEmpty)
+        #expect(h.send(.recoveryPagedUp(r1, mayFollowBack: true)).isEmpty)
+        #expect(h.scrolls == 0)
     }
 
     /// Migrated from `recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind`:

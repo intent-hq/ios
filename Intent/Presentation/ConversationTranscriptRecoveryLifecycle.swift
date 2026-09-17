@@ -272,12 +272,13 @@ enum ConversationTranscriptRecoveryLifecycle {
         case .recoveryPagedUp(let token, let mayFollowBack):
             // The follow back re-checks the claim once the rows have
             // realized rather than scroll over a follow that took the
-            // viewport meanwhile.
-            guard state.owner == .recovery(token) else { return (state, []) }
-            if mayFollowBack {
-                effects.append(.scrollToEnd)
-            } else {
+            // viewport meanwhile; a current recovery demoted under that
+            // follow still reports its yield.
+            guard state.currentRecovery == token else { return (state, []) }
+            if !mayFollowBack {
                 effects.append(.log("[SCROLL] End recovery yielded the paged-up viewport to the user"))
+            } else if state.owner == .recovery(token) {
+                effects.append(.scrollToEnd)
             }
 
         case .recoveryFinished(let token, let terminal, let corrections):
