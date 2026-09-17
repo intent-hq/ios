@@ -344,7 +344,7 @@ private extension ConversationTranscriptView {
         case .pageUp(let offsetY):
             scrollMomentumProxy.pageTo(offsetY: offsetY)
         case .replayLiveEdge(let isInteracting):
-            applyLiveScrolledAwayEdge(isInteracting: isInteracting, proxy: proxy)
+            applyLiveScrolledAwayEdge(isInteracting: isInteracting ?? isUserInteracting, proxy: proxy)
         case .showGoToEnd:
             userIsScrolledAway = true
         case .recordRecoveryOutcome(let terminal, let corrections):
