@@ -388,10 +388,42 @@ struct ConversationDecodingIdentityTests {
         #expect(second.contentBlocks.map(\.id).prefix(2) == ["msg-2:0", "msg-2:1"])
     }
 
-    /// Formerly divergent: the `Codable` path dropped the whole array (and
-    /// reported the blocks as unprovided) on one malformed entry, while the
-    /// dictionary path dropped only that entry. Both now drop only the entry,
-    /// and the surviving block keeps its wire index.
+    /// Formerly divergent: an all-dictionary array with one entry missing its
+    /// required key (`ToolCall.id` / `ToolResult.toolCallId`). The dictionary
+    /// path decoded per element and kept the sibling (reported as provided);
+    /// the `Codable` path decoded the whole array, dropped it, and reported
+    /// the collection as unprovided. Both now keep the sibling.
+    @Test func toolEntryMissingRequiredKeyDropsOnlyThatEntryOnBothPaths() throws {
+        let dict: [String: Any] = [
+            "id": "msg-6",
+            "role": "assistant",
+            "toolCalls": [
+                ["name": "read_file", "status": "completed"],
+                ["id": "tc-1", "name": "read_file", "status": "completed"]
+            ],
+            "toolResults": [
+                ["toolCallId": "tc-1", "isError": false],
+                ["isError": true, "content": "orphan"]
+            ]
+        ]
+        let viaDictionary = try #require(ConversationMessage.parseMessage(dict))
+        let viaCodable = try JSONDecoder().decode(ConversationMessage.self, from: rowData(dict))
+        for msg in [viaDictionary, viaCodable] {
+            #expect(msg.hasReportedToolCalls)
+            #expect(msg.toolCalls.map(\.id) == ["tc-1"])
+            #expect(msg.hasReportedToolResults)
+            #expect(msg.toolResults.map(\.toolCallId) == ["tc-1"])
+        }
+        #expect(viaDictionary == viaCodable)
+    }
+
+    /// A mixed array (non-object entry) was dropped whole by BOTH old paths
+    /// (`as? [[String: Any]]` and `decode([ContentBlock].self)` both fail),
+    /// which also read it as unprovided. The unified decoder keeps the object
+    /// siblings and reports the collection as provided; the surviving block
+    /// keeps its wire index. (A block that IS an object never fails to decode
+    /// — every `ContentBlock` field is lenient — so this is the only malformed
+    /// block shape.)
     @Test func malformedBlockEntryDropsOnlyThatEntryOnBothPaths() throws {
         let dict: [String: Any] = [
             "id": "msg-3",
@@ -409,7 +441,8 @@ struct ConversationDecodingIdentityTests {
         #expect(viaDictionary == viaCodable)
     }
 
-    /// Same former divergence for `toolCalls` / `toolResults`.
+    /// Same mixed-array shape for `toolCalls` / `toolResults`: formerly
+    /// dropped whole by both paths, now keeps the object siblings.
     @Test func malformedToolEntriesDropOnlyThatEntryOnBothPaths() throws {
         let dict: [String: Any] = [
             "id": "msg-4",
