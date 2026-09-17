@@ -198,51 +198,6 @@ extension AppCoordinatorTests {
         coordinator.onSelectNote("note-reg-3", workspaceId: wsId, noteTitle: "Preserve WS Note")
         #expect(coordinator.selectedWorkspaceId == wsId, "selectedWorkspaceId must not become nil after onSelectNote (regression: SwiftUI popped the stack)")
     }
-
-    // MARK: - iPad back button after agent auto-restore regression tests
-
-    @Test @MainActor func shouldRepushConversation_falseWhenUserNavigatedBack() {
-        // Regression: the deferred iPad re-push used to check only the agent id,
-        // so it re-pushed the conversation even after the coordinator had already
-        // navigated back to .workspaceDetail — leaving the conversation visible
-        // with a dead "< Agents" button.
-        let repush = RootView.shouldRepushConversation(
-            currentScreen: .workspaceDetail(workspaceId: "ws-1"),
-            pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1"
-        )
-        #expect(!repush, "Must not re-push the conversation when currentScreen is no longer .agentConversation")
-    }
-
-    @Test @MainActor func shouldRepushConversation_trueWhenStillOnSameConversation() {
-        let repush = RootView.shouldRepushConversation(
-            currentScreen: .agentConversation(agentId: "agent-1", workspaceId: "ws-1", agentName: "Worker"),
-            pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1"
-        )
-        #expect(repush, "Should re-push when the same conversation is still the current screen")
-    }
-
-    @Test @MainActor func shouldRepushConversation_falseWhenAgentChangedAgain() {
-        let repush = RootView.shouldRepushConversation(
-            currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
-            pendingAgentId: "agent-1",
-            conversationAgentId: "agent-2"
-        )
-        #expect(!repush, "A stale re-push for a superseded agent must be dropped")
-    }
-
-    @Test @MainActor func shouldRepushConversation_falseWhenCoordinatorMovedToAnotherAgent() {
-        // Coordinator moved on to a different agent before the view state re-synced:
-        // the screen match must reject the stale re-push even though the pending
-        // and view-state agent ids still agree.
-        let repush = RootView.shouldRepushConversation(
-            currentScreen: .agentConversation(agentId: "agent-2", workspaceId: "ws-1", agentName: "Other"),
-            pendingAgentId: "agent-1",
-            conversationAgentId: "agent-1"
-        )
-        #expect(!repush, "Re-push must be dropped when the coordinator now shows a different conversation")
-    }
 }
 
 extension AppCoordinatorTests {

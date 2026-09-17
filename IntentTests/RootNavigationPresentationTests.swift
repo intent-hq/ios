@@ -3,7 +3,9 @@ import SwiftUI
 import Testing
 
 @Suite @MainActor
-struct RootNavigationPresentationTests {
+struct RootNavigationPresentationTests {}
+
+extension RootNavigationPresentationTests {
     @Test func compactConversationStagesWorkspaceBeforeDeferredPush() {
         let screen = conversationScreen(agentId: "agent-A")
         var presentation = RootNavigationPresentation()
@@ -20,7 +22,7 @@ struct RootNavigationPresentationTests {
         #expect(!presentation.showingConversation)
         #expect(presentation.conversationPayload.agentId == "agent-A")
 
-        let change = presentation.workspacePresentationChanged(
+        let change = presentation.compactWorkspacePresentationChanged(
             isPresented: true,
             currentScreen: screen
         )
@@ -40,7 +42,7 @@ struct RootNavigationPresentationTests {
             isCompact: true,
             isRegularWidth: false
         )
-        let change = presentation.workspacePresentationChanged(
+        let change = presentation.compactWorkspacePresentationChanged(
             isPresented: true,
             currentScreen: screen
         )
@@ -89,6 +91,55 @@ struct RootNavigationPresentationTests {
         #expect(presentation.conversationPayload.agentId == "agent-B")
     }
 
+    @Test func regularSameAgentNewRequestRepushesConversation() {
+        var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
+        let screen = conversationScreen(agentId: "agent-A")
+
+        let effects = presentation.synchronize(
+            with: screen,
+            conversationRequestId: 2,
+            isCompact: false,
+            isRegularWidth: true
+        )
+
+        #expect(effects == [.repushConversation(agentId: "agent-A")])
+        #expect(!presentation.showingConversation)
+    }
+
+    @Test func regularUnchangedPresentedConversationDoesNotRepush() {
+        var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
+
+        let effects = presentation.synchronize(
+            with: conversationScreen(agentId: "agent-A"),
+            conversationRequestId: 1,
+            isCompact: false,
+            isRegularWidth: true
+        )
+
+        #expect(effects.isEmpty)
+        #expect(presentation.showingConversation)
+    }
+
+    @Test func compactAgentAndRequestChangeDoesNotRepushConversation() {
+        var presentation = presentedConversation(
+            agentId: "agent-A",
+            requestId: 1,
+            isCompact: true,
+            isRegularWidth: false
+        )
+
+        let effects = presentation.synchronize(
+            with: conversationScreen(agentId: "agent-B"),
+            conversationRequestId: 2,
+            isCompact: true,
+            isRegularWidth: false
+        )
+
+        #expect(effects.isEmpty)
+        #expect(presentation.showingConversation)
+        #expect(presentation.conversationPayload.agentId == "agent-B")
+    }
+
     @Test func dismissalCallbackBeforeDuplicateSyncPreservesImmediateRepushOrdering() {
         var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
         let screen = conversationScreen(agentId: "agent-B")
@@ -119,7 +170,9 @@ struct RootNavigationPresentationTests {
         presentation.applyDeferredEffect(effects[0], currentScreen: screen)
         #expect(presentation.showingConversation)
     }
+}
 
+extension RootNavigationPresentationTests {
     @Test func programmaticDismissalIsSuppressedButUserDismissalNavigatesBack() {
         var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
         let screen = conversationScreen(agentId: "agent-B")
@@ -135,6 +188,11 @@ struct RootNavigationPresentationTests {
             currentScreen: screen,
             suppressesProgrammaticDismissal: true
         )
+        presentation.applyDeferredEffect(
+            .repushConversation(agentId: "agent-B"),
+            currentScreen: screen
+        )
+        #expect(presentation.showingConversation)
         let userAction = presentation.conversationPresentationChanged(
             isPresented: false,
             currentScreen: screen,
@@ -161,6 +219,46 @@ struct RootNavigationPresentationTests {
         )
 
         #expect(!presentation.showingConversation)
+    }
+
+    @Test func staleRegularRepushAfterPayloadChangesAgentIsDropped() {
+        var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
+        let pendingScreen = conversationScreen(agentId: "agent-B")
+        let effects = presentation.synchronize(
+            with: pendingScreen,
+            conversationRequestId: 2,
+            isCompact: false,
+            isRegularWidth: true
+        )
+        _ = presentation.synchronize(
+            with: conversationScreen(agentId: "agent-C"),
+            conversationRequestId: 3,
+            isCompact: false,
+            isRegularWidth: true
+        )
+
+        presentation.applyDeferredEffect(effects[0], currentScreen: pendingScreen)
+
+        #expect(!presentation.showingConversation)
+        #expect(presentation.conversationPayload.agentId == "agent-C")
+    }
+
+    @Test func staleRegularRepushAfterCoordinatorChangesAgentIsDropped() {
+        var presentation = presentedConversation(agentId: "agent-A", requestId: 1)
+        let effects = presentation.synchronize(
+            with: conversationScreen(agentId: "agent-B"),
+            conversationRequestId: 2,
+            isCompact: false,
+            isRegularWidth: true
+        )
+
+        presentation.applyDeferredEffect(
+            effects[0],
+            currentScreen: conversationScreen(agentId: "agent-C")
+        )
+
+        #expect(!presentation.showingConversation)
+        #expect(presentation.conversationPayload.agentId == "agent-B")
     }
 
     @Test func unspecifiedWidthDoesNotTriggerRegularRepush() {
@@ -204,6 +302,71 @@ struct RootNavigationPresentationTests {
             presentation.noteStackChanged(to: NavigationPath(), currentScreen: screen) == .backFromNote
         )
     }
+}
+
+extension RootNavigationPresentationTests {
+    @Test func regularNoteTeardownObserverBeforeDeferredRebuildNavigatesBack() {
+        var presentation = RootNavigationPresentation()
+        let firstScreen = noteScreen(noteId: "note-A")
+        let firstEffects = presentation.synchronize(
+            with: firstScreen,
+            conversationRequestId: 0,
+            isCompact: false,
+            isRegularWidth: true
+        )
+        presentation.applyDeferredEffect(firstEffects[0], currentScreen: firstScreen)
+
+        let nextScreen = noteScreen(noteId: "note-B")
+        let rebuildEffects = presentation.synchronize(
+            with: nextScreen,
+            conversationRequestId: 0,
+            isCompact: false,
+            isRegularWidth: true
+        )
+        #expect(presentation.noteStack.isEmpty)
+        #expect(
+            presentation.noteStackChanged(to: NavigationPath(), currentScreen: nextScreen) == .backFromNote
+        )
+
+        presentation.applyDeferredEffect(
+            rebuildEffects[0],
+            currentScreen: .workspaceDetail(workspaceId: "workspace-1")
+        )
+        #expect(presentation.noteStack.isEmpty)
+    }
+
+    @Test func regularWorkspaceObserverDoesNotConsumeInterruptedCompactNotePush() {
+        var presentation = RootNavigationPresentation()
+        let note = noteScreen(noteId: "note-A")
+        _ = presentation.synchronize(
+            with: note,
+            conversationRequestId: 0,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        _ = presentation.synchronize(
+            with: .workspaceList,
+            conversationRequestId: 0,
+            isCompact: false,
+            isRegularWidth: true
+        )
+
+        #expect(presentation.regularWorkspacePresentationChanged(isPresented: false).isEmpty)
+        _ = presentation.synchronize(
+            with: .workspaceDetail(workspaceId: "workspace-1"),
+            conversationRequestId: 0,
+            isCompact: false,
+            isRegularWidth: true
+        )
+        #expect(presentation.regularWorkspacePresentationChanged(isPresented: true).isEmpty)
+
+        let compactChange = presentation.compactWorkspacePresentationChanged(
+            isPresented: true,
+            currentScreen: note
+        )
+        #expect(compactChange.deferredEffects == [.pushPendingNoteDetail])
+        #expect(compactChange.coordinatorAction == nil)
+    }
 
     @Test func initialDeferredPushRemainsUnguardedAfterRouteChanges() {
         let screen = conversationScreen(agentId: "agent-A")
@@ -214,7 +377,7 @@ struct RootNavigationPresentationTests {
             isCompact: true,
             isRegularWidth: false
         )
-        let change = presentation.workspacePresentationChanged(
+        let change = presentation.compactWorkspacePresentationChanged(
             isPresented: true,
             currentScreen: screen
         )
@@ -267,10 +430,13 @@ struct RootNavigationPresentationTests {
         #expect(live?.agentId == "live-agent")
         #expect(retained == fallback)
     }
+}
 
+private extension RootNavigationPresentationTests {
     private func presentedConversation(
         agentId: String,
         requestId: Int,
+        isCompact: Bool = false,
         isRegularWidth: Bool = true
     ) -> RootNavigationPresentation {
         let screen = conversationScreen(agentId: agentId)
@@ -278,14 +444,19 @@ struct RootNavigationPresentationTests {
         _ = presentation.synchronize(
             with: screen,
             conversationRequestId: requestId,
-            isCompact: false,
+            isCompact: isCompact,
             isRegularWidth: isRegularWidth
         )
-        let change = presentation.workspacePresentationChanged(
-            isPresented: true,
-            currentScreen: screen
-        )
-        for effect in change.deferredEffects {
+        let effects: [RootNavigationPresentation.DeferredEffect]
+        if isCompact {
+            effects = presentation.compactWorkspacePresentationChanged(
+                isPresented: true,
+                currentScreen: screen
+            ).deferredEffects
+        } else {
+            effects = presentation.regularWorkspacePresentationChanged(isPresented: true)
+        }
+        for effect in effects {
             presentation.applyDeferredEffect(effect, currentScreen: screen)
         }
         return presentation

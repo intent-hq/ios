@@ -88,7 +88,7 @@ struct RootView: View {
                 showingNoteDetail: $navigationPresentation.showingNoteDetail,
                 noteStack: $navigationPresentation.noteStack,
                 onSynchronize: synchronizeNavigationPresentation,
-                onWorkspacePresentationChanged: workspacePresentationChanged,
+                onWorkspacePresentationChanged: compactWorkspacePresentationChanged,
                 onConversationPresentationChanged: compactConversationPresentationChanged,
                 onNotePresentationChanged: notePresentationChanged,
                 onOpenLinkedNote: openCompactLinkedNote
@@ -114,7 +114,7 @@ struct RootView: View {
                     showingConversation: $navigationPresentation.showingConversation,
                     noteStack: $navigationPresentation.noteStack,
                     onSynchronize: synchronizeNavigationPresentation,
-                    onWorkspacePresentationChanged: workspacePresentationChanged,
+                    onWorkspacePresentationChanged: regularWorkspacePresentationChanged,
                     onConversationPresentationChanged: regularConversationPresentationChanged,
                     onNoteStackChanged: noteStackChanged,
                     onOpenLinkedNote: openRegularLinkedNote
@@ -333,13 +333,19 @@ private extension RootView {
         scheduleNavigationEffects(effects)
     }
 
-    func workspacePresentationChanged(_ isPresented: Bool) {
-        let change = navigationPresentation.workspacePresentationChanged(
+    func compactWorkspacePresentationChanged(_ isPresented: Bool) {
+        let change = navigationPresentation.compactWorkspacePresentationChanged(
             isPresented: isPresented,
             currentScreen: coordinator.currentScreen
         )
         scheduleNavigationEffects(change.deferredEffects)
         performCoordinatorAction(change.coordinatorAction)
+    }
+
+    func regularWorkspacePresentationChanged(_ isPresented: Bool) {
+        scheduleNavigationEffects(
+            navigationPresentation.regularWorkspacePresentationChanged(isPresented: isPresented)
+        )
     }
 
     func compactConversationPresentationChanged(_ isPresented: Bool) {

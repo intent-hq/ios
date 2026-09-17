@@ -80,7 +80,7 @@ struct RootNavigationPresentation {
         }
     }
 
-    mutating func workspacePresentationChanged(
+    mutating func compactWorkspacePresentationChanged(
         isPresented: Bool,
         currentScreen: AppScreen
     ) -> PresentationChange {
@@ -102,6 +102,14 @@ struct RootNavigationPresentation {
             action = nil
         }
         return PresentationChange(deferredEffects: effects, coordinatorAction: action)
+    }
+
+    mutating func regularWorkspacePresentationChanged(isPresented: Bool) -> [DeferredEffect] {
+        showingWorkspaceDetail = isPresented
+        if isPresented, pendingConversationPush {
+            return [.pushPendingConversation]
+        }
+        return []
     }
 
     mutating func conversationPresentationChanged(
