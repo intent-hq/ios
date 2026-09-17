@@ -278,7 +278,6 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
-$(SRCROOT)/IntentTests/ConversationTranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
@@ -379,6 +378,14 @@ $(SRCROOT)/IntentTests/TestSourceInputs.swift
 $(SRCROOT)/IntentTests/TextInputDescendantWalkTests.swift
 $(SRCROOT)/IntentTests/ToolClassifierClassificationTests.swift
 $(SRCROOT)/IntentTests/TranscriptDecodingMeasurementTests.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+EdgeSequences.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Follow.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Harness.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Invariants.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
