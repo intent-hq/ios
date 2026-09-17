@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 
@@ -63,9 +64,29 @@ final class ConversationTranscriptScrollState {
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingStep?
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
-    /// How the last unrealized-end recovery that corrected the viewport
-    /// resolved, and the corrections it spent (#338); demo-only diagnostics
-    /// like the forced follow's.
-    var lastUnrealizedEndRecoveryOutcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?
-    var lastUnrealizedEndRecoveryCorrections = 0
+    /// How the last unrealized-end recovery episode ended (#338): recorded
+    /// on every terminal path — resolved, given up, yielded or cancelled —
+    /// with the end row's realization at that moment; nil while an episode
+    /// is in flight, or before the first. Demo-only diagnostics like the
+    /// forced follow's.
+    var lastUnrealizedEndRecoveryReport: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport?
+    /// Episodes armed on this transcript so far.
+    var unrealizedEndRecoveryEpisodes = 0
+    /// Corrections the in-flight (or, once it ended, the last) episode has
+    /// spent, published as each is issued so a cancellation records them.
+    var unrealizedEndRecoveryCorrections = 0
+    /// Demo-only (`--demo-end-derealization-trigger-file`): while set, the
+    /// end row is withdrawn from the lazy stack so its real `onDisappear`
+    /// armed the recovery, with the live offset at withdrawal the restore
+    /// is judged against (see `DemoFixtures.shouldRestoreDerealizedEnd`).
+    /// Never set outside `--demo-data`.
+    var demoEndDerealization: DemoEndDerealization?
+    /// Set once the trigger has fired so a re-run of the poll does not
+    /// withdraw the row again.
+    @ObservationIgnored var demoEndDerealizationTriggered = false
+
+    struct DemoEndDerealization: Equatable {
+        let mode: DemoFixtures.EndDerealizationMode
+        let withdrawnOffsetY: CGFloat
+    }
 }

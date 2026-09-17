@@ -425,6 +425,76 @@ extension DemoFixturesTests {
             for: "agent.getMessageBlock", params: ["agentId": "demo-agent-implementor"]) == nil)
     }
 
+    // MARK: - Controlled end derealization (intent-hq/ios#338)
+
+    @Test func endDerealizationTriggerFileComesFromTheLaunchArgumentOnly() {
+        #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-data"]) == nil)
+        #expect(DemoFixtures.endDerealizationTriggerFile(from: ["--demo-end-derealization-trigger-file="]) == nil)
+        #expect(DemoFixtures.endDerealizationTriggerFile(
+            from: ["--demo-hook-list-trigger-file=/tmp/hooks.trigger"]) == nil)
+        #expect(DemoFixtures.endDerealizationTriggerFile(
+            from: ["--demo-data", "--demo-end-derealization-trigger-file=/tmp/a.trigger"])
+            == URL(fileURLWithPath: "/tmp/a.trigger"))
+        #expect(DemoFixtures.endDerealizationTriggerFile(from: [
+            "--demo-end-derealization-trigger-file=/tmp/a.trigger",
+            "--demo-end-derealization-trigger-file=",
+            "--demo-end-derealization-trigger-file=/tmp/b.trigger",
+        ]) == URL(fileURLWithPath: "/tmp/b.trigger"))
+        // The test runner never passes the argument, so the live value is nil.
+        #expect(DemoFixtures.configuredEndDerealizationTriggerFile == nil)
+    }
+
+    @Test func endDerealizationModeDefaultsToReleaseAndTakesTheLastWellFormedValue() {
+        #expect(DemoFixtures.endDerealizationMode(from: ["--demo-data"]) == .release)
+        #expect(DemoFixtures.endDerealizationMode(from: ["--demo-end-derealization-mode=hold"]) == .hold)
+        #expect(DemoFixtures.endDerealizationMode(from: ["--demo-end-derealization-mode=release"]) == .release)
+        #expect(DemoFixtures.endDerealizationMode(from: ["--demo-end-derealization-mode=Hold"]) == .release)
+        #expect(DemoFixtures.endDerealizationMode(from: ["--demo-end-derealization-mode="]) == .release)
+        #expect(DemoFixtures.endDerealizationMode(from: [
+            "--demo-end-derealization-mode=hold",
+            "--demo-end-derealization-mode=bogus",
+            "--demo-end-derealization-mode=release",
+        ]) == .release)
+        #expect(DemoFixtures.endDerealizationMode(from: [
+            "--demo-end-derealization-mode=release",
+            "--demo-end-derealization-mode=hold",
+        ]) == .hold)
+        #expect(DemoFixtures.configuredEndDerealizationMode == .release)
+    }
+
+    /// The withdrawn row is restored on measured movement of the live scroll
+    /// view only: in `release` the recovery's page up (a full container, so
+    /// half of one is the bar), in either mode a gesture that moved the
+    /// viewport; never at rest, never on a re-measure jitter, and never
+    /// in `hold` without a gesture.
+    @Test func derealizedEndIsRestoredOnlyOnMeasuredMovement() {
+        func restore(_ mode: DemoFixtures.EndDerealizationMode, offset: CGFloat, interacting: Bool = false) -> Bool {
+            DemoFixtures.shouldRestoreDerealizedEnd(
+                mode: mode,
+                withdrawnOffsetY: 1_000,
+                contentOffsetY: offset,
+                containerHeight: 600,
+                isInteracting: interacting
+            )
+        }
+        #expect(!restore(.release, offset: 1_000))
+        #expect(!restore(.release, offset: 990))
+        #expect(!restore(.release, offset: 701))
+        #expect(restore(.release, offset: 700))
+        #expect(restore(.release, offset: 400))
+        #expect(!restore(.release, offset: 1_400))
+
+        #expect(!restore(.hold, offset: 1_000))
+        #expect(!restore(.hold, offset: 400))
+        #expect(!restore(.hold, offset: 1_400))
+
+        #expect(!restore(.release, offset: 1_000, interacting: true))
+        #expect(!restore(.hold, offset: 1_000.5, interacting: true))
+        #expect(restore(.release, offset: 999, interacting: true))
+        #expect(restore(.hold, offset: 1_001, interacting: true))
+        #expect(restore(.hold, offset: 400, interacting: true))
+    }
+
     // MARK: - Slim-truncated tool rows near the end of the long conversation
 
     @Test func blockHydrationGateComesFromTheLaunchArguments() {

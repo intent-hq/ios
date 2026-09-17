@@ -87,6 +87,42 @@ enum Fixture {
     static let followReportPrefix = "lastForcedFollow="
     static let pendingFollowReport = "lastForcedFollow=pending"
     static let landedFollowReportPrefix = "lastForcedFollow=landed"
+    // The `endRecovery=<reason> corrections=N episodes=N endRealized=<bool>`
+    // segment the report carries once the follow has reported
+    // (ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport):
+    // how the last unrealized-end recovery episode resolved. `reason` is
+    // `notAttempted` before any episode, `recovering` while one is in
+    // flight and terminal otherwise; `recovered` is earned only by an
+    // episode that spent a correction and found the end row realized
+    // when it resolved, which every settled report is checked against
+    // (`assertRecoveryReportWellFormed`). Ordinary launches are not
+    // held to `notAttempted`: the marker may transiently derealize
+    // during entry, an episode the report classifies as
+    // `noCorrectionNeeded`.
+    static let endRecoveryReportPrefix = "endRecovery="
+    static let recoveringReason = "recovering"
+    static let recoveredReason = "recovered"
+    static let gaveUpReason = "gaveUp"
+    // Withdraws the transcript's `scroll-bottom` marker once this file
+    // exists (DemoFixtures.configuredEndDerealizationTriggerFile), so the
+    // real recovery arms through the marker's own `onDisappear` at a
+    // moment the test chooses instead of the organic hooks-row timing.
+    // `release` puts the marker back once the recovery has measurably
+    // paged the live scroll view up, so its follow back re-verifies
+    // through the marker's real `onAppear`; `hold` never does, so the
+    // recovery runs out its landing budget. Only the two controlled
+    // tests pass the argument.
+    static let endDerealizationTriggerFileArgumentPrefix = "--demo-end-derealization-trigger-file="
+    static let endDerealizationModeArgumentPrefix = "--demo-end-derealization-mode="
+    // Upper bound on a recovery episode reporting a terminal reason: the
+    // fixture's 100 ms trigger poll, then the recovery's own bounded
+    // budget — settle polls, the page up, the follow back, or in `hold`
+    // the 3 s landing timeout (Constants.Conversation.Transcript.
+    // followLanding*) — with the same simulator margin as settleTimeout.
+    static let recoveryTimeout: TimeInterval = 15
+    // Name prefix of the per-launch evidence attachment (see
+    // `attachRecoveryEvidence`): `<prefix>-<test method>-<cycle>`.
+    static let evidenceAttachmentPrefix = "transcript-recovery-evidence"
     // Cadence of every poll.
     static let pollInterval: TimeInterval = 0.25
     static let workspaceTimeout: TimeInterval = 30
@@ -135,14 +171,86 @@ struct FooterBaseline {
     let messageGap: CGFloat
 }
 
+/// `--demo-end-derealization-mode=` values (DemoFixtures.EndDerealizationMode).
+enum EndDerealizationMode: String {
+    case hold
+    case release
+}
+
+/// The marker withdrawal a controlled-recovery launch arms: the trigger
+/// file the fixture waits on and the mode it withdraws in.
+struct EndDerealization {
+    let triggerFile: URL
+    let mode: EndDerealizationMode
+}
+
+/// The `endRecovery=…` segment of the transcript's accessibility value
+/// (see `Fixture.endRecoveryReportPrefix`), parsed; nil while the value
+/// carries none (the follow still pending).
+struct EndRecoveryReport {
+    let reason: String
+    let corrections: Int
+    let episodes: Int
+    let endRealized: Bool
+    /// The whole accessibility value, for messages.
+    let raw: String
+
+    init?(followReport: String) {
+        guard let start = followReport.range(of: Fixture.endRecoveryReportPrefix)?.lowerBound else { return nil }
+        var fields: [String: String] = [:]
+        for token in followReport[start...].split(separator: " ") {
+            let pair = token.split(separator: "=", maxSplits: 1)
+            guard pair.count == 2 else { continue }
+            fields[String(pair[0])] = String(pair[1])
+        }
+        guard let reason = fields["endRecovery"],
+              let corrections = fields["corrections"].flatMap({ Int($0) }),
+              let episodes = fields["episodes"].flatMap({ Int($0) }),
+              let endRealized = fields["endRealized"].flatMap({ Bool($0) })
+        else { return nil }
+        self.reason = reason
+        self.corrections = corrections
+        self.episodes = episodes
+        self.endRealized = endRealized
+        raw = followReport
+    }
+
+    /// False while an episode is in flight.
+    var isTerminal: Bool { reason != Fixture.recoveringReason }
+}
+
+/// A launch armed for its evidence record: what `attachRecoveryEvidence`
+/// needs to take the snapshot, held until the record is attached.
+struct PendingRecoveryEvidence {
+    var context: String
+    let cycle: Int
+    var settledLaunches: Int?
+    let opened: OpenConversation
+    let endRow: EndRow
+}
+
+/// How `enterLongConversation` arms a launch for its evidence record
+/// before the first assertion on it: the record's identity, and `arm`,
+/// which hands the built record to the test case (see
+/// `ConversationTranscriptScrollUITests.recoveryEvidence`).
+struct RecoveryEvidenceArming {
+    let cycle: Int
+    let endRow: EndRow
+    let settledLaunches: Int?
+    let arm: @MainActor (PendingRecoveryEvidence) -> Void
+}
+
 /// Launches the demo app with footer and hydration responses held behind
 /// their trigger files. `standaloneSlimToolRows` makes truncated tools
-/// independently tappable for the opt-in hydration regression.
+/// independently tappable for the opt-in hydration regression, and
+/// `endDerealization` arms the marker withdrawal behind its trigger file
+/// in the given mode (see `Fixture.endDerealizationTriggerFileArgumentPrefix`).
 @MainActor
 func launchDemoApp(
     hooksRowTriggerFile: URL,
     blockHydrationTriggerFile: URL? = nil,
-    standaloneSlimToolRows: Bool = false
+    standaloneSlimToolRows: Bool = false,
+    endDerealization: EndDerealization? = nil
 ) -> XCUIApplication {
     let app = XCUIApplication()
     app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path]
@@ -154,6 +262,12 @@ func launchDemoApp(
     if standaloneSlimToolRows {
         app.launchArguments.append(Fixture.slimToolRowLayoutArgumentPrefix + Fixture.standaloneSlimToolRows)
     }
+    if let endDerealization {
+        app.launchArguments += [
+            Fixture.endDerealizationTriggerFileArgumentPrefix + endDerealization.triggerFile.path,
+            Fixture.endDerealizationModeArgumentPrefix + endDerealization.mode.rawValue
+        ]
+    }
     app.launch()
     return app
 }
@@ -163,10 +277,16 @@ func launchDemoApp(
 /// and waits for the transcript, Go to End button handle and scroll view.
 /// A missing last message is
 /// reported with the resting state (a viewport past the end may leave the
-/// last row unrealized and off the accessibility hierarchy).
+/// last row unrealized and off the accessibility hierarchy). `evidence`
+/// arms the launch's evidence record before the first assertion (see
+/// `enterLongConversation`).
 @MainActor
-func openLongConversation(in app: XCUIApplication, context: String = "after opening") -> OpenConversation {
-    let opened = enterLongConversation(in: app, context: context)
+func openLongConversation(
+    in app: XCUIApplication,
+    context: String = "after opening",
+    evidence: RecoveryEvidenceArming? = nil
+) -> OpenConversation {
+    let opened = enterLongConversation(in: app, context: context, evidence: evidence)
     XCTAssertTrue(
         opened.lastMessage.waitForExistence(timeout: Fixture.settleTimeout),
         "\(context): last transcript message never appeared — "
@@ -176,9 +296,35 @@ func openLongConversation(in app: XCUIApplication, context: String = "after open
 }
 
 /// `openLongConversation` without waiting for the last message, so a
-/// test can observe the transcript's very first settled state.
+/// test can observe the transcript's very first settled state. The query
+/// handles are built first and, with `evidence`, the launch is armed for
+/// its evidence record before the workspace-row and agent-row taps and
+/// the existence assertions, so a launch that never shows its transcript
+/// leaves a record too (the flush reads absent elements as absent, never
+/// asserts).
 @MainActor
-func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConversation {
+func enterLongConversation(
+    in app: XCUIApplication,
+    context: String,
+    evidence: RecoveryEvidenceArming? = nil
+) -> OpenConversation {
+    let opened = OpenConversation(
+        lastMessage: message(in: app, containing: Fixture.lastMessageFragment),
+        goToEnd: app.buttons[Fixture.goToEndIdentifier].firstMatch,
+        transcript: app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+    )
+    if let evidence {
+        evidence.arm(
+            PendingRecoveryEvidence(
+                context: context,
+                cycle: evidence.cycle,
+                settledLaunches: evidence.settledLaunches,
+                opened: opened,
+                endRow: evidence.endRow
+            )
+        )
+    }
+
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     if !workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout) {
         // Same fallback as AppStoreScreenshotTests: a collapsed iPad
@@ -202,14 +348,11 @@ func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConv
     )
     agentRow.tap()
 
-    let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
-    let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
-    let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
     XCTAssertTrue(
-        transcript.waitForExistence(timeout: Fixture.elementTimeout),
+        opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
         "\(context): transcript scroll view not found"
     )
-    return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+    return opened
 }
 
 /// The transcript's static-text rows whose frames intersect its own
@@ -350,6 +493,8 @@ func waitUntilSettled(
             message += "; " + restingState(of: extra.row, named: extra.name, in: opened)
         }
         XCTFail(message)
+    } else {
+        assertRecoveryReportWellFormed(in: opened, context: context)
     }
     return settled
 }
@@ -394,6 +539,175 @@ func assertStaysAtBottom(
             + restingState(of: lastRow, named: rowName, in: opened) + "; "
             + restingState(of: endRow.element, named: endRow.name, in: opened)
     )
+    assertRecoveryReportWellFormed(in: opened, context: context)
+}
+
+/// The shape guard on every settled report: `recovered` may only be
+/// claimed by an episode that spent a correction and found the end row
+/// realized (see `Fixture.endRecoveryReportPrefix`). Any other reason,
+/// or a report without the segment, passes — ordinary launches are not
+/// held to `notAttempted`.
+@MainActor
+func assertRecoveryReportWellFormed(in opened: OpenConversation, context: String) {
+    guard let report = recoveryReport(in: opened), report.reason == Fixture.recoveredReason else { return }
+    XCTAssertTrue(
+        report.endRealized && report.corrections >= 1,
+        "\(context): the report claims a recovered end row without the evidence for it "
+            + "(recovered requires endRealized=true and corrections>=1) — \(report.raw)"
+    )
+}
+
+/// The controlled tests' baseline: `waitUntilSettled` on `lastRow`,
+/// `assertAtEnd` on `endRow`, then the `endRecovery` report once it is
+/// terminal — an entry-time episode may still be in flight when the
+/// follow reports — which must not already read `recovered`. Fails the
+/// test and returns nil when any of that does not happen.
+@MainActor
+func settledRecoveryBaseline(
+    lastRow: XCUIElement,
+    endRow: EndRow,
+    in opened: OpenConversation,
+    context: String
+) -> EndRecoveryReport? {
+    guard waitUntilSettled(
+        on: lastRow,
+        named: "last assistant paragraph",
+        in: opened,
+        context: context,
+        alsoReporting: (endRow.element, endRow.name)
+    ) else { return nil }
+    assertAtEnd(endRow, in: opened, context: context)
+    var report = recoveryReport(in: opened)
+    let terminal = waitUntil(timeout: Fixture.recoveryTimeout) {
+        report = recoveryReport(in: opened)
+        return report?.isTerminal == true
+    }
+    guard terminal, let baseline = report else {
+        XCTFail(
+            "\(context): no terminal endRecovery report within \(Int(Fixture.recoveryTimeout)) s of settling, "
+                + "before the trigger file — " + restingState(of: endRow.element, named: endRow.name, in: opened)
+        )
+        return nil
+    }
+    XCTAssertNotEqual(
+        baseline.reason,
+        Fixture.recoveredReason,
+        "\(context): the report already reads recovered before the trigger file exists — \(baseline.raw)"
+    )
+    return baseline
+}
+
+/// Polls until an episode after `baseline` — a higher episode count —
+/// has reported a terminal reason, within `Fixture.recoveryTimeout` of
+/// the trigger file; fails the test and returns nil otherwise.
+@MainActor
+func waitForTerminalRecovery(
+    after baseline: EndRecoveryReport,
+    endRow: EndRow,
+    in opened: OpenConversation,
+    context: String
+) -> EndRecoveryReport? {
+    var latest: EndRecoveryReport?
+    let resolved = waitUntil(timeout: Fixture.recoveryTimeout) {
+        latest = recoveryReport(in: opened)
+        guard let latest else { return false }
+        return latest.episodes > baseline.episodes && latest.isTerminal
+    }
+    guard resolved, let latest else {
+        XCTFail(
+            "\(context): no recovery episode after the baseline (\(baseline.raw)) reported a terminal reason "
+                + "within \(Int(Fixture.recoveryTimeout)) s of the trigger file — "
+                + restingState(of: endRow.element, named: endRow.name, in: opened)
+        )
+        return nil
+    }
+    return latest
+}
+
+/// The `endRecovery=…` segment of the follow report, parsed; nil while
+/// the report carries none.
+@MainActor
+func recoveryReport(in opened: OpenConversation) -> EndRecoveryReport? {
+    EndRecoveryReport(followReport: followReport(in: opened))
+}
+
+/// The content-free evidence record of an armed launch (see
+/// `attachRecoveryEvidence`): the follow report and its parsed
+/// `endRecovery` fields, Go to End presence, the end row's gap from the
+/// transcript's bottom edge and where its frame lies (ABOVE / INSIDE /
+/// BELOW / CLIPPED_TOP / CLIPPED_BOTTOM / UNREALIZED, the classification
+/// `restingState` spells out, or NO_TRANSCRIPT), the transcript frame, a
+/// timestamp — and, for a repeated scenario, `settledLaunches`, the
+/// launches that had reached the settle assertion. No message text or
+/// fixture strings. The transcript is read from one `snapshot()` and
+/// every field it feeds is null when it is absent: the record is taken
+/// from teardown after a failed launch too, so it never asserts.
+@MainActor
+func recoveryEvidenceRecord(of pending: PendingRecoveryEvidence, test testMethodName: String) -> [String: Any] {
+    let opened = pending.opened
+    let transcript = try? opened.transcript.snapshot()
+    let report = transcript?.value as? String
+    let parsed = report.flatMap { EndRecoveryReport(followReport: $0) }
+    let transcriptFrame = transcript?.frame
+    let rowFrame = frame(of: pending.endRow.element)
+    var gap: Double?
+    if let transcriptFrame, let rowFrame {
+        gap = Double(transcriptFrame.maxY - rowFrame.maxY)
+    }
+    var record: [String: Any] = [
+        "test": testMethodName,
+        "cycle": pending.cycle,
+        "context": pending.context,
+        "followReport": jsonValue(report),
+        "goToEndPresent": opened.goToEnd.exists,
+        "transcriptFrame": jsonValue(transcriptFrame.map { evidenceRecord(of: $0) }),
+        "endRecovery": jsonValue(parsed.map { evidenceRecord(of: $0) }),
+        "endRowPosition": evidencePosition(of: rowFrame, in: transcriptFrame),
+        "endRowGap": jsonValue(gap),
+        "endRowFrame": jsonValue(rowFrame.map { evidenceRecord(of: $0) }),
+        "timestamp": ISO8601DateFormatter().string(from: Date())
+    ]
+    if let settledLaunches = pending.settledLaunches {
+        record["settledLaunches"] = settledLaunches
+    }
+    return record
+}
+
+/// Where `rowFrame` lies relative to `transcriptFrame`, for the evidence
+/// record: NO_TRANSCRIPT when the transcript is absent, UNREALIZED when
+/// the row is.
+func evidencePosition(of rowFrame: CGRect?, in transcriptFrame: CGRect?) -> String {
+    guard let transcriptFrame else { return "NO_TRANSCRIPT" }
+    guard let rowFrame else { return "UNREALIZED" }
+    return if rowFrame.maxY <= transcriptFrame.minY {
+        "ABOVE"
+    } else if rowFrame.minY >= transcriptFrame.maxY {
+        "BELOW"
+    } else if isInside(rowFrame, transcriptFrame) {
+        "INSIDE"
+    } else if rowFrame.minY < transcriptFrame.minY {
+        "CLIPPED_TOP"
+    } else {
+        "CLIPPED_BOTTOM"
+    }
+}
+
+func evidenceRecord(of report: EndRecoveryReport) -> [String: Any] {
+    [
+        "reason": report.reason,
+        "corrections": report.corrections,
+        "episodes": report.episodes,
+        "endRealized": report.endRealized
+    ]
+}
+
+func evidenceRecord(of rect: CGRect) -> [String: Double] {
+    ["x": Double(rect.minX), "y": Double(rect.minY), "width": Double(rect.width), "height": Double(rect.height)]
+}
+
+/// `value` for a JSON record, `NSNull` when absent.
+func jsonValue(_ value: Any?) -> Any {
+    value ?? NSNull()
 }
 
 /// True when `endRow` is realized, lies inside the transcript and its
@@ -443,7 +757,11 @@ func isInside(_ element: XCUIElement, _ container: XCUIElement) -> Bool {
 
 @MainActor
 func isInside(_ frame: CGRect, _ container: XCUIElement) -> Bool {
-    container.frame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(frame)
+    isInside(frame, container.frame)
+}
+
+func isInside(_ frame: CGRect, _ containerFrame: CGRect) -> Bool {
+    containerFrame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(frame)
 }
 
 /// Diagnostic sentence for failure messages: the last forced follow's

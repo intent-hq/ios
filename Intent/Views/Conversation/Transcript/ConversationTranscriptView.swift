@@ -196,11 +196,13 @@ private extension ConversationTranscriptView {
             ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
                 outcome: scrollState.lastForcedFollowOutcome,
                 corrections: scrollState.lastForcedFollowCorrections,
-                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
-                    outcome: scrollState.lastUnrealizedEndRecoveryOutcome,
-                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections
-                )
+                endRecovery: unrealizedEndRecoveryDemoReport.summary
             )
+        )
+        .demoEndDerealization(
+            triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
+            onTrigger: withdrawEndRowForDemo,
+            onGeometryChange: restoreDerealizedEndIfMoved
         )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
@@ -310,12 +312,14 @@ private extension ConversationTranscriptView {
     /// would only reset the bound.
     private func scheduleUnrealizedEndRecovery(proxy: ScrollViewProxy) {
         guard scrollState.unrealizedEndRecoveryTask == nil else { return }
+        scrollState.unrealizedEndRecoveryEpisodes += 1
+        scrollState.unrealizedEndRecoveryCorrections = 0
+        scrollState.lastUnrealizedEndRecoveryReport = nil
         // swiftlint:disable:next closure_body_length
         scrollState.unrealizedEndRecoveryTask = Task { @MainActor in
             let deadline = ContinuousClock.now
                 + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
             var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
-            var corrections = 0
             var previous: ScrollViewMomentumProxy.RestingGeometry?
             while true {
                 try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
@@ -330,7 +334,7 @@ private extension ConversationTranscriptView {
                     hasInitiallyScrolled: hasInitiallyScrolled,
                     userIsScrolledAway: userIsScrolledAway,
                     correctionsLeft: correctionsLeft,
-                    correctionsSpent: corrections,
+                    correctionsSpent: scrollState.unrealizedEndRecoveryCorrections,
                     timedOut: ContinuousClock.now >= deadline
                 )
                 previous = geometry
@@ -339,14 +343,14 @@ private extension ConversationTranscriptView {
                     continue
                 case .followToEnd:
                     correctionsLeft -= 1
-                    corrections += 1
+                    scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
                     AppLog.userInterface.debug("[SCROLL] End row off screen short of the bottom; following to the end")
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
                 case .recover(let pageOffsetY):
                     correctionsLeft -= 1
-                    corrections += 1
+                    scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
                     AppLog.userInterface.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
                     if scrollMomentumProxy.pageTo(offsetY: pageOffsetY) {
@@ -360,14 +364,14 @@ private extension ConversationTranscriptView {
                             isFollowing: scrollDebounceTask != nil
                         ) else {
                             AppLog.userInterface.debug("[SCROLL] End recovery yielded the paged-up viewport to the user")
-                            finishUnrealizedEndRecovery(outcome: .yieldToUser, corrections: corrections, proxy: proxy)
+                            finishUnrealizedEndRecovery(outcome: .yieldToUser, proxy: proxy)
                             return
                         }
                     }
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
                 case .none, .giveUp, .yieldToUser:
-                    finishUnrealizedEndRecovery(outcome: step, corrections: corrections, proxy: proxy)
+                    finishUnrealizedEndRecovery(outcome: step, proxy: proxy)
                     return
                 }
             }
@@ -375,8 +379,8 @@ private extension ConversationTranscriptView {
     }
     // swiftlint:enable function_body_length
 
-    /// Drains the recovery: records the outcome once it has corrected the
-    /// viewport, releases the follow flag, and either replays the live edge
+    /// Drains the recovery: records the episode's report, releases the
+    /// follow flag, and either replays the live edge
     /// the flag suppressed while a correction was in flight (a viewport the
     /// correction left short of a realized end row is re-pinned by the
     /// growth path; under the finger it is read as the gesture it is) or,
@@ -387,13 +391,9 @@ private extension ConversationTranscriptView {
     /// `resolveDeferredUnrealizedEndGiveUp`).
     private func finishUnrealizedEndRecovery(
         outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep,
-        corrections: Int,
         proxy: ScrollViewProxy
     ) {
-        if corrections > 0 {
-            scrollState.lastUnrealizedEndRecoveryOutcome = outcome
-            scrollState.lastUnrealizedEndRecoveryCorrections = corrections
-        }
+        recordUnrealizedEndRecoveryReport(outcome: outcome, cancelled: false)
         scrollState.isRecoveringUnrealizedEnd = false
         scrollState.unrealizedEndRecoveryTask = nil
         switch ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(
@@ -436,10 +436,46 @@ private extension ConversationTranscriptView {
         return showGoToEnd
     }
 
+    /// Cancels an episode in flight and records it as such; with none in
+    /// flight, only releases the follow flag.
     private func cancelUnrealizedEndRecovery() {
-        scrollState.unrealizedEndRecoveryTask?.cancel()
-        scrollState.unrealizedEndRecoveryTask = nil
+        if let task = scrollState.unrealizedEndRecoveryTask {
+            task.cancel()
+            scrollState.unrealizedEndRecoveryTask = nil
+            recordUnrealizedEndRecoveryReport(outcome: nil, cancelled: true)
+        }
         scrollState.isRecoveringUnrealizedEnd = false
+    }
+
+    /// Records how the episode ended, with the corrections it spent and
+    /// the end row's realization at this moment, so every terminal path —
+    /// resolved on any step, or cancelled — is observable under
+    /// `--demo-data` (see `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport`).
+    private func recordUnrealizedEndRecoveryReport(
+        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?,
+        cancelled: Bool
+    ) {
+        scrollState.lastUnrealizedEndRecoveryReport = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+            outcome: outcome,
+            corrections: scrollState.unrealizedEndRecoveryCorrections,
+            episodes: scrollState.unrealizedEndRecoveryEpisodes,
+            endRealized: scrollState.isEndRealized,
+            cancelled: cancelled
+        )
+    }
+
+    /// The last episode's report or, with one in flight (`recovering`) or
+    /// none armed yet (`notAttempted`), the classifier's reading of the
+    /// current state.
+    private var unrealizedEndRecoveryDemoReport: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport {
+        scrollState.lastUnrealizedEndRecoveryReport
+            ?? ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+                outcome: nil,
+                corrections: scrollState.unrealizedEndRecoveryCorrections,
+                episodes: scrollState.unrealizedEndRecoveryEpisodes,
+                endRealized: scrollState.isEndRealized,
+                cancelled: false
+            )
     }
 
     /// Re-checks the live scroll view once the geometry has had time to
@@ -747,19 +783,81 @@ private extension ConversationTranscriptView {
         // realization is the end-row signal the unrealized-end recovery
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it.
-        Color.clear.frame(height: Layout.bottomAnchorHeight)
-            .padding(.bottom, Layout.bottomAnchorPadding)
-            .id("scroll-bottom")
-            .onAppear {
-                scrollState.isEndRealized = true
-                if userIsScrolledAway {
-                    applyLiveScrolledAwayEdge(proxy: proxy)
+        if demoWithdrawnEnd == nil {
+            Color.clear.frame(height: Layout.bottomAnchorHeight)
+                .padding(.bottom, Layout.bottomAnchorPadding)
+                .id("scroll-bottom")
+                .onAppear {
+                    scrollState.isEndRealized = true
+                    if userIsScrolledAway {
+                        applyLiveScrolledAwayEdge(proxy: proxy)
+                    }
                 }
-            }
-            .onDisappear {
-                scrollState.isEndRealized = false
-                scheduleUnrealizedEndRecovery(proxy: proxy)
-            }
+                .onDisappear {
+                    scrollState.isEndRealized = false
+                    scheduleUnrealizedEndRecovery(proxy: proxy)
+                }
+        } else {
+            // Demo-only stand-in while the marker is withdrawn (see
+            // `withdrawEndRowForDemo`): the same height, so the content
+            // height and every offset the recovery reads are unchanged, but
+            // no id and no realization handlers — `scrollTo("scroll-bottom")`
+            // finds nothing and `isEndRealized` stays false, exactly as over
+            // a dropped end row.
+            Color.clear.frame(height: Layout.bottomAnchorHeight)
+                .padding(.bottom, Layout.bottomAnchorPadding)
+        }
+    }
+
+    // MARK: - Demo-only controlled end derealization (#338)
+
+    /// Nil outside `--demo-data` without reading the state, so production
+    /// bodies take no dependency on it.
+    private var demoWithdrawnEnd: ConversationTranscriptScrollState.DemoEndDerealization? {
+        DemoMode.isEnabled ? scrollState.demoEndDerealization : nil
+    }
+
+    /// Withdraws the end row once the trigger file exists
+    /// (`DemoFixtures.configuredEndDerealizationTriggerFile`): the marker leaves the
+    /// lazy stack, its real `onDisappear` arms `scheduleUnrealizedEndRecovery`
+    /// through the ordinary edge, and the recovery runs unchanged — nothing
+    /// it reads is fabricated. Waits for the live scroll view so the offset
+    /// the restore is judged against is the one the recovery pages from.
+    private func withdrawEndRowForDemo() async {
+        guard !scrollState.demoEndDerealizationTriggered else { return }
+        while scrollMomentumProxy.restingGeometry == nil {
+            try? await Task.sleep(for: DemoFixtures.triggerFilePollInterval)
+            guard !Task.isCancelled else { return }
+        }
+        guard let geometry = scrollMomentumProxy.restingGeometry else { return }
+        scrollState.demoEndDerealizationTriggered = true
+        let mode = DemoFixtures.configuredEndDerealizationMode
+        AppLog.userInterface.debug("[SCROLL] Demo: withdrawing the end row (\(mode.rawValue)) at \(geometry.contentOffsetY)")
+        scrollState.demoEndDerealization = ConversationTranscriptScrollState.DemoEndDerealization(
+            mode: mode,
+            withdrawnOffsetY: geometry.contentOffsetY
+        )
+    }
+
+    /// Puts the withdrawn end row back on evidence from the live scroll view
+    /// alone (see `DemoFixtures.shouldRestoreDerealizedEnd`): the recovery's
+    /// page up in `release` mode, or a gesture in either. Restored at the
+    /// end of the content while the viewport rests above it, the marker is
+    /// unrealized until the recovery's own follow back reaches it, so its
+    /// real `onAppear` is what resolves the episode.
+    private func restoreDerealizedEndIfMoved() {
+        guard let withdrawn = demoWithdrawnEnd,
+              let geometry = scrollMomentumProxy.restingGeometry,
+              DemoFixtures.shouldRestoreDerealizedEnd(
+                mode: withdrawn.mode,
+                withdrawnOffsetY: withdrawn.withdrawnOffsetY,
+                contentOffsetY: geometry.contentOffsetY,
+                containerHeight: geometry.containerHeight,
+                isInteracting: isUserInteracting
+              )
+        else { return }
+        AppLog.userInterface.debug("[SCROLL] Demo: restoring the end row at \(geometry.contentOffsetY)")
+        scrollState.demoEndDerealization = nil
     }
 
     private var goToEndButton: some View {
@@ -1166,6 +1264,33 @@ private extension View {
     func demoAccessibilityValue(_ value: @autoclosure () -> String) -> some View {
         if DemoMode.isEnabled {
             accessibilityValue(value())
+        } else {
+            self
+        }
+    }
+
+    /// Under `--demo-data` with `--demo-end-derealization-trigger-file` only:
+    /// polls for the trigger file and calls `onTrigger` once it exists, and
+    /// calls `onGeometryChange` on every content offset change so the
+    /// withdrawn end row can be restored on live evidence (#338). Neither
+    /// the task nor the observer is installed otherwise.
+    @ViewBuilder
+    func demoEndDerealization(
+        triggerFile: URL?,
+        onTrigger: @escaping @MainActor () async -> Void,
+        onGeometryChange: @escaping @MainActor () -> Void
+    ) -> some View {
+        if DemoMode.isEnabled, let triggerFile {
+            self
+                .task {
+                    guard (try? await DemoFixtures.wait(for: .triggerFile(triggerFile))) != nil else { return }
+                    await onTrigger()
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y
+                } action: { _, _ in
+                    onGeometryChange()
+                }
         } else {
             self
         }

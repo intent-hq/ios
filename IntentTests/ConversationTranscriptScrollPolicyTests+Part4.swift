@@ -159,10 +159,7 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(!rePinAfterGrowth(isFollowing: true))
         #expect(!transition(current: false, distanceToBottom: 10, isInteracting: false))
         #expect(!rePinAfterGrowth(geometryAway: false))
-        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
-            outcome: .yieldToUser,
-            corrections: 1
-        ) == "endRecovery=yieldToUser corrections=1")
+        #expect(recoveryReport(.yieldToUser, corrections: 1).reason == .yieldedToUser)
     }
 
     @Test func recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind() {
@@ -181,10 +178,7 @@ extension ConversationTranscriptScrollPolicyTests {
         ))
         #expect(drain(.giveUp, isFollowing: true) == .deferToFollow)
         #expect(!rePinAfterGrowth(isFollowing: true))
-        #expect(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
-            outcome: .giveUp,
-            corrections: 2
-        ) == "endRecovery=giveUp corrections=2")
+        #expect(recoveryReport(.giveUp, corrections: 2).reason == .gaveUp)
     }
 
     @Test func deferredGiveUpShowsGoToEndWhenTheFollowIsDropped() {
@@ -260,24 +254,112 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000), isEndRealized: true) == .none)
     }
 
-    @Test func unrealizedEndRecoverySummaryIsAppendedOnlyAfterACorrection() {
+    /// The report of a transcript with one episode armed, resolved on
+    /// `outcome` (nil: still running) with the end row realized by default.
+    private func recoveryReport(
+        _ outcome: RecoveryStep?,
+        corrections: Int = 0,
+        episodes: Int = 1,
+        endRealized: Bool = true,
+        cancelled: Bool = false
+    ) -> ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport {
+        ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+            outcome: outcome,
+            corrections: corrections,
+            episodes: episodes,
+            endRealized: endRealized,
+            cancelled: cancelled
+        )
+    }
+
+    /// `recovered` needs a correction spent and the end row realized at the
+    /// finish; a `.none` that spent nothing is `noCorrectionNeeded`, one over
+    /// a still unrealized end row is `unverified` (neither recovered nor a
+    /// give-up: the budget was not spent and Go to End is not shown).
+    @Test func recoveryReportLabelsRecoveredOnlyWithACorrectionAndTheEndRealized() {
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: true).reason == .recovered)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 3, endRealized: true).reason == .recovered)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: false).reason == .unverified)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 0, endRealized: true).reason == .noCorrectionNeeded)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 0, endRealized: false).reason == .noCorrectionNeeded)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: false).reason != .recovered)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: false).reason != .gaveUp)
+        let report = recoveryReport(RecoveryStep.none, corrections: 2, episodes: 3, endRealized: true)
+        #expect(report == ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport(
+            reason: .recovered,
+            corrections: 2,
+            episodes: 3,
+            endRealized: true
+        ))
+    }
+
+    /// An abandoned episode is never `recovered`: a give-up is `gaveUp`, a
+    /// yield is `yieldedToUser`, and a cancelled task is `cancelled`
+    /// whatever step it last took, a `.none` included.
+    @Test func recoveryReportNeverLabelsAnAbandonedEpisodeRecovered() {
+        for corrections in [0, 1, 3] {
+            for endRealized in [false, true] {
+                #expect(recoveryReport(.giveUp, corrections: corrections, endRealized: endRealized).reason == .gaveUp)
+                #expect(recoveryReport(.yieldToUser, corrections: corrections, endRealized: endRealized).reason == .yieldedToUser)
+                #expect(recoveryReport(nil, corrections: corrections, endRealized: endRealized, cancelled: true).reason == .cancelled)
+                #expect(recoveryReport(
+                    .recover(pageOffsetY: 0),
+                    corrections: corrections,
+                    endRealized: endRealized,
+                    cancelled: true
+                ).reason == .cancelled)
+            }
+        }
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: true, cancelled: true).reason == .cancelled)
+        #expect(recoveryReport(.giveUp, corrections: 1, endRealized: true, cancelled: true).reason == .cancelled)
+    }
+
+    /// No episode armed is `notAttempted` whatever else is handed; an armed
+    /// episode without a resolution (no outcome, or a step the loop
+    /// continues from) is `recovering`.
+    @Test func recoveryReportDistinguishesNotAttemptedFromInFlight() {
+        #expect(recoveryReport(nil, episodes: 0, endRealized: false).reason == .notAttempted)
+        #expect(recoveryReport(nil, episodes: 0, endRealized: true).reason == .notAttempted)
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, episodes: 0).reason == .notAttempted)
+        #expect(recoveryReport(nil, episodes: 0, cancelled: true).reason == .notAttempted)
+        #expect(recoveryReport(nil, episodes: 1).reason == .recovering)
+        #expect(recoveryReport(nil, corrections: 1, episodes: 2, endRealized: false).reason == .recovering)
+        #expect(recoveryReport(.settling, corrections: 0).reason == .recovering)
+        #expect(recoveryReport(.followToEnd, corrections: 1).reason == .recovering)
+        #expect(recoveryReport(.recover(pageOffsetY: 100), corrections: 1, endRealized: false).reason == .recovering)
+    }
+
+    /// The summary names the reason with its evidence and reads next to the
+    /// forced follow's report once that follow has reported — on every
+    /// launch, `notAttempted` included — never on the pending report.
+    @Test func recoveryReportSummaryIsAppendedOnlyAfterTheFollowReports() {
         let policy = ConversationTranscriptScrollPolicy.self
-        #expect(policy.unrealizedEndRecoverySummary(outcome: nil, corrections: 0) == nil)
-        #expect(policy.unrealizedEndRecoverySummary(outcome: RecoveryStep.none, corrections: 0) == nil)
-        #expect(policy.unrealizedEndRecoverySummary(
-            outcome: RecoveryStep.none,
-            corrections: 1
-        ) == "endRecovery=recovered corrections=1")
-        #expect(policy.unrealizedEndRecoverySummary(
-            outcome: .giveUp,
-            corrections: 3
-        ) == "endRecovery=giveUp corrections=3")
-        let recovered = policy.unrealizedEndRecoverySummary(outcome: RecoveryStep.none, corrections: 1)
+        let notAttempted = recoveryReport(nil, episodes: 0, endRealized: false)
+        #expect(notAttempted.summary == "endRecovery=notAttempted corrections=0 episodes=0 endRealized=false")
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, episodes: 2).summary
+            == "endRecovery=recovered corrections=1 episodes=2 endRealized=true")
+        #expect(recoveryReport(RecoveryStep.none, corrections: 1, endRealized: false).summary
+            == "endRecovery=unverified corrections=1 episodes=1 endRealized=false")
+        #expect(recoveryReport(RecoveryStep.none).summary
+            == "endRecovery=noCorrectionNeeded corrections=0 episodes=1 endRealized=true")
+        #expect(recoveryReport(.giveUp, corrections: 3, endRealized: false).summary
+            == "endRecovery=gaveUp corrections=3 episodes=1 endRealized=false")
+        #expect(recoveryReport(.yieldToUser, corrections: 1, endRealized: false).summary
+            == "endRecovery=yieldedToUser corrections=1 episodes=1 endRealized=false")
+        #expect(recoveryReport(nil, cancelled: true).summary
+            == "endRecovery=cancelled corrections=0 episodes=1 endRealized=true")
+        #expect(recoveryReport(nil, endRealized: false).summary
+            == "endRecovery=recovering corrections=0 episodes=1 endRealized=false")
         #expect(policy.forcedFollowLandingSummary(
             outcome: .landed,
             corrections: 0,
-            endRecovery: recovered
-        ) == "lastForcedFollow=landed corrections=0 endRecovery=recovered corrections=1")
+            endRecovery: notAttempted.summary
+        ) == "lastForcedFollow=landed corrections=0 endRecovery=notAttempted corrections=0 episodes=0 endRealized=false")
+        #expect(policy.forcedFollowLandingSummary(
+            outcome: .giveUp,
+            corrections: 2,
+            endRecovery: recoveryReport(RecoveryStep.none, corrections: 1).summary
+        ) == "lastForcedFollow=giveUp corrections=2 endRecovery=recovered corrections=1 episodes=1 endRealized=true")
         #expect(policy.forcedFollowLandingSummary(
             outcome: .landed,
             corrections: 0,
@@ -286,7 +368,7 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(policy.forcedFollowLandingSummary(
             outcome: nil,
             corrections: 0,
-            endRecovery: recovered
+            endRecovery: notAttempted.summary
         ) == "lastForcedFollow=pending")
     }
 

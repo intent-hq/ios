@@ -10,8 +10,12 @@ import XCTest
 /// hidden — with the last message on screen, no blank band, and the prompt
 /// rows under it on screen — once a cold entry has settled
 /// (intent-hq/ios#304), hidden when the hooks row lands after a cold entry or
-/// a slim-truncated tool row hydrates after entry (intent-hq/ios#338), and
-/// hidden after a single tap from the very top of the transcript (#305).
+/// a slim-truncated tool row hydrates after entry (intent-hq/ios#338),
+/// hidden after a single tap from the very top of the transcript (#305),
+/// and — the controlled cases in `+Recovery` — absent once the real recovery
+/// recovered an end row the fixture withdrew on the test's signal, present
+/// once it gave up over one kept withdrawn. Those launches and the cold-entry
+/// ones attach a JSON evidence record (`recoveryEvidence`).
 ///
 /// Every wait is settlement polling on the app's own state, never a guessed
 /// idle delay: a forced follow (entry, Go to End, a send) reports its
@@ -67,6 +71,16 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     let blockHydrationTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-block-hydration-\(UUID().uuidString).trigger")
+
+    /// The file the fixture's end-derealization gate waits on (see
+    /// `Fixture.endDerealizationTriggerFileArgumentPrefix`), passed only by
+    /// the two controlled-recovery tests.
+    let endDerealizationTriggerFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("transcript-end-derealization-\(UUID().uuidString).trigger")
+
+    /// The launch whose evidence record is still owed (see `recoveryEvidence`):
+    /// flushed by `attachRecoveryEvidence`, or in teardown after a failure.
+    var pendingRecoveryEvidence: PendingRecoveryEvidence?
     // swiftlint:enable test_case_accessibility
 
     override func setUpWithError() throws {
@@ -74,11 +88,17 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         continueAfterFailure = false
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
         try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
+        try? FileManager.default.removeItem(at: endDerealizationTriggerFile)
     }
 
     override func tearDownWithError() throws {
+        // XCTest runs teardown on the main thread, so the main-actor hop is
+        // sound; nonisolated(unsafe) keeps the test case out of the region check.
+        nonisolated(unsafe) let test = self
+        MainActor.assumeIsolated { test.attachPendingRecoveryEvidence() }
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
         try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
+        try? FileManager.default.removeItem(at: endDerealizationTriggerFile)
         try super.tearDownWithError()
     }
 
@@ -352,10 +372,14 @@ extension ConversationTranscriptScrollUITests {
         for cycle in 1 ... Fixture.entryCycles {
             let context = "cold entry \(cycle)/\(Fixture.entryCycles)"
             let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
-            let opened = enterLongConversation(in: app, context: context)
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
+            let opened = enterLongConversation(
+                in: app,
+                context: context,
+                evidence: recoveryEvidence(cycle: cycle, endRow: endRow)
+            )
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
-            let endRow = EndRow.lastSuggestedPrompt(in: app)
 
             // 1. Settled: the entry follow has reported and the last message
             //    rests inside the transcript. An unrealized last message (the
@@ -369,6 +393,7 @@ extension ConversationTranscriptScrollUITests {
                 alsoReporting: (endRow.element, endRow.name)
             )
             let visibleBand = rows(intersecting: transcript)
+            attachRecoveryEvidence()
             XCTAssertFalse(
                 visibleBand.isEmpty,
                 "\(context): the transcript's visible band is empty — no message row intersects the transcript frame — "
