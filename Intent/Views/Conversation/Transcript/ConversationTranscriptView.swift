@@ -770,7 +770,9 @@ private extension ConversationTranscriptView {
         let mode = DemoFixtures.configuredEndDerealizationMode
         AppLog.userInterface.debug("[SCROLL] Demo: withdrawing the end row (\(mode.rawValue)) at \(geometry.contentOffsetY)")
         scrollState.demoEndDerealization = ConversationTranscriptScrollState.DemoEndDerealization(
-            mode: mode, withdrawnOffsetY: geometry.contentOffsetY)
+            mode: mode,
+            withdrawnOffsetY: geometry.contentOffsetY
+        )
     }
 
     /// Puts the withdrawn end row back on evidence from the live scroll view

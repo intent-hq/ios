@@ -247,7 +247,8 @@ enum DemoFixtures {
     /// one wins. Trigger-file gated like the fixture gates above, since a
     /// clock cannot be made robust against a loaded CI simulator.
     static let configuredEndDerealizationTriggerFile = endDerealizationTriggerFile(
-        from: ProcessInfo.processInfo.arguments)
+        from: ProcessInfo.processInfo.arguments
+    )
 
     /// `--demo-end-derealization-mode=<release|hold>`, `release` by default.
     static let configuredEndDerealizationMode = endDerealizationMode(from: ProcessInfo.processInfo.arguments)
@@ -258,13 +259,13 @@ enum DemoFixtures {
 
     /// What the withdrawn end row waits on before it is put back.
     enum EndDerealizationMode: String, Equatable {
+        /// Kept withdrawn so the recovery spends its whole budget and the
+        /// give-up path (Go to End) runs.
+        case hold
         /// Restored once the live scroll view is measurably paged up — the
         /// recovery's correction — so its follow back re-verifies through
         /// the row's real `onAppear` and the episode resolves.
         case release
-        /// Kept withdrawn so the recovery spends its whole budget and the
-        /// give-up path (Go to End) runs.
-        case hold
     }
 
     static func endDerealizationTriggerFile(from arguments: [String]) -> URL? {

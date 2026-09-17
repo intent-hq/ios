@@ -680,29 +680,29 @@ enum ConversationTranscriptScrollPolicy {
     /// realized the end row.
     struct UnrealizedEndRecoveryReport: Equatable {
         enum Reason: String, Equatable {
-            /// No episode was ever armed on this transcript.
-            case notAttempted
-            /// An episode is armed and has not resolved.
-            case recovering
+            /// The episode's task was cancelled (a takeover or the view
+            /// disappearing) before it resolved.
+            case cancelled
+            /// The budget was spent or the timeout hit over an unrealized
+            /// end row; Go to End is shown.
+            case gaveUp
             /// The last episode resolved without spending a correction.
             case noCorrectionNeeded
+            /// No episode was ever armed on this transcript.
+            case notAttempted
             /// The last episode corrected the viewport at least once and the
             /// end row was realized when it resolved.
             case recovered
+            /// An episode is armed and has not resolved.
+            case recovering
             /// The last episode corrected the viewport and resolved as
             /// nothing left to do (not following, content short of the
             /// container) with the end row still unrealized: not recovered,
             /// and not a give-up either — the budget was not spent and Go
             /// to End is not shown.
             case unverified
-            /// The budget was spent or the timeout hit over an unrealized
-            /// end row; Go to End is shown.
-            case gaveUp
             /// A gesture, a rest away or a follow claimed the viewport.
             case yieldedToUser
-            /// The episode's task was cancelled (a takeover or the view
-            /// disappearing) before it resolved.
-            case cancelled
         }
 
         let reason: Reason

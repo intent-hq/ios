@@ -468,12 +468,14 @@ extension DemoFixturesTests {
     /// viewport; never at rest, never on a re-measure jitter, and never
     /// in `hold` without a gesture.
     @Test func derealizedEndIsRestoredOnlyOnMeasuredMovement() {
-        func restore(
-            _ mode: DemoFixtures.EndDerealizationMode, offset: CGFloat, interacting: Bool = false
-        ) -> Bool {
+        func restore(_ mode: DemoFixtures.EndDerealizationMode, offset: CGFloat, interacting: Bool = false) -> Bool {
             DemoFixtures.shouldRestoreDerealizedEnd(
-                mode: mode, withdrawnOffsetY: 1_000, contentOffsetY: offset,
-                containerHeight: 600, isInteracting: interacting)
+                mode: mode,
+                withdrawnOffsetY: 1_000,
+                contentOffsetY: offset,
+                containerHeight: 600,
+                isInteracting: interacting
+            )
         }
         #expect(!restore(.release, offset: 1_000))
         #expect(!restore(.release, offset: 990))
