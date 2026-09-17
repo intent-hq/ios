@@ -269,6 +269,57 @@ jobs:
             TestResults
             TestResults-source-moved
 
+      # ConversationTranscriptScrollUITests attaches one content-free JSON
+      # record per launch (transcript-recovery-evidence-<test>-<cycle>,
+      # keepAlways) proving the unrealized-end recovery ran. Keep just those
+      # on every run — the full bundle above stays failure-only — by
+      # exporting the bundle's attachments to a scratch dir and copying the
+      # prefix-matched ones. `xcresulttool export attachments` (Xcode 16+)
+      # writes a manifest.json naming each exported file; the bundle is
+      # symlinked under a .xcresult name since RESULT_BUNDLE has none. No-op
+      # when the bundle is missing or the suite did not run (filtered lane).
+      - name: Export transcript recovery evidence
+        id: recovery-evidence
+        if: always()
+        run: |
+          out="$RUNNER_TEMP/recovery-evidence"
+          mkdir -p "$out"
+          count=0
+          if [ -d "$RESULT_BUNDLE" ]; then
+            bundle="$RUNNER_TEMP/recovery-evidence-bundle.xcresult"
+            ln -s "$PWD/$RESULT_BUNDLE" "$bundle"
+            exported="$RUNNER_TEMP/recovery-evidence-export"
+            mkdir -p "$exported"
+            if xcrun xcresulttool export attachments --path "$bundle" --output-path "$exported" \
+              && [ -f "$exported/manifest.json" ]; then
+              while IFS=$'\t' read -r src name; do
+                [ -n "$src" ] && [ -f "$exported/$src" ] || continue
+                cp "$exported/$src" "$out/$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')"
+                count=$((count + 1))
+              done < <(jq -r --arg prefix transcript-recovery-evidence- '
+                .[]? | .attachments[]?
+                | select(((.suggestedHumanReadableName // "") | startswith($prefix))
+                         or ((.exportedFileName // "") | startswith($prefix)))
+                | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
+              ' "$exported/manifest.json")
+            else
+              echo "::warning::could not export attachments from $RESULT_BUNDLE"
+            fi
+          else
+            echo "No result bundle at $RESULT_BUNDLE; nothing to export"
+          fi
+          echo "Recovery evidence records: $count"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload transcript recovery evidence
+        if: always() && steps.recovery-evidence.outputs.count != '0'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-transcript-recovery-evidence
+          path: ${{ runner.temp }}/recovery-evidence
+          retention-days: 14
+          if-no-files-found: ignore
+
       # See the job comment: turns a go-test failure into a failure of this
       # (the only ruleset-required) job. go-test normally finishes minutes
       # before this step runs, so the wait is usually zero. A failing
