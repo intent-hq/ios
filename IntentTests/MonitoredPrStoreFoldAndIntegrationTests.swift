@@ -335,13 +335,18 @@ extension MonitoredPrStoreTests {
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        fake.delayMap["prMonitor.list"] = 100_000_000
+        // Suspend prMonitor.list so unsubscribe lands while the request is
+        // in flight.
+        fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
-        try await fake.waitForRequests("prMonitor.list")
+        try await fake.waitForPendingRequests("prMonitor.list")
 
         await store.unsubscribe()
         #expect(store.monitors.isEmpty)
 
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the monitor that unsubscribe cleared.
+        fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         await refetchTask.value
 
         // The stale response must not repopulate the cleared list, and the

@@ -386,13 +386,17 @@ extension BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        fake.delayMap["hook.list"] = 100_000_000
+        // Suspend hook.list so unsubscribe lands while the request is in flight.
+        fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
-        try await fake.waitForRequests("hook.list")
+        try await fake.waitForPendingRequests("hook.list")
 
         await store.unsubscribe()
         #expect(store.hooks.isEmpty)
 
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the hook that unsubscribe cleared.
+        fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
         await refetchTask.value
 
         // The stale response must not repopulate the cleared list, and the
