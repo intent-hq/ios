@@ -65,7 +65,8 @@ nonisolated enum ImageDataRepresentation: Equatable {
 /// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
 /// with backward-compatible field aliases.
 nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
-    /// Auto-generated if not present in JSON
+    /// Wire `id`, or the `FallbackIdentity`-derived id when absent
+    /// (see `ContentBlock+Identity.swift`).
     let id: String
     let type: ContentBlockType
 
@@ -152,10 +153,17 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
     }
 
     init(from decoder: Decoder) throws {
+        let identity = decoder.userInfo[Self.fallbackIdentityUserInfoKey] as? FallbackIdentity
+        try self.init(from: decoder, fallbackIdentity: identity ?? .fingerprint(messageId: nil))
+    }
+
+    /// The one block decoder: every decode path (message rows, delta
+    /// entities, `agent.getMessageBlock` hydration, `JSONDecoder`) ends here,
+    /// differing only in the identity an id-less block falls back to.
+    init(from decoder: Decoder, fallbackIdentity: FallbackIdentity) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Auto-generate ID if missing
-        id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        let wireId = try? container.decode(String.self, forKey: .id)
         type = (try? container.decode(ContentBlockType.self, forKey: .type)) ?? .text
 
         // Text with fallback to content
@@ -212,11 +220,12 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         dataRepresentation = (try? container.decode(Bool.self, forKey: .dataIsThumbnail))
             .map(ImageDataRepresentation.init(reportedThumbnail:)) ?? .unreported
         dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
-    }
 
-    static func decode(_ dictionary: [String: Any]) -> Self? {
-        guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
-        return try? JSONDecoder().decode(Self.self, from: data)
+        id = wireId ?? Self.fallbackId(for: fallbackIdentity, fingerprintParts: [
+            type.rawValue, text, content, language, name, toolName, toolCallId, toolUseId, tool_use_id,
+            data, mimeType, fileName, attachmentId, size.map { String($0) },
+            resource?.uri, resource?.mimeType, resource?.text
+        ])
     }
 
     /// Resolved text content, falling back to legacy `content` field.
@@ -397,66 +406,5 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         case .thumbnail: try container.encode(true, forKey: key)
         case .unreported: break
         }
-    }
-}
-
-extension ContentBlock {
-    init(
-        type: ContentBlockType,
-        text: String? = nil,
-        language: String? = nil,
-        name: String? = nil,
-        input: [String: AnyCodable] = [:],
-        toolUseId: String? = nil,
-        output: AnyCodable? = nil,
-        errorOutcome: ToolExecutionOutcome = .unreported,
-        data: String? = nil,
-        mimeType: String? = nil,
-        fileName: String? = nil,
-        attachmentId: String? = nil,
-        size: Int? = nil,
-        resource: ResourceContents? = nil,
-        metadata: [String: AnyCodable] = [:],
-        messageMetadata: [String: AnyCodable] = [:],
-        inputWasProvided: Bool = false,
-        metadataWasProvided: Bool = false,
-        messageMetadataWasProvided: Bool = false,
-        inputTruncation: ProjectionTruncation = .unreported,
-        inputBytes: Int? = nil,
-        outputTruncation: ProjectionTruncation = .unreported,
-        outputBytes: Int? = nil,
-        dataTruncation: ProjectionTruncation = .unreported,
-        dataRepresentation: ImageDataRepresentation = .unreported,
-        dataBytes: Int? = nil
-    ) {
-        self.init(
-            id: UUID().uuidString,
-            type: type,
-            text: text,
-            language: language,
-            name: name,
-            input: input,
-            toolUseId: toolUseId,
-            output: output,
-            errorOutcome: errorOutcome,
-            data: data,
-            mimeType: mimeType,
-            fileName: fileName,
-            attachmentId: attachmentId,
-            size: size,
-            resource: resource,
-            metadata: metadata,
-            messageMetadata: messageMetadata,
-            inputWasProvided: inputWasProvided,
-            metadataWasProvided: metadataWasProvided,
-            messageMetadataWasProvided: messageMetadataWasProvided,
-            inputTruncation: inputTruncation,
-            inputBytes: inputBytes,
-            outputTruncation: outputTruncation,
-            outputBytes: outputBytes,
-            dataTruncation: dataTruncation,
-            dataRepresentation: dataRepresentation,
-            dataBytes: dataBytes
-        )
     }
 }

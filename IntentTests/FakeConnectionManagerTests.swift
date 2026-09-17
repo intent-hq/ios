@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 @MainActor
@@ -197,5 +198,68 @@ struct FakeConnectionManagerTests {
         fake.deliverSubscriptionPush(pushB)
         #expect(receivedA.count == 1)
         #expect(receivedB.count == 1)
+    }
+
+    // MARK: - Bounded condition waits (ios#261)
+
+    private static let shortTimeoutMilliseconds = 20
+
+    @Test func waitUntilThrowsOnTimeoutInsteadOfContinuing() async {
+        await #expect(throws: ConditionWaitFailure.self) {
+            try await waitUntil(
+                "a condition that never holds",
+                timeout: .milliseconds(Self.shortTimeoutMilliseconds)
+            ) { false }
+        }
+    }
+
+    @Test func expectNeverThrowsWhenTheForbiddenConditionAppearsInsideTheWindow() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        Task { _ = try? await fake.request("agent.markSeen") }
+
+        await #expect(throws: ConditionWaitFailure.self) {
+            try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
+        }
+    }
+
+    @Test func waitForPendingRequestsObservesTheParkedContinuation() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.get")
+        let request = Task { try await fake.request("agent.get") is [String: Any] }
+
+        try await fake.waitForPendingRequests("agent.get")
+        #expect(fake.pendingRequestCount("agent.get") == 1)
+
+        fake.resolvePending("agent.get", with: ["ok": true] as [String: Any])
+        #expect(try await request.value)
+        #expect(fake.pendingRequestCount("agent.get") == 0)
+    }
+
+    /// The escape hatch the time-limited race tests rely on: a candidate
+    /// cancelled while awaiting the gate stays parked (the race's loser
+    /// cancellation must not release it), while cancelling the test-level
+    /// task wrapped in `opening(onCancellationOf:)` opens the gate so a
+    /// system under test that regressed into awaiting the loser fails the
+    /// time limit instead of hanging the runner.
+    @Test func testGateOpensOnTestTaskCancellationButNotOnCandidateCancellation() async throws {
+        let gate = TestGate()
+        let candidateFinished = Mutex(false)
+        let candidate = Task {
+            await gate.wait()
+            candidateFinished.withLock { $0 = true }
+        }
+        candidate.cancel()
+        try await expectNever("gate released by the candidate's own cancellation") {
+            candidateFinished.withLock { $0 }
+        }
+
+        let testLevel = Task {
+            await gate.opening { await gate.wait() }
+        }
+        testLevel.cancel()
+        await testLevel.value
+        await candidate.value
+        #expect(candidateFinished.withLock { $0 })
     }
 }

@@ -4,13 +4,13 @@ import Foundation
 import Testing
 
 extension ConversationStoreIntegrationTests {
-    private func deliverAndWait(
+    /// `deliverSubscriptionPush` invokes the registered handler synchronously
+    /// on the main actor, so the push is applied when this returns.
+    private func deliver(
         _ push: SubscriptionPush,
         through fake: FakeConnectionManager
-    ) async throws {
-        let subscriptionDeliveryDelayNanoseconds: UInt64 = 50_000_000
+    ) {
         fake.deliverSubscriptionPush(push)
-        try await Task.sleep(nanoseconds: subscriptionDeliveryDelayNanoseconds)
     }
 
     private func slimMessage(containing block: [String: Any]) -> [String: Any] {
@@ -27,13 +27,12 @@ extension ConversationStoreIntegrationTests {
         through fake: FakeConnectionManager,
         snapshot: [[String: Any]]
     ) async throws {
-        let subscriptionDeliveryDelayNanoseconds: UInt64 = 50_000_000
         fake.responseMap["agent.getConversation"] = ["messages": snapshot]
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: subscriptionDeliveryDelayNanoseconds)
-        try await deliverAndWait(
+        try await waitUntil("chat.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
+        deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
                 kind: .snapshot,
@@ -205,8 +204,8 @@ extension ConversationStoreIntegrationTests {
 
         // Same for a chat.subscribe (re)snapshot that re-seeds the transcript.
         await store.subscribeLiveChat(agentId: "agent-1")
-        try await Task.sleep(nanoseconds: 50_000_000)
-        try await deliverAndWait(
+        try await waitUntil("chat.subscribe handler registration") { fake.hasSubscriptionHandler(id: "sub-1") }
+        deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
                 seq: 0,
@@ -338,7 +337,7 @@ extension ConversationStoreIntegrationTests {
         // A live delta re-upserting the slim (truncated) version of the
         // already-hydrated block must not revert it (third re-merge point:
         // applyChatDelta).
-        try await deliverAndWait(
+        deliver(
             SubscriptionPush(
                 subscriptionId: "sub-1",
                 seq: 1,
@@ -452,7 +451,7 @@ extension ConversationStoreIntegrationTests {
         // it resume: the stale block must NOT be inserted into the fresh cache.
         fake.pendingMethods.insert("agent.getMessageBlock")
         let hydration = Task { await store.hydrateBlock(messageId: "msg-1", blockId: "b-1") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getMessageBlock")
         store.reset()
         fake.resolvePending("agent.getMessageBlock", with: [
             "block": [

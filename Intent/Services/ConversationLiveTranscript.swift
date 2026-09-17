@@ -94,7 +94,7 @@ extension ConversationLiveTranscript {
                         "blockId": blockId
                     ]
                 )
-                return await Self.decodeMessageBlock(InboundJSONValue(value: result))
+                return await Self.decodeMessageBlock(InboundJSONValue(value: result), blockId: blockId)
             }
             guard let decoded else { return }
             guard let block = decoded else {
@@ -254,7 +254,7 @@ extension ConversationLiveTranscript {
         chatExpectedSeq = push.seq + 1
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
-        messages = push.snapshotMessages ?? items.compactMap { ConversationMessage.parseMessage($0) }
+        messages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
         remergeHydratedBlocks()
 
         isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false

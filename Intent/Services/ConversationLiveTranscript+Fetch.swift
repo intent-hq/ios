@@ -114,17 +114,22 @@ extension ConversationLiveTranscript {
         guard let response = result.value as? [String: Any],
               let items = response["messages"] as? [[String: Any]] else { return nil }
         return ConversationPage(
-            messages: items.compactMap { ConversationMessage.parseMessage($0) },
+            messages: ConversationMessage.parseMessages(items),
             truncated: response["truncated"] as? Bool ?? false,
             totalMessages: response["totalMessages"] as? Int
         )
     }
 
+    /// `blockId` is the requested block's id: a hydrated body served without
+    /// its own `id` keeps the identity of the row it replaces.
     @concurrent
-    nonisolated static func decodeMessageBlock(_ result: InboundJSONValue) async -> ContentBlock? {
+    nonisolated static func decodeMessageBlock(
+        _ result: InboundJSONValue,
+        blockId: String
+    ) async -> ContentBlock? {
         guard let response = result.value as? [String: Any],
               let blockDictionary = response["block"] as? [String: Any] else { return nil }
-        return ContentBlock.decode(blockDictionary)
+        return ContentBlock.decode(blockDictionary, fallbackIdentity: .fixed(blockId))
     }
 
     private func mergeFetchedMessages(_ fetched: [ConversationMessage]) {

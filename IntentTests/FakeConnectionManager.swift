@@ -1,6 +1,125 @@
 import Combine
 import Foundation
 @testable import Intent
+import Synchronization
+import Testing
+
+/// Thrown by `waitUntil` / `expectNever` so a missed or forbidden state
+/// transition aborts the test instead of letting it continue against a fake
+/// that never reached the awaited state (e.g. `resolvePending` on nothing).
+struct ConditionWaitFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
+/// Poll cadence shared by the bounded condition waits below.
+private let kConditionPollIntervalMilliseconds = 5
+private let kConditionPollInterval: Duration = .milliseconds(kConditionPollIntervalMilliseconds)
+
+/// Bounded poll until `condition` holds. Throws `ConditionWaitFailure` naming
+/// the call site on timeout. Use this instead of a fixed `Task.sleep` after
+/// spawning store work (ios#261).
+@MainActor
+func waitUntil(
+    _ description: String,
+    timeout: Duration = .seconds(2),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try await Task.sleep(for: kConditionPollInterval)
+    }
+    if condition() { return }
+    throw ConditionWaitFailure(
+        description: "Timed out waiting for \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+    )
+}
+
+/// Bounded negative observation window: polls `forbidden` for `window` and
+/// throws `ConditionWaitFailure` the first time it holds. For assertions that
+/// work must NOT have been spawned — positive ones must use `waitUntil`. The
+/// window is the same order as the sleeps it replaces, but a transient
+/// occurrence inside it now fails instead of slipping past a single check.
+@MainActor
+func expectNever(
+    _ description: String,
+    within window: Duration = .milliseconds(100),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ forbidden: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + window
+    repeat {
+        if forbidden() {
+            throw ConditionWaitFailure(
+                description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+            )
+        }
+        try await Task.sleep(for: kConditionPollInterval)
+    } while ContinuousClock.now < deadline
+    if forbidden() {
+        throw ConditionWaitFailure(
+            description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+        )
+    }
+}
+
+/// One-shot latch for scripting the order of racing fakes: `wait()` suspends
+/// until `open()` (returning immediately once open) and ignores cancellation,
+/// so a fake that must outlive its cancellation holds its lane until the test
+/// releases it — instead of guessing a `Task.sleep` long enough for the other
+/// candidate to win (ios#261).
+nonisolated final class TestGate: Sendable {
+    private struct State {
+        var isOpen = false
+        var waiters: [CheckedContinuation<Void, Never>] = []
+    }
+
+    private let state = Mutex(State())
+
+    func open() {
+        let waiters = state.withLock { state in
+            state.isOpen = true
+            let waiters = state.waiters
+            state.waiters = []
+            return waiters
+        }
+        for waiter in waiters { waiter.resume() }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let alreadyOpen = state.withLock { state in
+                if state.isOpen { return true }
+                state.waiters.append(continuation)
+                return false
+            }
+            if alreadyOpen { continuation.resume() }
+        }
+    }
+
+    /// Runs `body`, opening the gate if the CALLING task is cancelled — the
+    /// test-level escape hatch for a `.timeLimit` test whose system under test
+    /// regressed into awaiting the gated fake: Swift Testing only cancels the
+    /// test cooperatively, and `wait()` ignores cancellation, so without this
+    /// such a regression would hang the runner instead of failing. Cancelling
+    /// a candidate task that is merely awaiting `wait()` does not open the gate.
+    func opening<T>(onCancellationOf body: () async throws -> T) async rethrows -> T {
+        try await withTaskCancellationHandler(operation: body) { open() }
+    }
+}
+
+/// Suspends until the current task is cancelled. Replaces a long `Task.sleep`
+/// whose only job was to be cut short by cancellation (a raced loser that is
+/// released once the winner settles).
+nonisolated func suspendUntilCancelled() async {
+    let gate = TestGate()
+    await withTaskCancellationHandler {
+        await gate.wait()
+    } onCancel: {
+        gate.open()
+    }
+}
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
 /// to SessionConnectionManaging for testing purposes. It provides full control over connection
@@ -292,6 +411,44 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
+    }
+
+    /// Number of requests for `method` currently suspended by `pendingMethods`.
+    func pendingRequestCount(_ method: String) -> Int {
+        pendingContinuations[method]?.count ?? 0
+    }
+
+    /// Bounded poll until at least `count` requests for `method` are suspended
+    /// by `pendingMethods` — i.e. resolvable via `resolvePending` / `failPending`.
+    func waitForPendingRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) suspended request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            pendingRequestCount(method) >= count
+        }
+    }
+
+    /// Bounded poll until `method` has been requested at least `count` times.
+    func waitForRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            paramsForMethod(method).count >= count
+        }
     }
 
     /// Check if a handler is registered for a given subscriptionId.

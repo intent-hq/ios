@@ -367,72 +367,9 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onSelectWorkspace_ignoresSavedConversationScreen() {
-        let wsId = "test-coord-restore-conv-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        // Save a per-workspace conversation screen
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "agent-x",
-                agentName: "Tester",
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectWorkspace(wsId)
-
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
-        }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId)?.agentId == "agent-x")
-    }
-
-    @Test @MainActor func onSelectWorkspace_ignoresSavedNoteScreen() {
-        let wsId = "test-coord-restore-note-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "note",
-                workspaceId: wsId,
-                agentId: nil,
-                agentName: nil,
-                noteId: "note-abc",
-                noteTitle: "My Note"
-            )
-        )
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectWorkspace(wsId)
-
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
-        }
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId)?.noteId == "note-abc")
-    }
-
-    @Test @MainActor func onSelectWorkspace_fallsBackToDetailWhenNoSavedScreen() {
+    @Test @MainActor func onSelectWorkspace_landsOnWorkspaceDetail() {
         let wsId = "test-coord-no-saved-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
-        // Ensure no saved screen
-        persistence.clearWorkspaceScreen(workspaceId: wsId)
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -442,53 +379,5 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
         }
-    }
-
-    @Test @MainActor func onBackToWorkspaceDetail_clearsSavedScreen() {
-        let wsId = "test-coord-back-clears-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        // Save a screen and select the workspace
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "a",
-                agentName: "A",
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectWorkspace(wsId)
-        // Now go back to workspace detail
-        coordinator.onBackToWorkspaceDetail()
-
-        // The per-workspace screen should be cleared
-        let loaded = persistence.loadWorkspaceScreen(workspaceId: wsId)
-        #expect(loaded == nil, "Per-workspace screen should be cleared after onBackToWorkspaceDetail")
-    }
-}
-
-extension AppCoordinatorTests {
-    @Test @MainActor func onSelectAgent_savesPerWorkspaceScreen() {
-        let wsId = "test-coord-agent-saves-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectAgent("agent-99", workspaceId: wsId, agentName: "Worker")
-
-        let loaded = persistence.loadWorkspaceScreen(workspaceId: wsId)
-        #expect(loaded?.screen == "conversation")
-        #expect(loaded?.agentId == "agent-99")
-        #expect(loaded?.agentName == "Worker")
     }
 }

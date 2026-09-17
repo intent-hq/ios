@@ -79,34 +79,6 @@ extension PersistenceManager {
         defaults.removeObject(forKey: Self.lastNoteTitleKey)
     }
 
-    // MARK: - Per-Workspace Screen
-
-    private static let workspaceScreensKey = "workspaceScreens"
-
-    func saveWorkspaceScreen(workspaceId: String, screen: SavedScreen) {
-        var dict = loadWorkspaceScreensDict()
-        if let data = try? JSONEncoder().encode(screen) {
-            dict[workspaceId] = data
-        }
-        defaults.set(dict, forKey: Self.workspaceScreensKey)
-    }
-
-    func loadWorkspaceScreen(workspaceId: String) -> SavedScreen? {
-        let dict = loadWorkspaceScreensDict()
-        guard let data = dict[workspaceId] else { return nil }
-        return try? JSONDecoder().decode(SavedScreen.self, from: data)
-    }
-
-    func clearWorkspaceScreen(workspaceId: String) {
-        var dict = loadWorkspaceScreensDict()
-        dict.removeValue(forKey: workspaceId)
-        defaults.set(dict, forKey: Self.workspaceScreensKey)
-    }
-
-    private func loadWorkspaceScreensDict() -> [String: Data] {
-        (defaults.dictionary(forKey: Self.workspaceScreensKey) as? [String: Data]) ?? [:]
-    }
-
     // MARK: - Per-Workspace Tab
 
     private static let workspaceTabsKey = "workspaceTabs"

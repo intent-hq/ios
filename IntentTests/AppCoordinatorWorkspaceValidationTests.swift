@@ -7,49 +7,11 @@ import Testing
 import UIKit
 
 extension AppCoordinatorTests {
-    @Test @MainActor func onSelectNote_savesPerWorkspaceScreen() {
-        let wsId = "test-coord-note-saves-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        coordinator.onSelectNote("note-55", workspaceId: wsId, noteTitle: "Design Doc")
-
-        let loaded = persistence.loadWorkspaceScreen(workspaceId: wsId)
-        #expect(loaded?.screen == "note")
-        #expect(loaded?.noteId == "note-55")
-        #expect(loaded?.noteTitle == "Design Doc")
-    }
-
-    @Test @MainActor func onBackFromNote_clearsPerWorkspaceScreen() {
-        let wsId = "test-coord-backfromnote-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
-
-        let coordinator = AppCoordinator(persistence: persistence)
-        // First select the workspace so selectedWorkspaceId is set
-        coordinator.onSelectWorkspace(wsId)
-        coordinator.onSelectNote("note-1", workspaceId: wsId, noteTitle: "Note")
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil)
-
-        coordinator.onBackFromNote()
-
-        let loaded = persistence.loadWorkspaceScreen(workspaceId: wsId)
-        #expect(loaded == nil, "Per-workspace screen should be cleared after onBackFromNote")
-    }
-
     // MARK: - Missing workspace handling
 
     @Test @MainActor func handleMissingWorkspace_navigatesToWorkspaceList() {
         let wsId = "test-coord-missing-ws-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         // Simulate being on a workspace detail screen
@@ -61,7 +23,7 @@ extension AppCoordinatorTests {
         }
 
         // Now handle the missing workspace
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
             // pass
@@ -73,12 +35,8 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func handleMissingWorkspace_clearsSavedScreenState() {
         let wsId = "test-coord-missing-clears-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
-        // Save both last screen and per-workspace screen
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
                 screen: "workspaceDetail",
@@ -90,35 +48,19 @@ extension AppCoordinatorTests {
             ),
             for: Self.windowBackend.connectionID
         )
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "agent-1",
-                agentName: "Worker",
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
 
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
-        // Both should be cleared
         #expect(
             persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
             "Last screen should be cleared"
         )
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 
     @Test @MainActor func handleMissingWorkspace_worksFromConversationScreen() {
         let wsId = "test-coord-missing-conv-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-x", workspaceId: wsId, agentName: "Tester")
@@ -129,7 +71,7 @@ extension AppCoordinatorTests {
             Issue.record("Expected .agentConversation, got \(coordinator.currentScreen)")
         }
 
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
             // pass
@@ -142,10 +84,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func testNoteNavigationFromWorkspace_staysInWorkspace() {
         let wsId = "test-coord-note-nav-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -163,10 +102,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func testBackFromNote_goesToWorkspaceDetail_notWorkspaceList() {
         let wsId = "test-coord-back-note-detail-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -186,10 +122,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func testNoteNavigationPreservesWorkspaceId() {
         let wsId = "test-coord-preserve-wsid-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -203,10 +136,7 @@ extension AppCoordinatorTests {
 extension AppCoordinatorTests {
     @Test @MainActor func onBackToWorkspaceDetail_fromConversation_setsWorkspaceDetail() {
         let wsId = "test-coord-back-from-conv-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
@@ -221,27 +151,12 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func onBackToWorkspaceDetail_idempotentWhenAlreadyOnDetail() {
         let wsId = "test-coord-back-idempotent-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
         coordinator.onBackToWorkspaceDetail()
-        // Simulate the desynced state: a second back tap while already on .workspaceDetail
-        // (with a stale saved conversation screen) must stay on detail and keep it cleared.
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "agent-1",
-                agentName: "Worker",
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
+        // A second back tap while already on .workspaceDetail must stay on detail.
         coordinator.onBackToWorkspaceDetail()
 
         if case let .workspaceDetail(wId) = coordinator.currentScreen {
@@ -249,10 +164,6 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceDetail after repeated onBackToWorkspaceDetail, got \(coordinator.currentScreen)")
         }
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-            "Repeated onBackToWorkspaceDetail should still clear the per-workspace screen"
-        )
     }
 
     // MARK: - Fetch-driven workspace validation (lastUpdated race)
@@ -285,20 +196,36 @@ extension AppCoordinatorTests {
         )
     }
 
-    /// Let main-queue-hopping sinks and spawned validation tasks run.
-    static func drainMainQueue() async {
-        let drainDelayNanoseconds: UInt64 = 200_000_000
-        try? await Task.sleep(nanoseconds: drainDelayNanoseconds)
+    // MARK: - Screen predicates for bounded waits
+
+    /// `waitUntil` / `expectNever` conditions need a `Bool`; these name the
+    /// screen a main-queue-hopping sink or spawned validation task lands on
+    /// (or must not leave) instead of sleeping a guessed drain delay.
+    static func isWorkspaceList(_ screen: AppScreen) -> Bool {
+        if case .workspaceList = screen { return true }
+        return false
+    }
+
+    static func isWorkspaceDetail(_ screen: AppScreen, for workspaceId: String) -> Bool {
+        if case let .workspaceDetail(wId) = screen { return wId == workspaceId }
+        return false
+    }
+
+    static func isConversation(_ screen: AppScreen, agentId: String, workspaceId: String) -> Bool {
+        if case let .agentConversation(aId, wId, _) = screen { return aId == agentId && wId == workspaceId }
+        return false
+    }
+
+    static func isNoteDetail(_ screen: AppScreen, noteId: String, workspaceId: String) -> Bool {
+        if case let .noteDetail(nId, wId, _) = screen { return nId == noteId && wId == workspaceId }
+        return false
     }
 
     // MARK: - workspace.markSeen on open
 
-    @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async {
+    @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async throws {
         let wsId = "test-coord-markseen-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
@@ -307,9 +234,8 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
         #expect(
             store.workspaces.first?.attention == "none",
@@ -317,12 +243,9 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async {
+    @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async throws {
         let wsId = "test-coord-restore-markseen-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         // Cold-start restore into a workspace counts as viewing it (mirrors
         // the FE, which marks seen whenever the workspace surface activates).
@@ -350,9 +273,8 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
         #expect(
             store.workspaces.first?.attention == "none",
@@ -365,12 +287,9 @@ extension AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async {
+    @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async throws {
         let wsId = "test-coord-markseen-fail-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, attention: "unread")])
@@ -384,21 +303,16 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("markSeen failure must not affect navigation, got \(coordinator.currentScreen)")
+        try await expectNever("navigation change after a failed markSeen") {
+            !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
     }
 
-    @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async {
+    @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async throws {
         let wsId = "test-coord-firstfetch-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(
@@ -414,28 +328,21 @@ extension AppCoordinatorTests {
         // An empty first response must still invalidate Observation through the
         // fetch marker even though the workspace array remains empty.
         store.publishFetchedWorkspaces([])
-        await Self.drainMainQueue()
-
-        if case .workspaceList = coordinator.currentScreen {
-            // pass
-        } else {
-            Issue.record("Expected .workspaceList after first fetch without the workspace, got \(coordinator.currentScreen)")
+        try await waitUntil(".workspaceList after first fetch without the workspace") {
+            Self.isWorkspaceList(coordinator.currentScreen)
         }
+
         #expect(
             persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
             "Last screen should be cleared"
         )
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) == nil, "Per-workspace screen should be cleared")
     }
 }
 
 extension AppCoordinatorTests {
-    @Test @MainActor func preFetchEmptyPublish_doesNotBootUserOut() async {
+    @Test @MainActor func preFetchEmptyPublish_doesNotBootUserOut() async throws {
         let wsId = "test-coord-prefetch-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
@@ -443,12 +350,8 @@ extension AppCoordinatorTests {
 
         // A publish before any successful fetch (lastUpdated still nil) must be ignored.
         store.workspaces = []
-        await Self.drainMainQueue()
-
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("An empty pre-fetch publish must not navigate away, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away on an empty pre-fetch publish") {
+            !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
     }
 }

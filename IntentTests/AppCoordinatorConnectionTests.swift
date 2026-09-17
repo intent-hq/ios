@@ -321,12 +321,9 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onConnectionSuccess_restoredConversationAlive_staysOnConversation() async {
+    @Test @MainActor func onConnectionSuccess_restoredConversationAlive_staysOnConversation() async throws {
         let wsId = "test-coord-restore-conversation-alive-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let savedScreen = PersistenceManager.SavedScreen(
             screen: "conversation",
@@ -347,7 +344,10 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("agent.get")
+        try await expectNever("navigation away from a live restored conversation") {
+            !Self.isConversation(coordinator.currentScreen, agentId: "agent-live", workspaceId: wsId)
+        }
 
         let validations = fake.paramsForMethod("agent.get")
         #expect(validations.count == 1, "Cold-launch conversation restoration must validate its agent")
@@ -364,10 +364,7 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func onConnectionSuccess_windowWithoutRestorationClaimLandsOnList() {
-        defer {
-            cleanupLastScreen()
-            persistence.clearWorkspaceScreen(workspaceId: "ws-other")
-        }
+        defer { cleanupLastScreen() }
         // Only the session's first window restores (spec decision 1b): a
         // duplicate window lands on the workspace list and never overwrites
         // the restoring window's saved navigation.

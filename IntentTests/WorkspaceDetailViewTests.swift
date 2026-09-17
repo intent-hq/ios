@@ -203,14 +203,16 @@ extension WorkspaceDetailViewTests {
         let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
         let workspaceId = UUID().uuidString
         if savedScreen != "none" {
-            persistence.saveWorkspaceScreen(workspaceId: workspaceId, screen: .init(
+            // Seed a pre-#375 install's legacy data without resurrecting its removed API.
+            let legacyScreen = PersistenceManager.SavedScreen(
                 screen: savedScreen,
                 workspaceId: workspaceId,
                 agentId: "agent-0",
                 agentName: "Coordinator",
                 noteId: "spec",
                 noteTitle: "Spec"
-            ))
+            )
+            defaults.set([workspaceId: try JSONEncoder().encode(legacyScreen)], forKey: "workspaceScreens")
         }
         let fake = FakeConnectionManager()
         fake.pendingMethods = ["agent.list"]
@@ -231,35 +233,20 @@ extension WorkspaceDetailViewTests {
                     "event": ["type": "agent:created", "workspaceId": workspaceId]
                 ])
             }
-            try await waitForEntryCondition {
-                fake.requestLog.filter { $0.method == "agent.list" }.count == index + 1
-            }
+            try await fake.waitForPendingRequests("agent.list")
+            #expect(fake.paramsForMethod("agent.list").count == index + 1)
             let agents = (0..<count).map { ["id": "agent-\($0)", "name": "Coordinator \($0)"] }
             fake.resolvePending("agent.list", with: ["agents": agents])
-            try await waitForEntryCondition {
+            try await waitUntil("the hosted workspace's agent load") {
                 let snapshot = view.agentLoadSnapshotForTesting
                 return snapshot.hasLoaded && !snapshot.isLoading && snapshot.agentCount == count
             }
-            // Let SwiftUI render and deliver both agents/hasLoaded onChange callbacks.
-            try await Task.sleep(for: .milliseconds(100))
-            if case let .workspaceDetail(selectedId) = coordinator.currentScreen {
-                #expect(selectedId == workspaceId)
-            } else {
-                Issue.record("Delayed agent load forwarded explicit workspace entry: \(coordinator.currentScreen)")
+            // Observe the forbidden route throughout SwiftUI's callback delivery window.
+            try await expectNever("delayed agent load forwarding explicit workspace entry") {
+                !AppCoordinatorTests.isWorkspaceDetail(coordinator.currentScreen, for: workspaceId)
             }
         }
         #expect(fake.requestLog.contains { $0.method == "workspace.markSeen" })
-    }
-
-    @MainActor
-    private func waitForEntryCondition(_ condition: () -> Bool) async throws {
-        let timeoutSeconds = 5
-        let pollMilliseconds = 10
-        let deadline = ContinuousClock.now + .seconds(timeoutSeconds)
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(pollMilliseconds))
-        }
-        try #require(condition(), "Timed out waiting for the hosted workspace's agent load")
     }
 
     @MainActor

@@ -50,6 +50,28 @@ $REPO_ROOT/.swiftlint.yml
 EOF
 cmp -s "$TEMP_ROOT/expected-args" "$TEMP_ROOT/log/args" || fail "wrapper passed unexpected lint arguments"
 
+(
+  cd "$TEMP_ROOT/outside"
+  PATH="$TEMP_ROOT/bin:$PATH" FAKE_SWIFTLINT_LOG="$TEMP_ROOT/log" SWIFTLINT_REPORTER= "$WRAPPER"
+)
+cmp -s "$TEMP_ROOT/expected-args" "$TEMP_ROOT/log/args" || fail "empty SWIFTLINT_REPORTER changed the lint arguments"
+
+(
+  cd "$TEMP_ROOT/outside"
+  PATH="$TEMP_ROOT/bin:$PATH" FAKE_SWIFTLINT_LOG="$TEMP_ROOT/log" \
+    SWIFTLINT_REPORTER=github-actions-logging "$WRAPPER"
+)
+cat > "$TEMP_ROOT/expected-args-reporter" <<EOF
+lint
+--config
+$REPO_ROOT/.swiftlint.yml
+--strict
+--no-cache
+--reporter
+github-actions-logging
+EOF
+cmp -s "$TEMP_ROOT/expected-args-reporter" "$TEMP_ROOT/log/args" || fail "SWIFTLINT_REPORTER did not append --reporter to the lint arguments"
+
 set +e
 output=$(PATH="$TEMP_ROOT/bin:$PATH" FAKE_SWIFTLINT_VERSION=0.65.0 \
   FAKE_SWIFTLINT_LOG="$TEMP_ROOT/log" "$WRAPPER" 2>&1)

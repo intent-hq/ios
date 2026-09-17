@@ -90,6 +90,10 @@ extension AppCoordinator {
         }
     }
 
+    /// An explicit workspace tap always lands on the workspace overview
+    /// (ios#349). Saved sub-screens are only restored by cold-start restore
+    /// (`restoreLastScreenIfAvailable`); explicit agent/note selection and
+    /// notification routing go through `onSelectAgent` / `onSelectNote`.
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
         selectedWorkspaceId = workspaceId
@@ -116,9 +120,8 @@ extension AppCoordinator {
     }
 
     /// Called when a restored workspace is no longer found in the workspace list.
-    /// Navigates back to the workspace list and clears all saved screen state for that workspace.
-    func handleMissingWorkspace(workspaceId: String) {
-        dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
+    /// Navigates back to the workspace list and clears the saved screen state.
+    func handleMissingWorkspace() {
         if let connectionID = windowConnectionID {
             dependencies.persistence.clearLastScreen(for: connectionID)
         }
@@ -150,43 +153,17 @@ extension AppCoordinator {
         conversationRequestId += 1
         currentScreen = .agentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
         saveCurrentScreen()
-        // Save per-workspace sub-screen
-        dependencies.persistence.saveWorkspaceScreen(
-            workspaceId: workspaceId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: workspaceId,
-                agentId: agentId,
-                agentName: agentName,
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
     }
 
     func onSelectNote(_ noteId: String, workspaceId: String, noteTitle: String) {
         currentScreen = .noteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
         saveCurrentScreen()
-        // Save per-workspace sub-screen
-        dependencies.persistence.saveWorkspaceScreen(
-            workspaceId: workspaceId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "note",
-                workspaceId: workspaceId,
-                agentId: nil,
-                agentName: nil,
-                noteId: noteId,
-                noteTitle: noteTitle
-            )
-        )
     }
 
     func onBackFromNote() {
         if let workspaceId = selectedWorkspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
-            // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
-            dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }
 
@@ -194,8 +171,6 @@ extension AppCoordinator {
         if let workspaceId = selectedWorkspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
-            // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
-            dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }
 
@@ -279,7 +254,6 @@ extension AppCoordinator {
         // validation must not evict a different conversation in the same workspace.
         if case let .agentConversation(aId, wsId, _) = currentScreen,
            aId == agentId, wsId == workspaceId {
-            dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
         }
@@ -300,7 +274,6 @@ extension AppCoordinator {
         // must not evict a different note screen in the same workspace.
         if case let .noteDetail(nId, wsId, _) = currentScreen,
            nId == noteId, wsId == workspaceId {
-            dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
         }

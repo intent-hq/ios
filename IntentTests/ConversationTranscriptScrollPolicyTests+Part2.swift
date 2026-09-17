@@ -75,7 +75,7 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
         #expect(transition(current: true, distanceToBottom: 300, isInteracting: false))
         #expect(!executeFollow(forced: true, userIsScrolledAway: true, distanceToBottom: 300))
-        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .yieldToUser)
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .finish(.yieldToUser))
         #expect(!ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(
             goToEndRequested: false
         ))
@@ -163,7 +163,7 @@ extension ConversationTranscriptScrollPolicyTests {
     /// has not resolved a UIScrollView and its flags read false.
     @Test func phaseOnlyInteractionYieldsForcedFollowAndLanding() {
         #expect(!executeFollow(forced: true, distanceToBottom: nil, isInteracting: true))
-        #expect(landing(nil, isInteracting: true) == .yieldToUser)
+        #expect(landing(nil, isInteracting: true) == .finish(.yieldToUser))
         #expect(transition(current: false, distanceToBottom: 300, isInteracting: true))
     }
 

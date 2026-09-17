@@ -115,8 +115,12 @@ enum ConversationTranscriptScrollPolicy {
     enum ContainerRePinDecision: Equatable {
         /// Following, but under the finger or decelerating; re-check on settle.
         case deferred
+        /// Settled short of the bottom inside the at-bottom band while
+        /// following: the ordinary automatic follow closes the gap.
+        case follow
         /// The container is unchanged or the viewport is not following.
         case none
+        /// Pin straight back to the bottom.
         case rePin
     }
 
@@ -148,17 +152,30 @@ enum ConversationTranscriptScrollPolicy {
         return isInteracting ? .deferred : .rePin
     }
 
-    /// The settle re-check of a container re-pin deferred while interacting.
-    /// Still interacting, it is deferred again. Settled, the viewport is
-    /// followed to the bottom when it is still following and rests short of
-    /// the bottom within the at-bottom band — a row shorter than the threshold
-    /// leaves exactly that gap under the last message, with no Go to End and
-    /// no further geometry edge to close it. A fling that carried the user
-    /// past the threshold applied its edge on the way and is left where it
-    /// stopped; an unknown distance (no scroll view) proves nothing.
+    /// The settle re-check after a container resize: of a re-pin deferred
+    /// while interacting, and of the per-frame re-pins a resize animation
+    /// issued (the keyboard). Still interacting, or with a follow in flight
+    /// that another settle source (`bottomBandRePinDecision`, the past-end
+    /// clamp) already issued — the re-pin would cancel it mid-animation and
+    /// re-issue the same scroll — it is deferred again and reads the landed
+    /// distance instead. Settled short of the bottom within the at-bottom
+    /// band while still following, the viewport is followed to the bottom —
+    /// a row shorter than the threshold leaves exactly that gap under the
+    /// last message, with no Go to End and no further geometry edge to close
+    /// it. Settled past the threshold while still following, it is pinned
+    /// straight back: only a gesture may set `userIsScrolledAway`, so a
+    /// following viewport resting away with no gesture is one the resize
+    /// displaced — the keyboard shrinking the transcript while the lazy
+    /// stack re-estimated its rows walked the offset to the very top (#276),
+    /// and the per-frame re-pins had consumed the away edge the growth
+    /// re-pin would otherwise act on. A fling that carried the user past the
+    /// threshold set the flag as its phase ended and is left where it
+    /// stopped; a rest past the end belongs to the #271 clamp; an unknown
+    /// distance (no scroll view) proves nothing.
     static func deferredContainerRePinDecision(
         distanceToBottom: CGFloat?,
         isInteracting: Bool,
+        isFollowing: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool,
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
@@ -168,12 +185,92 @@ enum ConversationTranscriptScrollPolicy {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
-        if isInteracting { return .deferred }
-        guard let distanceToBottom, isDriftedWithinBottomBand(
+        if isInteracting || isFollowing { return .deferred }
+        guard let distanceToBottom else { return .none }
+        if isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold) {
+            return .rePin
+        }
+        return isDriftedWithinBottomBand(
             distanceToBottom: distanceToBottom,
             driftTolerance: driftTolerance,
             atBottomThreshold: atBottomThreshold
+        ) ? .follow : .none
+    }
+
+    enum BottomBandRePinDecision: Equatable {
+        /// Following, but under the finger, decelerating, or with a follow
+        /// in flight; re-check on settle.
+        case deferred
+        /// Not following (scrolled away, or before the entry scroll), or the
+        /// viewport rests within `driftTolerance` of the bottom, at a
+        /// negative distance the past-end clamp owns (#271), or at an
+        /// unknown distance.
+        case none
+        /// Following and settled, with no gesture, at rest more than
+        /// `driftTolerance` short of the bottom — past `atBottomThreshold`
+        /// included: the automatic follow re-validates that distance and,
+        /// from past the band, its drain re-pins it as content growth.
+        case rePin
+    }
+
+    /// A new conversation's transcript starts shorter than its container, at
+    /// a negative distance, and its first reply grows it past one page. The
+    /// bottom anchor takes the pin over mid-growth and the viewport comes to
+    /// rest a line or two short of the end (#346): under `atBottomThreshold`,
+    /// so Go to End stays hidden, and with no gesture, so the away edge never
+    /// fires. Streaming deltas read the distance before their content is
+    /// laid out and are rate-limited, and streaming ending issues no scroll,
+    /// so nothing closes the gap. The growth does cross from a negative band
+    /// into band 0, and that edge — read on a pinned, settled transcript —
+    /// schedules a settle re-check (`bottomBandRePinDecision`). A follow in
+    /// flight does not suppress it: the last rows may lay out during that
+    /// follow's completion window and its drain re-pins only on an away
+    /// edge, so the request is kept and the re-check defers until the
+    /// follow lands. An away edge without a gesture is content growth past
+    /// the band: `shouldRePinAfterContentGrowth` re-pins it at once, and the
+    /// re-check validates that single scroll once the growth has settled
+    /// (a reply ending with several suggested prompts swaps in more than
+    /// `atBottomThreshold` at stream end). Under the finger the edge is a
+    /// gesture, not growth; before the entry scroll the viewport is not
+    /// following yet.
+    static func shouldRecheckBottomBandAfterEdge(
+        isInteracting: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool
+    ) -> Bool {
+        !isInteracting && shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
+        )
+    }
+
+    /// The settle re-check scheduled by `shouldRecheckBottomBandAfterEdge`,
+    /// and when streaming ends. Interacting, or with a follow in flight that
+    /// a re-pin would land under, it is deferred again. Settled, a viewport
+    /// still following that rests short of the bottom — past
+    /// `driftTolerance`, so layout rounding is left alone — is followed
+    /// there through the ordinary automatic follow, which re-validates the
+    /// geometry when it runs: within the at-bottom band it scrolls, and past
+    /// `atBottomThreshold` its drain re-pins the distance as content growth
+    /// (`shouldRePinAfterContentGrowth`) — with no gesture the flag cannot
+    /// have been raised. Content still shorter than the container rests at
+    /// a negative distance that the past-end clamp owns (#271); an unknown
+    /// distance (no scroll view) proves nothing; scrolled away or before the
+    /// entry scroll nothing is following.
+    static func bottomBandRePinDecision(
+        distanceToBottom: CGFloat?,
+        isInteracting: Bool,
+        isFollowing: Bool,
+        hasInitiallyScrolled: Bool,
+        userIsScrolledAway: Bool,
+        driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance
+    ) -> BottomBandRePinDecision {
+        guard shouldFollowToBottom(
+            hasInitiallyScrolled: hasInitiallyScrolled,
+            userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
+        if isInteracting || isFollowing { return .deferred }
+        guard let distanceToBottom, distanceToBottom > driftTolerance else { return .none }
         return .rePin
     }
 
@@ -393,21 +490,60 @@ enum ConversationTranscriptScrollPolicy {
         var verticalInsets: CGFloat { topInset + bottomInset }
     }
 
-    enum FollowLandingStep: Equatable {
-        /// At rest past the end of the content: clamp the offset back.
-        case clampPastEnd
-        /// Timed out, or the bounded corrections are spent: leave the pin.
-        case giveUp
-        /// At rest within `landingTolerance` of the bottom.
-        case landed
+    // Outcome order follows the landing state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
+    /// An intermediate step of a forced follow's landing loop: the loop
+    /// polls again after it.
+    enum FollowLandingContinuation: Equatable {
+        /// No scroll view yet, or the geometry moved since the last poll.
+        case settling
         /// At rest short of the bottom, even inside the at-bottom band:
         /// issue the scroll again.
         case scrollAgain
-        /// No scroll view yet, or the geometry moved since the last poll.
-        case settling
+        /// At rest past the end of the content: clamp the offset back.
+        case clampPastEnd
+    }
+
+    /// How a forced follow's landing loop ends; the only outcomes the
+    /// landing report (see `forcedFollowLandingSummary`) can carry.
+    enum FollowLandingTerminal: Equatable {
+        /// At rest within `landingTolerance` of the bottom.
+        case landed
         /// The user took over the scroll view; the gesture rule owns the flag.
         case yieldToUser
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
     }
+    // swiftlint:enable sorted_enum_cases
+
+    /// One poll of the landing loop: either a step the loop continues from
+    /// or the terminal that ends it, so a drain can be handed only the
+    /// latter.
+    enum FollowLandingStep: Equatable {
+        case `continue`(FollowLandingContinuation)
+        case finish(FollowLandingTerminal)
+    }
+
+    // Outcome order follows the follow state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
+    /// Every way a follow ends once requested, terminal for the drain that
+    /// resolves a give-up the end recovery deferred to it (see
+    /// `shouldShowGoToEndAfterFollow`, `shouldArmUnrealizedEndRecoveryAfterFollow`).
+    enum FollowTerminal: Equatable {
+        /// The follow scrolled; a forced one carries its landing terminal,
+        /// an automatic one (which only waits out its animation) carries nil.
+        case executed(FollowLandingTerminal?)
+        /// An automatic follow whose re-validation at the due time failed
+        /// (see `shouldExecuteFollow`).
+        case dropped
+        /// A forced follow that came due under a gesture, or scrolled away.
+        case yielded
+        /// A gesture took the pending follow over.
+        case cancelled
+        /// A newer request superseded the follow before it came due.
+        case replaced
+    }
+    // swiftlint:enable sorted_enum_cases
 
     /// A forced follow (entry, a new user message, the thinking indicator,
     /// Go to End) is complete only when the live geometry confirms it (#281).
@@ -445,9 +581,9 @@ enum ConversationTranscriptScrollPolicy {
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> FollowLandingStep {
-        if isInteracting || userIsScrolledAway { return .yieldToUser }
-        if timedOut { return .giveUp }
-        guard let geometry, geometry == previous else { return .settling }
+        if isInteracting || userIsScrolledAway { return .finish(.yieldToUser) }
+        if timedOut { return .finish(.giveUp) }
+        guard let geometry, geometry == previous else { return .continue(.settling) }
         let distance = geometry.distanceToBottom
         if isPastEnd(
             distanceToBottom: distance,
@@ -456,20 +592,19 @@ enum ConversationTranscriptScrollPolicy {
             verticalInsets: geometry.verticalInsets,
             atBottomThreshold: atBottomThreshold
         ) {
-            return correctionsLeft > 0 ? .clampPastEnd : .giveUp
+            return correctionsLeft > 0 ? .continue(.clampPastEnd) : .finish(.giveUp)
         }
         if isScrolledAway(distanceToBottom: distance, atBottomThreshold: landingTolerance) {
-            return correctionsLeft > 0 ? .scrollAgain : .giveUp
+            return correctionsLeft > 0 ? .continue(.scrollAgain) : .finish(.giveUp)
         }
-        return .landed
+        return .finish(.landed)
     }
 
     // Outcome order follows the recovery state machine rather than spelling.
     // swiftlint:disable sorted_enum_cases
-    enum UnrealizedEndRecoveryStep: Equatable {
-        /// The end row is realized, the viewport is not following, or the
-        /// content is shorter than the container.
-        case none
+    /// An intermediate step of the unrealized-end recovery loop: the loop
+    /// polls again after it.
+    enum UnrealizedEndRecoveryContinuation: Equatable {
         /// No scroll view yet, a follow or gesture in flight, the geometry
         /// moved since the last poll, or a geometry another path corrects.
         case settling
@@ -480,6 +615,15 @@ enum ConversationTranscriptScrollPolicy {
         /// follow that changed nothing: page the offset up to `pageOffsetY`
         /// so the lazy stack realizes rows again, then follow back to the end.
         case recover(pageOffsetY: CGFloat)
+    }
+
+    /// How the unrealized-end recovery ends; the only outcomes its drain
+    /// (see `unrealizedEndRecoveryDrain`) and its report (see
+    /// `unrealizedEndRecoveryReport`) can be handed.
+    enum UnrealizedEndRecoveryTerminal: Equatable {
+        /// The end row is realized, the viewport is not following, or the
+        /// content is shorter than the container.
+        case notNeeded
         /// Timed out, or the bounded corrections are spent, with the end row
         /// still unrealized: show Go to End (see `unrealizedEndRecoveryDrain`).
         case giveUp
@@ -488,6 +632,14 @@ enum ConversationTranscriptScrollPolicy {
         case yieldToUser
     }
     // swiftlint:enable sorted_enum_cases
+
+    /// One poll of the recovery loop: either a step the loop continues from
+    /// or the terminal that ends it, so the drain can be handed only the
+    /// latter.
+    enum UnrealizedEndRecoveryStep: Equatable {
+        case `continue`(UnrealizedEndRecoveryContinuation)
+        case finish(UnrealizedEndRecoveryTerminal)
+    }
 
     // swiftlint:disable function_parameter_count function_default_parameter_at_end
     /// Every re-pin judges the viewport by geometry alone, and the geometry
@@ -525,15 +677,17 @@ enum ConversationTranscriptScrollPolicy {
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> UnrealizedEndRecoveryStep {
-        if isEndRealized { return .none }
+        if isEndRealized { return .finish(.notNeeded) }
         guard shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
-        ) else { return .none }
-        if timedOut { return .giveUp }
-        if isInteracting || isFollowing { return .settling }
-        guard let geometry, geometry == previous else { return .settling }
-        guard geometry.contentHeight > geometry.containerHeight - geometry.verticalInsets else { return .none }
+        ) else { return .finish(.notNeeded) }
+        if timedOut { return .finish(.giveUp) }
+        if isInteracting || isFollowing { return .continue(.settling) }
+        guard let geometry, geometry == previous else { return .continue(.settling) }
+        guard geometry.contentHeight > geometry.containerHeight - geometry.verticalInsets else {
+            return .finish(.notNeeded)
+        }
         let distance = geometry.distanceToBottom
         if isPastEnd(
             distanceToBottom: distance,
@@ -542,17 +696,19 @@ enum ConversationTranscriptScrollPolicy {
             verticalInsets: geometry.verticalInsets,
             atBottomThreshold: atBottomThreshold
         ) || isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
-            return .settling
+            return .continue(.settling)
         }
-        guard correctionsLeft > 0 else { return .giveUp }
+        guard correctionsLeft > 0 else { return .finish(.giveUp) }
         if correctionsSpent == 0, isDriftedWithinBottomBand(
             distanceToBottom: distance,
             driftTolerance: landingTolerance,
             atBottomThreshold: atBottomThreshold
         ) {
-            return .followToEnd
+            return .continue(.followToEnd)
         }
-        return .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
+        return .continue(
+            .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
+        )
     }
     // swiftlint:enable function_parameter_count function_default_parameter_at_end
 
@@ -601,13 +757,13 @@ enum ConversationTranscriptScrollPolicy {
     /// deferred to the follow's drain, which re-arms the recovery if the
     /// follow executed and shows Go to End if it did not.
     static func unrealizedEndRecoveryDrain(
-        outcome: UnrealizedEndRecoveryStep,
+        outcome: UnrealizedEndRecoveryTerminal,
         isFollowing: Bool
     ) -> UnrealizedEndRecoveryDrain {
         switch outcome {
         case .giveUp:
             return isFollowing ? .deferToFollow : .showGoToEnd
-        case .none, .yieldToUser, .settling, .followToEnd, .recover:
+        case .notNeeded, .yieldToUser:
             return .replayEdge
         }
     }
@@ -620,13 +776,19 @@ enum ConversationTranscriptScrollPolicy {
     /// `shouldArmUnrealizedEndRecoveryAfterFollow`). So a deferred give-up
     /// whose follow did not execute, with the end row still unrealized,
     /// shows Go to End as the undeferred give-up would have; a realized end
-    /// row needs nothing.
+    /// row needs nothing. Only `.executed` counts as executed.
     static func shouldShowGoToEndAfterFollow(
-        executed: Bool,
+        terminal: FollowTerminal,
         isEndRealized: Bool,
         giveUpDeferred: Bool
     ) -> Bool {
-        giveUpDeferred && !executed && !isEndRealized
+        guard giveUpDeferred, !isEndRealized else { return false }
+        switch terminal {
+        case .executed:
+            return false
+        case .dropped, .yielded, .cancelled, .replaced:
+            return true
+        }
     }
 
     /// The recovery is armed by the end row derealizing — an edge — and an
@@ -638,10 +800,16 @@ enum ConversationTranscriptScrollPolicy {
     /// A realized end row needs nothing, and `unrealizedEndRecoveryStep`
     /// bounds what an armed recovery may do from here.
     static func shouldArmUnrealizedEndRecoveryAfterFollow(
-        executed: Bool,
+        terminal: FollowTerminal,
         isEndRealized: Bool
     ) -> Bool {
-        executed && !isEndRealized
+        guard !isEndRealized else { return false }
+        switch terminal {
+        case .executed:
+            return true
+        case .dropped, .yielded, .cancelled, .replaced:
+            return false
+        }
     }
 
     /// The transcript's accessibility value under `--demo-data`: the last
@@ -651,10 +819,10 @@ enum ConversationTranscriptScrollPolicy {
     /// first). Lets the XCUITests assert the follow landed rather than gave
     /// up with the pin kept, which the visible geometry alone cannot tell
     /// apart within the at-bottom band (#304, #305). `endRecovery` (see
-    /// `unrealizedEndRecoverySummary`) is appended once the follow has
-    /// reported, never to the pending report the tests compare whole.
+    /// `UnrealizedEndRecoveryReport.summary`) is appended once the follow
+    /// has reported, never to the pending report the tests compare whole.
     static func forcedFollowLandingSummary(
-        outcome: FollowLandingStep?,
+        outcome: FollowLandingTerminal?,
         corrections: Int,
         endRecovery: String? = nil
     ) -> String {
@@ -664,30 +832,111 @@ enum ConversationTranscriptScrollPolicy {
         case .landed: name = "landed"
         case .giveUp: name = "giveUp"
         case .yieldToUser: name = "yieldToUser"
-        case .settling: name = "settling"
-        case .scrollAgain: name = "scrollAgain"
-        case .clampPastEnd: name = "clampPastEnd"
         }
         let summary = "lastForcedFollow=\(name) corrections=\(corrections)"
         guard let endRecovery else { return summary }
         return "\(summary) \(endRecovery)"
     }
 
-    /// The last unrealized-end recovery that spent a correction, e.g.
-    /// `endRecovery=recovered corrections=1` or
-    /// `endRecovery=giveUp corrections=3`; nil before any recovery has
-    /// corrected the viewport, so the ordinary report is unchanged.
-    static func unrealizedEndRecoverySummary(outcome: UnrealizedEndRecoveryStep?, corrections: Int) -> String? {
-        guard let outcome, corrections > 0 else { return nil }
-        let name: String
-        switch outcome {
-        case .none: name = "recovered"
-        case .giveUp: name = "giveUp"
-        case .yieldToUser: name = "yieldToUser"
-        case .settling: name = "settling"
-        case .followToEnd, .recover: name = "recovering"
+    /// How the last unrealized-end recovery episode resolved
+    /// (`UnrealizedEndRecoveryReport.reason`).
+    enum UnrealizedEndRecoveryReason: String, Equatable {
+        /// The episode's task was cancelled (a takeover or the view
+        /// disappearing) before it resolved.
+        case cancelled
+        /// The budget was spent or the timeout hit over an unrealized
+        /// end row; Go to End is shown.
+        case gaveUp
+        /// The last episode resolved without spending a correction.
+        case noCorrectionNeeded
+        /// No episode was ever armed on this transcript.
+        case notAttempted
+        /// The last episode corrected the viewport at least once and the
+        /// end row was realized when it resolved.
+        case recovered
+        /// An episode is armed and has not resolved.
+        case recovering
+        /// The last episode corrected the viewport and resolved as
+        /// nothing left to do (not following, content short of the
+        /// container) with the end row still unrealized: not recovered,
+        /// and not a give-up either — the budget was not spent and Go
+        /// to End is not shown.
+        case unverified
+        /// A gesture, a rest away or a follow claimed the viewport.
+        case yieldedToUser
+    }
+
+    /// The unrealized-end recovery's demo-only report: how the last episode
+    /// resolved, with the evidence the label rests on. Reported by
+    /// `unrealizedEndRecoveryReport`, which alone decides the reason, so a
+    /// reader cannot be told `recovered` by a resolution that never
+    /// realized the end row.
+    struct UnrealizedEndRecoveryReport: Equatable {
+        let reason: UnrealizedEndRecoveryReason
+        /// Corrections the last episode spent.
+        let corrections: Int
+        /// Episodes armed on this transcript so far.
+        let episodes: Int
+        /// Whether the end row was realized when the last episode resolved.
+        let endRealized: Bool
+
+        /// `endRecovery=<reason> corrections=N episodes=N endRealized=<true|false>`.
+        var summary: String {
+            "endRecovery=\(reason.rawValue) corrections=\(corrections) episodes=\(episodes) endRealized=\(endRealized)"
         }
-        return "endRecovery=\(name) corrections=\(corrections)"
+    }
+
+    /// Classifies the last recovery episode. `outcome` is the terminal the
+    /// episode resolved on, nil while it is still running (or, with no
+    /// episode armed, before the first); `cancelled` names an episode whose
+    /// task was cancelled and overrides whatever terminal it reached. No
+    /// episode is `notAttempted`. A cancelled, yielded or given-up episode
+    /// is never `recovered`, nor is a `.notNeeded` resolution that spent no
+    /// correction (`noCorrectionNeeded`) or left the end row unrealized
+    /// (`unverified`): `recovered` needs a correction and the end row
+    /// realized at the finish, both. An episode still on an intermediate
+    /// step has no terminal yet, so it is `recovering`.
+    static func unrealizedEndRecoveryReport(
+        outcome: UnrealizedEndRecoveryTerminal?,
+        corrections: Int,
+        episodes: Int,
+        endRealized: Bool,
+        cancelled: Bool
+    ) -> UnrealizedEndRecoveryReport {
+        let reason = unrealizedEndRecoveryReason(
+            outcome: outcome,
+            corrections: corrections,
+            episodes: episodes,
+            endRealized: endRealized,
+            cancelled: cancelled
+        )
+        return UnrealizedEndRecoveryReport(
+            reason: reason,
+            corrections: corrections,
+            episodes: episodes,
+            endRealized: endRealized
+        )
+    }
+
+    private static func unrealizedEndRecoveryReason(
+        outcome: UnrealizedEndRecoveryTerminal?,
+        corrections: Int,
+        episodes: Int,
+        endRealized: Bool,
+        cancelled: Bool
+    ) -> UnrealizedEndRecoveryReason {
+        guard episodes > 0 else { return .notAttempted }
+        if cancelled { return .cancelled }
+        guard let outcome else { return .recovering }
+        switch outcome {
+        case .giveUp:
+            return .gaveUp
+        case .yieldToUser:
+            return .yieldedToUser
+        case .notNeeded:
+            guard corrections > 0 else { return .noCorrectionNeeded }
+            return endRealized ? .recovered : .unverified
+        }
     }
 }
 // swiftlint:enable file_length type_body_length

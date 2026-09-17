@@ -98,8 +98,18 @@ nonisolated final class RootNavigationUITests: XCTestCase {
             waitForHittable(agent),
             "Explicit workspace entry must remain on the overview after its sole agent loads"
         )
-        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-        XCTAssertTrue(agent.isHittable, "The sole-agent overview must remain visible before explicit agent selection")
+        let overview = app.buttons["Context"].firstMatch
+        XCTAssertTrue(waitForHittable(overview))
+        let unexpectedDeparture = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"),
+            object: overview
+        )
+        unexpectedDeparture.isInverted = true
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [unexpectedDeparture], timeout: 0.5),
+            .completed,
+            "The sole-agent overview must remain visible before explicit agent selection"
+        )
 
         agent.tap()
         let message = app.staticTexts

@@ -274,12 +274,17 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         case toolCalls, toolResults, error, isStreaming, metadata
     }
 
+    /// The one message decoder (ios#257): `parseMessage` routes through it, so
+    /// the dictionary and `Codable` paths cannot drift. Array fields are
+    /// lenient per element — a malformed entry is dropped, its siblings kept —
+    /// and id-less blocks take the daemon's `{messageId}:{index}` identity.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
+        let messageId = try container.decode(String.self, forKey: .id)
+        id = messageId
         role = (try? container.decode(MessageRole.self, forKey: .role)) ?? .system
-        if let decodedContentBlocks = try? container.decode([ContentBlock].self, forKey: .contentBlocks) {
-            contentBlocks = decodedContentBlocks
+        if var blocksContainer = try? container.nestedUnkeyedContainer(forKey: .contentBlocks) {
+            contentBlocks = Self.decodeContentBlocks(from: &blocksContainer, messageId: messageId)
             contentBlocksWereProvided = true
         } else {
             contentBlocks = []
@@ -287,15 +292,15 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         }
         timestamp = (try? container.decode(String.self, forKey: .timestamp)) ?? ""
         turnNumber = try? container.decode(Int.self, forKey: .turnNumber)
-        if let decodedToolCalls = try? container.decode([ToolCall].self, forKey: .toolCalls) {
-            toolCalls = decodedToolCalls
+        if var toolCallsContainer = try? container.nestedUnkeyedContainer(forKey: .toolCalls) {
+            toolCalls = Self.decodeLenientArray(ToolCall.self, from: &toolCallsContainer)
             toolCallsWereProvided = true
         } else {
             toolCalls = []
             toolCallsWereProvided = false
         }
-        if let decodedToolResults = try? container.decode([ToolResult].self, forKey: .toolResults) {
-            toolResults = decodedToolResults
+        if var toolResultsContainer = try? container.nestedUnkeyedContainer(forKey: .toolResults) {
+            toolResults = Self.decodeLenientArray(ToolResult.self, from: &toolResultsContainer)
             toolResultsWereProvided = true
         } else {
             toolResults = []
@@ -349,50 +354,70 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
 
     // MARK: - Parsing from dictionary (JSON-RPC response)
 
-    private static func decodeItems<Element: Decodable>(
-        _ value: Any?,
-        as type: Element.Type
-    ) -> [Element] {
-        guard let dictionaries = value as? [[String: Any]] else { return [] }
-        return dictionaries.compactMap { dictionary in
-            guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
-            return try? JSONDecoder().decode(type, from: data)
+    /// Decodes a raw JSON-RPC message row through `init(from:)`. Nil when the
+    /// row is not a valid JSON object or has no string `id`.
+    static func parseMessage(_ dict: [String: Any]) -> Self? {
+        guard JSONSerialization.isValidJSONObject(dict),
+              let data = try? JSONSerialization.data(withJSONObject: dict) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+
+    /// `parseMessage` for a whole page (ios#258): one validation walk, one
+    /// serialization and one `JSONDecoder` for all rows instead of one of each
+    /// per row. Rows that do not decode are dropped, so the result equals
+    /// `rows.compactMap(parseMessage)`; a page that cannot be serialized as a
+    /// whole (a non-finite number in one row) falls back to per-row parsing so
+    /// only the offending row is dropped.
+    static func parseMessages(_ rows: [[String: Any]]) -> [Self] {
+        guard !rows.isEmpty else { return [] }
+        guard JSONSerialization.isValidJSONObject(rows),
+              let data = try? JSONSerialization.data(withJSONObject: rows),
+              let page = try? JSONDecoder().decode(LenientPage.self, from: data) else {
+            return rows.compactMap { parseMessage($0) }
+        }
+        return page.messages
+    }
+
+    /// Array decoder that drops undecodable rows instead of failing the page.
+    private struct LenientPage: Decodable {
+        let messages: [ConversationMessage]
+
+        init(from decoder: Decoder) throws {
+            var container = try decoder.unkeyedContainer()
+            messages = ConversationMessage.decodeLenientArray(ConversationMessage.self, from: &container)
         }
     }
 
-    static func parseMessage(_ dict: [String: Any]) -> Self? {
-        guard let id = dict["id"] as? String else { return nil }
-
-        let roleStr = dict["role"] as? String ?? "system"
-        let role = MessageRole(rawValue: roleStr) ?? .system
-
-        let contentBlocks = Self.decodeItems(dict["contentBlocks"], as: ContentBlock.self)
-        let toolCalls = Self.decodeItems(dict["toolCalls"], as: ToolCall.self)
-        let toolResults = Self.decodeItems(dict["toolResults"], as: ToolResult.self)
-
-        var metadata: [String: AnyCodable] = [:]
-        if let metaDict = dict["metadata"] as? [String: Any] {
-            metadata = metaDict.mapValues { AnyCodable($0) }
+    private static func decodeContentBlocks(
+        from container: inout UnkeyedDecodingContainer,
+        messageId: String
+    ) -> [ContentBlock] {
+        var blocks: [ContentBlock] = []
+        while !container.isAtEnd {
+            let index = container.currentIndex
+            guard let elementDecoder = try? container.superDecoder() else { break }
+            if let block = try? ContentBlock(
+                from: elementDecoder,
+                fallbackIdentity: .indexed(messageId: messageId, index: index)
+            ) {
+                blocks.append(block)
+            }
         }
+        return blocks
+    }
 
-        var message = Self(
-            id: id,
-            role: role,
-            contentBlocks: contentBlocks,
-            timestamp: dict["timestamp"] as? String ?? "",
-            turnNumber: dict["turnNumber"] as? Int,
-            toolCalls: toolCalls,
-            toolResults: toolResults,
-            error: dict["error"] as? String,
-            streamingState: (dict["isStreaming"] as? Bool)
-                .map(MessageStreamingState.init(reportedStreaming:)) ?? .unreported,
-            metadata: metadata
-        )
-        message.contentBlocksWereProvided = dict["contentBlocks"] is [[String: Any]]
-        message.toolCallsWereProvided = dict["toolCalls"] is [[String: Any]]
-        message.toolResultsWereProvided = dict["toolResults"] is [[String: Any]]
-        message.metadataWasProvided = dict["metadata"] is [String: Any]
-        return message
+    private static func decodeLenientArray<Element: Decodable>(
+        _: Element.Type,
+        from container: inout UnkeyedDecodingContainer
+    ) -> [Element] {
+        var items: [Element] = []
+        while !container.isAtEnd {
+            guard let elementDecoder = try? container.superDecoder() else { break }
+            if let item = try? Element(from: elementDecoder) {
+                items.append(item)
+            }
+        }
+        return items
     }
 
     func encode(to encoder: Encoder) throws {

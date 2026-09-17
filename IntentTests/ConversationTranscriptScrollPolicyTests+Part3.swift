@@ -53,30 +53,31 @@ extension ConversationTranscriptScrollPolicyTests {
     /// The landing is verified from two identical reads: no scroll view, no
     /// previous read, or geometry still moving all keep polling.
     @Test func followLandingSettlesUntilTwoReadsAgree() {
-        #expect(landing(nil) == .settling)
-        #expect(landing(geometry(offsetY: 300), previous: .some(nil)) == .settling)
-        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 250)) == .settling)
+        #expect(landing(nil) == .continue(.settling))
+        #expect(landing(geometry(offsetY: 300), previous: .some(nil)) == .continue(.settling))
+        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 250)) == .continue(.settling))
         // Insets changing (keyboard) count as movement too.
-        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 300, bottomInset: 20)) == .settling)
+        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 300, bottomInset: 20))
+            == .continue(.settling))
     }
 
     @Test func followLandsAtRestWithinTheLandingTolerance() {
-        #expect(landing(geometry(offsetY: 300)) == .landed)
-        #expect(landing(geometry(offsetY: 299.5)) == .landed)
-        #expect(landing(geometry(offsetY: 299)) == .landed)
-        #expect(landing(geometry(offsetY: 298)) != .landed)
+        #expect(landing(geometry(offsetY: 300)) == .finish(.landed))
+        #expect(landing(geometry(offsetY: 299.5)) == .finish(.landed))
+        #expect(landing(geometry(offsetY: 299)) == .finish(.landed))
+        #expect(landing(geometry(offsetY: 298)) != .finish(.landed))
         // Content shorter than the container rests at a negative distance.
-        #expect(landing(geometry(offsetY: 0, contentHeight: 400)) == .landed)
+        #expect(landing(geometry(offsetY: 0, contentHeight: 400)) == .finish(.landed))
         // A bounce short of the past-end threshold is at the bottom.
-        #expect(landing(geometry(offsetY: 340)) == .landed)
+        #expect(landing(geometry(offsetY: 340)) == .finish(.landed))
     }
 
     /// Regression (#281): Go to End's scroll came to rest 379 points above
     /// the bottom because rows realized during the animation grew the
     /// content, and the timer-ended follow copied that into the flag.
     @Test func followLandingShortIsScrolledAgain() {
-        #expect(landing(geometry(offsetY: 0)) == .scrollAgain)
-        #expect(landing(geometry(offsetY: 249)) == .scrollAgain)
+        #expect(landing(geometry(offsetY: 0)) == .continue(.scrollAgain))
+        #expect(landing(geometry(offsetY: 249)) == .continue(.scrollAgain))
     }
 
     /// Regression (#304, #305): the last rows realized by the entry scroll,
@@ -86,10 +87,10 @@ extension ConversationTranscriptScrollPolicyTests {
     /// below the viewport; a rest short of the bottom by more than layout
     /// rounding is scrolled again even inside the band.
     @Test func followLandingShortInsideTheAtBottomBandIsScrolledAgain() {
-        #expect(landing(geometry(offsetY: 298)) == .scrollAgain)
-        #expect(landing(geometry(offsetY: 270)) == .scrollAgain)
-        #expect(landing(geometry(offsetY: 250)) == .scrollAgain)
-        #expect(landing(geometry(offsetY: 250), correctionsLeft: 0) == .giveUp)
+        #expect(landing(geometry(offsetY: 298)) == .continue(.scrollAgain))
+        #expect(landing(geometry(offsetY: 270)) == .continue(.scrollAgain))
+        #expect(landing(geometry(offsetY: 250)) == .continue(.scrollAgain))
+        #expect(landing(geometry(offsetY: 250), correctionsLeft: 0) == .finish(.giveUp))
         #expect(Constants.Conversation.Transcript.followLandingTolerance
             < Constants.Conversation.Transcript.atBottomThreshold)
     }
@@ -97,17 +98,17 @@ extension ConversationTranscriptScrollPolicyTests {
     /// Regression (#271): rows re-measured shorter after the entry scroll
     /// left the offset past the end, over a blank band.
     @Test func followLandingPastEndIsClamped() {
-        #expect(landing(geometry(offsetY: 351)) == .clampPastEnd)
-        #expect(landing(geometry(offsetY: 600)) == .clampPastEnd)
+        #expect(landing(geometry(offsetY: 351)) == .continue(.clampPastEnd))
+        #expect(landing(geometry(offsetY: 600)) == .continue(.clampPastEnd))
     }
 
     /// Corrections are bounded and their exhaustion leaves the pin alone:
     /// no forced follow ever shows Go to End without a gesture.
     @Test func followLandingCorrectionsAreBoundedAndThenGiveUp() {
-        #expect(landing(geometry(offsetY: 0), correctionsLeft: 1) == .scrollAgain)
-        #expect(landing(geometry(offsetY: 0), correctionsLeft: 0) == .giveUp)
-        #expect(landing(geometry(offsetY: 600), correctionsLeft: 0) == .giveUp)
-        #expect(landing(geometry(offsetY: 300), correctionsLeft: 0) == .landed)
+        #expect(landing(geometry(offsetY: 0), correctionsLeft: 1) == .continue(.scrollAgain))
+        #expect(landing(geometry(offsetY: 0), correctionsLeft: 0) == .finish(.giveUp))
+        #expect(landing(geometry(offsetY: 600), correctionsLeft: 0) == .finish(.giveUp))
+        #expect(landing(geometry(offsetY: 300), correctionsLeft: 0) == .finish(.landed))
         #expect(Constants.Conversation.Transcript.followLandingRetries > 0)
         // The timeout leaves room for the first scroll and every correction
         // to animate and then settle over two reads (#305).
@@ -131,13 +132,13 @@ extension ConversationTranscriptScrollPolicyTests {
     }
 
     @Test func followLandingYieldsToTheUserAndToTheTimeout() {
-        #expect(landing(geometry(offsetY: 0), isInteracting: true) == .yieldToUser)
-        #expect(landing(geometry(offsetY: 300), isInteracting: true) == .yieldToUser)
-        #expect(landing(nil, isInteracting: true) == .yieldToUser)
-        #expect(landing(geometry(offsetY: 0), timedOut: true) == .giveUp)
-        #expect(landing(nil, timedOut: true) == .giveUp)
-        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 250), timedOut: true) == .giveUp)
-        #expect(landing(geometry(offsetY: 0), isInteracting: true, timedOut: true) == .yieldToUser)
+        #expect(landing(geometry(offsetY: 0), isInteracting: true) == .finish(.yieldToUser))
+        #expect(landing(geometry(offsetY: 300), isInteracting: true) == .finish(.yieldToUser))
+        #expect(landing(nil, isInteracting: true) == .finish(.yieldToUser))
+        #expect(landing(geometry(offsetY: 0), timedOut: true) == .finish(.giveUp))
+        #expect(landing(nil, timedOut: true) == .finish(.giveUp))
+        #expect(landing(geometry(offsetY: 300), previous: geometry(offsetY: 250), timedOut: true) == .finish(.giveUp))
+        #expect(landing(geometry(offsetY: 0), isInteracting: true, timedOut: true) == .finish(.yieldToUser))
         #expect(Constants.Conversation.Transcript.followLandingPollMilliseconds
             < Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
     }
@@ -146,11 +147,11 @@ extension ConversationTranscriptScrollPolicyTests {
     /// the raised flag behind; the landing yields to it rather than scrolling
     /// the user back, even from a viewport at rest short of the bottom.
     @Test func followLandingYieldsToAGestureThatAlreadyEndedAway() {
-        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .yieldToUser)
-        #expect(landing(geometry(offsetY: 300), userIsScrolledAway: true) == .yieldToUser)
-        #expect(landing(nil, userIsScrolledAway: true) == .yieldToUser)
-        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true, timedOut: true) == .yieldToUser)
-        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: false) == .scrollAgain)
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true) == .finish(.yieldToUser))
+        #expect(landing(geometry(offsetY: 300), userIsScrolledAway: true) == .finish(.yieldToUser))
+        #expect(landing(nil, userIsScrolledAway: true) == .finish(.yieldToUser))
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: true, timedOut: true) == .finish(.yieldToUser))
+        #expect(landing(geometry(offsetY: 0), userIsScrolledAway: false) == .continue(.scrollAgain))
     }
 
     /// An unknown distance never releases a scrolled-away state: every

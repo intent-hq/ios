@@ -292,24 +292,17 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func firstFetch_archivedWorkspace_bootsToWorkspaceListFromConversation() async {
+    @Test @MainActor func firstFetch_archivedWorkspace_bootsToWorkspaceListFromConversation() async throws {
         let wsId = "test-coord-archived-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
 
         store.publishFetchedWorkspaces([Self.makeWorkspace(id: wsId, status: "archived")])
-        await Self.drainMainQueue()
-
-        if case .workspaceList = coordinator.currentScreen {
-            // pass
-        } else {
-            Issue.record("Expected .workspaceList for archived workspace, got \(coordinator.currentScreen)")
+        try await waitUntil(".workspaceList for an archived workspace") {
+            Self.isWorkspaceList(coordinator.currentScreen)
         }
     }
 

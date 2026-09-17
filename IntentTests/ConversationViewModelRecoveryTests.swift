@@ -310,7 +310,7 @@ extension ConversationViewModelTests {
         ])
         #expect(viewModel.pendingQuestions == nil)
         #expect(viewModel.isPendingQuestionRecoveryLoading, "fails closed while the seek is in flight")
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("the seek to settle") { !viewModel.isPendingQuestionRecoveryLoading }
 
         let set = try #require(viewModel.pendingQuestions, "the recovered row renders the wizard")
         #expect(set.messageId == "a1")

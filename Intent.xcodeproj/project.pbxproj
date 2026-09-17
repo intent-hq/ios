@@ -117,6 +117,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		AC000004AAAA000000000004 /* Test Source Inputs */ = {
+			isa = PBXGroup;
+			children = (
+				AC000001AAAA000000000001 /* Intent */,
+				AC000002AAAA000000000002 /* IntentTests */,
+				AC000003AAAA000000000003 /* Info-visionOS.plist */,
+			);
+			name = "Test Source Inputs";
+			sourceTree = "<group>";
+		};
 		EB655EC02F669E6B00176730 = {
 			isa = PBXGroup;
 			children = (
@@ -127,16 +137,6 @@
 				AC000004AAAA000000000004 /* Test Source Inputs */,
 				EB655ECA2F669E6B00176730 /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		AC000004AAAA000000000004 /* Test Source Inputs */ = {
-			isa = PBXGroup;
-			children = (
-				AC000001AAAA000000000001 /* Intent */,
-				AC000002AAAA000000000002 /* IntentTests */,
-				AC000003AAAA000000000003 /* Info-visionOS.plist */,
-			);
-			name = "Test Source Inputs";
 			sourceTree = "<group>";
 		};
 		EB655ECA2F669E6B00176730 /* Products */ = {

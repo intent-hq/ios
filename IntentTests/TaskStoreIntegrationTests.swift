@@ -44,13 +44,14 @@ struct TaskStoreIntegrationTests {
 
         // Start connected
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         // Verify subscribe was called
         #expect(fake.didCallMethod("task.subscribe"))
-        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
 
-        // Deliver snapshot push to make the store live
+        // Deliver snapshot push to make the store live (applied synchronously)
         let push = SubscriptionPush(
             subscriptionId: "sub-1",
             seq: 0,
@@ -59,7 +60,6 @@ struct TaskStoreIntegrationTests {
             ]
         )
         fake.deliverSubscriptionPush(push)
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         // Verify state
         #expect(store.tasks.count == 1)
@@ -74,7 +74,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -84,7 +86,6 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
 
         // Contiguous delta
@@ -97,7 +98,6 @@ struct TaskStoreIntegrationTests {
                 removedIds: []
             )
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         #expect(store.tasks.count == 2)
     }
@@ -112,7 +112,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.responseMap["task.unsubscribe"] = ["ok": true]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -122,7 +124,7 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(store.tasks.count == 1)
 
         fake.clearRequestLog()
 
@@ -132,7 +134,9 @@ struct TaskStoreIntegrationTests {
             seq: 5,
             delta: SubscriptionPush.DeltaPayload(added: [], updated: [], removedIds: [])
         ))
-        try await Task.sleep(nanoseconds: 200_000_000)
+        // The baseline `task.list` is the last step of resnapshot, so its
+        // arrival proves unsubscribe and subscribe already ran.
+        try await fake.waitForRequests("task.list")
 
         // Verify resnapshot: unsubscribe, subscribe, list
         #expect(fake.didCallMethod("task.unsubscribe"))
@@ -150,7 +154,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         // Snapshot
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -160,21 +166,22 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
 
-        // Disconnect
+        // Disconnect, then reconnect with a fresh subscription id so the
+        // resubscribe is distinguishable from the original registration.
+        fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-2", "seq": 0, "snapshot": []]
         fake.clearRequestLog()
         fake.simulateDisconnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        // Reconnect
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("reconnect resubscribe") {
+            fake.hasSubscriptionHandler(id: "sub-2")
+        }
 
         // Verify fresh subscribe + list
         #expect(fake.didCallMethod("task.subscribe"))
         #expect(fake.didCallMethod("task.list"))
+        #expect(!fake.hasSubscriptionHandler(id: "sub-1"))
     }
 
     // MARK: - legacyEventSuppressedWhileLive
@@ -186,7 +193,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         // Snapshot establishes live state
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -196,7 +205,6 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
 
         fake.clearRequestLog()
@@ -210,10 +218,11 @@ struct TaskStoreIntegrationTests {
                 "noteId": "task-1"
             ]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
 
         // Verify no refetch (live guard suppressed the allowlisted event)
-        #expect(!fake.didCallMethod("task.list"))
+        try await expectNever("task.list refetch while live") {
+            fake.didCallMethod("task.list")
+        }
     }
 
     // MARK: - crossIdPushIsolation
@@ -225,7 +234,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-A", "seq": 0, "snapshot": []]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-A")
+        }
 
         // Snapshot for sub-A
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -235,7 +246,6 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-1", "title": "Task 1", "status": "not_started", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.tasks.count == 1)
 
         // Push for unregistered sub-B (should be ignored by store)
@@ -246,7 +256,6 @@ struct TaskStoreIntegrationTests {
                 ["id": "task-99", "title": "Should not appear", "status": "in_progress", "updatedAt": "2024-01-01T00:00:00Z"]
             ]
         ))
-        try await Task.sleep(nanoseconds: 50_000_000)
 
         // Verify state unchanged
         #expect(store.tasks.count == 1)
@@ -263,18 +272,17 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
         fake.responseMap["task.subscribe"] = ["subscriptionId": "sub-1", "seq": 0, "snapshot": []]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("task.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
         #expect(fake.eventHandlerCount == 1)
         #expect(fake.subscriptionHandlerCount == 1)
         #expect(store != nil)
 
         store = nil
         // deinit hops to the main actor to remove the handlers; wait for that task
-        for _ in 0 ..< 40 {
-            if fake.eventHandlerCount == 0, fake.subscriptionHandlerCount == 0 {
-                break
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("deinit to remove event + subscription handlers") {
+            fake.eventHandlerCount == 0 && fake.subscriptionHandlerCount == 0
         }
         #expect(fake.eventHandlerCount == 0)
         #expect(fake.subscriptionHandlerCount == 0)
@@ -294,7 +302,7 @@ struct TaskStoreIntegrationTests {
         for type in ["task:created", "task:status-changed"] {
             fake.clearRequestLog()
             store.handleEvent("events.event", params: taskEvent(type))
-            try await Task.sleep(nanoseconds: 50_000_000)
+            try await fake.waitForRequests("task.list")
             #expect(fake.didCallMethod("task.list"), "\(type) must refetch task.list")
         }
     }
@@ -307,9 +315,10 @@ struct TaskStoreIntegrationTests {
         for type in ["task:ready-tasks-changed", "task:agent-linked", "task:agent-unlinked", "task:updated"] {
             store.handleEvent("events.event", params: taskEvent(type))
         }
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(!fake.didCallMethod("task.list"))
+        try await expectNever("task.list refetch for non-allowlisted events") {
+            fake.didCallMethod("task.list")
+        }
     }
 
     /// intentd's `delete_note` emits `task:ready-tasks-changed` with
@@ -337,8 +346,8 @@ struct TaskStoreIntegrationTests {
         store.handleEvent("events.event", params: readyTasksChangedEvent(
             triggeredBy: ["noteId": "task-1", "reason": "note-deleted"]
         ))
-        try await Task.sleep(nanoseconds: 100_000_000)
 
+        try await fake.waitForRequests("task.list")
         #expect(fake.didCallMethod("task.list"))
     }
 
@@ -353,9 +362,10 @@ struct TaskStoreIntegrationTests {
         store.handleEvent("events.event", params: readyTasksChangedEvent(
             triggeredBy: ["noteId": "task-1", "previousStatus": "not_started", "newStatus": "complete"]
         ))
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(!fake.didCallMethod("task.list"))
+        try await expectNever("task.list refetch for non-deletion ready-tasks-changed") {
+            fake.didCallMethod("task.list")
+        }
     }
 
     @Test func allowlistedTaskEventForOtherWorkspaceDoesNotRefetch() async throws {
@@ -364,8 +374,9 @@ struct TaskStoreIntegrationTests {
         fake.responseMap["task.list"] = ["tasks": []]
 
         store.handleEvent("events.event", params: taskEvent("task:status-changed", workspaceId: "ws-other"))
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(!fake.didCallMethod("task.list"))
+        try await expectNever("task.list refetch for another workspace's event") {
+            fake.didCallMethod("task.list")
+        }
     }
 }

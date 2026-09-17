@@ -88,9 +88,10 @@ extension PersistenceManager {
             )
         }
         let stored: StoredConnection
+        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
         if let index = connections.firstIndex(where: { storedConnection in
             storedConnection.server.port == connection.server.port
-                && (!Set(storedConnection.server.hosts).isDisjoint(with: connection.server.hosts)
+                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
                     || (connection.server.tcAddress != nil
                         && storedConnection.server.tcAddress == connection.server.tcAddress))
         }) {
@@ -133,13 +134,16 @@ extension PersistenceManager {
     }
 
     /// Existing hosts keep their order and are never dropped; incoming hosts not
-    /// already present are appended, deduped.
+    /// already present are appended, deduped case-insensitively (DNS names and
+    /// IPv6 hex are case-insensitive — ios#341), keeping the first spelling seen.
     static func mergeHostLists(existing: [String], incoming: [String]) -> [String] {
         var merged = existing
-        var seen = Set(existing)
-        for host in incoming where !seen.contains(host) {
+        var seen = Set(existing.map(SyncedBackendConnectionMerge.normalizeHost))
+        for host in incoming {
+            let key = SyncedBackendConnectionMerge.normalizeHost(host)
+            guard !seen.contains(key) else { continue }
             merged.append(host)
-            seen.insert(host)
+            seen.insert(key)
         }
         return merged
     }

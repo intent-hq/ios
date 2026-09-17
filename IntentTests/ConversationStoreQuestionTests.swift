@@ -14,7 +14,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
 
@@ -57,7 +57,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.reset()
 
@@ -90,7 +90,7 @@ extension ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
@@ -120,7 +120,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.handleStreamEvent("events.event", params: [
             "event": [
@@ -155,7 +155,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
         store.isStreaming = false
@@ -191,7 +191,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true) }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
         store.isStreaming = false
@@ -216,8 +216,8 @@ extension ConversationStoreTests {
         // says nothing about B.
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
-        fake.delayMap["agent.get"] = 150_000_000
-        fake.errorMap["agent.get"] = NSError(
+        fake.pendingMethods.insert("agent.get")
+        let notFound = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -229,9 +229,10 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         await store.fetchConversation(agentId: "b", workspaceId: "w")
+        fake.failPending("agent.get", with: notFound)
         await refresh.value
 
         #expect(
@@ -254,7 +255,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.reset()
 
@@ -276,8 +277,8 @@ extension ConversationStoreTests {
     @Test func staleNotFoundAfterResetDoesNotRaiseAgentNotFound() async throws {
         let fake = FakeConnectionManager()
         fake.responseMap["agent.getConversation"] = ["messages": []]
-        fake.delayMap["agent.get"] = 150_000_000
-        fake.errorMap["agent.get"] = NSError(
+        fake.pendingMethods.insert("agent.get")
+        let notFound = NSError(
             domain: "WebSocket",
             code: -32_602,
             userInfo: [
@@ -289,9 +290,10 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.reset()
+        fake.failPending("agent.get", with: notFound)
         await refresh.value
 
         #expect(
@@ -313,7 +315,7 @@ extension ConversationStoreTests {
         store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.handleStreamEvent("events.event", params: [
             "event": [
@@ -373,7 +375,7 @@ extension ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
@@ -392,17 +394,20 @@ extension ConversationStoreTests {
 
         fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
         await fetch.value
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("the buffered turn boundary to refresh the marker") {
+            store.pendingQuestionsMessageId == "a1"
+        }
+        // One refresh regardless of how many boundaries were buffered.
+        try await expectNever("a second agent.get for the buffered boundaries") {
+            fake.requestLog.filter { $0.method == "agent.get" }.count > 1
+        }
 
         #expect(!store.isLoading)
         #expect(
             store.pendingQuestionsMessageId == "a1",
             "the buffered turn boundary still refreshes the marker after load"
         )
-        #expect(
-            fake.requestLog.filter { $0.method == "agent.get" }.count == 1,
-            "one refresh regardless of how many boundaries were buffered"
-        )
+        #expect(fake.requestLog.filter { $0.method == "agent.get" }.count == 1)
     }
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
