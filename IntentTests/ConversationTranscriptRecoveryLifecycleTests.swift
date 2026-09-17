@@ -135,6 +135,31 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         } else {
             #expect(outcomes.isEmpty, "outcome recorded outside a current recovery terminal", sourceLocation: sourceLocation)
         }
+        // Budget continuity (invariant 6): demoting an owning recovery and
+        // restoring it keep the same token and start no recovery task; only
+        // the executed-over-unrealized-end re-arm may start one.
+        if case .followRequested = event, case .recovery(let recovery) = before.owner, followOwner(of: after) != nil {
+            #expect(after.armedRecovery == .demoted(recovery), "demotion changed the recovery token", sourceLocation: sourceLocation)
+            #expect(!effects.contains(where: isStartRecovery), "demotion started a recovery task", sourceLocation: sourceLocation)
+        }
+        if case .followFinished(let follow, _) = event, followOwner(of: before) == follow,
+           case .demoted(let recovery) = before.armedRecovery {
+            #expect(after.owner == .recovery(recovery), "restoration changed the recovery token", sourceLocation: sourceLocation)
+            #expect(after.armedRecovery == nil, "restored recovery still armed", sourceLocation: sourceLocation)
+            #expect(!effects.contains(where: isStartRecovery), "restoration started a recovery task", sourceLocation: sourceLocation)
+        }
+        if effects.contains(where: isStartRecovery) {
+            switch event {
+            case .followFinished(_, .executed):
+                #expect(!before.isEndRealized, "re-arm over a realized end", sourceLocation: sourceLocation)
+                #expect(before.currentRecovery == nil, "re-arm alongside a live recovery", sourceLocation: sourceLocation)
+            case .endDerealized:
+                break
+            case .endRealized, .followRequested, .followDue, .followFinished, .followCancelledByGesture, .explicitClaim,
+                 .recoveryStep, .recoveryPagedUp, .recoveryFinished, .viewDisappeared:
+                Issue.record("recovery task started by \(event)", sourceLocation: sourceLocation)
+            }
+        }
     }
 
     private func isStartRecovery(_ effect: Effect) -> Bool {
