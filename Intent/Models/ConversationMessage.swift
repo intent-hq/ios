@@ -407,7 +407,7 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
     }
 
     private static func decodeLenientArray<Element: Decodable>(
-        _ type: Element.Type,
+        _: Element.Type,
         from container: inout UnkeyedDecodingContainer
     ) -> [Element] {
         var items: [Element] = []
