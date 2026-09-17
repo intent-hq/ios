@@ -7,6 +7,10 @@ import Testing
 
 @MainActor
 struct AgentStoreTests {
+    /// Margin added to `fetchDebounce` when holding that no further
+    /// `agent.list` request is issued after the debounce window.
+    static let debounceSlack: Duration = .milliseconds(200)
+
     // MARK: - hasLoaded gating (empty state waits for first completed load)
 
     @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
@@ -230,7 +234,7 @@ struct AgentStoreTests {
         await refresh.value
         try await expectNever(
             "agent.list request after the cancelled debounce",
-            within: Constants.AgentStore.fetchDebounce + .milliseconds(200)
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack
         ) {
             fake.paramsForMethod("agent.list").count > 1
         }
@@ -384,7 +388,7 @@ extension AgentStoreTests {
         try await fake.waitForRequests("agent.list", sourceLocation: sourceLocation)
         try await expectNever(
             "second agent.list refetch after \(type)",
-            within: Constants.AgentStore.fetchDebounce + .milliseconds(200),
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack,
             sourceLocation: sourceLocation
         ) {
             fake.paramsForMethod("agent.list").count > 1
@@ -404,7 +408,7 @@ extension AgentStoreTests {
         deliverAgentEvent(fake, type: type)
         try await expectNever(
             "agent.list refetch after \(type)",
-            within: Constants.AgentStore.fetchDebounce + .milliseconds(200),
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack,
             sourceLocation: sourceLocation
         ) {
             fake.didCallMethod("agent.list")
