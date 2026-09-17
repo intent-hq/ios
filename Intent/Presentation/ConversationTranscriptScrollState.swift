@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 
@@ -71,4 +72,18 @@ final class ConversationTranscriptScrollState {
     /// Corrections the in-flight (or, once it ended, the last) episode has
     /// spent, published as each is issued so a cancellation records them.
     var unrealizedEndRecoveryCorrections = 0
+    /// Demo-only (`--demo-end-derealization-trigger-file`): while set, the
+    /// end row is withdrawn from the lazy stack so its real `onDisappear`
+    /// armed the recovery, with the live offset at withdrawal the restore
+    /// is judged against (see `DemoFixtures.shouldRestoreDerealizedEnd`).
+    /// Never set outside `--demo-data`.
+    var demoEndDerealization: DemoEndDerealization?
+    /// Set once the trigger has fired so a re-run of the poll does not
+    /// withdraw the row again.
+    @ObservationIgnored var demoEndDerealizationTriggered = false
+
+    struct DemoEndDerealization: Equatable {
+        let mode: DemoFixtures.EndDerealizationMode
+        let withdrawnOffsetY: CGFloat
+    }
 }

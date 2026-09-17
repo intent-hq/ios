@@ -194,6 +194,11 @@ private extension ConversationTranscriptView {
                 endRecovery: unrealizedEndRecoveryDemoReport.summary
             )
         )
+        .demoEndDerealization(
+            triggerFile: DemoFixtures.configuredEndDerealizationTriggerFile,
+            onTrigger: withdrawEndRowForDemo,
+            onGeometryChange: restoreDerealizedEndIfMoved
+        )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
         // gesture here would starve Textual's UIKit link-tap recognizer.
         .onScrollGeometryChange(for: ScrolledAwayGeometry.self) { geometry in
@@ -714,19 +719,79 @@ private extension ConversationTranscriptView {
         // realization is the end-row signal the unrealized-end recovery
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it.
-        Color.clear.frame(height: Layout.bottomAnchorHeight)
-            .padding(.bottom, Layout.bottomAnchorPadding)
-            .id("scroll-bottom")
-            .onAppear {
-                scrollState.isEndRealized = true
-                if userIsScrolledAway {
-                    applyLiveScrolledAwayEdge(proxy: proxy)
+        if demoWithdrawnEnd == nil {
+            Color.clear.frame(height: Layout.bottomAnchorHeight)
+                .padding(.bottom, Layout.bottomAnchorPadding)
+                .id("scroll-bottom")
+                .onAppear {
+                    scrollState.isEndRealized = true
+                    if userIsScrolledAway {
+                        applyLiveScrolledAwayEdge(proxy: proxy)
+                    }
                 }
-            }
-            .onDisappear {
-                scrollState.isEndRealized = false
-                scheduleUnrealizedEndRecovery(proxy: proxy)
-            }
+                .onDisappear {
+                    scrollState.isEndRealized = false
+                    scheduleUnrealizedEndRecovery(proxy: proxy)
+                }
+        } else {
+            // Demo-only stand-in while the marker is withdrawn (see
+            // `withdrawEndRowForDemo`): the same height, so the content
+            // height and every offset the recovery reads are unchanged, but
+            // no id and no realization handlers — `scrollTo("scroll-bottom")`
+            // finds nothing and `isEndRealized` stays false, exactly as over
+            // a dropped end row.
+            Color.clear.frame(height: Layout.bottomAnchorHeight)
+                .padding(.bottom, Layout.bottomAnchorPadding)
+        }
+    }
+
+    // MARK: - Demo-only controlled end derealization (#338)
+
+    /// Nil outside `--demo-data` without reading the state, so production
+    /// bodies take no dependency on it.
+    private var demoWithdrawnEnd: ConversationTranscriptScrollState.DemoEndDerealization? {
+        DemoMode.isEnabled ? scrollState.demoEndDerealization : nil
+    }
+
+    /// Withdraws the end row once the trigger file exists
+    /// (`DemoFixtures.configuredEndDerealizationTriggerFile`): the marker leaves the
+    /// lazy stack, its real `onDisappear` arms `scheduleUnrealizedEndRecovery`
+    /// through the ordinary edge, and the recovery runs unchanged — nothing
+    /// it reads is fabricated. Waits for the live scroll view so the offset
+    /// the restore is judged against is the one the recovery pages from.
+    private func withdrawEndRowForDemo() async {
+        guard !scrollState.demoEndDerealizationTriggered else { return }
+        while scrollMomentumProxy.restingGeometry == nil {
+            try? await Task.sleep(for: DemoFixtures.triggerFilePollInterval)
+            guard !Task.isCancelled else { return }
+        }
+        guard let geometry = scrollMomentumProxy.restingGeometry else { return }
+        scrollState.demoEndDerealizationTriggered = true
+        let mode = DemoFixtures.configuredEndDerealizationMode
+        AppLog.userInterface.debug("[SCROLL] Demo: withdrawing the end row (\(mode.rawValue)) at \(geometry.contentOffsetY)")
+        scrollState.demoEndDerealization = ConversationTranscriptScrollState.DemoEndDerealization(
+            mode: mode, withdrawnOffsetY: geometry.contentOffsetY)
+    }
+
+    /// Puts the withdrawn end row back on evidence from the live scroll view
+    /// alone (see `DemoFixtures.shouldRestoreDerealizedEnd`): the recovery's
+    /// page up in `release` mode, or a gesture in either. Restored at the
+    /// end of the content while the viewport rests above it, the marker is
+    /// unrealized until the recovery's own follow back reaches it, so its
+    /// real `onAppear` is what resolves the episode.
+    private func restoreDerealizedEndIfMoved() {
+        guard let withdrawn = demoWithdrawnEnd,
+              let geometry = scrollMomentumProxy.restingGeometry,
+              DemoFixtures.shouldRestoreDerealizedEnd(
+                mode: withdrawn.mode,
+                withdrawnOffsetY: withdrawn.withdrawnOffsetY,
+                contentOffsetY: geometry.contentOffsetY,
+                containerHeight: geometry.containerHeight,
+                isInteracting: isUserInteracting
+              )
+        else { return }
+        AppLog.userInterface.debug("[SCROLL] Demo: restoring the end row at \(geometry.contentOffsetY)")
+        scrollState.demoEndDerealization = nil
     }
 
     private var goToEndButton: some View {
@@ -1133,6 +1198,33 @@ private extension View {
     func demoAccessibilityValue(_ value: @autoclosure () -> String) -> some View {
         if DemoMode.isEnabled {
             accessibilityValue(value())
+        } else {
+            self
+        }
+    }
+
+    /// Under `--demo-data` with `--demo-end-derealization-trigger-file` only:
+    /// polls for the trigger file and calls `onTrigger` once it exists, and
+    /// calls `onGeometryChange` on every content offset change so the
+    /// withdrawn end row can be restored on live evidence (#338). Neither
+    /// the task nor the observer is installed otherwise.
+    @ViewBuilder
+    func demoEndDerealization(
+        triggerFile: URL?,
+        onTrigger: @escaping @MainActor () async -> Void,
+        onGeometryChange: @escaping @MainActor () -> Void
+    ) -> some View {
+        if DemoMode.isEnabled, let triggerFile {
+            self
+                .task {
+                    guard (try? await DemoFixtures.wait(for: .triggerFile(triggerFile))) != nil else { return }
+                    await onTrigger()
+                }
+                .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.contentOffset.y
+                } action: { _, _ in
+                    onGeometryChange()
+                }
         } else {
             self
         }
