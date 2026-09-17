@@ -113,6 +113,7 @@ $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
+$(SRCROOT)/Intent/Presentation/RootNavigationPresentation.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
@@ -435,6 +436,7 @@ $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/RootNavigationPresentationTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift

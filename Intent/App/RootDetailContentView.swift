@@ -1,13 +1,30 @@
 import SwiftUI
 
-extension RootView {
-    @ViewBuilder
-    var detailContent: some View {
-        if let workspaceId = coordinator.selectedWorkspaceId {
+struct RootDetailContentView: View {
+    let session: BackendSession
+    let selectedWorkspaceId: String?
+    let currentScreenDescription: String
+    let conversationRequestId: Int
+    let showingWorkspaceDetail: Bool
+    let conversationFallback: RootNavigationPresentation.ConversationPayload?
+    let colorScheme: ColorScheme
+    @Binding var showingConversation: Bool
+    @Binding var noteStack: NavigationPath
+    let onSynchronize: () -> Void
+    let onWorkspacePresentationChanged: (Bool) -> Void
+    let onConversationPresentationChanged: (Bool) -> Void
+    let onNoteStackChanged: (NavigationPath) -> Void
+    let onOpenLinkedNote: (RootNavigationPresentation.NotePayload) -> Void
+
+    var body: some View {
+        if let workspaceId = selectedWorkspaceId {
             NavigationStack(path: $noteStack) {
                 WorkspaceDetailView(workspaceId: workspaceId, session: session)
                     .navigationDestination(isPresented: $showingConversation) {
-                        conversationDestination
+                        ConversationDestinationView(
+                            fallback: conversationFallback,
+                            session: session
+                        )
                     }
                     .navigationDestination(for: NoteDestination.self) { dest in
                         NoteDetailView(
@@ -16,47 +33,31 @@ extension RootView {
                             noteTitle: dest.noteTitle,
                             session: session
                         ) { noteId, workspaceId, title in
-                            noteStack.append(NoteDestination(noteId: noteId, workspaceId: workspaceId, noteTitle: title))
+                            onOpenLinkedNote(RootNavigationPresentation.NotePayload(
+                                noteId: noteId,
+                                workspaceId: workspaceId,
+                                noteTitle: title
+                            ))
                         }
                     }
             }
             .onAppear {
-                syncNavigationState()
+                onSynchronize()
             }
-            .onChange(of: coordinator.currentScreenDescription) {
-                syncNavigationState()
+            .onChange(of: currentScreenDescription) {
+                onSynchronize()
             }
-            .onChange(of: coordinator.conversationRequestId) {
-                syncNavigationState()
+            .onChange(of: conversationRequestId) {
+                onSynchronize()
             }
             .onChange(of: showingWorkspaceDetail) { _, newValue in
-                if newValue {
-                    if pendingConversationPush {
-                        DispatchQueue.main.async {
-                            showingConversation = true
-                            pendingConversationPush = false
-                        }
-                    }
-                }
+                onWorkspacePresentationChanged(newValue)
             }
             .onChange(of: showingConversation) { _, newValue in
-                // When user taps the back button, sync coordinator. Skip when the
-                // dismissal is the programmatic iPad tear-down/re-push, which is
-                // not a user-initiated back navigation. Consume the flag here so
-                // it only ever suppresses the single tear-down dismissal; the
-                // deferred re-push block clears it again as a backstop.
-                if !newValue, programmaticConversationDismiss {
-                    programmaticConversationDismiss = false
-                    return
-                }
-                if !newValue, case .agentConversation = coordinator.currentScreen {
-                    coordinator.onBackToWorkspaceDetail()
-                }
+                onConversationPresentationChanged(newValue)
             }
             .onChange(of: noteStack) { _, newStack in
-                if newStack.isEmpty, case .noteDetail = coordinator.currentScreen {
-                    coordinator.onBackFromNote()
-                }
+                onNoteStackChanged(newStack)
             }
         } else {
             emptyDetailPlaceholder

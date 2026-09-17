@@ -15,47 +15,7 @@ struct RootView: View {
     /// Token of this window's selection-handler registration, so disappear
     /// removes only this window's registration — never a successor's.
     @State private var selectionHandlerToken: UUID?
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingWorkspaceDetail = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingConversation = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationAgentId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var conversationAgentName: String = "" // swiftlint:disable:this private_swiftui_state
-    // Compact (iPhone) note detail navigation — uses isPresented instead of noteStack
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var showingNoteDetail = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailNoteId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailWorkspaceId: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteDetailNoteTitle: String = "" // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var pendingConversationPush = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var pendingNoteDetailPush = false // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    /// True while syncNavigationState() tears down the conversation for the iPad
-    /// re-push dance, so the user-back onChange handler doesn't misfire.
-    @State var programmaticConversationDismiss = false // swiftlint:disable:this private_swiftui_state
-    @State var handledConversationRequestId = 0 // swiftlint:disable:this private_swiftui_state
-    // Cross-file RootView navigation extensions bind or mutate this state, requiring internal access.
-    @State var noteStack = NavigationPath() // swiftlint:disable:this private_swiftui_state
-
-    var conversationDestination: some View {
-        ConversationDestinationView(
-            fallback: conversationAgentId.isEmpty ? nil : ConversationDestinationView.Target(
-                agentId: conversationAgentId,
-                workspaceId: conversationWorkspaceId,
-                agentName: conversationAgentName
-            ),
-            session: session
-        )
-    }
+    @State private var navigationPresentation = RootNavigationPresentation()
 
     private var isWorkspaceFlow: Bool {
         switch coordinator.currentScreen {
@@ -116,7 +76,23 @@ struct RootView: View {
     @ViewBuilder private var workspaceFlowContent: some View {
         if sizeClass == .compact {
             // iPhone: standard NavigationStack with push/pop
-            compactNavigationView
+            RootCompactNavigationView(
+                session: session,
+                selectedWorkspaceId: coordinator.selectedWorkspaceId,
+                currentScreenDescription: coordinator.currentScreenDescription,
+                conversationRequestId: coordinator.conversationRequestId,
+                conversationFallback: navigationPresentation.conversationFallback,
+                notePayload: navigationPresentation.notePayload,
+                showingWorkspaceDetail: $navigationPresentation.showingWorkspaceDetail,
+                showingConversation: $navigationPresentation.showingConversation,
+                showingNoteDetail: $navigationPresentation.showingNoteDetail,
+                noteStack: $navigationPresentation.noteStack,
+                onSynchronize: synchronizeNavigationPresentation,
+                onWorkspacePresentationChanged: workspacePresentationChanged,
+                onConversationPresentationChanged: compactConversationPresentationChanged,
+                onNotePresentationChanged: notePresentationChanged,
+                onOpenLinkedNote: openCompactLinkedNote
+            )
         } else {
             // iPad: NavigationSplitView with sidebar selection
             NavigationSplitView {
@@ -127,7 +103,22 @@ struct RootView: View {
                         max: Constants.Root.sidebarMaximumWidth
                     )
             } detail: {
-                detailContent
+                RootDetailContentView(
+                    session: session,
+                    selectedWorkspaceId: coordinator.selectedWorkspaceId,
+                    currentScreenDescription: coordinator.currentScreenDescription,
+                    conversationRequestId: coordinator.conversationRequestId,
+                    showingWorkspaceDetail: navigationPresentation.showingWorkspaceDetail,
+                    conversationFallback: navigationPresentation.conversationFallback,
+                    colorScheme: colorScheme,
+                    showingConversation: $navigationPresentation.showingConversation,
+                    noteStack: $navigationPresentation.noteStack,
+                    onSynchronize: synchronizeNavigationPresentation,
+                    onWorkspacePresentationChanged: workspacePresentationChanged,
+                    onConversationPresentationChanged: regularConversationPresentationChanged,
+                    onNoteStackChanged: noteStackChanged,
+                    onOpenLinkedNote: openRegularLinkedNote
+                )
             }
             .navigationSplitViewStyle(.automatic)
         }
@@ -331,20 +322,112 @@ struct RootView: View {
     }
 }
 
-struct ConversationDestinationView: View {
-    struct Target: Equatable {
-        let agentId: String
-        let workspaceId: String
-        let agentName: String
+private extension RootView {
+    func synchronizeNavigationPresentation() {
+        let effects = navigationPresentation.synchronize(
+            with: coordinator.currentScreen,
+            conversationRequestId: coordinator.conversationRequestId,
+            isCompact: sizeClass == .compact,
+            isRegularWidth: sizeClass == .regular
+        )
+        scheduleNavigationEffects(effects)
     }
 
-    let fallback: Target?
+    func workspacePresentationChanged(_ isPresented: Bool) {
+        let change = navigationPresentation.workspacePresentationChanged(
+            isPresented: isPresented,
+            currentScreen: coordinator.currentScreen
+        )
+        scheduleNavigationEffects(change.deferredEffects)
+        performCoordinatorAction(change.coordinatorAction)
+    }
+
+    func compactConversationPresentationChanged(_ isPresented: Bool) {
+        let action = navigationPresentation.conversationPresentationChanged(
+            isPresented: isPresented,
+            currentScreen: coordinator.currentScreen,
+            suppressesProgrammaticDismissal: false
+        )
+        performCoordinatorAction(action)
+    }
+
+    func regularConversationPresentationChanged(_ isPresented: Bool) {
+        let action = navigationPresentation.conversationPresentationChanged(
+            isPresented: isPresented,
+            currentScreen: coordinator.currentScreen,
+            suppressesProgrammaticDismissal: true
+        )
+        performCoordinatorAction(action)
+    }
+
+    func notePresentationChanged(_ isPresented: Bool) {
+        let action = navigationPresentation.notePresentationChanged(
+            isPresented: isPresented,
+            currentScreen: coordinator.currentScreen
+        )
+        performCoordinatorAction(action)
+    }
+
+    func noteStackChanged(_ newStack: NavigationPath) {
+        let action = navigationPresentation.noteStackChanged(
+            to: newStack,
+            currentScreen: coordinator.currentScreen
+        )
+        performCoordinatorAction(action)
+    }
+
+    func openCompactLinkedNote(_ payload: RootNavigationPresentation.NotePayload) {
+        navigationPresentation.openCompactLinkedNote(payload)
+    }
+
+    func openRegularLinkedNote(_ payload: RootNavigationPresentation.NotePayload) {
+        navigationPresentation.openRegularLinkedNote(payload)
+    }
+
+    func scheduleNavigationEffects(_ effects: [RootNavigationPresentation.DeferredEffect]) {
+        for effect in effects {
+            DispatchQueue.main.async {
+                navigationPresentation.applyDeferredEffect(
+                    effect,
+                    currentScreen: coordinator.currentScreen
+                )
+            }
+        }
+    }
+
+    func performCoordinatorAction(_ action: RootNavigationPresentation.CoordinatorAction?) {
+        switch action {
+        case .backFromNote:
+            coordinator.onBackFromNote()
+        case .backToWorkspaceDetail:
+            coordinator.onBackToWorkspaceDetail()
+        case .backToWorkspaceList:
+            coordinator.onBackToWorkspaceList()
+        case nil:
+            break
+        }
+    }
+}
+
+struct ConversationDestinationView: View {
+    let fallback: RootNavigationPresentation.ConversationPayload?
     let session: BackendSession
     @Environment(AppCoordinator.self) private var coordinator
 
-    private var target: Target? {
-        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
-            return Target(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+    private var target: RootNavigationPresentation.ConversationPayload? {
+        Self.resolveTarget(currentScreen: coordinator.currentScreen, fallback: fallback)
+    }
+
+    static func resolveTarget(
+        currentScreen: AppScreen,
+        fallback: RootNavigationPresentation.ConversationPayload?
+    ) -> RootNavigationPresentation.ConversationPayload? {
+        if case let .agentConversation(agentId, workspaceId, agentName) = currentScreen {
+            return RootNavigationPresentation.ConversationPayload(
+                agentId: agentId,
+                workspaceId: workspaceId,
+                agentName: agentName
+            )
         }
         return fallback
     }
