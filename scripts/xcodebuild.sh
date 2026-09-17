@@ -580,11 +580,13 @@ print(" ".join(suites))
 # exit code 80 in the header). $1 = simulator UDID, $2 = the kept crash log,
 # $3 = the primary result bundle path or "", the rest = the subcommand's
 # -skip-testing: flags. The re-run carries one -only-testing: per interrupted
-# Target/Suite; when the caller's ONLY_TESTING selectors lie inside that suite
-# (and none of them names the suite itself or its target, which keeps the
-# whole suite), it narrows to those instead. RETRY_SELECTORS records the
-# identifiers re-run (space-separated, for the ONLY_TESTING summary merge) and
-# RETRY_BUNDLE (<bundle>-retry) is written when a bundle is written at all.
+# Target/Suite, intersected with the caller's ONLY_TESTING selection: a
+# selector naming the suite or its target keeps the whole suite, selectors
+# inside the suite (with no such ancestor) narrow the re-run to them, and a
+# suite no selector covers is left out (it was not selected, so it cannot have
+# been running). RETRY_SELECTORS records the identifiers re-run
+# (space-separated, for the ONLY_TESTING summary merge) and RETRY_BUNDLE
+# (<bundle>-retry) is written when a bundle is written at all.
 # Returns the merged status: 0 when the re-run is green (the crash stays
 # reported), xcodebuild's status when it fails without a crash,
 # EXIT_TEST_PROCESS_CRASHED when it crashes too, when no suite can be named,
@@ -593,7 +595,7 @@ print(" ".join(suites))
 RETRY_BUNDLE=
 RETRY_SELECTORS=
 retry_crashed_suites() {
-  local udid=$1 log=$2 bundle=$3 suites suite id whole nested=() selectors=() extra=() retry_log status=0 outcome=0 verdict
+  local udid=$1 log=$2 bundle=$3 suites suite id whole covered kept= nested=() selectors=() extra=() retry_log status=0 outcome=0 verdict
   shift 3
   if [ "${TEST_CRASH_RETRY:-1}" = "0" ]; then
     echo "TEST_CRASH_RETRY=0: not re-running the interrupted suite(s). Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash)." >&2
@@ -612,14 +614,20 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
   for suite in $suites; do
     whole=1
     nested=()
+    covered=$(( ${#ONLY_TESTING_IDS[@]} == 0 ))
     for id in ${ONLY_TESTING_IDS+"${ONLY_TESTING_IDS[@]}"}; do
       case "$suite" in
-        "$id" | "$id"/*) whole=1; break ;;
+        "$id" | "$id"/*) whole=1; covered=1; break ;;
       esac
       case "$id" in
-        "$suite"/*) nested+=("$id"); whole=0 ;;
+        "$suite"/*) nested+=("$id"); whole=0; covered=1 ;;
       esac
     done
+    if [ "$covered" -eq 0 ]; then
+      echo "notice: $suite is named as interrupted but lies outside the ONLY_TESTING selection; not re-running it." >&2
+      continue
+    fi
+    kept="$kept $suite"
     if [ "$whole" -eq 1 ]; then
       selectors+=("-only-testing:$suite")
       RETRY_SELECTORS="$RETRY_SELECTORS $suite"
@@ -631,6 +639,13 @@ Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
     fi
   done
   RETRY_SELECTORS=${RETRY_SELECTORS# }
+  suites=${kept# }
+  if [ -z "$suites" ]; then
+    echo "error: every suite named as interrupted lies outside the ONLY_TESTING selection, so there is nothing to re-run.
+Exiting $EXIT_TEST_PROCESS_CRASHED (test-process crash), not 65." >&2
+    append_step_summary ":x: Every suite named as interrupted lies outside the ONLY_TESTING selection; nothing to re-run (exit $EXIT_TEST_PROCESS_CRASHED)." ""
+    return "$EXIT_TEST_PROCESS_CRASHED"
+  fi
   if [ -n "$bundle" ]; then
     case "$bundle" in
       *.xcresult) RETRY_BUNDLE=${bundle%.xcresult}-retry.xcresult ;;
@@ -914,19 +929,23 @@ Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&
 # carries the resolver's "<count>\t<selector>" lines, and
 # ONLY_TESTING_RETRY_RESULTS, when set, the xcresulttool json of the crash
 # re-run's bundle with ONLY_TESTING_RETRY_SELECTORS naming what it re-ran:
-# every primary record matching a re-run selector is dropped and the re-run's
-# records stand in for them (the re-run is the later, authoritative result,
-# and a test it did not record counts as not executed — a crashed suite's
-# results are never trusted). Walks testNodes recursively (xcrun xcresulttool get test-results
+# the re-run's records stand in for every primary record matching a re-run
+# selector (the re-run is the later, authoritative result; a crashed suite's
+# results are never trusted), except that a primary Failed the re-run did not
+# record is kept as an unrecovered failure. Each re-run selector is verified
+# on its own against the re-run bundle — one that recorded nothing executed
+# or skipped for it fails the run whatever the caller's broader selectors
+# gathered from uninterrupted suites. Walks testNodes recursively (xcrun xcresulttool get test-results
 # tests, Xcode 16+): a "Test Case" node is identified as <enclosing test
 # bundle name>/<nodeIdentifier> and attributed to every selector it matches;
 # executed = Passed + Failed + Expected Failure, Skipped is counted apart, and
 # any other result string is "unknown" (the bundle cannot be trusted). Prints
 # the table on stdout and appends it as Markdown to the step summary when
 # given. Exit 0, or 1 when a selector has executed + skipped = 0 (named on
-# stderr; an all-skipped selector is only a notice), or 2 when the JSON is
-# unreadable or not the expected shape or a selector has an unknown result
-# (2 wins over 1).
+# stderr; an all-skipped selector is only a notice) or the re-run recorded
+# nothing for one of its selectors or left a primary Failed unrecovered, or 2
+# when the JSON is unreadable or not the expected shape or a selector has an
+# unknown result (2 wins over 1).
 ONLY_TESTING_SUMMARY_PY='
 import json, os
 results_path, summary_path, bundle = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -969,15 +988,29 @@ def walk(node, bundle_name):
         return
     walk(node.get("children", []), bundle_name)
 walk(document["testNodes"], "")
+EXECUTED_RESULTS = ("Passed", "Failed", "Expected Failure")
+rerun_empty, unrecovered = [], []
 if retry_path:
     primary, cases = cases, []
     walk(load(retry_path, "the re-run result bundle")["testNodes"], "")
-    rerun = [s.split("/") for s in os.environ.get("ONLY_TESTING_RETRY_SELECTORS", "").split()]
+    rerun = os.environ.get("ONLY_TESTING_RETRY_SELECTORS", "").split()
     recorded = set(ident for ident, _ in cases)
-    cases = [case for case in primary
-             if case[0] not in recorded and not any(matches(parts, case[0]) for parts in rerun)] + cases
+    kept = []
+    for ident, result in primary:
+        if ident in recorded:
+            continue
+        if any(matches(selector.split("/"), ident) for selector in rerun):
+            if result == "Failed":
+                unrecovered.append(ident)
+                kept.append((ident, result))
+            continue
+        kept.append((ident, result))
+    for selector in rerun:
+        parts = selector.split("/")
+        if not any(matches(parts, ident) and (result in EXECUTED_RESULTS or result == "Skipped") for ident, result in cases):
+            rerun_empty.append(selector)
+    cases = kept + cases
     bundle += " merged with the re-run"
-EXECUTED_RESULTS = ("Passed", "Failed", "Expected Failure")
 rows, failing, notices, unknowns = [], [], [], []
 for selector in selectors:
     parts = selector.split("/")
@@ -1009,6 +1042,10 @@ if summary_path:
                 f.write("| `%s` | %s | %s | %s | %s | %s |\n" % row)
             for selector in failing:
                 f.write("\n:x: `%s` executed nothing (exit 82).\n" % selector)
+            for selector in rerun_empty:
+                f.write("\n:x: the crash re-run of `%s` recorded nothing executed or skipped for it; the interrupted suite is not recovered (exit 82).\n" % selector)
+            for ident in unrecovered:
+                f.write("\n:x: `%s` failed in the crashed run and the re-run did not record it; no recovery evidence (exit 82).\n" % ident)
             for selector, count, unknown in unknowns:
                 f.write("\n:warning: `%s`: %d test(s) with an unrecognised result (%s); selection unverified (exit 83).\n" % (selector, count, ", ".join(repr(u) for u in unknown)))
             for selector, skipped in notices:
@@ -1024,11 +1061,15 @@ for selector in failing:
         sys.stderr.write("error: %s\n" % excluded_message(selector, excluded[0]))
     else:
         sys.stderr.write("error: ONLY_TESTING selector %r resolved to %s test(s) but the result bundle records none executed or skipped for it.\n" % (selector, resolved.get(selector, "?")))
+for selector in rerun_empty:
+    sys.stderr.write("error: the crash re-run of %r recorded no test executed or skipped for it; the interrupted suite is not recovered, whatever the other selectors gathered.\n" % selector)
+for ident in unrecovered:
+    sys.stderr.write("error: %s failed in the crashed run and the re-run did not record it; the crashed run is no evidence either way, so it counts as unrecovered.\n" % ident)
 for selector, count, unknown in unknowns:
     sys.stderr.write("error: could not verify the ONLY_TESTING selection: %d test case(s) matching %r have a result the wrapper does not recognise (%s; expected Passed / Failed / Skipped / Expected Failure — xcresulttool output changed?).\n" % (count, selector, ", ".join(repr(u) for u in unknown)))
 if unknowns:
     sys.exit(2)
-if failing:
+if failing or rerun_empty or unrecovered:
     sys.exit(1)
 '
 
@@ -1037,12 +1078,13 @@ if failing:
 # report_test_outcome and any crash re-run), $2 = the bundle path, the rest =
 # the subcommand's -skip-testing: flags; RETRY_BUNDLE, when set, is read too
 # and its records replace the primary ones for everything RETRY_SELECTORS
-# re-ran (so a re-run that recorded nothing for a selector leaves it with
-# nothing executed). Returns the status to exit with:
-# a nonzero $1 is kept (with a warning when a bundle disagrees or is
-# unreadable); a 0 becomes EXIT_SELECTOR_UNMATCHED when a resolved selector
-# executed and skipped nothing, or EXIT_SELECTION_UNVERIFIED when a bundle
-# cannot be read or records a result the classifier does not recognise.
+# re-ran, each re-run selector being verified against the re-run bundle on
+# its own and a primary Failed the re-run did not record staying unrecovered.
+# Returns the status to exit with: a nonzero $1 is kept (with a warning when
+# a bundle disagrees or is unreadable); a 0 becomes EXIT_SELECTOR_UNMATCHED
+# when a resolved selector executed and skipped nothing or the re-run left an
+# interrupted suite or test unrecovered, or EXIT_SELECTION_UNVERIFIED when a
+# bundle cannot be read or records a result the classifier does not recognise.
 summarize_only_testing() {
   local status=$1 bundle=$2 results retry_results= outcome=0
   shift 2
@@ -1080,7 +1122,7 @@ summarize_only_testing() {
         echo "warning: the ONLY_TESTING selector(s) above executed nothing; keeping exit $status from the test run." >&2
         return "$status"
       fi
-      echo "Exiting $EXIT_SELECTOR_UNMATCHED (an ONLY_TESTING selector executed nothing although xcodebuild exited 0)." >&2
+      echo "Exiting $EXIT_SELECTOR_UNMATCHED (an ONLY_TESTING selector executed nothing although xcodebuild exited 0${RETRY_SELECTORS:+, or the crash re-run left an interrupted suite or test unrecovered})." >&2
       return "$EXIT_SELECTOR_UNMATCHED" ;;
     *)
       if [ "$status" -ne 0 ]; then
