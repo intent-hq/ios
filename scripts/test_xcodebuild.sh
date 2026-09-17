@@ -57,7 +57,9 @@ EOF
 # SIGTERM for that long (logged as "child <pid>") and STUB_RESIST_ROOT=1 makes
 # the stub itself ignore SIGTERM. STUB_ARGS records every invocation's argv as
 # one "argv: [arg] [arg] ..." line. STUB_NO_FAILING=1 drops the "Failing
-# tests" list from the marker outcome. A -resultBundlePath is created as a
+# tests" list from the marker outcome; STUB_FLAT_FAILING=1 prints it in the
+# flat single-tab form (fully qualified entries, no target header) instead of
+# the grouped one. A -resultBundlePath is created as a
 # directory (not under STUB_NO_BUNDLE=1). An -enumerate-tests invocation
 # copies $STUB_CATALOG to the requested -test-enumeration-output-path and
 # exits 0 (nonzero with STUB_ENUMERATE_FAIL=1) without running the canned
@@ -106,7 +108,11 @@ case "$mode" in
   marker)
     echo "Test Suite 'FooTests' started"
     echo "$STUB_MARKER"
-    if [ -z "${STUB_NO_FAILING:-}" ]; then
+    if [ -n "${STUB_FLAT_FAILING:-}" ]; then
+      echo "Failing tests:"
+      echo "	IntentTests.FooTests/testBar()"
+      echo "	IntentTests.DemoFixturesTests.testQux()"
+    elif [ -z "${STUB_NO_FAILING:-}" ]; then
       echo "Failing tests:"
       echo "	IntentTests:"
       echo "		FooTests.testBar()"
@@ -362,6 +368,14 @@ status=$(run_filtered signalonly "" test-without-building STUB_MODE=marker STUB_
 assert_eq "signal-only crash then green re-run exits 0" "$status" 0
 assert_contains "signal-only crash re-runs the suite named under Failing tests" "$(argv_line signalonly 2)" \
   "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/FooTests]"
+
+echo "# the Failing tests list also comes flat: one tab, fully qualified Target.Suite/test() entries"
+status=$(run_filtered flatfailing "" test-without-building STUB_MODE=marker STUB_MARKER="Test crashed with signal segv." \
+  STUB_THEN=pass STUB_STATE="$work/flatfailing.state" STUB_FLAT_FAILING=1)
+assert_eq "signal-only crash with a flat Failing tests list then green re-run exits 0" "$status" 0
+assert_eq "a flat Failing tests list is retried exactly once" "$(argv_count flatfailing)" 2
+assert_contains "the flat list's suites are re-run (both / and . test separators)" "$(argv_line flatfailing 2)" \
+  "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/FooTests] [-only-testing:IntentTests/DemoFixturesTests]"
 
 echo "# a restart that names nothing and lists no failing test is not retried"
 status=$(run_filtered nameless "" test-without-building STUB_MODE=marker STUB_MARKER="Lost connection to the test manager service" \
