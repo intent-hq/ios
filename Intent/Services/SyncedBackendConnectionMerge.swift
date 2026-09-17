@@ -136,12 +136,13 @@ enum SyncedBackendConnectionMerge {
     }
 
     /// The URL-embeddable form of the host string, or nil when it has no
-    /// safe form. Accepts a plain DNS name / IPv4 address or an IPv6
-    /// literal — raw IPv6 strings (intentd's pairing_hosts advertises
+    /// safe form. Accepts a structurally valid DNS name / IPv4 address or an
+    /// IPv6 literal — raw IPv6 strings (intentd's pairing_hosts advertises
     /// unbracketed `2001:db8::1` forms) are bracket-normalized. Anything
     /// else is rejected: a deterministic allowlist on purpose, since iOS
     /// 17+'s lenient URL parser would percent-encode junk instead of
-    /// failing, hiding the problem until connect.
+    /// failing, hiding the problem until connect. Spelling is preserved
+    /// (`MAC.Local` stays as entered); callers dedup on `normalizeHost`.
     static func usableHost(_ raw: String) -> String? {
         guard !raw.isEmpty else { return nil }
         let inner: Substring
@@ -151,11 +152,7 @@ enum SyncedBackendConnectionMerge {
         } else if raw.contains(":") {
             inner = raw[...]
         } else {
-            let usable = raw.allSatisfy { char in
-                char.isLetter && char.isASCII || char.isNumber && char.isASCII
-                    || char == "-" || char == "." || char == "_"
-            }
-            return usable ? raw : nil
+            return isValidNameOrIPv4(raw) ? raw : nil
         }
         // IPv6 literal (bare or bracketed): hex digits and colons only, and
         // structurally valid — the character allowlist alone admits `::::`.
@@ -163,6 +160,41 @@ enum SyncedBackendConnectionMerge {
             IPv6Address(String(inner)) != nil
         else { return nil }
         return "[\(inner)]"
+    }
+
+    // RFC 1035 presentation-form limits.
+    private static let maxHostNameLength = 253
+    private static let maxHostLabelLength = 63
+
+    /// Structural check for the non-IPv6 branch (ios#341). A DNS name is
+    /// dot-separated labels of 1–63 ASCII letters/digits/hyphens/underscores
+    /// (underscores stay allowed for local names such as `my-mac_2.local`),
+    /// no label starting or ending with a hyphen, no empty label — so no
+    /// leading, trailing or doubled dot — and at most 253 characters. A
+    /// string made only of digits and dots is an IPv4 literal and must be a
+    /// dotted quad with octets 0–255 and no leading zeros.
+    private static func isValidNameOrIPv4(_ raw: String) -> Bool {
+        guard raw.count <= maxHostNameLength else { return false }
+        let labels = raw.split(separator: ".", omittingEmptySubsequences: false)
+        if raw.allSatisfy({ $0 == "." || $0.isNumber && $0.isASCII }) {
+            return labels.count == 4 && labels.allSatisfy(isIPv4Octet)
+        }
+        return labels.allSatisfy(isDNSLabel)
+    }
+
+    private static func isDNSLabel(_ label: Substring) -> Bool {
+        guard !label.isEmpty, label.count <= maxHostLabelLength,
+            label.first != "-", label.last != "-"
+        else { return false }
+        return label.allSatisfy { char in
+            char.isLetter && char.isASCII || char.isNumber && char.isASCII
+                || char == "-" || char == "_"
+        }
+    }
+
+    private static func isIPv4Octet(_ octet: Substring) -> Bool {
+        guard !octet.isEmpty, octet.count <= 3, let value = Int(octet), value <= 255 else { return false }
+        return octet.count == 1 || octet.first != "0"
     }
 
     /// Display name mirroring the desktop convention: the record label
