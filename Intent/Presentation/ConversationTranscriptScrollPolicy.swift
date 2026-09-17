@@ -706,8 +706,9 @@ enum ConversationTranscriptScrollPolicy {
         ) {
             return .continue(.followToEnd)
         }
-        return .continue(.recover(
-            pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight)))
+        return .continue(
+            .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
+        )
     }
     // swiftlint:enable function_parameter_count function_default_parameter_at_end
 
