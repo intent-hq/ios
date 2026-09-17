@@ -107,7 +107,7 @@ struct WorkspaceDetailView: View {
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
             if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
-                coordinator.handleMissingWorkspace(workspaceId: workspaceId)
+                coordinator.handleMissingWorkspace()
             }
         }
     }

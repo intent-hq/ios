@@ -23,7 +23,7 @@ extension AppCoordinatorTests {
         }
 
         // Now handle the missing workspace
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
             // pass
@@ -50,7 +50,7 @@ extension AppCoordinatorTests {
         )
 
         let coordinator = AppCoordinator(backendID: Self.windowBackend, persistence: persistence)
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
         #expect(
             persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
@@ -71,7 +71,7 @@ extension AppCoordinatorTests {
             Issue.record("Expected .agentConversation, got \(coordinator.currentScreen)")
         }
 
-        coordinator.handleMissingWorkspace(workspaceId: wsId)
+        coordinator.handleMissingWorkspace()
 
         if case .workspaceList = coordinator.currentScreen {
             // pass

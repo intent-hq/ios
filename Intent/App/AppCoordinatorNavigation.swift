@@ -121,7 +121,7 @@ extension AppCoordinator {
 
     /// Called when a restored workspace is no longer found in the workspace list.
     /// Navigates back to the workspace list and clears the saved screen state.
-    func handleMissingWorkspace(workspaceId: String) {
+    func handleMissingWorkspace() {
         if let connectionID = windowConnectionID {
             dependencies.persistence.clearLastScreen(for: connectionID)
         }
