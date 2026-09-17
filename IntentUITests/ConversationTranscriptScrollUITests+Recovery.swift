@@ -91,7 +91,7 @@ extension ConversationTranscriptScrollUITests {
     /// The controlled counterpart of the hooks-row scenario: the transcript
     /// has settled at the end with no recovery episode in flight, then the
     /// fixture withdraws the `scroll-bottom` marker on the trigger file
-    /// (`release` mode, see `Fixture.endDerealizationTriggerFileArgumentPrefix`),
+    /// (`release` mode, see `Fixture.endDerealizationTriggerArgumentPrefix`),
     /// so the real unrealized-end recovery arms through the marker's own
     /// `onDisappear` exactly as it does over a dropped end row. The recovery
     /// must then run to its recovered outcome on its own — settle, page the
@@ -355,7 +355,6 @@ extension ConversationTranscriptScrollUITests {
 
 // The evidence helpers are shared with the cold-entry test in the main file
 // and its teardown.
-// swiftlint:disable test_case_accessibility
 extension ConversationTranscriptScrollUITests {
     /// The arming `enterLongConversation` performs before its first
     /// assertion: the record it builds lands in `pendingRecoveryEvidence`.
@@ -409,5 +408,4 @@ extension ConversationTranscriptScrollUITests {
         return tail.trimmingCharacters(in: CharacterSet(charactersIn: "]"))
     }
 }
-// swiftlint:enable test_case_accessibility
 // swiftlint:enable function_body_length no_magic_numbers trailing_newline

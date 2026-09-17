@@ -116,7 +116,7 @@ enum Fixture {
     // through the marker's real `onAppear`; `hold` never does, so the
     // recovery runs out its landing budget. Only the two controlled
     // tests pass the argument.
-    static let endDerealizationTriggerFileArgumentPrefix = "--demo-end-derealization-trigger-file="
+    static let endDerealizationTriggerArgumentPrefix = "--demo-end-derealization-trigger-file="
     static let endDerealizationModeArgumentPrefix = "--demo-end-derealization-mode="
     // Upper bound on a recovery episode reporting a terminal reason: the
     // fixture's 100 ms trigger poll, then the recovery's own bounded
@@ -256,7 +256,7 @@ struct RecoveryEvidenceArming {
 /// their trigger files. `standaloneSlimToolRows` makes truncated tools
 /// independently tappable for the opt-in hydration regression, and
 /// `endDerealization` arms the marker withdrawal behind its trigger file
-/// in the given mode (see `Fixture.endDerealizationTriggerFileArgumentPrefix`).
+/// in the given mode (see `Fixture.endDerealizationTriggerArgumentPrefix`).
 @MainActor
 func launchDemoApp(
     hooksRowTriggerFile: URL,
@@ -276,7 +276,7 @@ func launchDemoApp(
     }
     if let endDerealization {
         app.launchArguments += [
-            Fixture.endDerealizationTriggerFileArgumentPrefix + endDerealization.triggerFile.path,
+            Fixture.endDerealizationTriggerArgumentPrefix + endDerealization.triggerFile.path,
             Fixture.endDerealizationModeArgumentPrefix + endDerealization.mode.rawValue
         ]
     }

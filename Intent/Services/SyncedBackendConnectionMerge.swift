@@ -167,6 +167,9 @@ enum SyncedBackendConnectionMerge {
     // RFC 1035 presentation-form limits.
     private static let maxHostNameLength = 253
     private static let maxHostLabelLength = 63
+    private static let ipv4OctetCount = 4
+    private static let maxIPv4OctetDigits = 3
+    private static let maxIPv4OctetValue = 255
 
     /// Structural check for the non-IPv6 branch (ios#341). A DNS name is
     /// dot-separated labels of 1–63 ASCII letters/digits/hyphens/underscores
@@ -179,7 +182,7 @@ enum SyncedBackendConnectionMerge {
         guard raw.count <= maxHostNameLength else { return false }
         let labels = raw.split(separator: ".", omittingEmptySubsequences: false)
         if raw.allSatisfy({ $0 == "." || $0.isNumber && $0.isASCII }) {
-            return labels.count == 4 && labels.allSatisfy(isIPv4Octet)
+            return labels.count == ipv4OctetCount && labels.allSatisfy(isIPv4Octet)
         }
         return labels.allSatisfy(isDNSLabel)
     }
@@ -195,7 +198,8 @@ enum SyncedBackendConnectionMerge {
     }
 
     private static func isIPv4Octet(_ octet: Substring) -> Bool {
-        guard !octet.isEmpty, octet.count <= 3, let value = Int(octet), value <= 255 else { return false }
+        guard !octet.isEmpty, octet.count <= maxIPv4OctetDigits, let value = Int(octet), value <= maxIPv4OctetValue
+        else { return false }
         return octet.count == 1 || octet.first != "0"
     }
 

@@ -106,15 +106,7 @@ private extension ConversationTranscriptView {
     ) -> some View {
         transcriptScrollBase(proxy: proxy, dividerAnchorId: dividerAnchorId)
             .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
-                let appendedUserMessage = newCount > oldCount
-                    && viewModel.filteredMessages.last?.role == .user
-                if appendedUserMessage {
-                    claimViewportForExplicitFollow(proxy: proxy)
-                    userIsScrolledAway = false
-                }
-                if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy, forced: appendedUserMessage)
-                }
+                handleMessageCountChange(from: oldCount, to: newCount, proxy: proxy)
             }
             .onChange(of: viewModel.isStreaming) { _, isStreaming in
                 if ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
@@ -161,6 +153,18 @@ private extension ConversationTranscriptView {
                     scrollToBottom(proxy: proxy, forced: true)
                 }
             }
+    }
+
+    private func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
+        let appendedUserMessage = newCount > oldCount
+            && viewModel.filteredMessages.last?.role == .user
+        if appendedUserMessage {
+            claimViewportForExplicitFollow(proxy: proxy)
+            userIsScrolledAway = false
+        }
+        if shouldFollowToBottom {
+            scrollToBottom(proxy: proxy, forced: appendedUserMessage)
+        }
     }
 
     private var shouldFollowToBottom: Bool {
@@ -313,15 +317,8 @@ private extension ConversationTranscriptView {
     /// `runFollow`).
     private func perform(_ effect: Lifecycle.Effect, proxy: ScrollViewProxy, animated: Bool) {
         switch effect {
-        case .startFollowTask(let token, let forced):
-            if forced {
-                isScrollingToBottom = true
-                scrollState.lastForcedFollowOutcome = nil
-                scrollState.lastForcedFollowCorrections = 0
-            }
-            scrollState.followTasks[token] = Task { @MainActor in
-                await runFollow(token, forced: forced, animated: animated, proxy: proxy)
-            }
+        case let .startFollowTask(token, forced):
+            startFollowTask(token, forced: forced, animated: animated, proxy: proxy)
         case .cancelFollowTask(let token):
             scrollState.followTasks[token]?.cancel()
             scrollState.followTasks[token] = nil
@@ -334,20 +331,16 @@ private extension ConversationTranscriptView {
                 await runUnrealizedEndRecovery(token, proxy: proxy)
             }
         case .cancelRecoveryTask(let token):
-            if let task = scrollState.recoveryTasks[token] {
-                task.cancel()
-                scrollState.recoveryTasks[token] = nil
-                recordUnrealizedEndRecoveryReport(outcome: nil, cancelled: true)
-            }
+            cancelRecoveryTask(token)
         case .scrollToEnd:
             issueScrollToBottom(proxy: proxy, animated: animated)
         case .pageUp(let offsetY):
             scrollMomentumProxy.pageTo(offsetY: offsetY)
-        case .replayLiveEdge(let isInteracting):
-            applyLiveScrolledAwayEdge(isInteracting: isInteracting ?? isUserInteracting, proxy: proxy)
+        case .replayLiveEdge(let sample):
+            applyLiveScrolledAwayEdge(isInteracting: sample.isInteracting(live: isUserInteracting), proxy: proxy)
         case .showGoToEnd:
             userIsScrolledAway = true
-        case .recordRecoveryOutcome(let terminal, let corrections):
+        case let .recordRecoveryOutcome(terminal, corrections):
             scrollState.unrealizedEndRecoveryCorrections = corrections
             recordUnrealizedEndRecoveryReport(outcome: terminal, cancelled: false)
         case .log(let message):
@@ -355,7 +348,25 @@ private extension ConversationTranscriptView {
         }
     }
 
-    // swiftlint:disable function_body_length
+    private func startFollowTask(_ token: Lifecycle.FollowToken, forced: Bool, animated: Bool, proxy: ScrollViewProxy) {
+        if forced {
+            isScrollingToBottom = true
+            scrollState.lastForcedFollowOutcome = nil
+            scrollState.lastForcedFollowCorrections = 0
+        }
+        scrollState.followTasks[token] = Task { @MainActor in
+            await runFollow(token, forced: forced, animated: animated, proxy: proxy)
+        }
+    }
+
+    private func cancelRecoveryTask(_ token: Lifecycle.RecoveryToken) {
+        if let task = scrollState.recoveryTasks[token] {
+            task.cancel()
+            scrollState.recoveryTasks[token] = nil
+            recordUnrealizedEndRecoveryReport(outcome: nil, cancelled: true)
+        }
+    }
+
     /// Verifies, once the geometry has settled, that a following viewport
     /// rests on realized rows, and recovers a blank one (#338): the lazy
     /// stack can realize no rows at all under an offset that still reads
@@ -420,32 +431,7 @@ private extension ConversationTranscriptView {
                     guard !effects.isEmpty else { continue }
                     correctionsLeft -= 1
                     scrollState.unrealizedEndRecoveryCorrections += 1
-                    // The step read the live geometry this same pass, so the
-                    // page up found the scroll view; the rows realize under
-                    // the paged-up offset before the follow back re-checks
-                    // the claim.
-                    try? await Task.sleep(
-                        for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds)
-                    )
-                    guard !Task.isCancelled else { return }
-                    let mayFollowBack = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
-                        isInteracting: isUserInteracting,
-                        userIsScrolledAway: userIsScrolledAway,
-                        isFollowing: followOwnsViewport
-                    )
-                    send(.recoveryPagedUp(token, mayFollowBack: mayFollowBack), proxy: proxy, animated: false)
-                    guard mayFollowBack else {
-                        scrollState.recoveryTasks[token] = nil
-                        send(
-                            .recoveryFinished(
-                                token,
-                                .yieldToUser,
-                                corrections: scrollState.unrealizedEndRecoveryCorrections
-                            ),
-                            proxy: proxy
-                        )
-                        return
-                    }
+                    guard await followBackAfterPageUp(token, proxy: proxy) else { return }
                 }
                 previous = nil
             case .finish(let terminal):
@@ -458,7 +444,36 @@ private extension ConversationTranscriptView {
             }
         }
     }
-    // swiftlint:enable function_body_length
+
+    /// The step read the live geometry this same pass, so the page up found
+    /// the scroll view; the rows realize under the paged-up offset before
+    /// the follow back re-checks the claim. Returns false when the loop
+    /// ends here: cancelled during the settle, or yielded to the user.
+    private func followBackAfterPageUp(_ token: Lifecycle.RecoveryToken, proxy: ScrollViewProxy) async -> Bool {
+        try? await Task.sleep(
+            for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds)
+        )
+        guard !Task.isCancelled else { return false }
+        let mayFollowBack = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
+            isInteracting: isUserInteracting,
+            userIsScrolledAway: userIsScrolledAway,
+            isFollowing: followOwnsViewport
+        )
+        send(.recoveryPagedUp(token, mayFollowBack: mayFollowBack), proxy: proxy, animated: false)
+        guard mayFollowBack else {
+            scrollState.recoveryTasks[token] = nil
+            send(
+                .recoveryFinished(
+                    token,
+                    .yieldToUser,
+                    corrections: scrollState.unrealizedEndRecoveryCorrections
+                ),
+                proxy: proxy
+            )
+            return false
+        }
+        return true
+    }
 
     /// Records how the episode ended, with the corrections it spent and
     /// the end row's realization at this moment, so every terminal path —
@@ -771,22 +786,8 @@ private extension ConversationTranscriptView {
         }
 
         ForEach(viewModel.filteredMessages) { message in
-            MessageView(
-                message: message,
-                workspaceId: viewModel.workspaceId,
-                onNavigateToNote: onNavigateToNote,
-                onNavigateToAgent: onNavigateToAgent,
-                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
-            ) { blockId in
-                let messageId = message.id
-                Task {
-                    await viewModel.store.hydrateBlock(
-                        messageId: messageId,
-                        blockId: blockId
-                    )
-                }
-            }
-            .id(message.id)
+            messageRow(for: message)
+                .id(message.id)
             if message.id == dividerAnchorId {
                 NewMessagesDividerView()
                     .id("new-messages-divider")
@@ -835,6 +836,24 @@ private extension ConversationTranscriptView {
             // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
+        }
+    }
+
+    private func messageRow(for message: ConversationMessage) -> some View {
+        MessageView(
+            message: message,
+            workspaceId: viewModel.workspaceId,
+            onNavigateToNote: onNavigateToNote,
+            onNavigateToAgent: onNavigateToAgent,
+            hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
+        ) { blockId in
+            let messageId = message.id
+            Task {
+                await viewModel.store.hydrateBlock(
+                    messageId: messageId,
+                    blockId: blockId
+                )
+            }
         }
     }
 

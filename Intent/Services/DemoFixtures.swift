@@ -253,7 +253,7 @@ enum DemoFixtures {
     /// `--demo-end-derealization-mode=<release|hold>`, `release` by default.
     static let configuredEndDerealizationMode = endDerealizationMode(from: ProcessInfo.processInfo.arguments)
 
-    static let endDerealizationTriggerFileArgumentPrefix = "--demo-end-derealization-trigger-file="
+    static let endDerealizationTriggerArgumentPrefix = "--demo-end-derealization-trigger-file="
 
     static let endDerealizationModeArgumentPrefix = "--demo-end-derealization-mode="
 
@@ -269,7 +269,7 @@ enum DemoFixtures {
     }
 
     static func endDerealizationTriggerFile(from arguments: [String]) -> URL? {
-        triggerFile(from: arguments, prefix: endDerealizationTriggerFileArgumentPrefix)
+        triggerFile(from: arguments, prefix: endDerealizationTriggerArgumentPrefix)
     }
 
     /// `.release` unless the arguments carry a well-formed
