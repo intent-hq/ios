@@ -300,6 +300,16 @@ struct ConnectionPersistenceTests {
         #expect(PersistenceManager.mergeHostLists(existing: ["a"], incoming: []) == ["a"])
     }
 
+    @Test func mergeHostListsDedupesCaseVariantsKeepingFirstSpelling() {
+        // ios#341: DNS names are case-insensitive; a case-variant duplicate
+        // must not become a second route. Existing spelling is preserved.
+        #expect(PersistenceManager.mergeHostLists(
+            existing: ["Mac.local", "[2001:DB8::1]"],
+            incoming: ["mac.local", "MAC.LOCAL", "[2001:db8::1]", "Other.local", "other.local"]
+        )
+            == ["Mac.local", "[2001:DB8::1]", "Other.local"])
+    }
+
     // MARK: - updateConnectionHosts
 
     @Test func updateConnectionHostsGrowsHostSetWithoutDuplicating() {

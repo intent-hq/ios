@@ -156,6 +156,27 @@ extension ConnectionManagerTests {
         ])
     }
 
+    @Test @MainActor func mergeHostsDedupesCaseVariantsOfExistingAndReportedHosts() {
+        // ios#341: `seen` was a case-sensitive set, so HOST.local and
+        // host.local both survived as separate routes. The stored spelling
+        // wins; the first reported spelling wins among new entries.
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["HOST.local", "[fe80::1]"],
+            reported: ["host.local", "Host.Local", "[FE80::1]", "fe80::1", "New-Mac.local", "new-mac.local", "10.0.0.5"]
+        )
+        #expect(merged == ["HOST.local", "[fe80::1]", "New-Mac.local", "10.0.0.5"])
+    }
+
+    @Test @MainActor func mergeHostsRejectsStructurallyInvalidNamesAndAddresses() {
+        // ios#341: the character allowlist admitted these; they must not be
+        // raced or persisted.
+        let merged = ConnectionManager.mergeHosts(
+            existing: ["daemon.local"],
+            reported: ["a..b", "-bad", "bad-", ".bad", "999.999.999.999", "1.2.3", "256.0.0.1", "10.0.0.5"]
+        )
+        #expect(merged == ["daemon.local", "10.0.0.5"])
+    }
+
     @Test @MainActor func persistedMergeKeepsStoredHostsSessionDidNotConnectWith() {
         // Reviewer scenario: the stored record holds a NAT hostname the current
         // session didn't connect with. The persisted list is the stored hosts
