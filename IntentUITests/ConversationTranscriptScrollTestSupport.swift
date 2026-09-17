@@ -5,6 +5,16 @@ import XCTest
 
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
+    // WorkspaceListView's navigation title: the list is the only screen
+    // that shows it, whereas `workspaceTitle` is also the overview's
+    // navigation title and the conversation's back-button label.
+    static let workspaceListTitle = "Workspaces"
+    // DemoFixtures.longConversationAgents' top-level agent name: the row
+    // tapped on the workspace overview to reach the transcript.
+    static let agentName = "Test Stabilizer"
+    // WorkspaceDetailView's Agents/Context segmented control: an
+    // overview-only surface.
+    static let overviewOnlyButton = "Context"
     // Distinctive substrings of DemoFixtures.longConversationFirstSentence
     // / longConversationLastSentence (the UI test target cannot import
     // the app module, so match on text the way AppStoreScreenshotTests does).
@@ -274,8 +284,10 @@ func launchDemoApp(
     return app
 }
 
-/// Taps the long-conversation workspace row and waits for its transcript,
-/// Go to End button handle and scroll view. A missing last message is
+/// Taps the long-conversation workspace row, then its agent row on the
+/// workspace overview (a workspace tap never auto-opens an agent, ios#349),
+/// and waits for the transcript, Go to End button handle and scroll view.
+/// A missing last message is
 /// reported with the resting state (a viewport past the end may leave the
 /// last row unrealized and off the accessibility hierarchy). `evidence`
 /// arms the launch's evidence record before the first assertion (see
@@ -298,9 +310,10 @@ func openLongConversation(
 /// `openLongConversation` without waiting for the last message, so a
 /// test can observe the transcript's very first settled state. The query
 /// handles are built first and, with `evidence`, the launch is armed for
-/// its evidence record before the workspace-row tap and the existence
-/// assertions, so a launch that never shows its transcript leaves a
-/// record too (the flush reads absent elements as absent, never asserts).
+/// its evidence record before the workspace-row and agent-row taps and
+/// the existence assertions, so a launch that never shows its transcript
+/// leaves a record too (the flush reads absent elements as absent, never
+/// asserts).
 @MainActor
 func enterLongConversation(
     in app: XCUIApplication,
@@ -332,6 +345,20 @@ func enterLongConversation(
         XCTAssertTrue(workspaceRow.waitForExistence(timeout: Fixture.settleTimeout))
     }
     workspaceRow.tap()
+
+    // The Agents/Context switcher exists only on the overview; the agent
+    // name alone would also match an already-open conversation's title.
+    let overview = app.buttons[Fixture.overviewOnlyButton].firstMatch
+    XCTAssertTrue(
+        overview.waitForExistence(timeout: Fixture.settleTimeout),
+        "\(context): workspace overview not shown after the workspace tap"
+    )
+    let agentRow = app.staticTexts[Fixture.agentName].firstMatch
+    XCTAssertTrue(
+        agentRow.waitForExistence(timeout: Fixture.settleTimeout),
+        "\(context): agent row not found on the workspace overview"
+    )
+    agentRow.tap()
 
     XCTAssertTrue(
         opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
@@ -369,17 +396,21 @@ func rows(intersecting transcript: XCUIElement) -> [XCUIElement] {
 /// Navigates back out of the transcript to the workspace list so the
 /// next `openLongConversation` is a fresh entry; relaunches when no back
 /// path leads there (a split view keeps the transcript in its detail column).
+/// Gates on the list's own navigation bar: the workspace title alone also
+/// exists on the overview (its navigation title) and on the transcript
+/// (its back button), where tapping it navigates nowhere.
 @MainActor
 func leaveConversation(in app: XCUIApplication) {
+    let workspaceList = app.navigationBars[Fixture.workspaceListTitle].firstMatch
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     var backTapsLeft = Fixture.backNavigationAttempts
-    while backTapsLeft > 0, !workspaceRow.waitForExistence(timeout: Fixture.backNavigationTimeout) {
+    while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
         let back = app.navigationBars.buttons.element(boundBy: 0)
         guard back.exists else { break }
         back.tap()
         backTapsLeft -= 1
     }
-    if !workspaceRow.waitForExistence(timeout: Fixture.elementTimeout) {
+    if !workspaceList.exists || !workspaceRow.waitForExistence(timeout: Fixture.elementTimeout) {
         app.launch()
     }
 }

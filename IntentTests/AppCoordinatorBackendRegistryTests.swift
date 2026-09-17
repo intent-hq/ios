@@ -367,14 +367,15 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {
-        let wsId = "test-coord-restore-conv-\(UUID().uuidString)"
+    @Test @MainActor func onSelectWorkspace_savedConversationLandsOnOverview() {
+        let wsId = "test-coord-tap-saved-conv-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
             cleanupLastScreen()
         }
 
-        // Save a per-workspace conversation screen
+        // An explicit workspace tap always shows the overview (ios#349): a
+        // saved per-workspace conversation must not forward into the chat.
         persistence.saveWorkspaceScreen(
             workspaceId: wsId,
             screen: PersistenceManager.SavedScreen(
@@ -390,17 +391,15 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case let .agentConversation(agentId, wId, name) = coordinator.currentScreen {
-            #expect(agentId == "agent-x")
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
-            #expect(name == "Tester")
         } else {
-            Issue.record("Expected .agentConversation, got \(coordinator.currentScreen)")
+            Issue.record("A workspace tap must land on the overview, got \(coordinator.currentScreen)")
         }
     }
 
-    @Test @MainActor func onSelectWorkspace_restoresSavedNoteScreen() {
-        let wsId = "test-coord-restore-note-\(UUID().uuidString)"
+    @Test @MainActor func onSelectWorkspace_savedNoteLandsOnOverview() {
+        let wsId = "test-coord-tap-saved-note-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
             cleanupLastScreen()
@@ -421,12 +420,10 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case let .noteDetail(noteId, wId, title) = coordinator.currentScreen {
-            #expect(noteId == "note-abc")
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
-            #expect(title == "My Note")
         } else {
-            Issue.record("Expected .noteDetail, got \(coordinator.currentScreen)")
+            Issue.record("A workspace tap must land on the overview, got \(coordinator.currentScreen)")
         }
     }
 
@@ -453,22 +450,12 @@ extension AppCoordinatorTests {
             cleanupLastScreen()
         }
 
-        // Save a screen and select the workspace
-        persistence.saveWorkspaceScreen(
-            workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "conversation",
-                workspaceId: wsId,
-                agentId: "a",
-                agentName: "A",
-                noteId: nil,
-                noteTitle: nil
-            )
-        )
-
+        // Enter a conversation (which saves the per-workspace screen), then
+        // go back to workspace detail
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
-        // Now go back to workspace detail
+        coordinator.onSelectAgent("a", workspaceId: wsId, agentName: "A")
+        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil)
         coordinator.onBackToWorkspaceDetail()
 
         // The per-workspace screen should be cleared

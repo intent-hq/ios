@@ -274,8 +274,8 @@ struct DemoFixturesTests {
     }
 
     /// The delegates are background sub-agents of the coordinator, so the
-    /// coordinator stays the workspace's only foreground agent (the
-    /// workspace row still auto-opens into its transcript) while the
+    /// coordinator stays the workspace's only foreground agent (the only
+    /// row the UI tests tap on the workspace overview) while the
     /// "Waiting for all" footer has rows to show.
     @Test func longConversationDelegatesAreBackgroundSubAgentsOfTheCoordinator() throws {
         let result = DemoFixtures.response(
