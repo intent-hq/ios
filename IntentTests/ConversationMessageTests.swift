@@ -458,6 +458,14 @@ struct ConversationDecodingIdentityTests {
         #expect(otherType.id != first.id)
     }
 
+    @Test func wireIdAlwaysWins() throws {
+        let block = try #require(ContentBlock.decode(
+            ["id": "wire-9", "type": "text", "text": "x"],
+            fallbackIdentity: .indexed(messageId: "m", index: 0)
+        ))
+        #expect(block.id == "wire-9")
+    }
+
     @Test func deltaEntityIdLessBlockIsStableAndMessageScoped() throws {
         let block: [String: Any] = ["type": "text", "text": "chunk"]
         let entityA: [String: Any] = ["messageId": "msg-a", "block": block]
@@ -468,6 +476,28 @@ struct ConversationDecodingIdentityTests {
         #expect(first.block.id == second.block.id)
         #expect(first.block.id.hasPrefix("msg-a:"))
         #expect(first.block.id != other.block.id)
+    }
+
+    @Test func hydratedBlockWithoutIdKeepsRequestedIdentity() async throws {
+        let idLess: [String: Any] = [
+            "block": ["type": "tool_result", "toolUseId": "tc-1", "output": "full"]
+        ]
+        let decoded = await ConversationLiveTranscript.decodeMessageBlock(
+            InboundJSONValue(value: idLess),
+            blockId: "msg-1:3"
+        )
+        let block = try #require(decoded)
+        #expect(block.id == "msg-1:3")
+
+        let stamped: [String: Any] = [
+            "block": ["id": "msg-1:3", "type": "tool_result", "toolUseId": "tc-1", "output": "full"]
+        ]
+        let decodedStamped = await ConversationLiveTranscript.decodeMessageBlock(
+            InboundJSONValue(value: stamped),
+            blockId: "other"
+        )
+        let stampedBlock = try #require(decodedStamped)
+        #expect(stampedBlock.id == "msg-1:3")
     }
 }
 
