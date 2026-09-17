@@ -151,6 +151,7 @@ $(SRCROOT)/Intent/Services/DeltaSubscription.swift
 $(SRCROOT)/Intent/Services/DemoFixtures.swift
 $(SRCROOT)/Intent/Services/DemoFixturesData.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversation.swift
+$(SRCROOT)/Intent/Services/DemoFixturesLongConversationHydration.swift
 $(SRCROOT)/Intent/Services/DemoFixturesLongConversationRound.swift
 $(SRCROOT)/Intent/Services/GitHubRepoStore.swift
 $(SRCROOT)/Intent/Services/MonitoredPrStore.swift
@@ -360,6 +361,7 @@ $(SRCROOT)/IntentTests/ConversationStoreTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part4.swift
 $(SRCROOT)/IntentTests/ConversationViewModelAttachmentTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelDividerLatchTests.swift
 $(SRCROOT)/IntentTests/ConversationViewModelModelCatalogTests.swift

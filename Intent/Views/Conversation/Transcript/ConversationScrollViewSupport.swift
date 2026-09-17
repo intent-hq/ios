@@ -96,6 +96,17 @@ class ScrollViewMomentumProxy {
         case unavailable
     }
 
+    /// Moves a resting viewport to `offsetY` without animation, so the lazy
+    /// stack lays out the rows there before a follow back to the end (#338);
+    /// false when the scroll view has not been found.
+    @discardableResult
+    func pageTo(offsetY: CGFloat) -> Bool {
+        guard let scrollView else { return false }
+        AppLog.userInterface.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
+        scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
+        return true
+    }
+
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
         AppLog.userInterface.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")

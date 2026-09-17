@@ -9,8 +9,9 @@ import XCTest
 /// hidden on every one of several consecutive entries into the conversation,
 /// hidden — with the last message on screen, no blank band, and the prompt
 /// rows under it on screen — once a cold entry has settled
-/// (intent-hq/ios#304), and hidden after a single tap from the very top of
-/// the transcript (intent-hq/ios#305).
+/// (intent-hq/ios#304), hidden when the hooks row lands after a cold entry or
+/// a slim-truncated tool row hydrates after entry (intent-hq/ios#338), and
+/// hidden after a single tap from the very top of the transcript (#305).
 ///
 /// Every wait is settlement polling on the app's own state, never a guessed
 /// idle delay: a forced follow (entry, Go to End, a send) reports its
@@ -55,21 +56,29 @@ import XCTest
 /// (intent-hq/ios#338) — a second event, a container resize, with its own
 /// outcome, in tests that measure the entry, a tap or a send.
 nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
+    // Trigger URLs are shared with recovery tests extracted into a companion file.
+    // swiftlint:disable test_case_accessibility
     /// The file the fixture's hooks-row gate waits on (see
     /// `Fixture.hooksRowTriggerFileArgumentPrefix`): one path per test
     /// (XCTest instantiates the case per test method), never created unless
     /// the test releases the row.
-    private let hooksRowTriggerFile = FileManager.default.temporaryDirectory
+    let hooksRowTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-hooks-row-\(UUID().uuidString).trigger")
+
+    let blockHydrationTriggerFile = FileManager.default.temporaryDirectory
+        .appendingPathComponent("transcript-block-hydration-\(UUID().uuidString).trigger")
+    // swiftlint:enable test_case_accessibility
 
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
     }
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
+        try? FileManager.default.removeItem(at: blockHydrationTriggerFile)
         try super.tearDownWithError()
     }
 

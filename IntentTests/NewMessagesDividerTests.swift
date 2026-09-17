@@ -100,14 +100,20 @@ struct ConversationTranscriptScrollPolicyTests {
         ) == 200)
     }
 
-    func transition(current: Bool, distanceToBottom: CGFloat, isInteracting: Bool) -> Bool {
+    func transition(
+        current: Bool,
+        distanceToBottom: CGFloat,
+        isInteracting: Bool,
+        isEndRealized: Bool = true
+    ) -> Bool {
         ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: current,
             geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(
                 distanceToBottom: distanceToBottom,
                 atBottomThreshold: 50
             ),
-            isInteracting: isInteracting
+            isInteracting: isInteracting,
+            isEndRealized: isEndRealized
         )
     }
 
@@ -152,6 +158,22 @@ struct ConversationTranscriptScrollPolicyTests {
     @Test func bouncePastEndWhilePinnedStaysPinned() {
         #expect(!transition(current: false, distanceToBottom: -60, isInteracting: true))
         #expect(!transition(current: false, distanceToBottom: -60, isInteracting: false))
+    }
+
+    /// A viewport over an unrealized end row reads "at bottom" while showing
+    /// nothing (#338), so that edge clears neither the scrolled-away state nor
+    /// Go to End until the row realizes. Away edges remain unchanged.
+    @Test func atBottomEdgeOverAnUnrealizedEndRowClearsNothing() {
+        #expect(transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 40, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 0, isInteracting: true, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: -30, isInteracting: false, isEndRealized: false))
+        #expect(!transition(current: false, distanceToBottom: 0, isInteracting: false, isEndRealized: false))
+        #expect(!transition(current: true, distanceToBottom: 0, isInteracting: false, isEndRealized: true))
+        #expect(!transition(current: true, distanceToBottom: 40, isInteracting: true, isEndRealized: true))
+        #expect(transition(current: false, distanceToBottom: 120, isInteracting: true, isEndRealized: false))
+        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false, isEndRealized: false))
+        #expect(transition(current: true, distanceToBottom: 120, isInteracting: false, isEndRealized: false))
     }
 
     func rePinAfterGrowth(

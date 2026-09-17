@@ -290,10 +290,33 @@ extension DemoFixtures {
     ]
 
     static var longConversationMessages: [[String: Any]] {
+        longConversationMessages(slimToolRows: longConversationSlimToolRowLayout)
+    }
+
+    static func longConversationMessages(
+        slimToolRows layout: LongConversationSlimToolRowLayout
+    ) -> [[String: Any]] {
         var rows: [LongConversationRow] = []
         for (index, exchange) in longConversationExchanges.enumerated() {
             rows.append(LongConversationRow(role: "user", contentBlocks: [textBlock(exchange.user)]))
-            rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
+            let truncatedCallIndex = longConversationExchanges.count - 1 - index
+            let truncatedBlocks = if truncatedCallIndex < longConversationTruncatedToolCalls.count {
+                truncatedToolBlocks(longConversationTruncatedToolCalls[truncatedCallIndex])
+            } else {
+                [[String: Any]]()
+            }
+            switch layout {
+            case .leading:
+                rows.append(LongConversationRow(
+                    role: "assistant",
+                    contentBlocks: truncatedBlocks + [textBlock(exchange.assistant)]
+                ))
+            case .standalone:
+                if !truncatedBlocks.isEmpty {
+                    rows.append(LongConversationRow(role: "assistant", contentBlocks: truncatedBlocks))
+                }
+                rows.append(LongConversationRow(role: "assistant", contentBlocks: [textBlock(exchange.assistant)]))
+            }
             if index < longConversationExchanges.count - 1 {
                 rows += longConversationRound(index)
             }
@@ -312,4 +335,5 @@ extension DemoFixtures {
             if !row.metadata.isEmpty { message["metadata"] = row.metadata }
             return message
         }
-    }}
+    }
+}

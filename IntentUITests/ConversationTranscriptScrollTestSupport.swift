@@ -1,5 +1,8 @@
 import XCTest
 
+// Shared diagnostics stay together so every failure reports the same state.
+// swiftlint:disable file_length
+
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
     // Distinctive substrings of DemoFixtures.longConversationFirstSentence
@@ -58,6 +61,12 @@ enum Fixture {
     // delay raced the CI simulator's render time (#285).
     static let hooksRowTriggerFileArgumentPrefix = "--demo-hook-list-trigger-file="
     static let hooksRowTimeout: TimeInterval = 15
+    static let blockHydrationTriggerFileArgumentPrefix = "--demo-block-hydration-trigger-file="
+    static let blockHydrationTimeout: TimeInterval = 15
+    static let slimToolRowLayoutArgumentPrefix = "--demo-long-slim-tool-rows="
+    static let standaloneSlimToolRows = "standalone"
+    static let truncatedToolFileName = "final_evidence_table.py"
+    static let hydrationHintFragment = "full content"
     // Slack for the last message to sit at the same distance from the
     // transcript's bottom edge after the re-pin as before the row (an
     // unpinned transcript is off by the row's full height, ~36 pt).
@@ -71,6 +80,7 @@ enum Fixture {
     static let visibleBandAttempts = 3
     static let followReportPrefix = "lastForcedFollow="
     static let pendingFollowReport = "lastForcedFollow=pending"
+    static let landedFollowReportPrefix = "lastForcedFollow=landed"
     // Cadence of every poll.
     static let pollInterval: TimeInterval = 0.25
     static let workspaceTimeout: TimeInterval = 30
@@ -119,15 +129,25 @@ struct FooterBaseline {
     let messageGap: CGFloat
 }
 
-/// Launches the demo app with the hooks row held back behind
-/// `hooksRowTriggerFile` (see the class comment).
+/// Launches the demo app with footer and hydration responses held behind
+/// their trigger files. `standaloneSlimToolRows` makes truncated tools
+/// independently tappable for the opt-in hydration regression.
 @MainActor
-func launchDemoApp(hooksRowTriggerFile: URL) -> XCUIApplication {
+func launchDemoApp(
+    hooksRowTriggerFile: URL,
+    blockHydrationTriggerFile: URL? = nil,
+    standaloneSlimToolRows: Bool = false
+) -> XCUIApplication {
     let app = XCUIApplication()
-    app.launchArguments += [
-        "--demo-data",
-        Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path
-    ]
+    app.launchArguments += ["--demo-data", Fixture.hooksRowTriggerFileArgumentPrefix + hooksRowTriggerFile.path]
+    if let blockHydrationTriggerFile {
+        app.launchArguments.append(
+            Fixture.blockHydrationTriggerFileArgumentPrefix + blockHydrationTriggerFile.path
+        )
+    }
+    if standaloneSlimToolRows {
+        app.launchArguments.append(Fixture.slimToolRowLayoutArgumentPrefix + Fixture.standaloneSlimToolRows)
+    }
     app.launch()
     return app
 }
@@ -497,3 +517,4 @@ func waitUntilSteady(
     } while Date() < deadline
     return nil
 }
+// swiftlint:enable file_length

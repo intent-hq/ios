@@ -3,6 +3,9 @@ import Foundation
 import Testing
 import UIKit
 
+// Protocol fixtures use exact wire literals and long end-to-end assertions.
+// swiftlint:disable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma
+
 @MainActor
 struct DemoFixturesTests {
     // MARK: - Launch-argument gating
@@ -403,14 +406,150 @@ extension DemoFixturesTests {
         await #expect(throws: CancellationError.self) { try await gate.value }
     }
 
-    @Test func onlyTheLongConversationHookListIsGated() {
+    @Test func onlyTheLongConversationHookListAndBlockHydrationAreGated() {
         let long = ["workspaceId": DemoFixtures.longConversationWorkspaceId]
         #expect(DemoFixtures.responseGate(for: "hook.list", params: long)
             == DemoFixtures.longConversationHookListGate)
         #expect(DemoFixtures.responseGate(for: "hook.list", params: [:]) == nil)
         #expect(DemoFixtures.responseGate(for: "hook.list", params: ["workspaceId": "demo-ws-dashboard"]) == nil)
         #expect(DemoFixtures.responseGate(for: "agent.getConversation", params: long) == nil)
+        #expect(DemoFixtures.responseGate(
+            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId]) == nil)
         #expect(DemoFixtures.responseGate(for: "prMonitor.list", params: long) == nil)
+
+        let hydration = ["agentId": DemoFixtures.longConversationAgentId, "messageId": "m", "blockId": "b"]
+        #expect(DemoFixtures.responseGate(for: "agent.getMessageBlock", params: hydration)
+            == DemoFixtures.longConversationBlockHydrationGate)
+        #expect(DemoFixtures.responseGate(for: "agent.getMessageBlock", params: [:]) == nil)
+        #expect(DemoFixtures.responseGate(
+            for: "agent.getMessageBlock", params: ["agentId": "demo-agent-implementor"]) == nil)
+    }
+
+    // MARK: - Slim-truncated tool rows near the end of the long conversation
+
+    @Test func blockHydrationGateComesFromTheLaunchArguments() {
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data"])
+            == .delay(DemoFixtures.defaultBlockHydrationDelay))
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-data", "--demo-block-hydration-delay-ms=9000"])
+            == .delay(.milliseconds(9_000)))
+        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=0"]) == .zero)
+        #expect(DemoFixtures.blockHydrationDelay(from: ["--demo-block-hydration-delay-ms=abc"])
+            == DemoFixtures.defaultBlockHydrationDelay)
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
+            == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
+        #expect(DemoFixtures.blockHydrationGate(from: [
+            "--demo-block-hydration-delay-ms=9000",
+            "--demo-block-hydration-trigger-file=/tmp/a.trigger",
+            "--demo-block-hydration-trigger-file=",
+        ]) == .triggerFile(URL(fileURLWithPath: "/tmp/a.trigger")))
+        // The two gates read their own arguments only.
+        #expect(DemoFixtures.blockHydrationGate(from: ["--demo-hook-list-trigger-file=/tmp/a.trigger"])
+            == .delay(DemoFixtures.defaultBlockHydrationDelay))
+        #expect(DemoFixtures.hookListGate(from: ["--demo-block-hydration-trigger-file=/tmp/a.trigger"])
+            == .delay(DemoFixtures.defaultHookListDelay))
+    }
+
+    @Test func slimToolRowLayoutComesFromTheLaunchArguments() {
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-data"]) == .leading)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-data", "--demo-long-slim-tool-rows=standalone"])
+            == .standalone)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=leading"]) == .leading)
+        // The last well-formed value wins; unknown values are ignored.
+        #expect(DemoFixtures.slimToolRowLayout(from: [
+            "--demo-long-slim-tool-rows=standalone",
+            "--demo-long-slim-tool-rows=sideways",
+            "--demo-long-slim-tool-rows=",
+        ]) == .standalone)
+        #expect(DemoFixtures.slimToolRowLayout(from: ["--demo-long-slim-tool-rows=sideways"]) == .leading)
+        // `agent.getConversation` serves the process default.
+        let served = DemoFixtures.response(
+            for: "agent.getConversation", params: ["agentId": DemoFixtures.longConversationAgentId])
+        let items = (served as? [String: Any])?["messages"] as? [[String: Any]]
+        let expected = DemoFixtures.longConversationMessages(slimToolRows: DemoFixtures.longConversationSlimToolRowLayout)
+        #expect(items?.compactMap { $0["id"] as? String } == expected.compactMap { $0["id"] as? String })
+        #expect(items?.count == expected.count)
+    }
+
+    @Test(arguments: DemoFixtures.LongConversationSlimToolRowLayout.allCases)
+    func lastAssistantMessagesCarrySlimTruncatedToolRowsThatHydrateInFull(
+        layout: DemoFixtures.LongConversationSlimToolRowLayout
+    ) throws {
+        let items = DemoFixtures.longConversationMessages(slimToolRows: layout)
+        let messages = items.compactMap { ConversationMessage.parseMessage($0) }
+        #expect(messages.count == items.count)
+        #expect(Set(items.compactMap { $0["id"] as? String }).count == items.count)
+        let calls = DemoFixtures.longConversationTruncatedToolCalls
+        #expect(calls.count == 2)
+
+        // The first call sits with the very last (assistant text) message,
+        // the second with the assistant text message of the exchange before
+        // it; no other row is truncated.
+        let truncatedIndices = messages.indices.filter { index in
+            messages[index].contentBlocks.contains { $0.isSlimTruncated }
+        }
+        #expect(truncatedIndices.count == calls.count)
+        let last = try #require(messages.last)
+        #expect(last.role == .assistant)
+        switch layout {
+        case .leading:
+            #expect(truncatedIndices.last == messages.count - 1)
+        case .standalone:
+            #expect(truncatedIndices.last == messages.count - 2)
+            #expect(last.contentBlocks.allSatisfy { $0.type == .text })
+        }
+
+        for (call, index) in zip(calls, truncatedIndices.reversed()) {
+            let message = messages[index]
+            let blocks = message.contentBlocks
+            #expect(message.role == .assistant)
+            switch layout {
+            case .leading:
+                // The row opens a text-bearing message — the shape that
+                // reproduced intent-hq/ios#338 (CI run 35100409278).
+                #expect(blocks.first?.id == call.id)
+                #expect(blocks.last?.type == .text)
+            case .standalone:
+                // A tool-only assistant message (no text, so no copy
+                // context-menu overlay claims the row's taps, intent-hq/ios#344)
+                // right before a text message.
+                #expect(blocks.allSatisfy { $0.type == .toolUse || $0.type == .toolResult })
+                let following = messages[index + 1]
+                #expect(following.role == .assistant)
+                #expect(following.contentBlocks.contains { $0.type == .text })
+            }
+            let toolUse = try #require(blocks.first { $0.id == call.id })
+            #expect(toolUse.type == .toolUse)
+            #expect(!toolUse.inputTruncation.isTruncated)
+            #expect(toolUse.input["path"]?.value as? String == call.file)
+            let slimResult = try #require(blocks.first { $0.resolvedToolUseId == call.id })
+            #expect(slimResult.type == .toolResult)
+            #expect(slimResult.outputTruncation.isTruncated)
+            let preview = try #require(slimResult.output?.value as? String)
+            #expect(preview.count == DemoFixtures.truncatedOutputPreviewLength)
+
+            let hydrated = DemoFixtures.response(for: "agent.getMessageBlock", params: [
+                "agentId": DemoFixtures.longConversationAgentId,
+                "messageId": message.id,
+                "blockId": slimResult.id,
+            ])
+            let dict = try #require(hydrated as? [String: Any])
+            let blockDict = try #require(dict["block"] as? [String: Any])
+            let full = try #require(ContentBlock.decode(blockDict))
+            #expect(full.id == slimResult.id)
+            #expect(full.type == .toolResult)
+            #expect(full.resolvedToolUseId == call.id)
+            #expect(!full.outputTruncation.isTruncated)
+            let fullOutput = try #require(full.output?.value as? String)
+            #expect(fullOutput.hasPrefix(preview))
+            #expect(fullOutput.utf8.count == slimResult.outputBytes)
+            #expect(fullOutput.split(separator: "\n").count >= 50)
+            #expect(fullOutput.contains(call.symbol))
+        }
+
+        let unknown = DemoFixtures.response(
+            for: "agent.getMessageBlock",
+            params: ["agentId": DemoFixtures.longConversationAgentId, "blockId": "demo-long-tool-1-view-result"])
+        #expect(try #require(unknown as? [String: Any]).isEmpty)
     }
 
     @Test func taskListFixtureParses() throws {
@@ -466,3 +605,4 @@ extension DemoFixturesTests {
         #expect(!text.contains("bearer"))
     }
 }
+// swiftlint:enable file_length function_body_length multiline_arguments_brackets number_separator trailing_comma
