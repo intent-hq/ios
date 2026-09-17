@@ -321,6 +321,48 @@ extension AppCoordinatorTests {
         )
     }
 
+    @Test @MainActor func onConnectionSuccess_restoredConversationAlive_staysOnConversation() async {
+        let wsId = "test-coord-restore-conversation-alive-\(UUID().uuidString)"
+        defer {
+            persistence.clearWorkspaceScreen(workspaceId: wsId)
+            cleanupLastScreen()
+        }
+
+        let savedScreen = PersistenceManager.SavedScreen(
+            screen: "conversation",
+            workspaceId: wsId,
+            agentId: "agent-live",
+            agentName: "Restored Worker",
+            noteId: nil,
+            noteTitle: nil
+        )
+        persistence.saveLastScreen(savedScreen, for: Self.windowBackend.connectionID)
+
+        let store = WorkspaceStore(forTesting: true)
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.get"] = ["agent": ["id": "agent-live"]] as [String: Any]
+        fake.responseMap["workspace.markSeen"] = [String: Any]()
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake, backendID: Self.windowBackend, persistence: persistence
+        )
+
+        coordinator.onConnectionSuccess()
+        await Self.drainMainQueue()
+
+        let validations = fake.paramsForMethod("agent.get")
+        #expect(validations.count == 1, "Cold-launch conversation restoration must validate its agent")
+        #expect(validations.first?["agentId"] as? String == "agent-live")
+        #expect(validations.first?["workspaceId"] as? String == wsId)
+        #expect(coordinator.selectedWorkspaceId == wsId)
+        if case let .agentConversation(agentId, workspaceId, agentName) = coordinator.currentScreen {
+            #expect(agentId == "agent-live")
+            #expect(workspaceId == wsId)
+            #expect(agentName == "Restored Worker")
+        } else {
+            Issue.record("Expected a live saved conversation after cold launch, got \(coordinator.currentScreen)")
+        }
+    }
+
     @Test @MainActor func onConnectionSuccess_windowWithoutRestorationClaimLandsOnList() {
         defer {
             cleanupLastScreen()

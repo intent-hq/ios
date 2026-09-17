@@ -84,7 +84,7 @@ nonisolated final class RootNavigationUITests: XCTestCase {
 
         reenterWorkspace(named: Demo.workspace, in: app)
         XCTAssertTrue(waitForHittable(note), "Workspace re-entry must preserve the Context tab")
-        XCTAssertFalse(noteBar.exists, "A saved note must not open on workspace re-entry")
+        XCTAssertFalse(noteBar.exists, "Back followed by workspace re-entry must not reopen the note")
         note.tap()
         XCTAssertTrue(noteBar.waitForExistence(timeout: 15), "Explicit note selection must still work")
     }
@@ -99,7 +99,7 @@ nonisolated final class RootNavigationUITests: XCTestCase {
             "Explicit workspace entry must remain on the overview after its sole agent loads"
         )
         RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-        XCTAssertTrue(agent.isHittable, "A late agent update must not auto-forward the workspace entry")
+        XCTAssertTrue(agent.isHittable, "The sole-agent overview must remain visible before explicit agent selection")
 
         agent.tap()
         let message = app.staticTexts
@@ -110,7 +110,7 @@ nonisolated final class RootNavigationUITests: XCTestCase {
         navigateBackFromConversation(in: app, agentName: Demo.soleAgent, workspaceName: Demo.soleAgentWorkspace)
         XCTAssertTrue(waitForHittable(agent))
         reenterWorkspace(named: Demo.soleAgentWorkspace, in: app)
-        XCTAssertTrue(waitForHittable(agent), "Saved conversation must not open on workspace re-entry")
+        XCTAssertTrue(waitForHittable(agent), "Back followed by workspace re-entry must return to the overview")
         XCTAssertFalse(message.exists)
         agent.tap()
         XCTAssertTrue(message.waitForExistence(timeout: 15), "Explicit agent reselection must still work")
@@ -155,9 +155,8 @@ nonisolated final class RootNavigationUITests: XCTestCase {
     ) {
         let bar = app.navigationBars[agentName].firstMatch
         let workspaceBack = bar.buttons[workspaceName].firstMatch
-        let back = workspaceBack.exists ? workspaceBack : bar.buttons["Back"].firstMatch
-        XCTAssertTrue(waitForHittable(back), "Expected the conversation's Back button, not the sidebar toggle")
-        back.tap()
+        XCTAssertTrue(waitForHittable(workspaceBack), "Expected the conversation's workspace-named Back button")
+        workspaceBack.tap()
         XCTAssertTrue(waitForHittable(app.buttons["Context"].firstMatch), "Back must reveal the workspace overview")
     }
 
