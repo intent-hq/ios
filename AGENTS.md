@@ -28,11 +28,10 @@ crashed suite, or mutation checks use the subset forms — `scripts/xcodebuild.s
 test-ios-unit` (skips the `IntentUITests` bundle) and
 `ONLY_TESTING='IntentTests/SomeTests ...' scripts/xcodebuild.sh test-without-building`
 (one `-only-testing:` per whitespace-separated `Target[/Class[/method]]`; also honoured
-by `test-ios` and `test-ios-unit`). Selectors are `Target/Suite` names as xcodebuild
-enumerates them, not file names: the wrapper resolves each against the built revision's
-test catalog (`xcodebuild -enumerate-tests`) before running and exits 82 naming any
-selector that matches nothing (with look-alike suggestions), or 83 when the catalog
-could not be enumerated. `gh workflow run ci.yml --repo intent-hq/ios --ref
+by `test-ios` and `test-ios-unit`). Selectors are enumerated `Target/Suite` names, not
+file names: the wrapper resolves each against `xcodebuild -enumerate-tests` first and
+exits 82 naming any unmatched selector (with look-alike suggestions), or 83 when the
+catalog could not be enumerated. `gh workflow run ci.yml --repo intent-hq/ios --ref
 <branch> -f only_testing='IntentTests/SomeTests'` runs the same filter in CI as a
 non-gating `iOS Filtered Tests` job. iOS builds link the gitignored prebuilt
 `TailcatKit/build/TailcatKit.xcframework`: `scripts/xcodebuild.sh` builds it via
