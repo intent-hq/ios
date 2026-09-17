@@ -25,6 +25,9 @@ final class ConversationTranscriptScrollState {
     /// follow's drain (or its cancellation) resolves it (see
     /// `ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow`).
     @ObservationIgnored var unrealizedEndGiveUpDeferredToFollow = false
+    /// Pending settle re-check of a pinned viewport that a geometry edge (or
+    /// streaming ending) read within the at-bottom band (#346).
+    @ObservationIgnored var bottomBandRePinTask: Task<Void, Never>?
     var userIsScrolledAway = false
     /// True while SwiftUI reports a user-driven scroll phase (tracking,
     /// interacting, decelerating); read next to the UIScrollView flags when a
