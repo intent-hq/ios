@@ -153,7 +153,7 @@ struct TranscriptDecodingMeasurementTests {
 private extension Duration {
     private static let microsecondsPerSecond: Int64 = 1_000_000
     private static let attosecondsPerMicrosecond: Int64 = 1_000_000_000_000
-    private static let microsecondsPerMillisecond = 1_000.0
+    private static let microsecondsPerMillisecond = 1000.0
 
     var microseconds: Int64 {
         components.seconds * Self.microsecondsPerSecond + components.attoseconds / Self.attosecondsPerMicrosecond

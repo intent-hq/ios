@@ -106,15 +106,7 @@ private extension ConversationTranscriptView {
     ) -> some View {
         transcriptScrollBase(proxy: proxy, dividerAnchorId: dividerAnchorId)
             .onChange(of: viewModel.filteredMessages.count) { oldCount, newCount in
-                let appendedUserMessage = newCount > oldCount
-                    && viewModel.filteredMessages.last?.role == .user
-                if appendedUserMessage {
-                    claimViewportForExplicitFollow(proxy: proxy)
-                    userIsScrolledAway = false
-                }
-                if shouldFollowToBottom {
-                    scrollToBottom(proxy: proxy, forced: appendedUserMessage)
-                }
+                handleMessageCountChange(from: oldCount, to: newCount, proxy: proxy)
             }
             .onChange(of: viewModel.isStreaming) { _, isStreaming in
                 if ConversationTranscriptScrollPolicy.shouldFollowOnStreamingStateChange(
@@ -161,6 +153,18 @@ private extension ConversationTranscriptView {
                     scrollToBottom(proxy: proxy, forced: true)
                 }
             }
+    }
+
+    private func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
+        let appendedUserMessage = newCount > oldCount
+            && viewModel.filteredMessages.last?.role == .user
+        if appendedUserMessage {
+            claimViewportForExplicitFollow(proxy: proxy)
+            userIsScrolledAway = false
+        }
+        if shouldFollowToBottom {
+            scrollToBottom(proxy: proxy, forced: appendedUserMessage)
+        }
     }
 
     private var shouldFollowToBottom: Bool {
@@ -754,22 +758,8 @@ private extension ConversationTranscriptView {
         }
 
         ForEach(viewModel.filteredMessages) { message in
-            MessageView(
-                message: message,
-                workspaceId: viewModel.workspaceId,
-                onNavigateToNote: onNavigateToNote,
-                onNavigateToAgent: onNavigateToAgent,
-                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
-            ) { blockId in
-                let messageId = message.id
-                Task {
-                    await viewModel.store.hydrateBlock(
-                        messageId: messageId,
-                        blockId: blockId
-                    )
-                }
-            }
-            .id(message.id)
+            messageRow(for: message)
+                .id(message.id)
             if message.id == dividerAnchorId {
                 NewMessagesDividerView()
                     .id("new-messages-divider")
@@ -818,6 +808,24 @@ private extension ConversationTranscriptView {
             // a dropped end row.
             Color.clear.frame(height: Layout.bottomAnchorHeight)
                 .padding(.bottom, Layout.bottomAnchorPadding)
+        }
+    }
+
+    private func messageRow(for message: ConversationMessage) -> some View {
+        MessageView(
+            message: message,
+            workspaceId: viewModel.workspaceId,
+            onNavigateToNote: onNavigateToNote,
+            onNavigateToAgent: onNavigateToAgent,
+            hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
+        ) { blockId in
+            let messageId = message.id
+            Task {
+                await viewModel.store.hydrateBlock(
+                    messageId: messageId,
+                    blockId: blockId
+                )
+            }
         }
     }
 

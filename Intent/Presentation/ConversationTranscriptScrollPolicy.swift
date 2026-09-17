@@ -163,7 +163,7 @@ enum ConversationTranscriptScrollPolicy {
     static func deferredContainerRePinDecision(
         distanceToBottom: CGFloat?,
         isInteracting: Bool,
-        isFollowing: Bool = false,
+        isFollowing: Bool,
         hasInitiallyScrolled: Bool,
         userIsScrolledAway: Bool,
         driftTolerance: CGFloat = Constants.Conversation.Transcript.streamingFollowDriftTolerance,
@@ -183,14 +183,14 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum BottomBandRePinDecision: Equatable {
+        /// Following, but under the finger, decelerating, or with a follow
+        /// in flight; re-check on settle.
+        case deferred
         /// Not following (scrolled away, or before the entry scroll), or the
         /// viewport rests within `driftTolerance` of the bottom, at a
         /// negative distance the past-end clamp owns (#271), or at an
         /// unknown distance.
         case none
-        /// Following, but under the finger, decelerating, or with a follow
-        /// in flight; re-check on settle.
-        case deferred
         /// Following and settled, with no gesture, at rest more than
         /// `driftTolerance` short of the bottom — past `atBottomThreshold`
         /// included: the automatic follow re-validates that distance and,
@@ -822,39 +822,41 @@ enum ConversationTranscriptScrollPolicy {
         return "\(summary) \(endRecovery)"
     }
 
+    /// How the last unrealized-end recovery episode resolved
+    /// (`UnrealizedEndRecoveryReport.reason`).
+    enum UnrealizedEndRecoveryReason: String, Equatable {
+        /// The episode's task was cancelled (a takeover or the view
+        /// disappearing) before it resolved.
+        case cancelled
+        /// The budget was spent or the timeout hit over an unrealized
+        /// end row; Go to End is shown.
+        case gaveUp
+        /// The last episode resolved without spending a correction.
+        case noCorrectionNeeded
+        /// No episode was ever armed on this transcript.
+        case notAttempted
+        /// The last episode corrected the viewport at least once and the
+        /// end row was realized when it resolved.
+        case recovered
+        /// An episode is armed and has not resolved.
+        case recovering
+        /// The last episode corrected the viewport and resolved as
+        /// nothing left to do (not following, content short of the
+        /// container) with the end row still unrealized: not recovered,
+        /// and not a give-up either — the budget was not spent and Go
+        /// to End is not shown.
+        case unverified
+        /// A gesture, a rest away or a follow claimed the viewport.
+        case yieldedToUser
+    }
+
     /// The unrealized-end recovery's demo-only report: how the last episode
     /// resolved, with the evidence the label rests on. Reported by
     /// `unrealizedEndRecoveryReport`, which alone decides the reason, so a
     /// reader cannot be told `recovered` by a resolution that never
     /// realized the end row.
     struct UnrealizedEndRecoveryReport: Equatable {
-        enum Reason: String, Equatable {
-            /// The episode's task was cancelled (a takeover or the view
-            /// disappearing) before it resolved.
-            case cancelled
-            /// The budget was spent or the timeout hit over an unrealized
-            /// end row; Go to End is shown.
-            case gaveUp
-            /// The last episode resolved without spending a correction.
-            case noCorrectionNeeded
-            /// No episode was ever armed on this transcript.
-            case notAttempted
-            /// The last episode corrected the viewport at least once and the
-            /// end row was realized when it resolved.
-            case recovered
-            /// An episode is armed and has not resolved.
-            case recovering
-            /// The last episode corrected the viewport and resolved as
-            /// nothing left to do (not following, content short of the
-            /// container) with the end row still unrealized: not recovered,
-            /// and not a give-up either — the budget was not spent and Go
-            /// to End is not shown.
-            case unverified
-            /// A gesture, a rest away or a follow claimed the viewport.
-            case yieldedToUser
-        }
-
-        let reason: Reason
+        let reason: UnrealizedEndRecoveryReason
         /// Corrections the last episode spent.
         let corrections: Int
         /// Episodes armed on this transcript so far.
@@ -906,7 +908,7 @@ enum ConversationTranscriptScrollPolicy {
         episodes: Int,
         endRealized: Bool,
         cancelled: Bool
-    ) -> UnrealizedEndRecoveryReport.Reason {
+    ) -> UnrealizedEndRecoveryReason {
         guard episodes > 0 else { return .notAttempted }
         if cancelled { return .cancelled }
         guard let outcome else { return .recovering }
