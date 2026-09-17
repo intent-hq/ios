@@ -11,7 +11,8 @@ struct ConditionWaitFailure: Error, CustomStringConvertible {
 }
 
 /// Poll cadence shared by the bounded condition waits below.
-private let kConditionPollInterval: Duration = .milliseconds(5)
+private let kConditionPollIntervalMilliseconds = 5
+private let kConditionPollInterval: Duration = .milliseconds(kConditionPollIntervalMilliseconds)
 
 /// Bounded poll until `condition` holds. Throws `ConditionWaitFailure` naming
 /// the call site on timeout. Use this instead of a fixed `Task.sleep` after

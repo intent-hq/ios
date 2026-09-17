@@ -201,9 +201,14 @@ struct FakeConnectionManagerTests {
 
     // MARK: - Bounded condition waits (ios#261)
 
+    private static let shortTimeoutMilliseconds = 20
+
     @Test func waitUntilThrowsOnTimeoutInsteadOfContinuing() async {
         await #expect(throws: ConditionWaitFailure.self) {
-            try await waitUntil("a condition that never holds", timeout: .milliseconds(20)) { false }
+            try await waitUntil(
+                "a condition that never holds",
+                timeout: .milliseconds(Self.shortTimeoutMilliseconds)
+            ) { false }
         }
     }
 

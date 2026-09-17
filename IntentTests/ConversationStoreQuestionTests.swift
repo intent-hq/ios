@@ -397,16 +397,17 @@ extension ConversationStoreTests {
         try await waitUntil("the buffered turn boundary to refresh the marker") {
             store.pendingQuestionsMessageId == "a1"
         }
+        // One refresh regardless of how many boundaries were buffered.
+        try await expectNever("a second agent.get for the buffered boundaries") {
+            fake.requestLog.filter { $0.method == "agent.get" }.count > 1
+        }
 
         #expect(!store.isLoading)
         #expect(
             store.pendingQuestionsMessageId == "a1",
             "the buffered turn boundary still refreshes the marker after load"
         )
-        #expect(
-            fake.requestLog.filter { $0.method == "agent.get" }.count == 1,
-            "one refresh regardless of how many boundaries were buffered"
-        )
+        #expect(fake.requestLog.filter { $0.method == "agent.get" }.count == 1)
     }
 
     @Test func agentUpdatedEventWithoutPendingMarkerLeavesItUntouched() async {
