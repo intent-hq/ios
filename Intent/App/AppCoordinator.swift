@@ -293,14 +293,14 @@ extension AppCoordinator {
 
         // Check if workspace exists at all
         guard let workspace = workspaces.first(where: { $0.id == wsId }) else {
-            handleMissingWorkspace(workspaceId: wsId)
+            handleMissingWorkspace()
             return
         }
 
         // Check if workspace is archived or deleted
         let status = workspace.status?.lowercased() ?? ""
         if status == "archived" || status == "deleted" {
-            handleMissingWorkspace(workspaceId: wsId)
+            handleMissingWorkspace()
         }
     }
 }
