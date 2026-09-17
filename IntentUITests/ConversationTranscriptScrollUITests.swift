@@ -12,11 +12,10 @@ import XCTest
 /// (intent-hq/ios#304), hidden when the hooks row lands after a cold entry or
 /// a slim-truncated tool row hydrates after entry (intent-hq/ios#338),
 /// hidden after a single tap from the very top of the transcript (#305),
-/// and — the controlled cases in `+Recovery` — absent once the real
-/// unrealized-end recovery recovered an end row the fixture withdrew on the
-/// test's signal, present once it gave up over one kept withdrawn (see
-/// `Fixture.endDerealizationTriggerFileArgumentPrefix`). Those launches and
-/// the cold-entry ones attach a JSON evidence record (`armRecoveryEvidence`).
+/// and — the controlled cases in `+Recovery` — absent once the real recovery
+/// recovered an end row the fixture withdrew on the test's signal, present
+/// once it gave up over one kept withdrawn. Those launches and the cold-entry
+/// ones attach a JSON evidence record (`recoveryEvidence`).
 ///
 /// Every wait is settlement polling on the app's own state, never a guessed
 /// idle delay: a forced follow (entry, Go to End, a send) reports its
@@ -79,9 +78,8 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
     let endDerealizationTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-end-derealization-\(UUID().uuidString).trigger")
 
-    /// The launch whose evidence record is still owed (see
-    /// `armRecoveryEvidence`): flushed by `attachRecoveryEvidence`, or in
-    /// `tearDownWithError` when a failing assertion halted the test first.
+    /// The launch whose evidence record is still owed (see `recoveryEvidence`):
+    /// flushed by `attachRecoveryEvidence`, or in teardown after a failure.
     var pendingRecoveryEvidence: PendingRecoveryEvidence?
     // swiftlint:enable test_case_accessibility
 
@@ -95,8 +93,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         // XCTest runs teardown on the main thread, so the main-actor hop is
-        // sound; the nonisolated(unsafe) capture keeps the non-Sendable test
-        // case out of the region check when entering the main-actor closure.
+        // sound; nonisolated(unsafe) keeps the test case out of the region check.
         nonisolated(unsafe) let test = self
         MainActor.assumeIsolated { test.attachPendingRecoveryEvidence() }
         try? FileManager.default.removeItem(at: hooksRowTriggerFile)
@@ -375,11 +372,14 @@ extension ConversationTranscriptScrollUITests {
         for cycle in 1 ... Fixture.entryCycles {
             let context = "cold entry \(cycle)/\(Fixture.entryCycles)"
             let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
-            let opened = enterLongConversation(in: app, context: context)
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
+            let opened = enterLongConversation(
+                in: app,
+                context: context,
+                evidence: recoveryEvidence(cycle: cycle, endRow: endRow)
+            )
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
-            let endRow = EndRow.lastSuggestedPrompt(in: app)
-            armRecoveryEvidence(context: context, cycle: cycle, in: opened, endRow: endRow)
 
             // 1. Settled: the entry follow has reported and the last message
             //    rests inside the transcript. An unrealized last message (the

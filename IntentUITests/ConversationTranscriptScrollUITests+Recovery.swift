@@ -19,18 +19,15 @@ extension ConversationTranscriptScrollUITests {
                 hooksRowTriggerFile: hooksRowTriggerFile,
                 blockHydrationTriggerFile: blockHydrationTriggerFile
             )
-            let opened = enterLongConversation(in: app, context: context)
+            let endRow = EndRow.lastSuggestedPrompt(in: app)
+            let opened = enterLongConversation(
+                in: app,
+                context: context,
+                evidence: recoveryEvidence(cycle: cycle, endRow: endRow, settledLaunches: settledLaunches)
+            )
             let lastMessage = opened.lastMessage
             let transcript = opened.transcript
-            let endRow = EndRow.lastSuggestedPrompt(in: app)
             let hooksRow = app.staticTexts[Fixture.hooksRowLabel].firstMatch
-            armRecoveryEvidence(
-                context: context,
-                cycle: cycle,
-                settledLaunches: settledLaunches,
-                in: opened,
-                endRow: endRow
-            )
 
             guard waitUntilSettled(
                 on: lastMessage,
@@ -111,10 +108,13 @@ extension ConversationTranscriptScrollUITests {
             hooksRowTriggerFile: hooksRowTriggerFile,
             endDerealization: EndDerealization(triggerFile: endDerealizationTriggerFile, mode: .release)
         )
-        let opened = openLongConversation(in: app, context: context)
-        let lastMessage = opened.lastMessage
         let endRow = EndRow.lastSuggestedPrompt(in: app)
-        armRecoveryEvidence(context: context, cycle: 1, in: opened, endRow: endRow)
+        let opened = openLongConversation(
+            in: app,
+            context: context,
+            evidence: recoveryEvidence(cycle: 1, endRow: endRow)
+        )
+        let lastMessage = opened.lastMessage
 
         // 1. Settled at the end with a terminal report: the baseline.
         guard let baseline = settledRecoveryBaseline(
@@ -191,10 +191,13 @@ extension ConversationTranscriptScrollUITests {
             hooksRowTriggerFile: hooksRowTriggerFile,
             endDerealization: EndDerealization(triggerFile: endDerealizationTriggerFile, mode: .hold)
         )
-        let opened = openLongConversation(in: app, context: context)
-        let lastMessage = opened.lastMessage
         let endRow = EndRow.lastSuggestedPrompt(in: app)
-        armRecoveryEvidence(context: context, cycle: 1, in: opened, endRow: endRow)
+        let opened = openLongConversation(
+            in: app,
+            context: context,
+            evidence: recoveryEvidence(cycle: 1, endRow: endRow)
+        )
+        let lastMessage = opened.lastMessage
 
         // 1. Settled at the end with a terminal report: the baseline.
         guard let baseline = settledRecoveryBaseline(
@@ -354,26 +357,17 @@ extension ConversationTranscriptScrollUITests {
 // and its teardown.
 // swiftlint:disable test_case_accessibility
 extension ConversationTranscriptScrollUITests {
-    /// Arms the launch for its evidence record as soon as the conversation
-    /// is open, before any assertion on it: `attachRecoveryEvidence` takes
-    /// the record on the ordinary path, and `tearDownWithError` takes it
-    /// when a failing assertion halted the test first, so every launch
-    /// leaves one whether it passed, failed or never settled.
+    /// The arming `enterLongConversation` performs before its first
+    /// assertion: the record it builds lands in `pendingRecoveryEvidence`.
+    /// `attachRecoveryEvidence` takes the record on the ordinary path, and
+    /// `tearDownWithError` takes it when a failing assertion halted the
+    /// test first, so every launch leaves one whether it passed, failed,
+    /// never settled or never showed its transcript.
     @MainActor
-    func armRecoveryEvidence(
-        context: String,
-        cycle: Int,
-        settledLaunches: Int? = nil,
-        in opened: OpenConversation,
-        endRow: EndRow
-    ) {
-        pendingRecoveryEvidence = PendingRecoveryEvidence(
-            context: context,
-            cycle: cycle,
-            settledLaunches: settledLaunches,
-            opened: opened,
-            endRow: endRow
-        )
+    func recoveryEvidence(cycle: Int, endRow: EndRow, settledLaunches: Int? = nil) -> RecoveryEvidenceArming {
+        RecoveryEvidenceArming(cycle: cycle, endRow: endRow, settledLaunches: settledLaunches) { pending in
+            self.pendingRecoveryEvidence = pending
+        }
     }
 
     /// Attaches the armed launch's record now, under `context` when given

@@ -223,6 +223,17 @@ struct PendingRecoveryEvidence {
     let endRow: EndRow
 }
 
+/// How `enterLongConversation` arms a launch for its evidence record
+/// before the first assertion on it: the record's identity, and `arm`,
+/// which hands the built record to the test case (see
+/// `ConversationTranscriptScrollUITests.recoveryEvidence`).
+struct RecoveryEvidenceArming {
+    let cycle: Int
+    let endRow: EndRow
+    let settledLaunches: Int?
+    let arm: @MainActor (PendingRecoveryEvidence) -> Void
+}
+
 /// Launches the demo app with footer and hydration responses held behind
 /// their trigger files. `standaloneSlimToolRows` makes truncated tools
 /// independently tappable for the opt-in hydration regression, and
@@ -258,10 +269,16 @@ func launchDemoApp(
 /// Taps the long-conversation workspace row and waits for its transcript,
 /// Go to End button handle and scroll view. A missing last message is
 /// reported with the resting state (a viewport past the end may leave the
-/// last row unrealized and off the accessibility hierarchy).
+/// last row unrealized and off the accessibility hierarchy). `evidence`
+/// arms the launch's evidence record before the first assertion (see
+/// `enterLongConversation`).
 @MainActor
-func openLongConversation(in app: XCUIApplication, context: String = "after opening") -> OpenConversation {
-    let opened = enterLongConversation(in: app, context: context)
+func openLongConversation(
+    in app: XCUIApplication,
+    context: String = "after opening",
+    evidence: RecoveryEvidenceArming? = nil
+) -> OpenConversation {
+    let opened = enterLongConversation(in: app, context: context, evidence: evidence)
     XCTAssertTrue(
         opened.lastMessage.waitForExistence(timeout: Fixture.settleTimeout),
         "\(context): last transcript message never appeared — "
@@ -271,9 +288,34 @@ func openLongConversation(in app: XCUIApplication, context: String = "after open
 }
 
 /// `openLongConversation` without waiting for the last message, so a
-/// test can observe the transcript's very first settled state.
+/// test can observe the transcript's very first settled state. The query
+/// handles are built first and, with `evidence`, the launch is armed for
+/// its evidence record before the workspace-row tap and the existence
+/// assertions, so a launch that never shows its transcript leaves a
+/// record too (the flush reads absent elements as absent, never asserts).
 @MainActor
-func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConversation {
+func enterLongConversation(
+    in app: XCUIApplication,
+    context: String,
+    evidence: RecoveryEvidenceArming? = nil
+) -> OpenConversation {
+    let opened = OpenConversation(
+        lastMessage: message(in: app, containing: Fixture.lastMessageFragment),
+        goToEnd: app.buttons[Fixture.goToEndIdentifier].firstMatch,
+        transcript: app.scrollViews[Fixture.transcriptIdentifier].firstMatch
+    )
+    if let evidence {
+        evidence.arm(
+            PendingRecoveryEvidence(
+                context: context,
+                cycle: evidence.cycle,
+                settledLaunches: evidence.settledLaunches,
+                opened: opened,
+                endRow: evidence.endRow
+            )
+        )
+    }
+
     let workspaceRow = app.staticTexts[Fixture.workspaceTitle].firstMatch
     if !workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout) {
         // Same fallback as AppStoreScreenshotTests: a collapsed iPad
@@ -283,14 +325,11 @@ func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConv
     }
     workspaceRow.tap()
 
-    let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
-    let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
-    let transcript = app.scrollViews[Fixture.transcriptIdentifier].firstMatch
     XCTAssertTrue(
-        transcript.waitForExistence(timeout: Fixture.elementTimeout),
+        opened.transcript.waitForExistence(timeout: Fixture.elementTimeout),
         "\(context): transcript scroll view not found"
     )
-    return OpenConversation(lastMessage: lastMessage, goToEnd: goToEnd, transcript: transcript)
+    return opened
 }
 
 /// The transcript's static-text rows whose frames intersect its own
@@ -574,61 +613,78 @@ func recoveryReport(in opened: OpenConversation) -> EndRecoveryReport? {
 /// `endRecovery` fields, Go to End presence, the end row's gap from the
 /// transcript's bottom edge and where its frame lies (ABOVE / INSIDE /
 /// BELOW / CLIPPED_TOP / CLIPPED_BOTTOM / UNREALIZED, the classification
-/// `restingState` spells out), the transcript frame, a timestamp — and,
-/// for a repeated scenario, `settledLaunches`, the launches that had
-/// reached the settle assertion. No message text or fixture strings.
+/// `restingState` spells out, or NO_TRANSCRIPT), the transcript frame, a
+/// timestamp — and, for a repeated scenario, `settledLaunches`, the
+/// launches that had reached the settle assertion. No message text or
+/// fixture strings. The transcript is read from one `snapshot()` and
+/// every field it feeds is null when it is absent: the record is taken
+/// from teardown after a failed launch too, so it never asserts.
 @MainActor
 func recoveryEvidenceRecord(of pending: PendingRecoveryEvidence, test testMethodName: String) -> [String: Any] {
     let opened = pending.opened
-    let report = followReport(in: opened)
-    let transcriptFrame = opened.transcript.frame
+    let transcript = try? opened.transcript.snapshot()
+    let report = transcript?.value as? String
+    let parsed = report.flatMap { EndRecoveryReport(followReport: $0) }
+    let transcriptFrame = transcript?.frame
+    let rowFrame = frame(of: pending.endRow.element)
+    var gap: Double?
+    if let transcriptFrame, let rowFrame {
+        gap = Double(transcriptFrame.maxY - rowFrame.maxY)
+    }
     var record: [String: Any] = [
         "test": testMethodName,
         "cycle": pending.cycle,
         "context": pending.context,
-        "followReport": report,
+        "followReport": jsonValue(report),
         "goToEndPresent": opened.goToEnd.exists,
-        "transcriptFrame": evidenceRecord(of: transcriptFrame),
+        "transcriptFrame": jsonValue(transcriptFrame.map { evidenceRecord(of: $0) }),
+        "endRecovery": jsonValue(parsed.map { evidenceRecord(of: $0) }),
+        "endRowPosition": evidencePosition(of: rowFrame, in: transcriptFrame),
+        "endRowGap": jsonValue(gap),
+        "endRowFrame": jsonValue(rowFrame.map { evidenceRecord(of: $0) }),
         "timestamp": ISO8601DateFormatter().string(from: Date())
     ]
     if let settledLaunches = pending.settledLaunches {
         record["settledLaunches"] = settledLaunches
     }
-    if let parsed = EndRecoveryReport(followReport: report) {
-        record["endRecovery"] = [
-            "reason": parsed.reason,
-            "corrections": parsed.corrections,
-            "episodes": parsed.episodes,
-            "endRealized": parsed.endRealized
-        ] as [String: Any]
-    } else {
-        record["endRecovery"] = NSNull()
-    }
-    if let rowFrame = frame(of: pending.endRow.element) {
-        let position = if rowFrame.maxY <= transcriptFrame.minY {
-            "ABOVE"
-        } else if rowFrame.minY >= transcriptFrame.maxY {
-            "BELOW"
-        } else if isInside(rowFrame, opened.transcript) {
-            "INSIDE"
-        } else if rowFrame.minY < transcriptFrame.minY {
-            "CLIPPED_TOP"
-        } else {
-            "CLIPPED_BOTTOM"
-        }
-        record["endRowPosition"] = position
-        record["endRowGap"] = Double(transcriptFrame.maxY - rowFrame.maxY)
-        record["endRowFrame"] = evidenceRecord(of: rowFrame)
-    } else {
-        record["endRowPosition"] = "UNREALIZED"
-        record["endRowGap"] = NSNull()
-        record["endRowFrame"] = NSNull()
-    }
     return record
+}
+
+/// Where `rowFrame` lies relative to `transcriptFrame`, for the evidence
+/// record: NO_TRANSCRIPT when the transcript is absent, UNREALIZED when
+/// the row is.
+func evidencePosition(of rowFrame: CGRect?, in transcriptFrame: CGRect?) -> String {
+    guard let transcriptFrame else { return "NO_TRANSCRIPT" }
+    guard let rowFrame else { return "UNREALIZED" }
+    return if rowFrame.maxY <= transcriptFrame.minY {
+        "ABOVE"
+    } else if rowFrame.minY >= transcriptFrame.maxY {
+        "BELOW"
+    } else if isInside(rowFrame, transcriptFrame) {
+        "INSIDE"
+    } else if rowFrame.minY < transcriptFrame.minY {
+        "CLIPPED_TOP"
+    } else {
+        "CLIPPED_BOTTOM"
+    }
+}
+
+func evidenceRecord(of report: EndRecoveryReport) -> [String: Any] {
+    [
+        "reason": report.reason,
+        "corrections": report.corrections,
+        "episodes": report.episodes,
+        "endRealized": report.endRealized
+    ]
 }
 
 func evidenceRecord(of rect: CGRect) -> [String: Double] {
     ["x": Double(rect.minX), "y": Double(rect.minY), "width": Double(rect.width), "height": Double(rect.height)]
+}
+
+/// `value` for a JSON record, `NSNull` when absent.
+func jsonValue(_ value: Any?) -> Any {
+    value ?? NSNull()
 }
 
 /// True when `endRow` is realized, lies inside the transcript and its
@@ -678,7 +734,11 @@ func isInside(_ element: XCUIElement, _ container: XCUIElement) -> Bool {
 
 @MainActor
 func isInside(_ frame: CGRect, _ container: XCUIElement) -> Bool {
-    container.frame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(frame)
+    isInside(frame, container.frame)
+}
+
+func isInside(_ frame: CGRect, _ containerFrame: CGRect) -> Bool {
+    containerFrame.insetBy(dx: 0, dy: -Fixture.rePinTolerance).contains(frame)
 }
 
 /// Diagnostic sentence for failure messages: the last forced follow's
