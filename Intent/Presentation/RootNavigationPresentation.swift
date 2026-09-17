@@ -18,8 +18,8 @@ struct RootNavigationPresentation {
     }
 
     enum DeferredEffect: Equatable {
-        case pushPendingConversation
-        case pushPendingNoteDetail
+        case pushPendingConversation(identity: Int)
+        case pushPendingNoteDetail(identity: Int)
         case rebuildNote(NotePayload)
         case repushConversation(agentId: String)
     }
@@ -42,8 +42,20 @@ struct RootNavigationPresentation {
     private(set) var conversationPayload = ConversationPayload.empty
     private(set) var notePayload = NotePayload.empty
 
-    private var pendingConversationPush = false
-    private var pendingNoteDetailPush = false
+    private struct PendingConversationPush: Equatable {
+        let identity: Int
+        let payload: ConversationPayload
+        let conversationRequestId: Int
+    }
+
+    private struct PendingNoteDetailPush: Equatable {
+        let identity: Int
+        let payload: NotePayload
+    }
+
+    private var pendingConversationPush: PendingConversationPush?
+    private var pendingNoteDetailPush: PendingNoteDetailPush?
+    private var nextInitialPushIdentity = 0
     private var programmaticConversationDismiss = false
     private var handledConversationRequestId = 0
 
@@ -87,12 +99,15 @@ struct RootNavigationPresentation {
         showingWorkspaceDetail = isPresented
         var effects: [DeferredEffect] = []
         if isPresented {
-            if pendingConversationPush {
-                effects.append(.pushPendingConversation)
+            if let pendingConversationPush {
+                effects.append(.pushPendingConversation(identity: pendingConversationPush.identity))
             }
-            if pendingNoteDetailPush {
-                effects.append(.pushPendingNoteDetail)
+            if let pendingNoteDetailPush {
+                effects.append(.pushPendingNoteDetail(identity: pendingNoteDetailPush.identity))
             }
+        } else {
+            pendingConversationPush = nil
+            pendingNoteDetailPush = nil
         }
 
         let action: CoordinatorAction?
@@ -106,8 +121,12 @@ struct RootNavigationPresentation {
 
     mutating func regularWorkspacePresentationChanged(isPresented: Bool) -> [DeferredEffect] {
         showingWorkspaceDetail = isPresented
-        if isPresented, pendingConversationPush {
-            return [.pushPendingConversation]
+        if isPresented, let pendingConversationPush {
+            return [.pushPendingConversation(identity: pendingConversationPush.identity)]
+        }
+        if !isPresented {
+            pendingConversationPush = nil
+            pendingNoteDetailPush = nil
         }
         return []
     }
@@ -158,14 +177,43 @@ struct RootNavigationPresentation {
         noteStack.append(Self.destination(for: payload))
     }
 
-    mutating func applyDeferredEffect(_ effect: DeferredEffect, currentScreen: AppScreen) {
+    mutating func applyDeferredEffect(
+        _ effect: DeferredEffect,
+        currentScreen: AppScreen
+    ) {
+        applyDeferredEffect(
+            effect,
+            currentScreen: currentScreen,
+            conversationRequestId: handledConversationRequestId
+        )
+    }
+
+    mutating func applyDeferredEffect(
+        _ effect: DeferredEffect,
+        currentScreen: AppScreen,
+        conversationRequestId: Int
+    ) {
         switch effect {
-        case .pushPendingConversation:
+        case .pushPendingConversation(let identity):
+            guard let pendingConversationPush,
+                  pendingConversationPush.identity == identity else { return }
+            guard pendingConversationPush.conversationRequestId == conversationRequestId,
+                  Self.matchesConversation(currentScreen, payload: pendingConversationPush.payload)
+            else {
+                self.pendingConversationPush = nil
+                return
+            }
             showingConversation = true
-            pendingConversationPush = false
-        case .pushPendingNoteDetail:
+            self.pendingConversationPush = nil
+        case .pushPendingNoteDetail(let identity):
+            guard let pendingNoteDetailPush,
+                  pendingNoteDetailPush.identity == identity else { return }
+            guard Self.matchesNote(currentScreen, payload: pendingNoteDetailPush.payload) else {
+                self.pendingNoteDetailPush = nil
+                return
+            }
             showingNoteDetail = true
-            pendingNoteDetailPush = false
+            self.pendingNoteDetailPush = nil
         case .rebuildNote(let payload):
             if case .noteDetail(let currentNoteId, _, _) = currentScreen,
                currentNoteId == payload.noteId {
@@ -183,7 +231,9 @@ struct RootNavigationPresentation {
             }
         }
     }
+}
 
+private extension RootNavigationPresentation {
     private mutating func synchronizeConversation(
         agentId: String,
         workspaceId: String,
@@ -191,20 +241,30 @@ struct RootNavigationPresentation {
         conversationRequestId: Int,
         isRegularWidth: Bool
     ) -> [DeferredEffect] {
-        let agentChanged = conversationPayload.agentId != agentId
-        let isNewRequest = handledConversationRequestId != conversationRequestId
-        handledConversationRequestId = conversationRequestId
-        conversationPayload = ConversationPayload(
+        let payload = ConversationPayload(
             agentId: agentId,
             workspaceId: workspaceId,
             agentName: agentName
         )
+        let agentChanged = conversationPayload.agentId != agentId
+        let isNewRequest = handledConversationRequestId != conversationRequestId
+        handledConversationRequestId = conversationRequestId
+        conversationPayload = payload
+        pendingNoteDetailPush = nil
+        if pendingConversationPush?.payload != payload
+            || pendingConversationPush?.conversationRequestId != conversationRequestId {
+            pendingConversationPush = nil
+        }
         if !noteStack.isEmpty { noteStack = NavigationPath() }
         if showingNoteDetail { showingNoteDetail = false }
 
         if !showingWorkspaceDetail {
             showingWorkspaceDetail = true
-            pendingConversationPush = true
+            pendingConversationPush = PendingConversationPush(
+                identity: makeInitialPushIdentity(),
+                payload: payload,
+                conversationRequestId: conversationRequestId
+            )
         } else if !showingConversation {
             if !programmaticConversationDismiss {
                 showingConversation = true
@@ -217,40 +277,52 @@ struct RootNavigationPresentation {
         return []
     }
 
-    private mutating func synchronizeNote(payload: NotePayload, isCompact: Bool) -> [DeferredEffect] {
+    mutating func synchronizeNote(payload: NotePayload, isCompact: Bool) -> [DeferredEffect] {
+        pendingConversationPush = nil
+        if pendingNoteDetailPush?.payload != payload {
+            pendingNoteDetailPush = nil
+        }
         if isCompact {
             notePayload = payload
             if showingConversation { showingConversation = false }
             if !showingWorkspaceDetail {
                 showingWorkspaceDetail = true
-                pendingNoteDetailPush = true
+                pendingNoteDetailPush = PendingNoteDetailPush(
+                    identity: makeInitialPushIdentity(),
+                    payload: payload
+                )
             } else if !showingNoteDetail {
                 showingNoteDetail = true
             }
             return []
         }
 
+        pendingNoteDetailPush = nil
         if showingConversation { showingConversation = false }
         if !showingWorkspaceDetail { showingWorkspaceDetail = true }
         if !noteStack.isEmpty { noteStack = NavigationPath() }
         return [.rebuildNote(payload)]
     }
 
-    private mutating func synchronizeWorkspaceDetail() {
+    mutating func synchronizeWorkspaceDetail() {
+        pendingConversationPush = nil
+        pendingNoteDetailPush = nil
         if !showingWorkspaceDetail { showingWorkspaceDetail = true }
         if showingConversation { showingConversation = false }
         if showingNoteDetail { showingNoteDetail = false }
         if !noteStack.isEmpty { noteStack = NavigationPath() }
     }
 
-    private mutating func resetNavigation() {
+    mutating func resetNavigation() {
+        pendingConversationPush = nil
+        pendingNoteDetailPush = nil
         if showingWorkspaceDetail { showingWorkspaceDetail = false }
         if showingConversation { showingConversation = false }
         if showingNoteDetail { showingNoteDetail = false }
         if !noteStack.isEmpty { noteStack = NavigationPath() }
     }
 
-    private static func isWorkspaceDestination(_ screen: AppScreen) -> Bool {
+    static func isWorkspaceDestination(_ screen: AppScreen) -> Bool {
         switch screen {
         case .workspaceDetail, .agentConversation, .noteDetail:
             return true
@@ -259,7 +331,7 @@ struct RootNavigationPresentation {
         }
     }
 
-    private static func destination(for payload: NotePayload) -> NoteDestination {
+    static func destination(for payload: NotePayload) -> NoteDestination {
         NoteDestination(
             noteId: payload.noteId,
             workspaceId: payload.workspaceId,
@@ -267,7 +339,26 @@ struct RootNavigationPresentation {
         )
     }
 
-    private static func shouldRepushConversation(
+    mutating func makeInitialPushIdentity() -> Int {
+        nextInitialPushIdentity += 1
+        return nextInitialPushIdentity
+    }
+
+    static func matchesConversation(_ screen: AppScreen, payload: ConversationPayload) -> Bool {
+        guard case let .agentConversation(agentId, workspaceId, agentName) = screen else { return false }
+        return agentId == payload.agentId
+            && workspaceId == payload.workspaceId
+            && agentName == payload.agentName
+    }
+
+    static func matchesNote(_ screen: AppScreen, payload: NotePayload) -> Bool {
+        guard case let .noteDetail(noteId, workspaceId, noteTitle) = screen else { return false }
+        return noteId == payload.noteId
+            && workspaceId == payload.workspaceId
+            && noteTitle == payload.noteTitle
+    }
+
+    static func shouldRepushConversation(
         currentScreen: AppScreen,
         pendingAgentId: String,
         conversationAgentId: String

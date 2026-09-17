@@ -395,7 +395,8 @@ private extension RootView {
             DispatchQueue.main.async {
                 navigationPresentation.applyDeferredEffect(
                     effect,
-                    currentScreen: coordinator.currentScreen
+                    currentScreen: coordinator.currentScreen,
+                    conversationRequestId: coordinator.conversationRequestId
                 )
             }
         }

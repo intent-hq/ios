@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 @testable import Intent
 import SwiftUI
 import Testing
@@ -26,7 +27,8 @@ extension RootNavigationPresentationTests {
             isPresented: true,
             currentScreen: screen
         )
-        #expect(change.deferredEffects == [.pushPendingConversation])
+        #expect(change.deferredEffects.count == 1)
+        #expect(isPendingConversationPush(change.deferredEffects[0]))
 
         presentation.applyDeferredEffect(change.deferredEffects[0], currentScreen: screen)
         #expect(presentation.showingConversation)
@@ -46,7 +48,8 @@ extension RootNavigationPresentationTests {
             isPresented: true,
             currentScreen: screen
         )
-        #expect(change.deferredEffects == [.pushPendingNoteDetail])
+        #expect(change.deferredEffects.count == 1)
+        #expect(isPendingNoteDetailPush(change.deferredEffects[0]))
         presentation.applyDeferredEffect(change.deferredEffects[0], currentScreen: screen)
         #expect(presentation.showingNoteDetail)
 
@@ -335,7 +338,7 @@ extension RootNavigationPresentationTests {
         #expect(presentation.noteStack.isEmpty)
     }
 
-    @Test func regularWorkspaceObserverDoesNotConsumeInterruptedCompactNotePush() {
+    @Test func regularWorkspaceObserverDoesNotConsumePendingCompactNotePush() {
         var presentation = RootNavigationPresentation()
         let note = noteScreen(noteId: "note-A")
         _ = presentation.synchronize(
@@ -344,53 +347,16 @@ extension RootNavigationPresentationTests {
             isCompact: true,
             isRegularWidth: false
         )
-        _ = presentation.synchronize(
-            with: .workspaceList,
-            conversationRequestId: 0,
-            isCompact: false,
-            isRegularWidth: true
-        )
 
-        #expect(presentation.regularWorkspacePresentationChanged(isPresented: false).isEmpty)
-        _ = presentation.synchronize(
-            with: .workspaceDetail(workspaceId: "workspace-1"),
-            conversationRequestId: 0,
-            isCompact: false,
-            isRegularWidth: true
-        )
         #expect(presentation.regularWorkspacePresentationChanged(isPresented: true).isEmpty)
 
         let compactChange = presentation.compactWorkspacePresentationChanged(
             isPresented: true,
             currentScreen: note
         )
-        #expect(compactChange.deferredEffects == [.pushPendingNoteDetail])
+        #expect(compactChange.deferredEffects.count == 1)
+        #expect(isPendingNoteDetailPush(compactChange.deferredEffects[0]))
         #expect(compactChange.coordinatorAction == nil)
-    }
-
-    @Test func initialDeferredPushRemainsUnguardedAfterRouteChanges() {
-        let screen = conversationScreen(agentId: "agent-A")
-        var presentation = RootNavigationPresentation()
-        _ = presentation.synchronize(
-            with: screen,
-            conversationRequestId: 1,
-            isCompact: true,
-            isRegularWidth: false
-        )
-        let change = presentation.compactWorkspacePresentationChanged(
-            isPresented: true,
-            currentScreen: screen
-        )
-
-        presentation.applyDeferredEffect(
-            change.deferredEffects[0],
-            currentScreen: .workspaceList
-        )
-
-        #expect(
-            presentation.showingConversation,
-            "The ownership refactor intentionally preserves the pre-existing unguarded initial push"
-        )
     }
 
     @Test func separatePresentationInstancesRemainIndependent() {
@@ -479,6 +445,173 @@ private extension RootNavigationPresentationTests {
             noteId: noteId,
             workspaceId: "workspace-1",
             noteTitle: noteId
+        )
+    }
+
+    private func isPendingConversationPush(_ effect: RootNavigationPresentation.DeferredEffect) -> Bool {
+        if case .pushPendingConversation = effect { return true }
+        return false
+    }
+
+    private func isPendingNoteDetailPush(_ effect: RootNavigationPresentation.DeferredEffect) -> Bool {
+        if case .pushPendingNoteDetail = effect { return true }
+        return false
+    }
+}
+
+extension RootNavigationPresentationTests {
+    @Test func conversationPushAfterRouteCancellationIsDropped() {
+        let screen = conversationScreen()
+        var presentation = stagedConversation(screen: screen, requestId: 1)
+        let effect = pendingEffects(from: &presentation, screen: screen)[0]
+
+        presentation.applyDeferredEffect(effect, currentScreen: .workspaceList)
+
+        #expect(!presentation.showingConversation)
+    }
+
+    @Test func compactNotePushAfterWorkspaceOverviewIsDropped() {
+        let screen = noteScreen(noteId: "note-A")
+        var presentation = stagedNote(screen: screen)
+        let effect = pendingEffects(from: &presentation, screen: screen)[0]
+        _ = presentation.synchronize(
+            with: .workspaceDetail(workspaceId: "workspace-1"),
+            conversationRequestId: 0,
+            isCompact: true,
+            isRegularWidth: false
+        )
+
+        presentation.applyDeferredEffect(
+            effect,
+            currentScreen: .workspaceDetail(workspaceId: "workspace-1")
+        )
+
+        #expect(!presentation.showingNoteDetail)
+    }
+
+    @Test func staleConversationPushDoesNotConsumeSameDestinationReplacement() {
+        let screen = conversationScreen()
+        var presentation = stagedConversation(screen: screen, requestId: 1)
+        let staleEffect = pendingEffects(from: &presentation, screen: screen)[0]
+        cancel(&presentation, conversationRequestId: 1)
+        _ = presentation.synchronize(
+            with: screen,
+            conversationRequestId: 2,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        let replacementEffect = pendingEffects(from: &presentation, screen: screen)[0]
+
+        presentation.applyDeferredEffect(staleEffect, currentScreen: screen)
+        #expect(!presentation.showingConversation)
+        presentation.applyDeferredEffect(replacementEffect, currentScreen: screen)
+        #expect(presentation.showingConversation)
+    }
+
+    @Test func conversationPushChecksLiveSameDestinationRequest() {
+        let screen = conversationScreen()
+        var presentation = stagedConversation(screen: screen, requestId: 1)
+        let effect = pendingEffects(from: &presentation, screen: screen)[0]
+
+        presentation.applyDeferredEffect(
+            effect,
+            currentScreen: screen,
+            conversationRequestId: 2
+        )
+
+        #expect(!presentation.showingConversation)
+    }
+
+    @Test(arguments: ["note-A", "note-B"])
+    func staleNotePushDoesNotConsumeReplacement(replacementNoteId: String) {
+        let firstScreen = noteScreen(noteId: "note-A")
+        var presentation = stagedNote(screen: firstScreen)
+        let staleEffect = pendingEffects(from: &presentation, screen: firstScreen)[0]
+        cancel(&presentation, conversationRequestId: 0)
+        let replacementScreen = noteScreen(noteId: replacementNoteId)
+        _ = presentation.synchronize(
+            with: replacementScreen,
+            conversationRequestId: 0,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        let replacementEffect = pendingEffects(from: &presentation, screen: replacementScreen)[0]
+
+        presentation.applyDeferredEffect(staleEffect, currentScreen: replacementScreen)
+        #expect(!presentation.showingNoteDetail)
+        presentation.applyDeferredEffect(replacementEffect, currentScreen: replacementScreen)
+        #expect(presentation.showingNoteDetail)
+        #expect(presentation.notePayload.noteId == replacementNoteId)
+    }
+
+    @Test func repeatedConversationSynchronizationAndDeliveryRemainValid() {
+        let screen = conversationScreen()
+        var presentation = stagedConversation(screen: screen, requestId: 1)
+        let firstEffects = pendingEffects(from: &presentation, screen: screen)
+        let synchronizationEffects = presentation.synchronize(
+            with: screen,
+            conversationRequestId: 1,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        let repeatedEffects = pendingEffects(from: &presentation, screen: screen)
+
+        #expect(synchronizationEffects.isEmpty)
+        #expect(firstEffects == repeatedEffects)
+        presentation.applyDeferredEffect(firstEffects[0], currentScreen: screen)
+        #expect(presentation.showingConversation)
+        presentation.applyDeferredEffect(repeatedEffects[0], currentScreen: screen)
+        #expect(presentation.showingConversation)
+    }
+}
+
+private extension RootNavigationPresentationTests {
+    func stagedConversation(screen: AppScreen, requestId: Int) -> RootNavigationPresentation {
+        var presentation = RootNavigationPresentation()
+        _ = presentation.synchronize(
+            with: screen,
+            conversationRequestId: requestId,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        return presentation
+    }
+
+    func stagedNote(screen: AppScreen) -> RootNavigationPresentation {
+        var presentation = RootNavigationPresentation()
+        _ = presentation.synchronize(
+            with: screen,
+            conversationRequestId: 0,
+            isCompact: true,
+            isRegularWidth: false
+        )
+        return presentation
+    }
+
+    func pendingEffects(
+        from presentation: inout RootNavigationPresentation,
+        screen: AppScreen
+    ) -> [RootNavigationPresentation.DeferredEffect] {
+        presentation.compactWorkspacePresentationChanged(
+            isPresented: true,
+            currentScreen: screen
+        ).deferredEffects
+    }
+
+    func cancel(_ presentation: inout RootNavigationPresentation, conversationRequestId: Int) {
+        _ = presentation.synchronize(
+            with: .workspaceList,
+            conversationRequestId: conversationRequestId,
+            isCompact: true,
+            isRegularWidth: false
+        )
+    }
+
+    func conversationScreen() -> AppScreen {
+        .agentConversation(
+            agentId: "agent-A",
+            workspaceId: "workspace-1",
+            agentName: "agent-A"
         )
     }
 }
