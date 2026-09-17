@@ -399,8 +399,11 @@ retry=$(retry_argv crashonly)
 assert_contains "the re-run writes a sibling result bundle" "$retry" "[-resultBundlePath] [$work/xcodebuild-result."
 assert_contains "the re-run bundle is named after the primary one" "$retry" "/Intent-retry.xcresult]"
 assert_contains "the re-run narrows to the ONLY_TESTING selectors inside the interrupted suite" "$retry" \
-  "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests/testFoo] [-only-testing:IntentTests/DemoFixturesTests/testBar()] [-only-testing:IntentTests/FooTests]"
+  "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests/testFoo] [-only-testing:IntentTests/DemoFixturesTests/testBar()]"
 assert_lacks "the re-run leaves out selectors of uninterrupted suites" "$retry" "NewMessagesDividerViewTests"
+assert_lacks "a suite named as interrupted but outside the selection is not re-run" "$retry" "FooTests"
+assert_contains "the left-out suite is reported" "$out" \
+  "notice: IntentTests/FooTests is named as interrupted but lies outside the ONLY_TESTING selection; not re-running it."
 assert_eq "both result bundles are read" "$(xcresulttool_count crashonly)" 2
 assert_contains "the re-run result overrides the crashed test's primary result" "$out" \
   "  IntentTests/DemoFixturesTests/testFoo           1         1        0       0        0"
@@ -431,7 +434,7 @@ assert_eq "target + nested selector: crash then green re-run exits 0" "$status" 
 assert_contains "a target selector keeps the whole interrupted suite in the re-run" "$(retry_argv overlaptarget)" \
   "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests]"
 
-echo "# a re-run that records nothing for a selector leaves it unexecuted (the crashed suite's results are not trusted)"
+echo "# a re-run that records nothing for a selector is not green (the crashed suite's results are not trusted)"
 make_results "$work/emptyretry.json"
 status=$(run_filtered emptyretry "IntentTests/DemoFixturesTests/testBar" test-without-building \
   STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/emptyretry.state" STUB_NO_FAILING=1 \
@@ -440,10 +443,45 @@ status=$(run_filtered emptyretry "IntentTests/DemoFixturesTests/testBar" test-wi
 out=$(cat "$work/emptyretry.out")
 assert_eq "an empty re-run bundle is not green: exit 82" "$status" 82
 assert_contains "the re-run narrowed to the selector" "$(retry_argv emptyretry)" "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests/testBar]"
-assert_contains "the primary Failed record is dropped rather than counted" "$out" \
-  "  IntentTests/DemoFixturesTests/testBar         1         0        0       0        0"
-assert_contains "the selector is reported as executing nothing" "$out" "executed nothing although xcodebuild exited 0"
+assert_contains "the primary Failed record stays as an unrecovered failure" "$out" \
+  "  IntentTests/DemoFixturesTests/testBar         1         1        0       1        0"
+assert_contains "the re-run selector is reported as recording nothing" "$out" \
+  "error: the crash re-run of 'IntentTests/DemoFixturesTests/testBar' recorded no test executed or skipped for it"
+assert_contains "the unrecovered test is named" "$out" \
+  "error: IntentTests/DemoFixturesTests/testBar() failed in the crashed run and the re-run did not record it"
+assert_contains "the exit line names the re-run" "$out" "or the crash re-run left an interrupted suite or test unrecovered"
 assert_contains "both bundles are kept for inspection" "$out" "Re-run result bundle kept at: $work/xcodebuild-result."
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# a target-wide selector is not satisfied by uninterrupted suites when the re-run of the interrupted one is empty"
+make_results "$work/targetprimary.json" "IntentTests/DemoFixturesTests/testBar()=Failed" \
+  "IntentTests/NewMessagesDividerViewTests/testDividerAppears()=Passed"
+status=$(run_filtered targetempty "IntentTests" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/targetempty.state" STUB_NO_FAILING=1 \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testBar(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/targetprimary.json" STUB_RESULTS_RETRY="$work/emptyretry.json")
+out=$(cat "$work/targetempty.out")
+assert_eq "target-wide selector + empty re-run exits 82" "$status" 82
+assert_contains "the re-run covered the interrupted suite" "$(retry_argv targetempty)" "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests]"
+assert_contains "the uninterrupted suite's pass does not stand in for the interrupted one" "$out" \
+  "error: the crash re-run of 'IntentTests/DemoFixturesTests' recorded no test executed or skipped for it"
+assert_contains "the target row still shows the unrecovered failure" "$out" \
+  "  IntentTests         5         2        0       1        0"
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# a suite-wide re-run that omits the interrupted test does not count it as recovered"
+make_results "$work/partialretry.json" "IntentTests/DemoFixturesTests/testFoo()=Passed"
+status=$(run_filtered partialretry "IntentTests/DemoFixturesTests" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/partialretry.state" STUB_NO_FAILING=1 \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testBar(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/overlapprimary.json" STUB_RESULTS_RETRY="$work/partialretry.json")
+out=$(cat "$work/partialretry.out")
+assert_eq "suite-wide selector + partial re-run exits 82" "$status" 82
+assert_contains "the recorded test takes the re-run result, the omitted one keeps its failure" "$out" \
+  "  IntentTests/DemoFixturesTests         2         2        0       1        0"
+assert_contains "the omitted interrupted test is named as unrecovered" "$out" \
+  "error: IntentTests/DemoFixturesTests/testBar() failed in the crashed run and the re-run did not record it"
+assert_lacks "the suite itself is not reported as recording nothing" "$out" "recorded no test executed or skipped for it"
 rm -rf -- "$work"/xcodebuild-result.*
 
 echo "# RESULT_BUNDLE set: the re-run writes <bundle>-retry beside it"
