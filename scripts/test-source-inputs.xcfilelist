@@ -106,6 +106,7 @@ $(SRCROOT)/Intent/PersistenceManager+Drafts.swift
 $(SRCROOT)/Intent/PersistenceManager+Screens.swift
 $(SRCROOT)/Intent/PersistenceManager.swift
 $(SRCROOT)/Intent/Presentation
+$(SRCROOT)/Intent/Presentation/ConversationTranscriptRecoveryLifecycle.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollPolicy.swift
 $(SRCROOT)/Intent/Presentation/ConversationTranscriptScrollState.swift
 $(SRCROOT)/Intent/Presentation/LaunchPhaseTimeline.swift
@@ -358,6 +359,7 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
+$(SRCROOT)/IntentTests/ConversationTranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
