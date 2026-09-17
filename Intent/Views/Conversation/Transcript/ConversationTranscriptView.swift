@@ -191,16 +191,7 @@ private extension ConversationTranscriptView {
             ConversationTranscriptScrollPolicy.forcedFollowLandingSummary(
                 outcome: scrollState.lastForcedFollowOutcome,
                 corrections: scrollState.lastForcedFollowCorrections,
-                // Episodes and cancellation are not tracked yet: an episode
-                // is counted once it has recorded an outcome, and the end
-                // row's realization is read live.
-                endRecovery: ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
-                    outcome: scrollState.lastUnrealizedEndRecoveryOutcome,
-                    corrections: scrollState.lastUnrealizedEndRecoveryCorrections,
-                    episodes: scrollState.lastUnrealizedEndRecoveryOutcome == nil ? 0 : 1,
-                    endRealized: scrollState.isEndRealized,
-                    cancelled: false
-                ).summary
+                endRecovery: unrealizedEndRecoveryDemoReport.summary
             )
         )
         // Keyboard dismissal is installed by ScrollViewFinder. A SwiftUI tap
@@ -309,12 +300,14 @@ private extension ConversationTranscriptView {
     /// would only reset the bound.
     private func scheduleUnrealizedEndRecovery(proxy: ScrollViewProxy) {
         guard scrollState.unrealizedEndRecoveryTask == nil else { return }
+        scrollState.unrealizedEndRecoveryEpisodes += 1
+        scrollState.unrealizedEndRecoveryCorrections = 0
+        scrollState.lastUnrealizedEndRecoveryReport = nil
         // swiftlint:disable:next closure_body_length
         scrollState.unrealizedEndRecoveryTask = Task { @MainActor in
             let deadline = ContinuousClock.now
                 + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
             var correctionsLeft = Constants.Conversation.Transcript.followLandingRetries
-            var corrections = 0
             var previous: ScrollViewMomentumProxy.RestingGeometry?
             while true {
                 try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
@@ -329,7 +322,7 @@ private extension ConversationTranscriptView {
                     hasInitiallyScrolled: hasInitiallyScrolled,
                     userIsScrolledAway: userIsScrolledAway,
                     correctionsLeft: correctionsLeft,
-                    correctionsSpent: corrections,
+                    correctionsSpent: scrollState.unrealizedEndRecoveryCorrections,
                     timedOut: ContinuousClock.now >= deadline
                 )
                 previous = geometry
@@ -338,14 +331,14 @@ private extension ConversationTranscriptView {
                     continue
                 case .followToEnd:
                     correctionsLeft -= 1
-                    corrections += 1
+                    scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
                     AppLog.userInterface.debug("[SCROLL] End row off screen short of the bottom; following to the end")
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
                 case .recover(let pageOffsetY):
                     correctionsLeft -= 1
-                    corrections += 1
+                    scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
                     AppLog.userInterface.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
                     if scrollMomentumProxy.pageTo(offsetY: pageOffsetY) {
@@ -359,14 +352,14 @@ private extension ConversationTranscriptView {
                             isFollowing: scrollDebounceTask != nil
                         ) else {
                             AppLog.userInterface.debug("[SCROLL] End recovery yielded the paged-up viewport to the user")
-                            finishUnrealizedEndRecovery(outcome: .yieldToUser, corrections: corrections, proxy: proxy)
+                            finishUnrealizedEndRecovery(outcome: .yieldToUser, proxy: proxy)
                             return
                         }
                     }
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
                 case .none, .giveUp, .yieldToUser:
-                    finishUnrealizedEndRecovery(outcome: step, corrections: corrections, proxy: proxy)
+                    finishUnrealizedEndRecovery(outcome: step, proxy: proxy)
                     return
                 }
             }
@@ -374,8 +367,8 @@ private extension ConversationTranscriptView {
     }
     // swiftlint:enable function_body_length
 
-    /// Drains the recovery: records the outcome once it has corrected the
-    /// viewport, releases the follow flag, and either replays the live edge
+    /// Drains the recovery: records the episode's report, releases the
+    /// follow flag, and either replays the live edge
     /// the flag suppressed while a correction was in flight (a viewport the
     /// correction left short of a realized end row is re-pinned by the
     /// growth path; under the finger it is read as the gesture it is) or,
@@ -386,13 +379,9 @@ private extension ConversationTranscriptView {
     /// `resolveDeferredUnrealizedEndGiveUp`).
     private func finishUnrealizedEndRecovery(
         outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep,
-        corrections: Int,
         proxy: ScrollViewProxy
     ) {
-        if corrections > 0 {
-            scrollState.lastUnrealizedEndRecoveryOutcome = outcome
-            scrollState.lastUnrealizedEndRecoveryCorrections = corrections
-        }
+        recordUnrealizedEndRecoveryReport(outcome: outcome, cancelled: false)
         scrollState.isRecoveringUnrealizedEnd = false
         scrollState.unrealizedEndRecoveryTask = nil
         switch ConversationTranscriptScrollPolicy.unrealizedEndRecoveryDrain(
@@ -435,10 +424,46 @@ private extension ConversationTranscriptView {
         return showGoToEnd
     }
 
+    /// Cancels an episode in flight and records it as such; with none in
+    /// flight, only releases the follow flag.
     private func cancelUnrealizedEndRecovery() {
-        scrollState.unrealizedEndRecoveryTask?.cancel()
-        scrollState.unrealizedEndRecoveryTask = nil
+        if let task = scrollState.unrealizedEndRecoveryTask {
+            task.cancel()
+            scrollState.unrealizedEndRecoveryTask = nil
+            recordUnrealizedEndRecoveryReport(outcome: nil, cancelled: true)
+        }
         scrollState.isRecoveringUnrealizedEnd = false
+    }
+
+    /// Records how the episode ended, with the corrections it spent and
+    /// the end row's realization at this moment, so every terminal path —
+    /// resolved on any step, or cancelled — is observable under
+    /// `--demo-data` (see `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport`).
+    private func recordUnrealizedEndRecoveryReport(
+        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?,
+        cancelled: Bool
+    ) {
+        scrollState.lastUnrealizedEndRecoveryReport = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+            outcome: outcome,
+            corrections: scrollState.unrealizedEndRecoveryCorrections,
+            episodes: scrollState.unrealizedEndRecoveryEpisodes,
+            endRealized: scrollState.isEndRealized,
+            cancelled: cancelled
+        )
+    }
+
+    /// The last episode's report or, with one in flight (`recovering`) or
+    /// none armed yet (`notAttempted`), the classifier's reading of the
+    /// current state.
+    private var unrealizedEndRecoveryDemoReport: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport {
+        scrollState.lastUnrealizedEndRecoveryReport
+            ?? ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+                outcome: nil,
+                corrections: scrollState.unrealizedEndRecoveryCorrections,
+                episodes: scrollState.unrealizedEndRecoveryEpisodes,
+                endRealized: scrollState.isEndRealized,
+                cancelled: false
+            )
     }
 
     /// Re-checks the live scroll view once the geometry has had time to

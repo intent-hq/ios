@@ -60,9 +60,15 @@ final class ConversationTranscriptScrollState {
     var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingStep?
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
-    /// How the last unrealized-end recovery that corrected the viewport
-    /// resolved, and the corrections it spent (#338); demo-only diagnostics
-    /// like the forced follow's.
-    var lastUnrealizedEndRecoveryOutcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?
-    var lastUnrealizedEndRecoveryCorrections = 0
+    /// How the last unrealized-end recovery episode ended (#338): recorded
+    /// on every terminal path — resolved, given up, yielded or cancelled —
+    /// with the end row's realization at that moment; nil while an episode
+    /// is in flight, or before the first. Demo-only diagnostics like the
+    /// forced follow's.
+    var lastUnrealizedEndRecoveryReport: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryReport?
+    /// Episodes armed on this transcript so far.
+    var unrealizedEndRecoveryEpisodes = 0
+    /// Corrections the in-flight (or, once it ended, the last) episode has
+    /// spent, published as each is issued so a cancellation records them.
+    var unrealizedEndRecoveryCorrections = 0
 }
