@@ -182,3 +182,113 @@ struct CopyContextMenuOverlayHitTestTests {
         #expect(fixture.host.hitTest(CGPoint(x: 75, y: 50), with: nil) === fixture.overlay)
     }
 }
+
+/// End-to-end hit-testing of a hosted `AssistantMessageView` (ios#344): a
+/// settled message carrying text AND a tool_use block enables the copy
+/// overlay over the whole row, and a tap on the tool row's header must still
+/// reach the header `Button` (expand / hydrate) instead of being claimed for
+/// the copy interaction. The text region keeps the copy long-press, and a
+/// tool-only message (no copy text, overlay inert) keeps expanding too.
+@MainActor
+struct AssistantMessageToolRowHitTestTests {
+    private static let hostWidth: CGFloat = 390
+    private static let hostHeight: CGFloat = 320
+    private static let bodyText = "Here is the file you asked for."
+    private static let toolInput: [String: AnyCodable] = [
+        "path": AnyCodable("Sources/Package.swift")
+    ]
+
+    private static func makeMessage(includeText: Bool) -> ConversationMessage {
+        var blocks: [ContentBlock] = []
+        if includeText {
+            blocks.append(ContentBlock(id: "b-text", type: .text, text: bodyText))
+        }
+        blocks.append(ContentBlock(id: "b-tool", type: .toolUse, name: "view", input: toolInput))
+        return ConversationMessage(
+            id: "m-344",
+            role: .assistant,
+            contentBlocks: blocks,
+            timestamp: "2025-01-01T00:00:00Z",
+            streamingState: .complete
+        )
+    }
+
+    private static func makeCoordinator() throws -> AppCoordinator {
+        _ = TestKeychainStorage.installed
+        let suiteName = "AssistantMessageToolRowHitTestTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        return AppCoordinator(
+            workspaceStore: WorkspaceStore(forTesting: true),
+            connection: FakeConnectionManager(),
+            persistence: PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        )
+    }
+
+    /// Centre of the first accessibility element whose label (or value, for
+    /// UIKit-backed text views) contains `fragment`, in window coordinates.
+    private static func center(
+        ofElementContaining fragment: String,
+        in hostView: UIView,
+        window: UIWindow
+    ) throws -> CGPoint {
+        let element = try #require(
+            SyntheticBadgeHost.accessibilityElements(in: hostView).first { element in
+                element.accessibilityLabel?.contains(fragment) == true
+                    || element.accessibilityValue?.contains(fragment) == true
+            },
+            "no accessibility element labelled with \(fragment)"
+        )
+        let frame = window.convert(element.accessibilityFrame, from: nil)
+        return CGPoint(x: frame.midX, y: frame.midY)
+    }
+
+    private func hitTest(
+        includeText: Bool,
+        probe: (_ hostView: UIView, _ window: UIWindow) throws -> Void
+    ) throws {
+        let coordinator = try Self.makeCoordinator()
+        let view = AssistantMessageView(
+            message: Self.makeMessage(includeText: includeText),
+            workspaceId: "ws-1",
+            onNavigateToNote: nil,
+            hydratingBlockIds: [],
+            onHydrateBlock: nil
+        )
+        .environment(coordinator)
+        try SyntheticBadgeHost.render(view, width: Self.hostWidth, height: Self.hostHeight, inspect: probe)
+    }
+
+    private var toolSubject: String {
+        get throws {
+            try #require(ToolClassifier.classify(name: "view", input: Self.toolInput).subject)
+        }
+    }
+
+    @Test func toolRowHeaderTapReachesButtonInTextBearingMessage() throws {
+        let subject = try toolSubject
+        try hitTest(includeText: true) { hostView, window in
+            let point = try Self.center(ofElementContaining: subject, in: hostView, window: window)
+            let hit = window.hitTest(point, with: nil)
+            #expect(!(hit is CopyContextMenuOverlay.OverlayView), "copy overlay swallowed the header tap: \(String(describing: hit))")
+            #expect(hit is CopyContextMenuPassthroughMarker.MarkerView, "header tap resolved to \(String(describing: hit))")
+        }
+    }
+
+    @Test func textRegionStillClaimedForCopyMenuInTextBearingMessage() throws {
+        try hitTest(includeText: true) { hostView, window in
+            let point = try Self.center(ofElementContaining: Self.bodyText, in: hostView, window: window)
+            let hit = window.hitTest(point, with: nil)
+            #expect(!(hit is CopyContextMenuPassthroughMarker.MarkerView), "text region resolved to a pass-through marker")
+        }
+    }
+
+    @Test func toolRowHeaderTapReachesButtonInToolOnlyMessage() throws {
+        let subject = try toolSubject
+        try hitTest(includeText: false) { hostView, window in
+            let point = try Self.center(ofElementContaining: subject, in: hostView, window: window)
+            let hit = window.hitTest(point, with: nil)
+            #expect(!(hit is CopyContextMenuOverlay.OverlayView), "inert overlay claimed the header tap")
+        }
+    }
+}
