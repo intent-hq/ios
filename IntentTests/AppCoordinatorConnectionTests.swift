@@ -322,10 +322,7 @@ extension AppCoordinatorTests {
     }
 
     @Test @MainActor func onConnectionSuccess_windowWithoutRestorationClaimLandsOnList() {
-        defer {
-            cleanupLastScreen()
-            persistence.clearWorkspaceScreen(workspaceId: "ws-other")
-        }
+        defer { cleanupLastScreen() }
         // Only the session's first window restores (spec decision 1b): a
         // duplicate window lands on the workspace list and never overwrites
         // the restoring window's saved navigation.
