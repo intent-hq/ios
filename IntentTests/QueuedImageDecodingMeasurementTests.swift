@@ -177,10 +177,18 @@ struct QueuedImageDecodingMeasurementTests {
     }
 
     private static func imageBytes(_ images: [ImageBlock]) -> Int {
-        images.reduce(0) { total, image in
-            total + image.type.utf8.count + (image.data?.utf8.count ?? 0)
-                + (image.attachmentId?.utf8.count ?? 0) + (image.mimeType?.utf8.count ?? 0)
+        var total = 0
+        for image in images {
+            let typeBytes: Int = image.type.utf8.count
+            let dataBytes: Int = image.data?.utf8.count ?? 0
+            let attachmentBytes: Int = image.attachmentId?.utf8.count ?? 0
+            let mimeTypeBytes: Int = image.mimeType?.utf8.count ?? 0
+            total += typeBytes
+            total += dataBytes
+            total += attachmentBytes
+            total += mimeTypeBytes
         }
+        return total
     }
 
     private static func checksum(_ message: QueuedMessage) -> Int {
@@ -307,6 +315,16 @@ struct QueuedImageDecodingMeasurementTests {
             try Self.verifyOutputs(for: fixture)
             Self.report(fixture: fixture, samples: try Self.measure(fixture))
         }
+    }
+
+    @Test func imageByteChecksumCountsUTF8AndIgnoresAbsentFields() {
+        let images = [
+            ImageBlock(type: "图像", data: "🙂", mimeType: "image/π"),
+            ImageBlock(type: "image", attachmentId: "附件-β")
+        ]
+
+        #expect(Self.imageBytes([]) == 0)
+        #expect(Self.imageBytes(images) == 32)
     }
 }
 
