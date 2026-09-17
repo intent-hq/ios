@@ -69,7 +69,7 @@ func expectNever(
 /// so a fake that must outlive its cancellation holds its lane until the test
 /// releases it — instead of guessing a `Task.sleep` long enough for the other
 /// candidate to win (ios#261).
-final class TestGate: Sendable {
+nonisolated final class TestGate: Sendable {
     private struct State {
         var isOpen = false
         var waiters: [CheckedContinuation<Void, Never>] = []
@@ -102,7 +102,7 @@ final class TestGate: Sendable {
 /// Suspends until the current task is cancelled. Replaces a long `Task.sleep`
 /// whose only job was to be cut short by cancellation (a raced loser that is
 /// released once the winner settles).
-func suspendUntilCancelled() async {
+nonisolated func suspendUntilCancelled() async {
     let gate = TestGate()
     await withTaskCancellationHandler {
         await gate.wait()
