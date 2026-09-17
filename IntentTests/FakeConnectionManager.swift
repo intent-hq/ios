@@ -97,6 +97,16 @@ nonisolated final class TestGate: Sendable {
             if alreadyOpen { continuation.resume() }
         }
     }
+
+    /// Runs `body`, opening the gate if the CALLING task is cancelled — the
+    /// test-level escape hatch for a `.timeLimit` test whose system under test
+    /// regressed into awaiting the gated fake: Swift Testing only cancels the
+    /// test cooperatively, and `wait()` ignores cancellation, so without this
+    /// such a regression would hang the runner instead of failing. Cancelling
+    /// a candidate task that is merely awaiting `wait()` does not open the gate.
+    func opening<T>(onCancellationOf body: () async throws -> T) async rethrows -> T {
+        try await withTaskCancellationHandler(operation: body, onCancel: { open() })
+    }
 }
 
 /// Suspends until the current task is cancelled. Replaces a long `Task.sleep`

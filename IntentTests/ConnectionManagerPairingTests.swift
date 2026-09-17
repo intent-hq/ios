@@ -315,7 +315,7 @@ extension ConnectionManagerTests {
     /// candidate's certificate mismatch, reported by the background drain,
     /// must still reach `certMismatches`: the race was not superseded. The
     /// time limit turns a connect() that waits on the gated loser into a
-    /// failure instead of a hang.
+    /// failure instead of a hang: its cancellation of the test opens the gate.
     @Test(.timeLimit(.minutes(1)))
     @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
         let previous = Self.enablePlaintextLoopback()
@@ -340,12 +340,14 @@ extension ConnectionManagerTests {
 
         let loserRelease = TestGate()
         manager.tunnelDialer = GatedMismatchTunnelDialer(fingerprint: "cc:dd", release: loserRelease)
-        try await manager.connect(
-            hosts: ["127.0.0.1"],
-            port: serverB.port,
-            token: "token-b",
-            tcAddress: "tc-slow"
-        )
+        try await loserRelease.opening {
+            try await manager.connect(
+                hosts: ["127.0.0.1"],
+                port: serverB.port,
+                token: "token-b",
+                tcAddress: "tc-slow"
+            )
+        }
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
         #expect(manager.token == "token-b")

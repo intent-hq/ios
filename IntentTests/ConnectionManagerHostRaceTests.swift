@@ -438,21 +438,25 @@ extension ConnectionManagerTests {
     /// (a tunnel dial whose Go side does not abort promptly) must not delay
     /// the connect, and must still be disconnected by the background drain.
     /// The loser is released only after the race has returned, so a race that
-    /// waited on it would hit the time limit instead of racing a stopwatch.
+    /// waited on it would hit the time limit instead of racing a stopwatch;
+    /// the time limit's cancellation of the test opens the gate so that
+    /// regression fails instead of hanging.
     @Test(.timeLimit(.minutes(1)))
     func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
         let loserTunnel = FakeTunnelSession(localPort: 1)
         let loserRelease = TestGate()
-        let outcome = await ConnectionManager.raceCandidates(
-            ["direct.host", ConnectionManager.tunnelCandidateLabel]
-        ) { host -> FakeTunnelRaceConnection in
-            if host == ConnectionManager.tunnelCandidateLabel {
-                // `TestGate.wait()` is not interrupted by the candidate task's
-                // cancellation.
-                await loserRelease.wait()
-                return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+        let outcome = await loserRelease.opening {
+            await ConnectionManager.raceCandidates(
+                ["direct.host", ConnectionManager.tunnelCandidateLabel]
+            ) { host -> FakeTunnelRaceConnection in
+                if host == ConnectionManager.tunnelCandidateLabel {
+                    // `TestGate.wait()` is not interrupted by the candidate
+                    // task's cancellation.
+                    await loserRelease.wait()
+                    return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+                }
+                return FakeTunnelRaceConnection(host: host, tunnel: nil)
             }
-            return FakeTunnelRaceConnection(host: host, tunnel: nil)
         }
 
         #expect(outcome.winner?.host == "direct.host")
