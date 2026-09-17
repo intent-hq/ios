@@ -16,9 +16,12 @@ on:
     inputs:
       only_testing:
         description: >-
-          Whitespace-separated Target[/Class[/method]] identifiers passed to
-          ONLY_TESTING (e.g. 'IntentTests/DemoFixturesTests'). Empty runs the
-          full bundle.
+          Whitespace-separated Target[/Suite[/test]] identifiers passed to
+          ONLY_TESTING (e.g. 'IntentTests/DemoFixturesTests'; a file name is
+          not a selector). Each must resolve to enumerated tests or the job
+          fails with exit 82 (83 when the selection cannot be verified); the
+          per-selector table lands in the job summary. Empty runs the full
+          bundle.
         type: string
         required: false
         default: ''
@@ -217,7 +220,12 @@ jobs:
       # TEST_RUNNER_-prefixed environment variables into the test process
       # (minus the prefix), carrying the tcecho token to the TailcatKit
       # smoke test. ONLY_TESTING is set only on a workflow_dispatch, so a
-      # pull_request run always executes the full bundle.
+      # pull_request run always executes the full bundle. On a filtered run the
+      # script resolves every selector against xcodebuild -enumerate-tests
+      # before testing and checks the result bundle afterwards: a selector that
+      # matches or executes nothing fails the step with exit 82, an unverifiable
+      # selection with 83, and the per-selector table is appended to the job
+      # summary (see the script header).
       - name: Run unit tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}

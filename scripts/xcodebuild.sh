@@ -35,10 +35,33 @@
 #   SPM_CLONE_DIR         Passed as -clonedSourcePackagesDirPath (CI caches it).
 #   RESULT_BUNDLE         Passed as -resultBundlePath to test-without-building;
 #                         an existing bundle at that path is removed first.
+#                         A filtered run (ONLY_TESTING set) with no RESULT_BUNDLE
+#                         writes a temporary bundle instead so its results can
+#                         be read back; it is deleted after a passing run and
+#                         kept and named (like the log) after a failing one.
 #   ONLY_TESTING          Whitespace-separated Target[/Class[/method]] identifiers;
 #                         each becomes one -only-testing: argument on the test
 #                         subcommands (test-without-building, test-ios,
-#                         test-ios-unit). Entries starting with '-' are refused.
+#                         test-ios-unit). Entries starting with '-' are refused;
+#                         duplicates are collapsed. Before the filtered run the
+#                         wrapper enumerates the built revision's tests
+#                         (xcodebuild -enumerate-tests, under the simulator
+#                         lock, with the subcommand's -skip-testing: flags but
+#                         no -only-testing:) and resolves every selector against
+#                         that catalog by exact path segments, so a file name or
+#                         typo fails with exit 82 before any test runs. After
+#                         the run it reads the result bundle (xcrun xcresulttool
+#                         get test-results tests) and prints one table row per
+#                         selector — requested, resolved, executed, skipped,
+#                         failed, unknown — to stdout; a selector whose tests
+#                         neither executed nor were skipped exits 82 even when
+#                         xcodebuild exited 0, an all-skipped selector is a
+#                         notice, and an unreadable bundle or an unrecognised
+#                         result on a green run exits 83 (see the exit codes
+#                         below). Unset/empty skips all of this and leaves the
+#                         command line untouched.
+#   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
+#                         of a filtered run is also appended there as Markdown.
 #   TAILCATKIT_AUTOBUILD  Set to 0 to never run TailcatKit/build_xcframework.sh
 #                         from the preflight; a missing xcframework then fails fast.
 #   SIM_LOCK_TIMEOUT      Seconds to wait for the simulator lock (below) before
@@ -77,10 +100,29 @@
 #       whichever tests happened to be running; the wrapper prints the
 #       distinguishing lines instead and keeps the full log (intent-hq/ios#238).
 #   81  timed out waiting for the simulator lock.
+#   82  an ONLY_TESTING selector matched no runnable test in the enumerated
+#       catalog (typo, file name instead of Target/Suite, only disabled tests,
+#       or excluded by the subcommand's -skip-testing:) — every unmatched
+#       selector is named with up to five look-alike suites and the test run
+#       is not started even when other selectors resolved — or, after the run,
+#       a resolved selector for which the result bundle records no executed or
+#       skipped test although xcodebuild exited 0 (other selectors having run
+#       does not rescue it). A selector whose tests were all skipped at runtime
+#       (XCTSkip, .disabled) is reported as a notice and keeps exit 0.
+#   83  the ONLY_TESTING selection could not be verified: test enumeration
+#       failed or produced no parsable catalog, or the result bundle of a run
+#       that exited 0 is missing, unreadable, or records a test result other
+#       than Passed / Failed / Skipped / Expected Failure (counted in the
+#       table's "unknown" column, never as executed). Never passed through
+#       silently.
+#   Precedence: 80 and xcodebuild's own nonzero status win over 82/83, which
+#   only ever upgrade a 0 (the table and a warning are still printed).
 set -euo pipefail
 
 EXIT_TEST_PROCESS_CRASHED=80
 EXIT_SIM_LOCK_TIMEOUT=81
+EXIT_SELECTOR_UNMATCHED=82
+EXIT_SELECTION_UNVERIFIED=83
 
 cd "$(dirname "$0")/.."
 
@@ -107,8 +149,13 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
 Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see script header).
-Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated) and
-81 (timed out waiting for the simulator lock).
+ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
+is resolved against the enumerated tests before the run and checked against
+the result bundle after it, with a per-selector table printed at the end.
+Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated),
+81 (timed out waiting for the simulator lock), 82 (an ONLY_TESTING selector
+matched or executed no test) and 83 (the ONLY_TESTING selection could not be
+verified).
 EOF
   exit 2
 }
@@ -494,41 +541,379 @@ enable_simulator_accessibility() {
 }
 
 # ONLY_TESTING narrows a test run: whitespace-separated Target[/Class[/method]]
-# identifiers, each forwarded as one -only-testing: argument. Entries starting
-# with '-' are refused so the knob cannot smuggle arbitrary xcodebuild flags
-# past the extra-argument check. Parsed before any simulator or xcodebuild work
-# so a typo fails fast. Unset/empty leaves the command line untouched.
+# identifiers, each forwarded as one -only-testing: argument (duplicates
+# collapsed). Entries starting with '-' are refused so the knob cannot smuggle
+# arbitrary xcodebuild flags past the extra-argument check. Parsed before any
+# simulator or xcodebuild work so a flag-like entry fails fast; the selectors
+# themselves are checked against the enumerated catalog under the lock (see
+# resolve_only_testing). Unset/empty leaves the command line untouched.
+ONLY_TESTING_IDS=()
 ONLY_TESTING_ARGS=()
+ONLY_TESTING_RESOLVED=
 parse_only_testing() {
-  local ids=() id
+  local ids=() id seen
+  ONLY_TESTING_IDS=()
   ONLY_TESTING_ARGS=()
   read -r -d '' -a ids <<< "${ONLY_TESTING:-}" || true
   for id in ${ids+"${ids[@]}"}; do
     case "$id" in
       -*) die "ONLY_TESTING entry '$id' looks like a flag; entries must be Target[/Class[/method]] identifiers" ;;
     esac
+    for seen in ${ONLY_TESTING_IDS+"${ONLY_TESTING_IDS[@]}"}; do
+      [ "$seen" != "$id" ] || continue 2
+    done
+    ONLY_TESTING_IDS+=("$id")
     ONLY_TESTING_ARGS+=("-only-testing:$id")
   done
 }
 
-# xcodebuild refuses an existing result bundle path, so remove it first.
+# Selector matching shared by the pre-run resolver and the post-run summary
+# (each python program below is run as this prelude plus its own body, so
+# both attribute tests to selectors by the same rules). A selector matches an
+# identifier (Target/Suite/test() as enumerated by xcodebuild and as recorded
+# in the result bundle) when every one of its path segments equals the
+# identifier's segment at that position; the test segment also matches with
+# or without a "()" / parameter list, but a suite name never matches by
+# substring, so IntentTests/FooTests does not resolve to IntentTests/FooViewTests.
+# The trailing argv of both programs is the subcommand's -skip-testing: flags
+# (recognised by prefix) plus the selectors.
+ONLY_TESTING_MATCH_PY='
+import sys
+def split_skips(args):
+    skips, selectors = [], []
+    for arg in args:
+        if arg.startswith("-skip-testing:"):
+            skips.append(arg[len("-skip-testing:"):])
+        elif arg not in selectors:
+            selectors.append(arg)
+    return skips, selectors
+def bare(segment):
+    return segment.split("(", 1)[0]
+def matches(selector_parts, identifier):
+    parts = identifier.split("/")
+    if len(selector_parts) > len(parts):
+        return False
+    for i, want in enumerate(selector_parts):
+        have = parts[i]
+        if want == have:
+            continue
+        if i == len(parts) - 1 and bare(want) == bare(have) and ("(" not in want or "(" not in have):
+            continue
+        return False
+    return True
+def excluded_by(selector, skips):
+    return [skip for skip in skips if matches(skip.split("/"), selector)]
+def excluded_message(selector, skip):
+    return "ONLY_TESTING selector %r is excluded by -skip-testing:%s on this subcommand (test-ios-unit skips the IntentUITests bundle; use test-ios or test-without-building for it)." % (selector, skip)
+'
+
+# Resolves the ONLY_TESTING selectors against the enumerated test catalog.
+# argv: <catalog json> then the -skip-testing: flags and selectors. Enabled
+# and disabled identifiers are collected tolerantly from every
+# enabledTests/disabledTests list in the document (xcodebuild -enumerate-tests
+# -test-enumeration-style flat -format json writes
+# values[].enabledTests[].identifier as Target/Suite/test()). Prints one
+# "<count>\t<selector>" line per selector on stdout (the post-run summary
+# shows it as "resolved"). Exit 0 when every selector resolves to at least one
+# enabled test, 1 when any does not (each named on stderr, with up to five
+# look-alike targets/suites), 2 when the catalog is unreadable or lists no
+# tests at all.
+ONLY_TESTING_RESOLVER_PY='
+import difflib, json
+catalog_path = sys.argv[1]
+skips, selectors = split_skips(sys.argv[2:])
+def unverified(reason):
+    sys.stderr.write("error: could not verify the ONLY_TESTING selection: %s\n" % reason)
+    sys.exit(2)
+try:
+    with open(catalog_path) as f:
+        document = json.load(f)
+except (OSError, ValueError) as e:
+    unverified("the test enumeration output is unreadable (%s)" % e)
+enabled, disabled = [], []
+def identifiers(items):
+    found = []
+    for item in items if isinstance(items, list) else []:
+        if isinstance(item, str):
+            found.append(item)
+        elif isinstance(item, dict) and isinstance(item.get("identifier"), str):
+            found.append(item["identifier"])
+    return found
+def walk(node):
+    if isinstance(node, dict):
+        enabled.extend(identifiers(node.get("enabledTests")))
+        disabled.extend(identifiers(node.get("disabledTests")))
+        for value in node.values():
+            walk(value)
+    elif isinstance(node, list):
+        for value in node:
+            walk(value)
+walk(document)
+if not enabled and not disabled:
+    unverified("the test enumeration output lists no tests (expected values[].enabledTests[].identifier)")
+known = enabled + disabled
+candidates = sorted(set(i.split("/")[0] for i in known)) + sorted(set("/".join(i.split("/")[:2]) for i in known if "/" in i))
+def suggest(selector):
+    parts = selector.split("/")
+    token = (parts[1] if len(parts) > 1 else parts[0]).lower()
+    scored = []
+    for candidate in candidates:
+        name = candidate.split("/")[-1].lower()
+        score = difflib.SequenceMatcher(None, selector.lower(), candidate.lower()).ratio()
+        if token and (token in name or name in token):
+            score += 1
+        if score >= 0.6:
+            scored.append((-score, candidate))
+    return [candidate for _, candidate in sorted(scored)[:5]]
+unmatched = 0
+for selector in selectors:
+    parts = selector.split("/")
+    excluded = excluded_by(selector, skips)
+    if excluded:
+        unmatched += 1
+        sys.stderr.write("error: %s\n" % excluded_message(selector, excluded[0]))
+        continue
+    hits = [i for i in enabled if matches(parts, i)]
+    if hits:
+        sys.stderr.write("ONLY_TESTING: %s -> %d test(s)\n" % (selector, len(hits)))
+        sys.stdout.write("%d\t%s\n" % (len(hits), selector))
+        continue
+    unmatched += 1
+    off = [i for i in disabled if matches(parts, i)]
+    if off:
+        sys.stderr.write("error: ONLY_TESTING selector %r matched only disabled tests (%d, e.g. %s); nothing would run.\n" % (selector, len(off), off[0]))
+        continue
+    sys.stderr.write("error: ONLY_TESTING selector %r matched no test in the enumerated catalog.\n" % selector)
+    for candidate in suggest(selector):
+        sys.stderr.write("  did you mean: %s\n" % candidate)
+if unmatched:
+    sys.stderr.write("error: %d ONLY_TESTING selector(s) matched nothing; the test run was not started.\n" % unmatched)
+    sys.stderr.write("A selector is Target/Suite or Target/Suite/test as enumerated by xcodebuild, not a file name (IntentTests/FooTests.swift never matches).\n")
+    sys.exit(1)
+'
+
+# Enumerates the tests of the built revision and resolves every ONLY_TESTING
+# selector against them; a no-op when ONLY_TESTING is empty. Runs under the
+# simulator lock (enumeration loads the test bundles on the device) with the
+# same project/destination arguments as the real run plus the -skip-testing:
+# flags of the subcommand ($@), but without the -only-testing: arguments so the
+# whole catalog is available for suggestions. Exits EXIT_SELECTOR_UNMATCHED
+# when any selector resolves to nothing and EXIT_SELECTION_UNVERIFIED when
+# the enumeration fails or is unparsable; the real test run never starts then.
+resolve_only_testing() {
+  local udid=$1 dir catalog log status=0
+  shift
+  [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return 0
+  command -v python3 >/dev/null 2>&1 \
+    || die "python3 is required to resolve ONLY_TESTING selectors (on macOS it ships with Xcode's Command Line Tools)"
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-enumerate.XXXXXX")
+  catalog=$dir/tests.json
+  log=$dir/enumerate.log
+  echo "resolving ${#ONLY_TESTING_IDS[@]} ONLY_TESTING selector(s) against the enumerated test catalog" >&2
+  run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
+    -destination "platform=iOS Simulator,id=$udid" \
+    -enumerate-tests -test-enumeration-style flat -test-enumeration-format json \
+    -test-enumeration-output-path "$catalog" "$@" || status=$?
+  echo done >&9
+  if [ "$status" -ne 0 ]; then
+    rm -rf -- "$dir"
+    release_simulator_lock
+    echo "error: could not verify the ONLY_TESTING selection: xcodebuild -enumerate-tests exited $status (see its output above).
+Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&2
+    exit "$EXIT_SELECTION_UNVERIFIED"
+  fi
+  ONLY_TESTING_RESOLVED=$(python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_RESOLVER_PY" "$catalog" "$@" "${ONLY_TESTING_IDS[@]}" 9>&-) || status=$?
+  rm -rf -- "$dir"
+  case "$status" in
+    0) ;;
+    1)
+      release_simulator_lock
+      echo "Exiting $EXIT_SELECTOR_UNMATCHED (unmatched ONLY_TESTING selector)." >&2
+      exit "$EXIT_SELECTOR_UNMATCHED" ;;
+    *)
+      release_simulator_lock
+      echo "Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified)." >&2
+      exit "$EXIT_SELECTION_UNVERIFIED" ;;
+  esac
+}
+
+# Summarises a filtered run from its result bundle. argv: <xcresulttool tests
+# json> <GITHUB_STEP_SUMMARY path or ""> <bundle path, for messages> then the
+# -skip-testing: flags and selectors; ONLY_TESTING_RESOLVED in the environment
+# carries the resolver's "<count>\t<selector>" lines. Walks testNodes
+# recursively (xcrun xcresulttool get test-results tests, Xcode 16+): a "Test
+# Case" node is identified as <enclosing test bundle name>/<nodeIdentifier>
+# and attributed to every selector it matches; executed = Passed + Failed +
+# Expected Failure, Skipped is counted apart, and any other result string is
+# "unknown" (the bundle cannot be trusted). Prints the table on stdout and
+# appends it as Markdown to the step summary when given. Exit 0, or 1 when a
+# selector has executed + skipped = 0 (named on stderr; an all-skipped
+# selector is only a notice), or 2 when the JSON is unreadable or not the
+# expected shape or a selector has an unknown result (2 wins over 1).
+ONLY_TESTING_SUMMARY_PY='
+import json, os
+results_path, summary_path, bundle = sys.argv[1], sys.argv[2], sys.argv[3]
+skips, selectors = split_skips(sys.argv[4:])
+resolved = {}
+for line in os.environ.get("ONLY_TESTING_RESOLVED", "").splitlines():
+    count, _, selector = line.partition("\t")
+    if selector:
+        resolved[selector] = count
+def unverified(reason):
+    sys.stderr.write("error: could not verify the ONLY_TESTING selection: %s\n" % reason)
+    sys.exit(2)
+try:
+    with open(results_path) as f:
+        document = json.load(f)
+except (OSError, ValueError) as e:
+    unverified("the result bundle %s could not be read (%s)" % (bundle, e))
+if not isinstance(document, dict) or not isinstance(document.get("testNodes"), list):
+    unverified("the result bundle %s has no testNodes list (xcresulttool output shape changed?)" % bundle)
+cases = []
+def walk(node, bundle_name):
+    if isinstance(node, list):
+        for value in node:
+            walk(value, bundle_name)
+        return
+    if not isinstance(node, dict):
+        return
+    kind = str(node.get("nodeType", ""))
+    if kind.lower().endswith("test bundle") and isinstance(node.get("name"), str):
+        bundle_name = node["name"]
+    if kind == "Test Case":
+        ident = str(node.get("nodeIdentifier") or node.get("name") or "")
+        if bundle_name and not ident.startswith(bundle_name + "/"):
+            ident = bundle_name + "/" + ident
+        cases.append((ident, str(node.get("result", ""))))
+        return
+    walk(node.get("children", []), bundle_name)
+walk(document["testNodes"], "")
+EXECUTED_RESULTS = ("Passed", "Failed", "Expected Failure")
+rows, failing, notices, unknowns = [], [], [], []
+for selector in selectors:
+    parts = selector.split("/")
+    hits = [result for ident, result in cases if matches(parts, ident)]
+    skipped = sum(1 for r in hits if r == "Skipped")
+    failed = sum(1 for r in hits if r == "Failed")
+    executed = sum(1 for r in hits if r in EXECUTED_RESULTS)
+    unknown = sorted(set(r for r in hits if r != "Skipped" and r not in EXECUTED_RESULTS))
+    unknown_count = len(hits) - executed - skipped
+    rows.append((selector, resolved.get(selector, "?"), str(executed), str(skipped), str(failed), str(unknown_count)))
+    if unknown_count:
+        unknowns.append((selector, unknown_count, unknown))
+    elif executed == 0 and skipped == 0:
+        failing.append(selector)
+    elif executed == 0:
+        notices.append((selector, skipped))
+header = ("requested", "resolved", "executed", "skipped", "failed", "unknown")
+width = max(len(row[0]) for row in rows + [header])
+fmt = "  %-" + str(width) + "s  %8s  %8s  %7s  %6s  %7s\n"
+sys.stdout.write("ONLY_TESTING summary (%d test case(s) in %s):\n" % (len(cases), bundle))
+for row in [header] + rows:
+    sys.stdout.write(fmt % row)
+sys.stdout.flush()
+if summary_path:
+    try:
+        with open(summary_path, "a") as f:
+            f.write("### ONLY_TESTING selectors\n\n| Requested | Resolved | Executed | Skipped | Failed | Unknown |\n|---|---:|---:|---:|---:|---:|\n")
+            for row in rows:
+                f.write("| `%s` | %s | %s | %s | %s | %s |\n" % row)
+            for selector in failing:
+                f.write("\n:x: `%s` executed nothing (exit 82).\n" % selector)
+            for selector, count, unknown in unknowns:
+                f.write("\n:warning: `%s`: %d test(s) with an unrecognised result (%s); selection unverified (exit 83).\n" % (selector, count, ", ".join(repr(u) for u in unknown)))
+            for selector, skipped in notices:
+                f.write("\n:information_source: `%s`: all %d tests skipped at runtime.\n" % (selector, skipped))
+            f.write("\n")
+    except OSError as e:
+        sys.stderr.write("warning: could not append the ONLY_TESTING summary to GITHUB_STEP_SUMMARY (%s)\n" % e)
+for selector, skipped in notices:
+    sys.stderr.write("notice: ONLY_TESTING selector %r: all %d of its test(s) were skipped at runtime (XCTSkip / .disabled); the selection is valid but nothing executed.\n" % (selector, skipped))
+for selector in failing:
+    excluded = excluded_by(selector, skips)
+    if excluded:
+        sys.stderr.write("error: %s\n" % excluded_message(selector, excluded[0]))
+    else:
+        sys.stderr.write("error: ONLY_TESTING selector %r resolved to %s test(s) but the result bundle records none executed or skipped for it.\n" % (selector, resolved.get(selector, "?")))
+for selector, count, unknown in unknowns:
+    sys.stderr.write("error: could not verify the ONLY_TESTING selection: %d test case(s) matching %r have a result the wrapper does not recognise (%s; expected Passed / Failed / Skipped / Expected Failure — xcresulttool output changed?).\n" % (count, selector, ", ".join(repr(u) for u in unknown)))
+if unknowns:
+    sys.exit(2)
+if failing:
+    sys.exit(1)
+'
+
+# Reads the result bundle of a filtered run and prints the per-selector
+# table; a no-op when ONLY_TESTING is empty. $1 = the status so far (after
+# report_test_outcome), $2 = the bundle path, the rest = the subcommand's
+# -skip-testing: flags. Returns the status to exit with: a nonzero $1 is kept
+# (with a warning when the bundle disagrees or is unreadable); a 0 becomes
+# EXIT_SELECTOR_UNMATCHED when a resolved selector executed and skipped
+# nothing, or EXIT_SELECTION_UNVERIFIED when the bundle cannot be read or
+# records a result the classifier does not recognise.
+summarize_only_testing() {
+  local status=$1 bundle=$2 results outcome=0
+  shift 2
+  [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ] || return "$status"
+  results=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-results.XXXXXX")
+  if [ ! -e "$bundle" ]; then
+    echo "error: could not verify the ONLY_TESTING selection: no result bundle was written at $bundle" >&2
+    outcome=2
+  elif ! xcrun xcresulttool get test-results tests --path "$bundle" > "$results"; then
+    echo "error: could not verify the ONLY_TESTING selection: xcrun xcresulttool could not read $bundle" >&2
+    outcome=2
+  else
+    ONLY_TESTING_RESOLVED="$ONLY_TESTING_RESOLVED" python3 -c "$ONLY_TESTING_MATCH_PY$ONLY_TESTING_SUMMARY_PY" \
+      "$results" "${GITHUB_STEP_SUMMARY:-}" "$bundle" "$@" "${ONLY_TESTING_IDS[@]}" || outcome=$?
+  fi
+  rm -f -- "$results"
+  case "$outcome" in
+    0) return "$status" ;;
+    1)
+      if [ "$status" -ne 0 ]; then
+        echo "warning: the ONLY_TESTING selector(s) above executed nothing; keeping exit $status from the test run." >&2
+        return "$status"
+      fi
+      echo "Exiting $EXIT_SELECTOR_UNMATCHED (an ONLY_TESTING selector executed nothing although xcodebuild exited 0)." >&2
+      return "$EXIT_SELECTOR_UNMATCHED" ;;
+    *)
+      if [ "$status" -ne 0 ]; then
+        echo "warning: the ONLY_TESTING selection could not be verified from the result bundle; keeping exit $status from the test run." >&2
+        return "$status"
+      fi
+      echo "Exiting $EXIT_SELECTION_UNVERIFIED (a run that exited 0 could not be verified from its result bundle)." >&2
+      return "$EXIT_SELECTION_UNVERIFIED" ;;
+  esac
+}
+
+# xcodebuild refuses an existing result bundle path, so remove it first. A
+# filtered run without RESULT_BUNDLE writes a temporary bundle (in a fresh
+# directory, so the path is free) that the post-run summary reads; it is
+# removed after a passing run and kept, and named, after a failing one.
 # Positional arguments are test-selection flags supplied by the subcommand
 # dispatch below (test-ios-unit passes -skip-testing:IntentUITests); they are
 # appended after the unconditional flags, as are the ONLY_TESTING arguments.
 #
 # The simulator lock is taken before the device is touched (boot, defaults,
-# tests) and released as soon as xcodebuild returns; the outcome is then
-# classified from the captured log (see report_test_outcome).
+# selector enumeration, tests) and released as soon as xcodebuild returns; the
+# outcome is then classified from the captured log (see report_test_outcome)
+# and, for a filtered run, checked against the result bundle
+# (summarize_only_testing).
 cmd_test_without_building() {
-  local udid extra=() log status=0
+  local udid extra=() log bundle= bundle_dir= status=0 outcome=0
   parse_only_testing
   udid=$(pick_simulator)
   acquire_simulator_lock "$udid"
   enable_simulator_accessibility "$udid"
+  resolve_only_testing "$udid" "$@"
   if [ -n "${RESULT_BUNDLE:-}" ]; then
     rm -rf -- "${RESULT_BUNDLE:?}"
-    extra+=(-resultBundlePath "$RESULT_BUNDLE")
+    bundle=$RESULT_BUNDLE
+  elif [ "${#ONLY_TESTING_IDS[@]}" -gt 0 ]; then
+    bundle_dir=$(mktemp -d "${TMPDIR:-/tmp}/xcodebuild-result.XXXXXX")
+    bundle=$bundle_dir/Intent.xcresult
   fi
+  [ -z "$bundle" ] || extra+=(-resultBundlePath "$bundle")
   log=$(mktemp "${TMPDIR:-/tmp}/xcodebuild-test.XXXXXX")
   run_xcodebuild_logged "$log" test-without-building "${PROJECT_ARGS[@]}" \
     -destination "platform=iOS Simulator,id=$udid" \
@@ -536,7 +921,16 @@ cmd_test_without_building() {
     ${ONLY_TESTING_ARGS+"${ONLY_TESTING_ARGS[@]}"} "$@" || status=$?
   echo done >&9
   release_simulator_lock
-  report_test_outcome "$status" "$log"
+  report_test_outcome "$status" "$log" || outcome=$?
+  summarize_only_testing "$outcome" "$bundle" "$@" || outcome=$?
+  if [ -n "$bundle_dir" ]; then
+    if [ "$outcome" -eq 0 ]; then
+      rm -rf -- "$bundle_dir"
+    else
+      echo "Result bundle kept at: $bundle" >&2
+    fi
+  fi
+  return "$outcome"
 }
 
 [ $# -ge 1 ] || usage
