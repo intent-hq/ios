@@ -85,8 +85,9 @@ extension ConnectionManagerTests {
         )
         #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts)
         clock.advance(by: .seconds(1))
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(server.requestCount(method: Self.subscribeMethod) == maxAttempts)
+        try await expectNever("subscribe retry after the attempts are exhausted") {
+            server.requestCount(method: Self.subscribeMethod) != maxAttempts
+        }
 
         let sessionConnection: any SessionConnectionManaging = manager
         #expect(Self.isSubscriptionFailed(sessionConnection.globalSubscriptionState))
@@ -124,8 +125,9 @@ extension ConnectionManagerTests {
         _ = await retired.value
         #expect(clock.pendingDurations.isEmpty)
         clock.advance(by: .seconds(30))
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(serverA.requestCount(method: Self.subscribeMethod) == 1)
+        try await expectNever("subscribe retry from a retired generation") {
+            serverA.requestCount(method: Self.subscribeMethod) != 1
+        }
 
         try await manager.connect(hosts: ["127.0.0.1"], port: serverB.port, token: "b")
         try await Self.settle { manager.globalSubscriptionState == .subscribed }
@@ -163,8 +165,9 @@ extension ConnectionManagerTests {
         _ = await retired.value
         #expect(server.requestCount(method: Self.subscribeMethod) == 2)
         clock.advance(by: .seconds(10))
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(server.requestCount(method: Self.subscribeMethod) == 2)
-        #expect(manager.globalSubscriptionState == .subscribed)
+        try await expectNever("subscribe retry from the retired pre-reconnect task") {
+            server.requestCount(method: Self.subscribeMethod) != 2
+                || manager.globalSubscriptionState != .subscribed
+        }
     }
 }

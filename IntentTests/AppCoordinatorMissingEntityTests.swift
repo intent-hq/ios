@@ -7,7 +7,7 @@ import Testing
 import UIKit
 
 extension AppCoordinatorTests {
-    @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async {
+    @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async throws {
         let wsId = "test-coord-reconnect-gone-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -32,21 +32,19 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Self.drainMainQueue()
-
-        #expect(fake.didCallMethod("agent.get"), "Reconnect must re-validate the open conversation's agent")
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail after reconnect with missing agent, got \(coordinator.currentScreen)")
+        // Reconnect must re-validate the open conversation's agent.
+        try await fake.waitForRequests("agent.get")
+        try await waitUntil(".workspaceDetail after reconnect with missing agent") {
+            Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
+
         #expect(
             persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
             "Per-workspace saved sub-screen should be cleared for the missing agent"
         )
     }
 
-    @Test @MainActor func reconnect_agentStillExists_staysOnConversation() async {
+    @Test @MainActor func reconnect_agentStillExists_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-alive-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -63,18 +61,14 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("agent.get")
 
-        #expect(fake.didCallMethod("agent.get"))
-        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
-            #expect(agentId == "agent-live")
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected to stay on .agentConversation after reconnect, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away from the conversation after reconnect") {
+            !Self.isConversation(coordinator.currentScreen, agentId: "agent-live", workspaceId: wsId)
         }
     }
 
-    @Test @MainActor func reconnect_agentTransientError_staysOnConversation() async {
+    @Test @MainActor func reconnect_agentTransientError_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-transient-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -96,18 +90,14 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("agent.get")
 
-        #expect(fake.didCallMethod("agent.get"))
-        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
-            #expect(agentId == "agent-live")
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Transient agent.get error must not navigate away, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away on a transient agent.get error") {
+            !Self.isConversation(coordinator.currentScreen, agentId: "agent-live", workspaceId: wsId)
         }
     }
 
-    @Test @MainActor func reconnect_agentBare32602_staysOnConversation() async {
+    @Test @MainActor func reconnect_agentBare32602_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-bare32602-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -130,18 +120,14 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("agent.get")
 
-        #expect(fake.didCallMethod("agent.get"))
-        if case let .agentConversation(agentId, wId, _) = coordinator.currentScreen {
-            #expect(agentId == "agent-live")
-            #expect(wId == wsId)
-        } else {
-            Issue.record("A -32602 without data.code == \"not-found\" must not navigate away, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away on a -32602 without data.code == \"not-found\"") {
+            !Self.isConversation(coordinator.currentScreen, agentId: "agent-live", workspaceId: wsId)
         }
     }
 
-    @Test @MainActor func reconnect_notOnConversation_doesNotValidateAgent() async {
+    @Test @MainActor func reconnect_notOnConversation_doesNotValidateAgent() async throws {
         let wsId = "test-coord-reconnect-detail-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -157,13 +143,10 @@ extension AppCoordinatorTests {
         fake.simulateConnect()
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Self.drainMainQueue()
 
-        #expect(!fake.didCallMethod("agent.get"), "agent.get must not be called when not on a conversation screen")
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail after reconnect, got \(coordinator.currentScreen)")
+        try await expectNever("agent.get or navigation away when not on a conversation screen") {
+            fake.didCallMethod("agent.get")
+                || !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
     }
 
@@ -360,7 +343,7 @@ extension AppCoordinatorTests {
 
     // MARK: - Note validation on cold-start restore
 
-    @Test @MainActor func restoreLastScreen_restoredNoteMissing_fallsBackToDetail() async {
+    @Test @MainActor func restoreLastScreen_restoredNoteMissing_fallsBackToDetail() async throws {
         let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -401,21 +384,19 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
-
-        #expect(fake.didCallMethod("note.get"), "Restoring a note screen must re-validate the note")
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected .workspaceDetail after restoring a missing note, got \(coordinator.currentScreen)")
+        // Restoring a note screen must re-validate the note.
+        try await fake.waitForRequests("note.get")
+        try await waitUntil(".workspaceDetail after restoring a missing note") {
+            Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
+
         #expect(
             persistence.loadLastScreen(for: Self.windowBackend.connectionID)?.screen == "workspaceDetail",
             "The saved last screen should fall back to the workspace for the missing note"
         )
     }
 
-    @Test @MainActor func restoreLastScreen_restoredNoteTransientError_staysOnNote() async {
+    @Test @MainActor func restoreLastScreen_restoredNoteTransientError_staysOnNote() async throws {
         let wsId = "test-coord-restore-note-transient-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -450,19 +431,16 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("note.get")
 
-        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
-            #expect(noteId == "note-1")
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Transient note.get error must not navigate away, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away on a transient note.get error") {
+            !Self.isNoteDetail(coordinator.currentScreen, noteId: "note-1", workspaceId: wsId)
         }
     }
 }
 
 extension AppCoordinatorTests {
-    @Test @MainActor func restoreLastScreen_restoredNoteAlive_staysOnNote() async {
+    @Test @MainActor func restoreLastScreen_restoredNoteAlive_staysOnNote() async throws {
         let wsId = "test-coord-restore-note-alive-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -498,14 +476,10 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("note.get")
 
-        #expect(fake.didCallMethod("note.get"))
-        if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
-            #expect(noteId == "note-live")
-            #expect(wId == wsId)
-        } else {
-            Issue.record("Expected to stay on .noteDetail for a live note, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away from a live note") {
+            !Self.isNoteDetail(coordinator.currentScreen, noteId: "note-live", workspaceId: wsId)
         }
     }
 }

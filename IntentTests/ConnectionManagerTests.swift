@@ -238,7 +238,11 @@ struct ConnectionManagerTests {
         }
         try await waitForPendingRequest(manager, id: 7002)
 
-        try? await Task.sleep(nanoseconds: 100_000_000) // outlast a hypothetical short bound
+        // Outlast a hypothetical short bound: the override must keep the
+        // request pending across the window instead of timing it out.
+        try await expectNever("request 7002 settling before the per-call override") {
+            manager.pendingRequests[7002] == nil || capture.error != nil
+        }
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7002,"result":{"ok":true}}
         """)
@@ -259,11 +263,8 @@ extension ConnectionManagerTests {
             do {
                 capture.value = try await manager.awaitResponse(id: 7004, timeout: 5.0) {
                     Task {
-                        do {
-                            try await Task.sleep(for: .seconds(5))
-                        } catch is CancellationError {
-                            writeCancelled.withLock { $0 = true }
-                        } catch {}
+                        await suspendUntilCancelled()
+                        writeCancelled.withLock { $0 = true }
                     }
                 }
             } catch {

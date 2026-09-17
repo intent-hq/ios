@@ -256,16 +256,20 @@ extension ConnectionManagerTests {
     }
 
     @Test func mixedRaceCollectsLoserMismatchAndStillWins() async {
+        // The winner is held until the loser is about to report its mismatch,
+        // so the mismatch is not swallowed by an already-settled race.
+        let mismatchReported = TestGate()
         let outcome = await ConnectionManager.raceCandidates(
             ["bad.host", "good.host"]
         ) { host -> FakeRaceConnection in
             if host == "bad.host" {
+                mismatchReported.open()
                 throw WebSocketTransportError.certificateMismatch(
                     host: host,
                     fingerprint: "aa:bb"
                 )
             }
-            try? await Task.sleep(for: .milliseconds(50))
+            await mismatchReported.wait()
             return FakeRaceConnection(host: host)
         }
 
@@ -285,7 +289,8 @@ extension ConnectionManagerTests {
             ["good.host", "bad.host"]
         ) { host -> FakeRaceConnection in
             if host == "bad.host" {
-                try? await Task.sleep(for: .milliseconds(50))
+                // Released by the loser cancellation that follows the win.
+                await suspendUntilCancelled()
                 throw WebSocketTransportError.certificateMismatch(
                     host: host,
                     fingerprint: "cc:dd"
@@ -330,16 +335,19 @@ extension ConnectionManagerTests {
     }
 
     @Test func certFailurePreferredOverGenericFailuresWhenNoWinner() async {
+        // Fixed ordering: the generic failure lands before the mismatch.
+        let genericFailureReported = TestGate()
         let outcome = await ConnectionManager.raceCandidates(
             ["down.host", "bad.host"]
         ) { host -> FakeRaceConnection in
             if host == "bad.host" {
-                try? await Task.sleep(for: .milliseconds(20))
+                await genericFailureReported.wait()
                 throw WebSocketTransportError.certificateMismatch(
                     host: host,
                     fingerprint: "ee:ff"
                 )
             }
+            genericFailureReported.open()
             throw WebSocketTransportError.failed(host: host, message: "unreachable")
         }
 
