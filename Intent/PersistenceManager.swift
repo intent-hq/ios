@@ -88,9 +88,10 @@ extension PersistenceManager {
             )
         }
         let stored: StoredConnection
+        let incomingHosts = Set(connection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
         if let index = connections.firstIndex(where: { storedConnection in
             storedConnection.server.port == connection.server.port
-                && (!Set(storedConnection.server.hosts).isDisjoint(with: connection.server.hosts)
+                && (!incomingHosts.isDisjoint(with: storedConnection.server.hosts.map(SyncedBackendConnectionMerge.normalizeHost))
                     || (connection.server.tcAddress != nil
                         && storedConnection.server.tcAddress == connection.server.tcAddress))
         }) {
