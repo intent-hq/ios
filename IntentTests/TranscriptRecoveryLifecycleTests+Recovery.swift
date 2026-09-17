@@ -1,3 +1,4 @@
+import CoreGraphics
 @testable import Intent
 import Testing
 
