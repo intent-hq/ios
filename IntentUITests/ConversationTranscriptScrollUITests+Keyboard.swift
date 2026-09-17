@@ -13,7 +13,11 @@ extension ConversationTranscriptScrollUITests {
     /// run and on the dismiss in another, from the second cycle on — so
     /// the cycle is repeated). Each cycle first asserts the transcript
     /// actually resized, so a simulator with a hardware keyboard attached
-    /// fails here instead of passing without exercising the inset.
+    /// fails here instead of passing without exercising the inset. While
+    /// the keyboard is up the transcript is shorter than the last
+    /// assistant paragraph plus the rows after it, so that half-cycle
+    /// settles on the end row itself; once the keyboard is down the
+    /// paragraph fits again and is the settle target, as elsewhere.
     @MainActor
     func testKeyboardOpenAndDismissKeepTranscriptAtEnd() {
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
@@ -51,8 +55,8 @@ extension ConversationTranscriptScrollUITests {
                     + "did not raise; is a hardware keyboard attached to the simulator?"
             )
             assertRestsAtBottom(
-                lastRow: lastMessage,
-                named: "last assistant paragraph",
+                lastRow: endRow.element,
+                named: endRow.name,
                 endRow: endRow,
                 in: opened,
                 context: "cycle \(cycle): after the keyboard opened"
