@@ -61,8 +61,7 @@ extension ConversationStoreTests {
 
         // A later reconcile for the same marker never re-seeks.
         pushMarker(store, "q1")
-        await drainMainActor()
-        #expect(seekRequests(fake).count == 1)
+        try await expectNever("re-seek for the same marker") { seekRequests(fake).count > 1 }
     }
 
     @Test func markerNamingResidentRowIssuesNoSeek() async throws {
@@ -72,9 +71,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         pushMarker(store, "q1")
-        await drainMainActor()
-
-        #expect(seekRequests(fake).isEmpty, "a resident row is never seeked")
+        try await expectNever("seek for a resident row") { !seekRequests(fake).isEmpty }
         #expect(store.pendingQuestionRecovery == nil)
     }
 
@@ -106,9 +103,7 @@ extension ConversationStoreTests {
 
         pushMarker(store, "q1")
         try await waitUntil("the seek to settle") { store.pendingQuestionRecovery?.status != .loading }
-        await drainMainActor()
-
-        #expect(seekRequests(fake).count == 1, "-32602 is terminal — no retry")
+        try await expectNever("retry after -32602 (terminal)") { seekRequests(fake).count > 1 }
         #expect(store.pendingQuestionRecovery?.status == .notFound)
         #expect(!store.agentNotFound, "an unknown message id is not a deleted agent")
     }
@@ -179,11 +174,9 @@ extension ConversationStoreTests {
             "agent.getConversation",
             with: ["messages": [questionRow(id: "q1")]] as [String: Any]
         )
-        await drainMainActor()
-        #expect(
-            store.pendingQuestionRecovery == nil,
-            "a late reply for the cancelled seek never settles state"
-        )
+        try await expectNever("late reply for the cancelled seek settling state") {
+            store.pendingQuestionRecovery != nil
+        }
     }
 
     @Test func markerReplacedMidFlightRestartsSeekForTheNewId() async throws {

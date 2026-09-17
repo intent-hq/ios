@@ -185,12 +185,10 @@ extension ConversationStoreLiveStateTests {
             )
         ]))
 
-        // Give any (wrongly) spawned resnapshot task a chance to run
-        await drainMainActor()
-
+        try await expectNever("resnapshot for a stale entity") {
+            fake.didCallMethod("chat.unsubscribe") || fake.didCallMethod("chat.subscribe")
+        }
         #expect(store.messages.count == 1) // stale entity not applied
-        #expect(!fake.didCallMethod("chat.unsubscribe"))
-        #expect(!fake.didCallMethod("chat.subscribe"))
 
         // The live sequence continues normally after the stale frame
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
@@ -225,10 +223,10 @@ extension ConversationStoreLiveStateTests {
         ]))
 
         try await fake.waitForRequests("chat.unsubscribe")
-        await drainMainActor()
-
+        try await expectNever("second resnapshot while one is in flight") {
+            fake.paramsForMethod("chat.unsubscribe").count > 1
+        }
         #expect(store.messages.isEmpty) // gapped deltas not applied
-        #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
     }
 }
 
@@ -258,9 +256,10 @@ extension ConversationStoreLiveStateTests {
                 block: ["type": "text", "id": "msg-2:0", "text": "Working more"]
             )
         ]))
-        await drainMainActor()
         #expect(store.messages[0].contentBlocks.first?.resolvedText == "Working more")
-        #expect(!fake.didCallMethod("chat.unsubscribe"))
+        try await expectNever("resnapshot for an in-sequence delta") {
+            fake.didCallMethod("chat.unsubscribe")
+        }
     }
 
     // MARK: - Mid-turn tool title classification (STAB: generic spanner fallback)

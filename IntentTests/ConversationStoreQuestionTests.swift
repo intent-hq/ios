@@ -397,7 +397,6 @@ extension ConversationStoreTests {
         try await waitUntil("the buffered turn boundary to refresh the marker") {
             store.pendingQuestionsMessageId == "a1"
         }
-        await drainMainActor()
 
         #expect(!store.isLoading)
         #expect(

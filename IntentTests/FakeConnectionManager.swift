@@ -3,9 +3,19 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Bounded poll until `condition` holds. Records a failure at the call site on
-/// timeout so a missed state transition cannot pass silently. Use this instead
-/// of a fixed `Task.sleep` after spawning store work (ios#261).
+/// Thrown by `waitUntil` / `expectNever` so a missed or forbidden state
+/// transition aborts the test instead of letting it continue against a fake
+/// that never reached the awaited state (e.g. `resolvePending` on nothing).
+struct ConditionWaitFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
+/// Poll cadence shared by the bounded condition waits below.
+private let kConditionPollInterval: Duration = .milliseconds(5)
+
+/// Bounded poll until `condition` holds. Throws `ConditionWaitFailure` naming
+/// the call site on timeout. Use this instead of a fixed `Task.sleep` after
+/// spawning store work (ios#261).
 @MainActor
 func waitUntil(
     _ description: String,
@@ -13,23 +23,43 @@ func waitUntil(
     sourceLocation: SourceLocation = #_sourceLocation,
     _ condition: () -> Bool
 ) async throws {
-    let pollIntervalMilliseconds = 5
     let deadline = ContinuousClock.now + timeout
     while ContinuousClock.now < deadline {
         if condition() { return }
-        try await Task.sleep(for: .milliseconds(pollIntervalMilliseconds))
+        try await Task.sleep(for: kConditionPollInterval)
     }
     if condition() { return }
-    Issue.record("Timed out waiting for \(description)", sourceLocation: sourceLocation)
+    throw ConditionWaitFailure(
+        description: "Timed out waiting for \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+    )
 }
 
-/// Yield the main actor enough turns for any (wrongly) spawned MainActor task
-/// to have run against a fake that resolves without delay. For negative
-/// assertions only — positive ones must use `waitUntil`.
+/// Bounded negative observation window: polls `forbidden` for `window` and
+/// throws `ConditionWaitFailure` the first time it holds. For assertions that
+/// work must NOT have been spawned — positive ones must use `waitUntil`. The
+/// window is the same order as the sleeps it replaces, but a transient
+/// occurrence inside it now fails instead of slipping past a single check.
 @MainActor
-func drainMainActor() async {
-    let drainYieldCount = 20
-    for _ in 0..<drainYieldCount { await Task.yield() }
+func expectNever(
+    _ description: String,
+    within window: Duration = .milliseconds(100),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ forbidden: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + window
+    repeat {
+        if forbidden() {
+            throw ConditionWaitFailure(
+                description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+            )
+        }
+        try await Task.sleep(for: kConditionPollInterval)
+    } while ContinuousClock.now < deadline
+    if forbidden() {
+        throw ConditionWaitFailure(
+            description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+        )
+    }
 }
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms

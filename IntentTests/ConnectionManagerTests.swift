@@ -187,7 +187,7 @@ struct ConnectionManagerTests {
     /// per-call override. A short per-call timeout must fire at the configured
     /// bound — well before the 10s default would. A response landing after the
     /// timeout has already fired is ignored; the timeout error wins.
-    @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async {
+    @Test @MainActor func perCallTimeoutFiresAtConfiguredBound() async throws {
         let manager = ConnectionManager.shared
         let start = ContinuousClock.now
         let capture = ResponseCapture()
@@ -200,11 +200,13 @@ struct ConnectionManagerTests {
         }
         await waitForPendingRequest(manager, id: 7001)
 
-        await pending.value // the 0.05s timeout fires and settles the request
+        // The 0.05s timeout clears the continuation; a response after that is late.
+        try await waitUntil("the per-call timeout to clear the request") { manager.pendingRequests[7001] == nil }
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
         """)
 
+        await pending.value
         if let error = capture.error {
             #expect(error.localizedDescription.contains("timed out"))
         } else {
