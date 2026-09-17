@@ -140,7 +140,6 @@ extension ConversationTranscriptScrollPolicyTests {
     }
 
     typealias RecoveryDrain = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryDrain
-    typealias FollowTerminal = ConversationTranscriptScrollPolicy.FollowTerminal
 
     /// The drain is handed a terminal only: an intermediate step cannot be
     /// drained, by type.
@@ -172,119 +171,6 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(continuations == 3)
         #expect(terminals == [.notNeeded, .giveUp])
         #expect(terminals.map { drain($0) } == [.replayEdge, .showGoToEnd])
-    }
-
-    @Test func recoveryDrainReplaysTheEdgeTheCorrectionSuppressed() {
-        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
-        #expect(!rePinAfterGrowth(isFollowing: true))
-        #expect(recovery(geometry(offsetY: 180), isEndRealized: true, correctionsSpent: 1) == .finish(.notNeeded))
-        #expect(drain(.notNeeded) == .replayEdge)
-        #expect(!transition(current: false, distanceToBottom: 120, isInteracting: false))
-        #expect(rePinAfterGrowth(isFollowing: false))
-        #expect(drain(.yieldToUser) == .replayEdge)
-        #expect(transition(current: false, distanceToBottom: 120, isInteracting: true))
-        #expect(!rePinAfterGrowth(isInteracting: true))
-        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
-        #expect(drain(.yieldToUser, isFollowing: true) == .replayEdge)
-        #expect(!rePinAfterGrowth(isFollowing: true))
-        #expect(!transition(current: false, distanceToBottom: 10, isInteracting: false))
-        #expect(!rePinAfterGrowth(geometryAway: false))
-        #expect(recoveryReport(.yieldToUser, corrections: 1).reason == .yieldedToUser)
-    }
-
-    @Test func recoveryGiveUpShowsGoToEndInsteadOfRePinningBlind() {
-        #expect(recovery(geometry(offsetY: 260), correctionsLeft: 0, correctionsSpent: 2) == .finish(.giveUp))
-        #expect(recovery(geometry(offsetY: 300), correctionsSpent: 2, timedOut: true) == .finish(.giveUp))
-        #expect(recovery(geometry(offsetY: 300), isInteracting: true, timedOut: true) == .finish(.giveUp))
-        #expect(drain(.giveUp) == .showGoToEnd)
-        #expect(!transition(current: false, distanceToBottom: 40, isInteracting: false))
-        #expect(!transition(current: false, distanceToBottom: 0, isInteracting: false))
-        #expect(rePinAfterGrowth(isFollowing: false))
-        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
-        #expect(ConversationTranscriptScrollPolicy.shouldFollowOnScrolledAwayCleared(goToEndRequested: true))
-        #expect(ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
-            terminal: .executed(.landed),
-            isEndRealized: false
-        ))
-        #expect(drain(.giveUp, isFollowing: true) == .deferToFollow)
-        #expect(!rePinAfterGrowth(isFollowing: true))
-        #expect(recoveryReport(.giveUp, corrections: 2).reason == .gaveUp)
-    }
-
-    @Test func deferredGiveUpShowsGoToEndWhenTheFollowIsDropped() {
-        let policy = ConversationTranscriptScrollPolicy.self
-        #expect(drain(.giveUp, isFollowing: true) == .deferToFollow)
-        #expect(!executeFollow(distanceToBottom: 120))
-        let dropped = FollowTerminal.dropped
-        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: dropped, isEndRealized: false))
-        #expect(!transition(
-            current: false,
-            distanceToBottom: 120,
-            isInteracting: false,
-            isEndRealized: false
-        ))
-        #expect(rePinAfterGrowth(isFollowing: false))
-        #expect(policy.shouldShowGoToEndAfterFollow(
-            terminal: dropped,
-            isEndRealized: false,
-            giveUpDeferred: true
-        ))
-        #expect(!rePinAfterGrowth(userIsScrolledAway: true))
-        #expect(executeFollow(distanceToBottom: 30))
-        let executedTerminals: [FollowTerminal] = [
-            .executed(nil), .executed(.landed), .executed(.giveUp), .executed(.yieldToUser),
-        ]
-        for executed in executedTerminals {
-            #expect(!policy.shouldShowGoToEndAfterFollow(
-                terminal: executed,
-                isEndRealized: false,
-                giveUpDeferred: true
-            ))
-            #expect(policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: executed, isEndRealized: false))
-        }
-        #expect(!executeFollow(forced: true, distanceToBottom: 0, isInteracting: true))
-        for notExecuted in [FollowTerminal.yielded, .cancelled, .replaced] {
-            #expect(policy.shouldShowGoToEndAfterFollow(
-                terminal: notExecuted,
-                isEndRealized: false,
-                giveUpDeferred: true
-            ))
-            #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: notExecuted, isEndRealized: false))
-        }
-        #expect(!policy.shouldShowGoToEndAfterFollow(
-            terminal: dropped,
-            isEndRealized: true,
-            giveUpDeferred: true
-        ))
-        #expect(!policy.shouldShowGoToEndAfterFollow(
-            terminal: dropped,
-            isEndRealized: false,
-            giveUpDeferred: false
-        ))
-        #expect(transition(
-            current: true,
-            distanceToBottom: 0,
-            isInteracting: false,
-            isEndRealized: false
-        ))
-        #expect(!transition(
-            current: true,
-            distanceToBottom: 0,
-            isInteracting: false,
-            isEndRealized: true
-        ))
-    }
-
-    @Test func followDrainingOverAnUnrealizedEndRowArmsTheRecovery() {
-        let policy = ConversationTranscriptScrollPolicy.self
-        #expect(policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .executed(nil), isEndRealized: false))
-        #expect(policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .executed(.landed), isEndRealized: false))
-        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .executed(nil), isEndRealized: true))
-        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .yielded, isEndRealized: false))
-        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .dropped, isEndRealized: false))
-        #expect(!policy.shouldArmUnrealizedEndRecoveryAfterFollow(terminal: .yielded, isEndRealized: true))
-        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000)) == .continue(.recover(pageOffsetY: 1_600)))
-        #expect(recovery(geometry(offsetY: 2_300, contentHeight: 3_000), isEndRealized: true) == .finish(.notNeeded))
     }
 
     /// The report of a transcript with one episode armed, resolved on
