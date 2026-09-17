@@ -53,6 +53,7 @@ $(SRCROOT)/Intent/Presentation/MessageBlockPartitioning.swift
 $(SRCROOT)/Intent/Presentation/NoteContentSegments.swift
 $(SRCROOT)/Intent/Presentation/NoteRowIcon.swift
 $(SRCROOT)/Intent/Presentation/NoteSheetInfo.swift
+$(SRCROOT)/Intent/Presentation/RootNavigationPresentation.swift
 $(SRCROOT)/Intent/Presentation/SpecialistModelFetchOutcome.swift
 $(SRCROOT)/Intent/Presentation/SpecialistPickerSelection.swift
 $(SRCROOT)/Intent/Presentation/SplashAnimation.swift
@@ -354,6 +355,7 @@ $(SRCROOT)/IntentTests/QuestionTests.swift
 $(SRCROOT)/IntentTests/RemoteImageLoaderTests.swift
 $(SRCROOT)/IntentTests/RenderBlockIdentityTests.swift
 $(SRCROOT)/IntentTests/RepoOwnerAvatarViewTests.swift
+$(SRCROOT)/IntentTests/RootNavigationPresentationTests.swift
 $(SRCROOT)/IntentTests/SessionCacheBoundsMeasurementTests.swift
 $(SRCROOT)/IntentTests/SettingsViewTests.swift
 $(SRCROOT)/IntentTests/ShapeIsolationTests.swift
@@ -410,7 +412,10 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
+$(SRCROOT)/IntentUITests/RootNavigationUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift
