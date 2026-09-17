@@ -142,6 +142,11 @@ extension ConversationTranscriptScrollUITests {
                 leaveConversation(in: app)
                 continue
             }
+            assertAtEnd(
+                endRow,
+                in: opened,
+                context: "\(context), after expanding the slim tool row"
+            )
             XCTAssertTrue(hydrationHint.exists, "\(context): hydration gate did not hold the request")
 
             try Data().write(to: blockHydrationTriggerFile)
