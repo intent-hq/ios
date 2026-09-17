@@ -225,6 +225,29 @@ struct AssistantMessageToolRowHitTestTests {
         )
     }
 
+    /// Every accessibility element reachable from `root`, depth-first. Unlike
+    /// `SyntheticBadgeHost.accessibilityElements(in:)` this also descends into
+    /// SwiftUI's non-`UIView` container nodes, which is where a nested row's
+    /// buttons and text live.
+    private static func allAccessibilityElements(
+        under root: NSObject,
+        visited: inout Set<ObjectIdentifier>,
+        maxDepth: Int = 12
+    ) -> [NSObject] {
+        guard maxDepth > 0, visited.insert(ObjectIdentifier(root)).inserted else { return [] }
+        var children = (root.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+        let elementCount = root.accessibilityElementCount()
+        if elementCount != NSNotFound, elementCount > 0 {
+            children += (0..<elementCount).compactMap { root.accessibilityElement(at: $0) as? NSObject }
+        }
+        if let view = root as? UIView {
+            children += view.subviews
+        }
+        return [root] + children.flatMap { child in
+            allAccessibilityElements(under: child, visited: &visited, maxDepth: maxDepth - 1)
+        }
+    }
+
     /// Frame of the first accessibility element whose label (or value, for
     /// UIKit-backed text views) contains `fragment`, in window coordinates.
     private static func frame(
@@ -232,12 +255,18 @@ struct AssistantMessageToolRowHitTestTests {
         in hostView: UIView,
         window: UIWindow
     ) throws -> CGRect {
+        var visited: Set<ObjectIdentifier> = []
+        let elements = allAccessibilityElements(under: hostView, visited: &visited)
+        let seen = elements.compactMap { element -> String? in
+            let text = element.accessibilityLabel ?? element.accessibilityValue
+            return text.map { "\(type(of: element))(\($0.prefix(60)))" }
+        }.joined(separator: ", ")
         let element = try #require(
-            SyntheticBadgeHost.accessibilityElements(in: hostView).first { element in
+            elements.first { element in
                 element.accessibilityLabel?.contains(fragment) == true
                     || element.accessibilityValue?.contains(fragment) == true
             },
-            "no accessibility element labelled with \(fragment)"
+            Comment(rawValue: "no accessibility element labelled with \(fragment); saw: [\(seen)]")
         )
         let frame = window.convert(element.accessibilityFrame, from: nil)
         try #require(!frame.isEmpty, "\(fragment) has an empty accessibility frame")
