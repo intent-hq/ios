@@ -222,7 +222,6 @@ extension WorkspaceDetailViewTests {
         )
         coordinator.onSelectWorkspace(workspaceId)
         let view = WorkspaceDetailView(workspaceId: workspaceId, session: session)
-        let store = view.agentStoreForTesting
         let (controller, window) = host(view, coordinator: coordinator, session: session)
         defer { tearDown(controller, window: window) }
 
@@ -237,7 +236,10 @@ extension WorkspaceDetailViewTests {
             }
             let agents = (0..<count).map { ["id": "agent-\($0)", "name": "Coordinator \($0)"] }
             fake.resolvePending("agent.list", with: ["agents": agents])
-            try await waitForEntryCondition { store.hasLoaded && !store.isLoading && store.agents.count == count }
+            try await waitForEntryCondition {
+                let snapshot = view.agentLoadSnapshotForTesting
+                return snapshot.hasLoaded && !snapshot.isLoading && snapshot.agentCount == count
+            }
             // Let SwiftUI render and deliver both agents/hasLoaded onChange callbacks.
             try await Task.sleep(for: .milliseconds(100))
             if case let .workspaceDetail(selectedId) = coordinator.currentScreen {

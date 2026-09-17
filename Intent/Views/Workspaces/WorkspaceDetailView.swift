@@ -30,7 +30,19 @@ struct WorkspaceDetailView: View {
         ObjectIdentifier(noteStore.connectionManager)
     }
 
-    var agentStoreForTesting: AgentStore { agentStore }
+    struct AgentLoadSnapshot {
+        let hasLoaded: Bool
+        let isLoading: Bool
+        let agentCount: Int
+    }
+
+    var agentLoadSnapshotForTesting: AgentLoadSnapshot {
+        AgentLoadSnapshot(
+            hasLoaded: agentStore.hasLoaded,
+            isLoading: agentStore.isLoading,
+            agentCount: agentStore.agents.count
+        )
+    }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
 
