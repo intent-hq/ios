@@ -183,12 +183,18 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum BottomBandRePinDecision: Equatable {
-        /// Not following, or the viewport rests within `driftTolerance` of
-        /// the bottom, past `atBottomThreshold`, or at an unknown distance.
+        /// Not following (scrolled away, or before the entry scroll), or the
+        /// viewport rests within `driftTolerance` of the bottom, at a
+        /// negative distance the past-end clamp owns (#271), or at an
+        /// unknown distance.
         case none
         /// Following, but under the finger, decelerating, or with a follow
         /// in flight; re-check on settle.
         case deferred
+        /// Following and settled, with no gesture, at rest more than
+        /// `driftTolerance` short of the bottom — past `atBottomThreshold`
+        /// included: the automatic follow re-validates that distance and,
+        /// from past the band, its drain re-pins it as content growth.
         case rePin
     }
 
