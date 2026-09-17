@@ -178,9 +178,10 @@ extension MonitoredPrStoreTests {
                 "data": makeEventData(state: "completed")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("prMonitor:completed fold") {
+            store.monitors.first?.state == .completed
+        }
 
-        #expect(store.monitors[0].state == .completed)
         #expect(store.monitors[0].lastSnapshot != nil)
     }
 
@@ -206,9 +207,9 @@ extension MonitoredPrStoreTests {
                 "data": makeEventData(state: "cancelled")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.monitors.count == 1)
+        try await expectNever("fold of a foreign-workspace or foreign-subscription event") {
+            store.monitors.count != 1
+        }
     }
 
     @Test func unknownMonitorEventTriggersRefetch() async throws {
@@ -225,11 +226,11 @@ extension MonitoredPrStoreTests {
                 "data": makeEventData(monitorId: "prm-new")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("prMonitor.list refetch for the unknown monitor") {
+            store.monitors.map(\.monitorId) == ["prm-new"]
+        }
 
         #expect(fake.paramsForMethod("prMonitor.list").count == 1)
-        #expect(store.monitors.count == 1)
-        #expect(store.monitors[0].monitorId == "prm-new")
     }
 
     @Test func flushAndCancelSendExactParams() async throws {
@@ -272,14 +273,9 @@ extension MonitoredPrStoreTests {
 
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            if fake.didCallMethod("prMonitor.list") { break }
-        }
+        try await fake.waitForRequests("prMonitor.list")
 
         #expect(fake.didCallMethod("events.subscribe"))
-        #expect(fake.didCallMethod("prMonitor.list"))
         #expect(store.monitors.count == 1)
     }
 
@@ -304,7 +300,7 @@ extension MonitoredPrStoreTests {
         // in flight.
         fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("prMonitor.list")
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-prmon",
@@ -314,20 +310,19 @@ extension MonitoredPrStoreTests {
                 "data": makeEventData(state: "cancelled")
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 20_000_000)
-        #expect(store.monitors.isEmpty)
+        try await waitUntil("prMonitor:cancelled fold") { store.monitors.isEmpty }
 
         // Resolve the in-flight request with the STALE payload — it still
         // lists the cancelled monitor. The queued follow-up stays suspended,
         // so a wrongly applied stale response cannot be masked by
         // convergence.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
-        try await Task.sleep(nanoseconds: 20_000_000)
-
-        // The stale response must not restore the cancelled monitor; the
-        // discarded response queues one follow-up fetch to converge.
-        #expect(store.monitors.isEmpty)
+        // The discarded response queues exactly one follow-up fetch to converge.
+        try await fake.waitForRequests("prMonitor.list", count: 2)
         #expect(fake.paramsForMethod("prMonitor.list").count == 2)
+
+        // The stale response must not restore the cancelled monitor.
+        #expect(store.monitors.isEmpty)
 
         // Fresh server state (post-cancel) for the queued follow-up fetch.
         fake.resolvePending("prMonitor.list", with: ["monitors": [] as [[String: Any]]])
@@ -340,13 +335,18 @@ extension MonitoredPrStoreTests {
         let store = await makeSubscribedStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
 
-        fake.delayMap["prMonitor.list"] = 100_000_000
+        // Suspend prMonitor.list so unsubscribe lands while the request is
+        // in flight.
+        fake.pendingMethods.insert("prMonitor.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("prMonitor.list")
 
         await store.unsubscribe()
         #expect(store.monitors.isEmpty)
 
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the monitor that unsubscribe cleared.
+        fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         await refetchTask.value
 
         // The stale response must not repopulate the cleared list, and the
@@ -364,11 +364,8 @@ extension MonitoredPrStoreTests {
         #expect(store != nil)
 
         store = nil
-        // deinit hops to the main actor to remove the handler; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("deinit to remove the event handler") {
+            fake.eventHandlerCount == 0
         }
-        #expect(fake.eventHandlerCount == 0)
     }
 }

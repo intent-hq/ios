@@ -105,7 +105,7 @@ nonisolated final class TestGate: Sendable {
     /// such a regression would hang the runner instead of failing. Cancelling
     /// a candidate task that is merely awaiting `wait()` does not open the gate.
     func opening<T>(onCancellationOf body: () async throws -> T) async rethrows -> T {
-        try await withTaskCancellationHandler(operation: body, onCancel: { open() })
+        try await withTaskCancellationHandler(operation: body) { open() }
     }
 }
 

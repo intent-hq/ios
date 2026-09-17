@@ -7,6 +7,10 @@ import Testing
 
 @MainActor
 struct AgentStoreTests {
+    /// Margin added to `fetchDebounce` when holding that no further
+    /// `agent.list` request is issued after the debounce window.
+    static let debounceSlack: Duration = .milliseconds(200)
+
     // MARK: - hasLoaded gating (empty state waits for first completed load)
 
     @Test func hasLoadedFalseUntilFirstFetchSucceeds() async throws {
@@ -16,7 +20,7 @@ struct AgentStoreTests {
 
         fake.pendingMethods.insert("agent.list")
         let fetch = Task { await store.fetchAgents(workspaceId: "ws-1") }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await fake.waitForPendingRequests("agent.list")
         // Fetch in flight: still not loaded
         #expect(store.hasLoaded == false)
         #expect(store.isLoading == true)
@@ -91,9 +95,9 @@ struct AgentStoreTests {
         fake.pendingMethods.insert("agent.list")
 
         let staleFetch = Task { await store.fetchAgents(workspaceId: "ws-1") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.list")
         let currentFetch = Task { await store.fetchAgents(workspaceId: "ws-2") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.list", count: 2)
 
         // The stale ws-1 fetch completing must not mark ws-2 as loaded
         // nor replace ws-2's agents with ws-1's.
@@ -117,7 +121,7 @@ struct AgentStoreTests {
         fake.pendingMethods.insert("agent.list")
 
         let staleFetch = Task { await store.fetchAgents(workspaceId: "ws-1") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.list")
 
         // The view switched workspaces; its async fetch for ws-2 has not
         // started yet. The old ws-1 response landing in this window must not
@@ -221,13 +225,20 @@ struct AgentStoreTests {
         // Cancel the caller while the debounce sleep is still pending: the
         // unstructured debounce task must be cancelled with it, so no
         // agent.list request is issued once the window would have elapsed.
+        // The 50 ms positions the caller inside the 300 ms debounce window;
+        // nothing observable marks that window, and either ordering must
+        // still issue no request.
         let refresh = Task { await store.fetchAgents(workspaceId: "ws-1") }
         try await Task.sleep(for: .milliseconds(50))
         refresh.cancel()
         await refresh.value
-        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+        try await expectNever(
+            "agent.list request after the cancelled debounce",
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack
+        ) {
+            fake.paramsForMethod("agent.list").count > 1
+        }
 
-        #expect(fake.paramsForMethod("agent.list").count == 1)
         #expect(store.agents.map(\.id) == ["agent-1"])
     }
 
@@ -238,7 +249,7 @@ struct AgentStoreTests {
         // the response is still pending: a late response must not publish.
         fake.pendingMethods.insert("agent.list")
         let refresh = Task { await store.fetchAgents(workspaceId: "ws-1") }
-        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+        try await fake.waitForPendingRequests("agent.list")
         #expect(fake.paramsForMethod("agent.list").count == 2)
 
         let changeCount = Mutex(0)
@@ -286,7 +297,9 @@ struct AgentStoreTests {
 
         // A newer fetch supersedes the first one's debounce task. Cancelling
         // the first caller afterwards must only cancel its own (already
-        // replaced) task, never the newer fetch.
+        // replaced) task, never the newer fetch. The 50 ms sleeps position
+        // each caller inside the 300 ms debounce window; nothing observable
+        // marks that window.
         let first = Task { await store.fetchAgents(workspaceId: "ws-1") }
         try await Task.sleep(for: .milliseconds(50))
         let second = Task { await store.fetchAgents(workspaceId: "ws-1") }
@@ -323,10 +336,9 @@ struct AgentStoreTests {
         ]
         fake.clearRequestLog()
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await waitUntil("agent.list refetch on connect") { store.hasLoaded }
 
         #expect(fake.didCallMethod("agent.list"))
-        #expect(store.hasLoaded == true)
         #expect(store.agents.count == 1)
     }
 
@@ -336,14 +348,20 @@ struct AgentStoreTests {
         fake.responseMap["agent.list"] = ["agents": []]
 
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await expectNever(
+            "agent.list request on connect without workspace context",
+            within: .milliseconds(200)
+        ) {
+            fake.didCallMethod("agent.list")
+        }
 
-        #expect(!fake.didCallMethod("agent.list"))
         #expect(store.hasLoaded == false)
     }
+}
 
-    // MARK: - Event allowlist (streaming firehose must not refetch the list)
+// MARK: - Event allowlist (streaming firehose must not refetch the list)
 
+extension AgentStoreTests {
     private func deliverAgentEvent(_ fake: FakeConnectionManager, type: String) {
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-agents",
@@ -355,32 +373,61 @@ struct AgentStoreTests {
         ] as [String: Any])
     }
 
-    /// Delivers `type` to a loaded, observing store and returns the number of
-    /// `agent.list` requests it issued once the debounce window has elapsed.
-    private func agentListRequests(after type: String) async throws -> Int {
+    /// Delivers `type` to a loaded, observing store, waits for the one
+    /// debounced `agent.list` refetch it must issue, and holds that no
+    /// second one follows across another debounce window.
+    private func expectRefetch(
+        after type: String,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
         let (fake, store) = await makeLoadedStore()
         store.startObservingEvents()
         fake.clearRequestLog()
 
         deliverAgentEvent(fake, type: type)
-        try await Task.sleep(for: Constants.AgentStore.fetchDebounce + .milliseconds(200))
+        try await fake.waitForRequests("agent.list", sourceLocation: sourceLocation)
+        try await expectNever(
+            "second agent.list refetch after \(type)",
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack,
+            sourceLocation: sourceLocation
+        ) {
+            fake.paramsForMethod("agent.list").count > 1
+        }
+    }
 
-        return fake.paramsForMethod("agent.list").count
+    /// Delivers `type` to a loaded, observing store and holds that no
+    /// `agent.list` refetch is issued across the debounce window.
+    private func expectNoRefetch(
+        after type: String,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        let (fake, store) = await makeLoadedStore()
+        store.startObservingEvents()
+        fake.clearRequestLog()
+
+        deliverAgentEvent(fake, type: type)
+        try await expectNever(
+            "agent.list refetch after \(type)",
+            within: Constants.AgentStore.fetchDebounce + Self.debounceSlack,
+            sourceLocation: sourceLocation
+        ) {
+            fake.didCallMethod("agent.list")
+        }
     }
 
     @Test func streamActivityDoesNotRefetchAgents() async throws {
-        #expect(try await agentListRequests(after: "agent:stream:activity") == 0)
+        try await expectNoRefetch(after: "agent:stream:activity")
     }
 
     @Test func toolCallDoesNotRefetchAgents() async throws {
-        #expect(try await agentListRequests(after: "agent:tool:call") == 0)
+        try await expectNoRefetch(after: "agent:tool:call")
     }
 
     @Test func statusChangedRefetchesAgents() async throws {
-        #expect(try await agentListRequests(after: "agent:status-changed") == 1)
+        try await expectRefetch(after: "agent:status-changed")
     }
 
     @Test func updatedRefetchesAgents() async throws {
-        #expect(try await agentListRequests(after: "agent:updated") == 1)
+        try await expectRefetch(after: "agent:updated")
     }
 }

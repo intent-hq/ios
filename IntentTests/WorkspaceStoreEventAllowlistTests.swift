@@ -50,8 +50,9 @@ struct WorkspaceStoreEventAllowlistTests {
         ] {
             fake.clearRequestLog()
             store.handleEvent("events.event", params: workspaceEvent(type))
-            try await Task.sleep(nanoseconds: 50_000_000)
-            #expect(fake.didCallMethod("workspace.list"), "\(type) must refetch workspace.list")
+            try await waitUntil("\(type) refetch of workspace.list") {
+                fake.didCallMethod("workspace.list")
+            }
         }
     }
 
@@ -69,9 +70,7 @@ struct WorkspaceStoreEventAllowlistTests {
                 ]
             )
         )
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(fake.didCallMethod("workspace.list"))
+        try await fake.waitForRequests("workspace.list")
     }
 
     /// A delta that carries `lastActivity` alongside another rendered field
@@ -92,9 +91,8 @@ struct WorkspaceStoreEventAllowlistTests {
                 ]
             )
         )
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(fake.didCallMethod("workspace.list"), "a mixed delta must refetch for the title")
+        // A mixed delta must refetch for the title.
+        try await fake.waitForRequests("workspace.list")
     }
 
     @Test func lastActivityOnlyUpdatePatchesInPlaceWithoutRefetch() async throws {
@@ -112,10 +110,11 @@ struct WorkspaceStoreEventAllowlistTests {
                 ]
             )
         )
-        try await Task.sleep(nanoseconds: 100_000_000)
 
         #expect(store.workspaces[0].lastActivity == "2026-03-01T12:00:00Z")
-        #expect(!fake.didCallMethod("workspace.list"))
+        try await expectNever("workspace.list refetch for a lastActivity-only delta") {
+            fake.didCallMethod("workspace.list")
+        }
     }
 
     @Test func nonAllowlistedWorkspaceEventsDoNotRefetch() async throws {
@@ -141,10 +140,11 @@ struct WorkspaceStoreEventAllowlistTests {
                 )
             )
         }
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(!fake.didCallMethod("workspace.list"))
         #expect(store.workspaces[0].waiting, "waiting-changed still patches the row in place")
+        try await expectNever("workspace.list refetch for non-allowlisted events") {
+            fake.didCallMethod("workspace.list")
+        }
     }
 
     /// Mirrors the Note/Task suites: once the `workspace.subscribe` snapshot
@@ -157,8 +157,9 @@ struct WorkspaceStoreEventAllowlistTests {
         fake.responseMap["workspace.list"] = ["workspaces": []]
         fake.responseMap["workspace.subscribe"] = ["subscriptionId": "sub-1"]
         fake.simulateConnect()
-        try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(fake.hasSubscriptionHandler(id: "sub-1"))
+        try await waitUntil("workspace.subscribe handler registration") {
+            fake.hasSubscriptionHandler(id: "sub-1")
+        }
 
         fake.deliverSubscriptionPush(
             SubscriptionPush(
@@ -171,13 +172,14 @@ struct WorkspaceStoreEventAllowlistTests {
                 delta: nil
             )
         )
-        try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(store.workspaces.map(\.id) == ["ws-1"])
+        try await waitUntil("live snapshot applied") {
+            store.workspaces.map(\.id) == ["ws-1"]
+        }
 
         fake.clearRequestLog()
         store.handleEvent("events.event", params: workspaceEvent("workspace:created"))
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(!fake.didCallMethod("workspace.list"))
+        try await expectNever("workspace.list refetch while live") {
+            fake.didCallMethod("workspace.list")
+        }
     }
 }
