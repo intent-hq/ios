@@ -189,7 +189,7 @@ extension AppCoordinator {
         if let workspaceId = selectedWorkspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
-            // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
+            // The per-workspace sub-screen record no longer points at an open note.
             dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }
@@ -198,7 +198,7 @@ extension AppCoordinator {
         if let workspaceId = selectedWorkspaceId {
             currentScreen = .workspaceDetail(workspaceId: workspaceId)
             saveCurrentScreen()
-            // Clear per-workspace sub-screen so re-entering the workspace shows the detail view.
+            // The per-workspace sub-screen record no longer points at an open conversation.
             dependencies.persistence.clearWorkspaceScreen(workspaceId: workspaceId)
         }
     }

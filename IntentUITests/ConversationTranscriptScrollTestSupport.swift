@@ -8,6 +8,9 @@ enum Fixture {
     // DemoFixtures.longConversationAgents' top-level agent name: the row
     // tapped on the workspace overview to reach the transcript.
     static let agentName = "Test Stabilizer"
+    // WorkspaceDetailView's Agents/Context segmented control: an
+    // overview-only surface.
+    static let overviewOnlyButton = "Context"
     // Distinctive substrings of DemoFixtures.longConversationFirstSentence
     // / longConversationLastSentence (the UI test target cannot import
     // the app module, so match on text the way AppStoreScreenshotTests does).
@@ -185,6 +188,13 @@ func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConv
     }
     workspaceRow.tap()
 
+    // The Agents/Context switcher exists only on the overview; the agent
+    // name alone would also match an already-open conversation's title.
+    let overview = app.buttons[Fixture.overviewOnlyButton].firstMatch
+    XCTAssertTrue(
+        overview.waitForExistence(timeout: Fixture.settleTimeout),
+        "\(context): workspace overview not shown after the workspace tap"
+    )
     let agentRow = app.staticTexts[Fixture.agentName].firstMatch
     XCTAssertTrue(
         agentRow.waitForExistence(timeout: Fixture.settleTimeout),
