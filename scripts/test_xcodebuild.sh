@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Self-tests for scripts/xcodebuild.sh: the simulator lock, the
-# crash-vs-failure classification of a test run, and the resolution of
-# ONLY_TESTING selectors against the enumerated test catalog. xcrun and
+# crash-vs-failure classification of a test run, the resolution of
+# ONLY_TESTING selectors against the enumerated test catalog, and the
+# per-selector summary read back from the result bundle. xcrun and
 # xcodebuild are replaced by stubs on PATH, so this runs anywhere with bash
 # (including the stock macOS Bash 3.2) plus python3 (which the lock keeper and
 # the resolver need) and never touches a real simulator.
@@ -21,28 +22,49 @@ trap 'rm -rf -- "$work"; [ "$made_tailcatkit" -eq 0 ] || { rm -rf -- "$tailcatki
 stubs=$work/bin
 mkdir -p "$stubs"
 
+# xcrun records its argv as "xcrun: [arg] ..." lines in STUB_ARGS; an
+# xcresulttool test-results query prints $STUB_RESULTS (fixture JSON) or fails
+# under STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
+if [ -n "${STUB_ARGS:-}" ]; then
+  { printf 'xcrun:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
+fi
+case " $* " in
+  *" xcresulttool get test-results tests --path "*)
+    if [ -n "${STUB_RESULTS_FAIL:-}" ]; then
+      echo "Error: the result bundle could not be opened (stub)" >&2
+      exit 1
+    fi
+    cat "$STUB_RESULTS" ;;
+esac
 exit 0
 EOF
 
 # STUB_MODE picks the canned xcodebuild outcome (marker prints STUB_MARKER as
-# the only crash line); STUB_SLEEP holds the "device" for that many seconds;
-# STUB_LOG records start/end epoch seconds; STUB_LINGER leaves a detached
-# child (like xcodebuild's helper daemons) alive for that many seconds with
-# every inherited fd except stdout/stderr still open; STUB_WATCH=<pid> records
-# at start whether that peer process is still alive; STUB_RESIST=<secs> spawns
-# a child that ignores SIGTERM for that long (logged as "child <pid>") and
-# STUB_RESIST_ROOT=1 makes the stub itself ignore SIGTERM. STUB_ARGS records
-# every invocation's argv as one "argv: [arg] [arg] ..." line. An
-# -enumerate-tests invocation copies $STUB_CATALOG to the requested
-# -test-enumeration-output-path and exits 0 (nonzero with STUB_ENUMERATE_FAIL=1)
-# without running the canned outcome.
+# the only crash line; pass prints STUB_PREAMBLE first when set); STUB_SLEEP
+# holds the "device" for that many seconds; STUB_LOG records start/end epoch
+# seconds; STUB_LINGER leaves a detached child (like xcodebuild's helper
+# daemons) alive for that many seconds with every inherited fd except
+# stdout/stderr still open; STUB_WATCH=<pid> records at start whether that
+# peer process is still alive; STUB_RESIST=<secs> spawns a child that ignores
+# SIGTERM for that long (logged as "child <pid>") and STUB_RESIST_ROOT=1 makes
+# the stub itself ignore SIGTERM. STUB_ARGS records every invocation's argv as
+# one "argv: [arg] [arg] ..." line. A -resultBundlePath is created as a
+# directory (not under STUB_NO_BUNDLE=1). An -enumerate-tests invocation
+# copies $STUB_CATALOG to the requested -test-enumeration-output-path and
+# exits 0 (nonzero with STUB_ENUMERATE_FAIL=1) without running the canned
+# outcome.
 cat > "$stubs/xcodebuild" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
   { printf 'argv:'; printf ' [%s]' "$@"; echo; } >> "$STUB_ARGS"
 fi
+prev=
+for arg in "$@"; do
+  [ "$prev" != "-resultBundlePath" ] || [ -n "${STUB_NO_BUNDLE:-}" ] || mkdir -p "$arg"
+  prev=$arg
+done
 case " $* " in
   *" -enumerate-tests "*)
     if [ -n "${STUB_ENUMERATE_FAIL:-}" ]; then
@@ -79,6 +101,7 @@ case "${STUB_MODE:-pass}" in
     echo "** TEST EXECUTE FAILED **"
     exit 65 ;;
   pass)
+    [ -z "${STUB_PREAMBLE:-}" ] || echo "$STUB_PREAMBLE"
     echo "Test Suite 'All tests' passed"
     echo "** TEST EXECUTE SUCCEEDED **"
     exit 0 ;;
@@ -132,8 +155,47 @@ cat > "$STUB_CATALOG" <<'EOF'
 }
 EOF
 
+# make_results <file> <Target/Suite/test=Result>...: writes the document
+# xcrun xcresulttool get test-results tests prints (Xcode 16 shape: a Test
+# Plan node, one Unit/UI test bundle node per target, Test Suite nodes, and
+# Test Case leaves identified as Suite/test with a result).
+make_results() {
+  python3 - "$@" <<'EOF'
+import json, sys
+out, bundles = sys.argv[1], {}
+for spec in sys.argv[2:]:
+    ident, result = spec.rsplit("=", 1)
+    target, suite, test = ident.split("/", 2)
+    bundles.setdefault(target, {}).setdefault(suite, []).append((test, result))
+targets = []
+for target, suites in bundles.items():
+    kind = "UI test bundle" if target.endswith("UITests") else "Unit test bundle"
+    children = [{"name": suite, "nodeType": "Test Suite", "nodeIdentifier": suite, "result": "Passed", "children": [
+        {"name": test, "nodeType": "Test Case", "nodeIdentifier": suite + "/" + test, "result": result, "duration": "0.001s"}
+        for test, result in tests]} for suite, tests in suites.items()]
+    targets.append({"name": target, "nodeType": kind, "result": "Passed", "children": children})
+doc = {"devices": [{"deviceName": "iPhone 16", "platform": "iOS Simulator"}],
+       "testNodes": [{"name": "Intent", "nodeType": "Test Plan", "result": "Passed", "children": targets}],
+       "testPlanConfigurations": [{"configurationId": "1", "configurationName": "Test Scheme Action"}]}
+with open(out, "w") as f:
+    json.dump(doc, f, indent=2)
+EOF
+}
+# The default result bundle: every enabled test of the catalog passed.
+export STUB_RESULTS=$work/results.json
+make_results "$STUB_RESULTS" \
+  "IntentTests/DemoFixturesTests/testFoo()=Passed" \
+  "IntentTests/DemoFixturesTests/testBar()=Passed" \
+  "IntentTests/ConversationTranscriptScrollPolicyTests/recoversAfterBlank(width:)=Passed" \
+  "IntentTests/ConversationTranscriptScrollPolicyTests/staysPinnedAtEnd()=Passed" \
+  "IntentTests/NewMessagesDividerViewTests/testDividerAppears()=Passed" \
+  "IntentUITests/ConversationTranscriptScrollUITests/testGoToEndButtonAppears()=Passed"
+
 export PATH="$stubs:$PATH"
 export TMPDIR=$work
+# The wrapper appends to a caller's step summary; the self-test's own CI job
+# must not receive the fixture tables.
+unset GITHUB_STEP_SUMMARY RESULT_BUNDLE ONLY_TESTING
 export SIM_UDID=00000000-0000-0000-0000-000000000001
 export SIM_LOCK_DIR=$work/locks
 lock=$SIM_LOCK_DIR/xcodebuild-sim-$SIM_UDID.lock
@@ -169,9 +231,15 @@ run_filtered() {
   env STUB_ARGS="$work/$name.args" ONLY_TESTING="$only" "$@" "$SCRIPT" "$sub" > "$work/$name.out" 2>&1 || status=$?
   echo "$status"
 }
-# argv_line <name> <n>: the n-th recorded xcodebuild invocation; argv_count <name>.
-argv_line() { sed -n "${2}p" "$work/$1.args"; }
+# argv_line <name> <n>: the n-th recorded xcodebuild invocation; argv_count <name>;
+# xcresulttool_count <name>: recorded xcrun xcresulttool queries.
+argv_line() { grep '^argv:' "$work/$1.args" | sed -n "${2}p"; }
 argv_count() { grep -c '^argv:' "$work/$1.args" || true; }
+xcresulttool_count() { grep -c '^xcrun: \[xcresulttool\]' "$work/$1.args" || true; }
+# temp_bundles: temporary result bundle directories left in $work.
+temp_bundles() { ls "$work" | grep -c '^xcodebuild-result\.' || true; }
+# kept_bundle <outfile>: the retained result bundle path named in a diagnostic.
+kept_bundle() { sed -n 's/^Result bundle kept at: //p' "$1"; }
 # The lock is a flock(2), so "free" means a non-blocking exclusive flock succeeds.
 lock_is_free() {
   python3 -c 'import fcntl, os, sys
@@ -399,6 +467,13 @@ assert_eq "empty ONLY_TESTING makes exactly one xcodebuild call" "$(argv_count p
 assert_eq "empty ONLY_TESTING leaves the argv byte-identical" "$(argv_line plain 1)" \
   "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO]"
 assert_lacks "empty ONLY_TESTING prints no resolution notice" "$(cat "$work/plain.out")" "ONLY_TESTING"
+assert_eq "empty ONLY_TESTING never reads a result bundle" "$(xcresulttool_count plain)" 0
+assert_eq "empty ONLY_TESTING leaves no temporary result bundle" "$(temp_bundles)" 0
+status=$(run_filtered plainbundle "" test-without-building RESULT_BUNDLE="$work/plain.xcresult")
+assert_eq "empty ONLY_TESTING with RESULT_BUNDLE exits 0" "$status" 0
+assert_eq "empty ONLY_TESTING with RESULT_BUNDLE keeps that argv" "$(argv_line plainbundle 1)" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-resultBundlePath] [$work/plain.xcresult]"
+assert_eq "empty ONLY_TESTING with RESULT_BUNDLE never reads it" "$(xcresulttool_count plainbundle)" 0
 
 echo "# a target-wide selector resolves; enumeration precedes the real run"
 status=$(run_filtered target "IntentTests" test-without-building)
@@ -412,11 +487,22 @@ assert_contains "enumeration asks for a flat json catalog" "$enum" \
   "[-enumerate-tests] [-test-enumeration-style] [flat] [-test-enumeration-format] [json] [-test-enumeration-output-path] [$work/xcodebuild-enumerate."
 assert_lacks "enumeration carries no -only-testing:" "$enum" "-only-testing:"
 assert_lacks "enumeration is not a real test run" "$enum" "-parallel-testing-enabled"
-assert_eq "the real run keeps the unfiltered argv plus the selector" "$real" \
-  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-only-testing:IntentTests]"
+assert_contains "the real run keeps the unfiltered argv and adds a temporary result bundle" "$real" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-resultBundlePath] [$work/xcodebuild-result."
+assert_contains "the real run ends with the selector" "$real" "/Intent.xcresult] [-only-testing:IntentTests]"
 assert_contains "target-wide selector reports its resolved count" "$(cat "$work/target.out")" "ONLY_TESTING: IntentTests -> 5 test(s)"
 assert_lock_free "lock released after a resolved filtered run"
 assert_eq "enumeration scratch files are removed" "$(ls "$work" | grep -c '^xcodebuild-enumerate\.')" 0
+assert_eq "the result bundle is read once" "$(xcresulttool_count target)" 1
+assert_contains "the result bundle is read with xcresulttool" "$(cat "$work/target.args")" \
+  "xcrun: [xcresulttool] [get] [test-results] [tests] [--path] [$work/xcodebuild-result."
+assert_contains "the summary table names the selector" "$(cat "$work/target.out")" "ONLY_TESTING summary (6 test case(s) in $work/xcodebuild-result."
+assert_contains "the summary table row shows requested/resolved/executed/skipped/failed" "$(cat "$work/target.out")" \
+  "  IntentTests         5         5        0       0"
+assert_contains "the summary table has a header" "$(cat "$work/target.out")" "  requested    resolved  executed  skipped  failed"
+assert_eq "the temporary result bundle is removed after a passing run" "$(temp_bundles)" 0
+assert_eq "results scratch files are removed" "$(ls "$work" | grep -c '^xcodebuild-results\.')" 0
+assert_lacks "a passing filtered run keeps no bundle" "$(cat "$work/target.out")" "Result bundle kept at"
 
 echo "# Target/Class selectors resolve for XCTest and Swift Testing suites"
 status=$(run_filtered xctest "IntentTests/DemoFixturesTests" test-without-building)
@@ -530,7 +616,146 @@ status=$(run_filtered unitok "IntentTests/DemoFixturesTests" test-ios-unit)
 assert_eq "unit selector under test-ios-unit exits 0" "$status" 0
 assert_eq "test-ios-unit builds, enumerates, and runs" "$(argv_count unitok)" 3
 assert_contains "test-ios-unit real run carries the selector and the skip flag" "$(argv_line unitok 3)" \
-  "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/DemoFixturesTests] [-skip-testing:IntentUITests]"
+  "/Intent.xcresult] [-only-testing:IntentTests/DemoFixturesTests] [-skip-testing:IntentUITests]"
+assert_contains "test-ios-unit summary row counts the selector's tests" "$(cat "$work/unitok.out")" \
+  "  IntentTests/DemoFixturesTests         2         2        0       0"
+
+echo "# (a) a green Swift Testing run whose XCTest side executed 0 tests passes"
+policy=()
+for n in $(seq 1 71); do policy+=("IntentTests/ConversationTranscriptScrollPolicyTests/case$n()=Passed"); done
+make_results "$work/policy.json" "${policy[@]}"
+status=$(run_filtered swiftonly "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building \
+  STUB_RESULTS="$work/policy.json" STUB_PREAMBLE="Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds")
+out=$(cat "$work/swiftonly.out")
+assert_eq "Swift Testing suite with an empty XCTest preamble exits 0" "$status" 0
+assert_contains "the log still shows the XCTest preamble" "$out" "Executed 0 tests"
+assert_contains "the table counts the 71 executed Swift Testing cases" "$out" \
+  "  IntentTests/ConversationTranscriptScrollPolicyTests         2        71        0       0"
+assert_lacks "no selector is reported as executing nothing" "$out" "records none executed"
+assert_eq "temporary bundle removed after the green Swift Testing run" "$(temp_bundles)" 0
+
+echo "# (b) a resolved selector absent from the result bundle exits 82"
+make_results "$work/uionly.json" "IntentUITests/ConversationTranscriptScrollUITests/testGoToEndButtonAppears()=Passed"
+status=$(run_filtered absent "IntentTests/ConversationTranscriptScrollPolicyTests IntentUITests/ConversationTranscriptScrollUITests" test-without-building \
+  STUB_RESULTS="$work/uionly.json")
+out=$(cat "$work/absent.out")
+assert_eq "a selector that executed nothing exits 82 although xcodebuild exited 0" "$status" 82
+assert_contains "the absent selector is named" "$out" \
+  "ONLY_TESTING selector 'IntentTests/ConversationTranscriptScrollPolicyTests' resolved to 2 test(s) but the result bundle records none executed or skipped for it"
+assert_contains "the absent selector's row shows zero executed" "$out" \
+  "  IntentTests/ConversationTranscriptScrollPolicyTests         2         0        0       0"
+assert_contains "the UI selector's row shows it ran" "$out" \
+  "  IntentUITests/ConversationTranscriptScrollUITests           1         1        0       0"
+assert_lacks "the UI selector is not blamed" "$out" "'IntentUITests/ConversationTranscriptScrollUITests' resolved to"
+assert_contains "exit 82 is explained" "$out" "Exiting 82 (an ONLY_TESTING selector executed nothing although xcodebuild exited 0)"
+assert_contains "the temporary bundle is kept and named" "$out" "Result bundle kept at: $work/xcodebuild-result."
+[ -d "$(kept_bundle "$work/absent.out")" ] && pass "the kept bundle exists" || fail "the kept bundle is missing"
+assert_eq "the real run was started" "$(argv_count absent)" 2
+assert_lock_free "lock released after a zero-executed selector"
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# (c) a selector whose tests were all skipped at runtime passes with a notice"
+make_results "$work/skipped.json" "IntentTests/DemoFixturesTests/testFoo()=Skipped" "IntentTests/DemoFixturesTests/testBar()=Skipped"
+status=$(run_filtered allskipped "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/skipped.json")
+out=$(cat "$work/allskipped.out")
+assert_eq "all-skipped selector exits 0" "$status" 0
+assert_contains "all-skipped selector gets a notice" "$out" \
+  "notice: ONLY_TESTING selector 'IntentTests/DemoFixturesTests': all 2 of its test(s) were skipped at runtime"
+assert_contains "all-skipped row counts the skips" "$out" "  IntentTests/DemoFixturesTests         2         0        2       0"
+assert_lacks "all-skipped selector is not an error" "$out" "error:"
+assert_eq "temporary bundle removed after an all-skipped run" "$(temp_bundles)" 0
+
+echo "# (d) failing tests keep xcodebuild's 65; the table is still printed"
+make_results "$work/mixedresults.json" "IntentTests/DemoFixturesTests/testFoo()=Passed" \
+  "IntentTests/DemoFixturesTests/testBar()=Failed" "IntentTests/DemoFixturesTests/testBaz()=Expected Failure"
+status=$(run_filtered failedrun "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/mixedresults.json" STUB_MODE=fail)
+out=$(cat "$work/failedrun.out")
+assert_eq "failing filtered run keeps 65" "$status" 65
+assert_contains "failing filtered run prints the table with the failure count" "$out" \
+  "  IntentTests/DemoFixturesTests         2         3        0       1"
+assert_contains "failing filtered run keeps the bundle" "$out" "Result bundle kept at: $work/xcodebuild-result."
+assert_lacks "failing filtered run is not upgraded to 82" "$out" "Exiting 82"
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered failedabsent "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building STUB_RESULTS="$work/uionly.json" STUB_MODE=fail)
+out=$(cat "$work/failedabsent.out")
+assert_eq "65 wins over a zero-executed selector" "$status" 65
+assert_contains "the zero-executed selector is still named" "$out" "'IntentTests/ConversationTranscriptScrollPolicyTests' resolved to 2 test(s) but the result bundle records none"
+assert_contains "the warning says 65 is kept" "$out" "warning: the ONLY_TESTING selector(s) above executed nothing; keeping exit 65 from the test run"
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# (e) a test-process crash keeps 80 over 82 and 83"
+status=$(run_filtered crashfiltered "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building STUB_RESULTS="$work/uionly.json" STUB_MODE=crash)
+out=$(cat "$work/crashfiltered.out")
+assert_eq "crash with a selector exits 80" "$status" 80
+assert_contains "crash with a selector prints the crash diagnostic" "$out" "crashed or was terminated (exit 65 is NOT a plain test failure)"
+assert_contains "crash with a selector keeps 80 over the zero-executed selector" "$out" "keeping exit 80 from the test run"
+assert_contains "crash with a selector keeps the bundle" "$out" "Result bundle kept at:"
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered crashunread "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS_FAIL=1 STUB_MODE=crash)
+out=$(cat "$work/crashunread.out")
+assert_eq "crash with an unreadable bundle exits 80" "$status" 80
+assert_contains "crash with an unreadable bundle warns instead of exiting 83" "$out" \
+  "warning: the ONLY_TESTING selection could not be verified from the result bundle; keeping exit 80 from the test run"
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# an unreadable or missing result bundle on a green run exits 83"
+status=$(run_filtered unreadable "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS_FAIL=1)
+out=$(cat "$work/unreadable.out")
+assert_eq "unreadable bundle on a green run exits 83" "$status" 83
+assert_contains "unreadable bundle is reported" "$out" "could not verify the ONLY_TESTING selection: xcrun xcresulttool could not read $work/xcodebuild-result."
+assert_contains "exit 83 is explained" "$out" "Exiting 83 (a run that exited 0 could not be verified from its result bundle)"
+assert_contains "unreadable bundle is kept" "$out" "Result bundle kept at:"
+assert_lock_free "lock released after an unreadable bundle"
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered nobundle "IntentTests/DemoFixturesTests" test-without-building STUB_NO_BUNDLE=1)
+assert_eq "missing bundle on a green run exits 83" "$status" 83
+assert_contains "missing bundle is reported" "$(cat "$work/nobundle.out")" "could not verify the ONLY_TESTING selection: no result bundle was written at $work/xcodebuild-result."
+assert_eq "missing bundle makes no xcresulttool call" "$(xcresulttool_count nobundle)" 0
+rm -rf -- "$work"/xcodebuild-result.*
+echo "not json" > "$work/garbage-results.json"
+status=$(run_filtered garbageresults "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/garbage-results.json")
+assert_eq "unparsable results on a green run exit 83" "$status" 83
+assert_contains "unparsable results are reported" "$(cat "$work/garbageresults.out")" "could not verify the ONLY_TESTING selection: the result bundle $work/xcodebuild-result."
+rm -rf -- "$work"/xcodebuild-result.*
+echo '{ "devices" : [ ] }' > "$work/noshape-results.json"
+status=$(run_filtered noshape "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/noshape-results.json")
+assert_eq "results without testNodes on a green run exit 83" "$status" 83
+assert_contains "results without testNodes are reported" "$(cat "$work/noshape.out")" "has no testNodes list"
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered failunread "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS_FAIL=1 STUB_MODE=fail)
+assert_eq "unreadable bundle on a failed run keeps 65" "$status" 65
+assert_contains "unreadable bundle on a failed run warns" "$(cat "$work/failunread.out")" "keeping exit 65 from the test run"
+rm -rf -- "$work"/xcodebuild-result.*
+
+echo "# RESULT_BUNDLE set: the given bundle is used, read, and left in place"
+status=$(run_filtered ownbundle "IntentTests/DemoFixturesTests" test-without-building RESULT_BUNDLE="$work/own.xcresult")
+assert_eq "RESULT_BUNDLE with a selector exits 0" "$status" 0
+assert_contains "RESULT_BUNDLE is passed instead of a temporary bundle" "$(argv_line ownbundle 2)" \
+  "[-parallel-testing-enabled] [NO] [-resultBundlePath] [$work/own.xcresult] [-only-testing:IntentTests/DemoFixturesTests]"
+assert_contains "RESULT_BUNDLE is the bundle read back" "$(cat "$work/ownbundle.args")" "xcrun: [xcresulttool] [get] [test-results] [tests] [--path] [$work/own.xcresult]"
+[ -d "$work/own.xcresult" ] && pass "RESULT_BUNDLE is left in place after a passing run" || fail "RESULT_BUNDLE was removed"
+assert_eq "no temporary bundle when RESULT_BUNDLE is set" "$(temp_bundles)" 0
+
+echo "# GITHUB_STEP_SUMMARY receives the Markdown table; a test counts for every selector it matches"
+: > "$work/step-summary.md"
+status=$(run_filtered summary "IntentTests IntentTests/DemoFixturesTests" test-without-building GITHUB_STEP_SUMMARY="$work/step-summary.md")
+summary_md=$(cat "$work/step-summary.md")
+assert_eq "run with GITHUB_STEP_SUMMARY exits 0" "$status" 0
+assert_contains "step summary has a heading" "$summary_md" "### ONLY_TESTING selectors"
+assert_contains "step summary has the table header" "$summary_md" "| Requested | Resolved | Executed | Skipped | Failed |"
+assert_contains "step summary has the target-wide row" "$summary_md" '| `IntentTests` | 5 | 5 | 0 | 0 |'
+assert_contains "step summary has the nested selector's row" "$summary_md" '| `IntentTests/DemoFixturesTests` | 2 | 2 | 0 | 0 |'
+assert_lacks "step summary flags nothing on a clean run" "$summary_md" ":x:"
+: > "$work/step-summary2.md"
+status=$(run_filtered summary82 "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building \
+  GITHUB_STEP_SUMMARY="$work/step-summary2.md" STUB_RESULTS="$work/uionly.json")
+assert_eq "zero-executed run with GITHUB_STEP_SUMMARY exits 82" "$status" 82
+assert_contains "step summary flags the zero-executed selector" "$(cat "$work/step-summary2.md")" \
+  ':x: `IntentTests/ConversationTranscriptScrollPolicyTests` executed nothing (exit 82).'
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered nosummary "IntentTests/DemoFixturesTests" test-without-building)
+assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
+assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 2
 
 echo
 if [ "$failures" -eq 0 ]; then
