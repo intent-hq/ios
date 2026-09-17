@@ -250,11 +250,13 @@ struct CopyContextMenuOverlay: UIViewRepresentable {
     }
 }
 
-/// Transparent UIKit view placed behind tappable image thumbnails inside a
-/// `MessageCopyContextMenu` row. The copy overlay claims any touch whose
-/// probe resolves to plain SwiftUI content (an ancestor hosting view), which
-/// is why taps on an attached image never reached its `Button` or its
-/// `.contextMenu`. A UIKit view beneath the overlay is a sibling instead: the
+/// Transparent UIKit view placed behind tappable controls (image thumbnails,
+/// tool-call row headers) inside a `MessageCopyContextMenu` row. The copy
+/// overlay claims any touch whose probe resolves to plain SwiftUI content (an
+/// ancestor hosting view), which is why taps on an attached image never
+/// reached its `Button` or its `.contextMenu`, and why tool rows in
+/// text-bearing assistant messages did not expand (ios#344). A UIKit view
+/// beneath the overlay is a sibling instead: the
 /// probe resolves to the marker, the overlay passes the touch through, and
 /// SwiftUI routes it to the gestures above the marker in its own tree — the
 /// Button's tap (lightbox) and the thumbnail's long-press (image Save/Copy

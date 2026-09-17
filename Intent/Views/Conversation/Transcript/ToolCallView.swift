@@ -103,6 +103,10 @@ struct ToolCallView: View {
             }
             .padding(.leading, Layout.headerLeadingPadding)
             .padding(.vertical, Layout.headerVerticalPadding)
+            // Text-bearing assistant rows carry the copy overlay
+            // (MessageCopyContextMenu); without a pass-through marker it
+            // claims the header tap and the row never expands (ios#344).
+            .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
     }
@@ -140,6 +144,7 @@ struct ToolCallView: View {
             }
             .font(.caption2)
             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+            .copyContextMenuPassthrough()
         }
         .buttonStyle(.plain)
         .disabled(isHydrating || onHydrate == nil)
