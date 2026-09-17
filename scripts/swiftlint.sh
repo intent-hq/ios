@@ -24,8 +24,18 @@ if [ "$ACTUAL_SWIFTLINT_VERSION" != "$EXPECTED_SWIFTLINT_VERSION" ]; then
   die "SwiftLint $EXPECTED_SWIFTLINT_VERSION is required; found $ACTUAL_SWIFTLINT_VERSION at $SWIFTLINT_PATH"
 fi
 
-cd "$REPO_ROOT"
-exec "$SWIFTLINT_PATH" lint \
-  --config "$REPO_ROOT/.swiftlint.yml" \
-  --strict \
+lint_args=(
+  lint
+  --config "$REPO_ROOT/.swiftlint.yml"
+  --strict
   --no-cache
+)
+# SWIFTLINT_REPORTER overrides the config's reporter (CI sets
+# github-actions-logging so violations render as PR annotations); unset or
+# empty leaves the config's reporter in effect.
+if [ -n "${SWIFTLINT_REPORTER:-}" ]; then
+  lint_args+=(--reporter "$SWIFTLINT_REPORTER")
+fi
+
+cd "$REPO_ROOT"
+exec "$SWIFTLINT_PATH" "${lint_args[@]}"
