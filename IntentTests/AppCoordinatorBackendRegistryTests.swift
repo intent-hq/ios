@@ -367,7 +367,7 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onSelectWorkspace_restoresSavedConversationScreen() {
+    @Test @MainActor func onSelectWorkspace_ignoresSavedConversationScreen() {
         let wsId = "test-coord-restore-conv-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -390,16 +390,15 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case let .agentConversation(agentId, wId, name) = coordinator.currentScreen {
-            #expect(agentId == "agent-x")
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
-            #expect(name == "Tester")
         } else {
-            Issue.record("Expected .agentConversation, got \(coordinator.currentScreen)")
+            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
         }
+        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId)?.agentId == "agent-x")
     }
 
-    @Test @MainActor func onSelectWorkspace_restoresSavedNoteScreen() {
+    @Test @MainActor func onSelectWorkspace_ignoresSavedNoteScreen() {
         let wsId = "test-coord-restore-note-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
@@ -421,13 +420,12 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
 
-        if case let .noteDetail(noteId, wId, title) = coordinator.currentScreen {
-            #expect(noteId == "note-abc")
+        if case let .workspaceDetail(wId) = coordinator.currentScreen {
             #expect(wId == wsId)
-            #expect(title == "My Note")
         } else {
-            Issue.record("Expected .noteDetail, got \(coordinator.currentScreen)")
+            Issue.record("Expected .workspaceDetail, got \(coordinator.currentScreen)")
         }
+        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId)?.noteId == "note-abc")
     }
 
     @Test @MainActor func onSelectWorkspace_fallsBackToDetailWhenNoSavedScreen() {

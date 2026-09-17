@@ -1,7 +1,9 @@
 import CoreGraphics
 import Foundation
 @testable import Intent
+import SwiftUI
 import Testing
+import UIKit
 
 struct WorkspaceDetailViewTests {
     @Test func delegatedAgentCountUsesLegibleSingularAndPluralLabels() {
@@ -186,5 +188,103 @@ struct WorkspaceDetailViewTests {
         #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
         #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
         #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+    }
+}
+
+extension WorkspaceDetailViewTests {
+    /// Exercise the real view's onAppear/onChange callbacks with held backend
+    /// responses, including the empty-to-sole-agent transition on a later reload.
+    @MainActor
+    @Test(.serialized, arguments: [0, 1, 2], ["none", "conversation", "note"])
+    func delayedAgentLoadsKeepExplicitEntryOnOverview(initialCount: Int, savedScreen: String) async throws {
+        let suiteName = "WorkspaceEntry-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let persistence = PersistenceManager(defaults: defaults, keychainStorage: InMemoryKeychainStorage())
+        let workspaceId = UUID().uuidString
+        if savedScreen != "none" {
+            persistence.saveWorkspaceScreen(workspaceId: workspaceId, screen: .init(
+                screen: savedScreen,
+                workspaceId: workspaceId,
+                agentId: "agent-0",
+                agentName: "Coordinator",
+                noteId: "spec",
+                noteTitle: "Spec"
+            ))
+        }
+        let fake = FakeConnectionManager()
+        fake.pendingMethods = ["agent.list"]
+        fake.responseMap["note.list"] = ["notes": []]
+        fake.responseMap["workspace.markSeen"] = [:]
+        let session = makePinnedSession(connection: fake)
+        let coordinator = AppCoordinator(
+            workspaceStore: session.workspaceStore, connection: fake, persistence: persistence
+        )
+        coordinator.onSelectWorkspace(workspaceId)
+        let view = WorkspaceDetailView(workspaceId: workspaceId, session: session)
+        let store = view.agentStoreForTesting
+        let (controller, window) = host(view, coordinator: coordinator, session: session)
+        defer { tearDown(controller, window: window) }
+
+        for (index, count) in [initialCount, 0, 1, 2, 1].enumerated() {
+            if index > 0 {
+                fake.deliverEvent(method: "events.event", params: [
+                    "event": ["type": "agent:created", "workspaceId": workspaceId]
+                ])
+            }
+            try await waitForEntryCondition {
+                fake.requestLog.filter { $0.method == "agent.list" }.count == index + 1
+            }
+            let agents = (0..<count).map { ["id": "agent-\($0)", "name": "Coordinator \($0)"] }
+            fake.resolvePending("agent.list", with: ["agents": agents])
+            try await waitForEntryCondition { store.hasLoaded && !store.isLoading && store.agents.count == count }
+            // Let SwiftUI render and deliver both agents/hasLoaded onChange callbacks.
+            try await Task.sleep(for: .milliseconds(100))
+            if case let .workspaceDetail(selectedId) = coordinator.currentScreen {
+                #expect(selectedId == workspaceId)
+            } else {
+                Issue.record("Delayed agent load forwarded explicit workspace entry: \(coordinator.currentScreen)")
+            }
+        }
+        #expect(fake.requestLog.contains { $0.method == "workspace.markSeen" })
+    }
+
+    @MainActor
+    private func waitForEntryCondition(_ condition: () -> Bool) async throws {
+        let timeoutSeconds = 5
+        let pollMilliseconds = 10
+        let deadline = ContinuousClock.now + .seconds(timeoutSeconds)
+        while !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(pollMilliseconds))
+        }
+        try #require(condition(), "Timed out waiting for the hosted workspace's agent load")
+    }
+
+    @MainActor
+    private func host(
+        _ view: WorkspaceDetailView, coordinator: AppCoordinator, session: BackendSession
+    ) -> (UIHostingController<AnyView>, UIWindow) {
+        let controller = UIHostingController(rootView: AnyView(
+            NavigationStack { view }.environment(coordinator).environment(session)
+        ))
+        let viewportWidth = 390
+        let viewportHeight = 844
+        let viewport = CGSize(width: viewportWidth, height: viewportHeight)
+        let window = UIWindow(frame: CGRect(origin: .zero, size: viewport))
+        controller.view.frame = window.bounds
+        controller.beginAppearanceTransition(true, animated: false)
+        window.addSubview(controller.view)
+        window.isHidden = false
+        controller.endAppearanceTransition()
+        controller.view.layoutIfNeeded()
+        return (controller, window)
+    }
+
+    @MainActor
+    private func tearDown(_ controller: UIHostingController<AnyView>, window: UIWindow) {
+        controller.beginAppearanceTransition(false, animated: false)
+        controller.view.removeFromSuperview()
+        window.isHidden = true
+        controller.endAppearanceTransition()
     }
 }

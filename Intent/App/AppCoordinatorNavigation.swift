@@ -92,67 +92,9 @@ extension AppCoordinator {
 
     func onSelectWorkspace(_ workspaceId: String) {
         markWorkspaceSeen(workspaceId)
-        pendingAutoOpenWorkspaceId = nil
-        // Check for a saved per-workspace sub-screen and restore it
-        if let saved = dependencies.persistence.loadWorkspaceScreen(workspaceId: workspaceId) {
-            navigationState.suppressWorkspaceNavigation = true
-            selectedWorkspaceId = workspaceId
-            navigationState.suppressWorkspaceNavigation = false
-            switch saved.screen {
-            case "conversation":
-                if let agentId = saved.agentId, let agentName = saved.agentName {
-                    currentScreen = .agentConversation(
-                        agentId: agentId,
-                        workspaceId: workspaceId,
-                        agentName: agentName
-                    )
-                    saveCurrentScreen()
-                    // Validate agent still exists asynchronously
-                    Task { @MainActor in
-                        await self.validateRestoredAgent(agentId: agentId, workspaceId: workspaceId)
-                    }
-                    return
-                }
-            case "note":
-                if let noteId = saved.noteId, let noteTitle = saved.noteTitle {
-                    currentScreen = .noteDetail(
-                        noteId: noteId,
-                        workspaceId: workspaceId,
-                        noteTitle: noteTitle
-                    )
-                    saveCurrentScreen()
-                    // Validate note still exists asynchronously
-                    Task { @MainActor in
-                        await self.validateRestoredNote(noteId: noteId, workspaceId: workspaceId)
-                    }
-                    return
-                }
-            default:
-                break
-            }
-        }
         selectedWorkspaceId = workspaceId
         currentScreen = .workspaceDetail(workspaceId: workspaceId)
         saveCurrentScreen()
-        pendingAutoOpenWorkspaceId = workspaceId
-    }
-
-    func autoOpenSoleAgentIfArmed(
-        workspaceId: String,
-        foregroundAgents: [AgentSession]
-    ) {
-        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
-        pendingAutoOpenWorkspaceId = nil
-        guard case .workspaceDetail(let shownWorkspaceId) = currentScreen,
-              shownWorkspaceId == workspaceId,
-              foregroundAgents.count == 1,
-              let agent = foregroundAgents.first else { return }
-        onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-    }
-
-    func cancelPendingAutoOpen(workspaceId: String) {
-        guard pendingAutoOpenWorkspaceId == workspaceId else { return }
-        pendingAutoOpenWorkspaceId = nil
     }
 
     /// Fire-and-forget workspace.markSeen: clears the server-owned unread

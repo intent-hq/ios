@@ -82,9 +82,6 @@ class AppCoordinator {
     @ObservationIgnored private var connectionObserver: AnyCancellable?
     @ObservationIgnored private var certMismatchObserver: AnyCancellable?
     @ObservationIgnored private var reconnectLoadingObservationID: UUID?
-    /// Workspace entered from the list whose agent list has not yet decided
-    /// whether to auto-open its sole top-level agent.
-    @ObservationIgnored var pendingAutoOpenWorkspaceId: String?
     /// Intentionally tracked so mutating it consumes the current one-shot
     /// workspace-loading registration before that registration is abandoned.
     private var reconnectLoadingObservationGeneration = 0

@@ -250,8 +250,7 @@ extension DemoFixtures {
     }
 
     /// Agents of `longConversationWorkspaceId`: the single top-level agent
-    /// whose transcript is `longConversationMessages` (still the only
-    /// foreground agent, so the workspace row auto-opens into it), plus its
+    /// whose transcript is `longConversationMessages`, plus its
     /// three delegated sub-agents (`createdByAgentId`, background) that the
     /// coordinator waits on — the rows of the "Waiting for all" footer.
     static var longConversationAgents: [[String: Any]] {

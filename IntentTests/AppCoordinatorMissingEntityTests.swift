@@ -360,24 +360,23 @@ extension AppCoordinatorTests {
 
     // MARK: - Note validation on restore
 
-    @Test @MainActor func onSelectWorkspace_restoredNoteMissing_fallsBackToDetail() async {
+    @Test @MainActor func onConnectionSuccess_restoredNoteMissing_fallsBackToDetail() async {
         let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
             cleanupLastScreen()
         }
 
-        persistence.saveWorkspaceScreen(
+        let savedScreen = PersistenceManager.SavedScreen(
+            screen: "note",
             workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "note",
-                workspaceId: wsId,
-                agentId: nil,
-                agentName: nil,
-                noteId: "note-dead",
-                noteTitle: "Dead Note"
-            )
+            agentId: nil,
+            agentName: nil,
+            noteId: "note-dead",
+            noteTitle: "Dead Note"
         )
+        persistence.saveWorkspaceScreen(workspaceId: wsId, screen: savedScreen)
+        persistence.saveLastScreen(savedScreen, for: Self.windowBackend.connectionID)
 
         // No workspace publish: keep lastUpdated nil so the workspace-existence
         // validation stays inert and only the note validation path is exercised.
@@ -393,9 +392,11 @@ extension AppCoordinatorTests {
                 NSError.intentErrorDataCodeKey: "not-found"
             ]
         )
-        let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake, backendID: Self.windowBackend, persistence: persistence
+        )
 
-        coordinator.onSelectWorkspace(wsId)
+        coordinator.onConnectionSuccess()
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("note.get"), "Restoring a note screen must re-validate the note")
@@ -410,24 +411,23 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onSelectWorkspace_restoredNoteTransientError_staysOnNote() async {
+    @Test @MainActor func onConnectionSuccess_restoredNoteTransientError_staysOnNote() async {
         let wsId = "test-coord-restore-note-transient-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
             cleanupLastScreen()
         }
 
-        persistence.saveWorkspaceScreen(
+        let savedScreen = PersistenceManager.SavedScreen(
+            screen: "note",
             workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "note",
-                workspaceId: wsId,
-                agentId: nil,
-                agentName: nil,
-                noteId: "note-1",
-                noteTitle: "Flaky Network Note"
-            )
+            agentId: nil,
+            agentName: nil,
+            noteId: "note-1",
+            noteTitle: "Flaky Network Note"
         )
+        persistence.saveWorkspaceScreen(workspaceId: wsId, screen: savedScreen)
+        persistence.saveLastScreen(savedScreen, for: Self.windowBackend.connectionID)
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -437,9 +437,11 @@ extension AppCoordinatorTests {
             code: -2,
             userInfo: [NSLocalizedDescriptionKey: "Request timed out"]
         )
-        let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake, backendID: Self.windowBackend, persistence: persistence
+        )
 
-        coordinator.onSelectWorkspace(wsId)
+        coordinator.onConnectionSuccess()
         await Self.drainMainQueue()
 
         if case let .noteDetail(noteId, wId, _) = coordinator.currentScreen {
@@ -452,24 +454,23 @@ extension AppCoordinatorTests {
 }
 
 extension AppCoordinatorTests {
-    @Test @MainActor func onSelectWorkspace_restoredNoteAlive_staysOnNote() async {
+    @Test @MainActor func onConnectionSuccess_restoredNoteAlive_staysOnNote() async {
         let wsId = "test-coord-restore-note-alive-\(UUID().uuidString)"
         defer {
             persistence.clearWorkspaceScreen(workspaceId: wsId)
             cleanupLastScreen()
         }
 
-        persistence.saveWorkspaceScreen(
+        let savedScreen = PersistenceManager.SavedScreen(
+            screen: "note",
             workspaceId: wsId,
-            screen: PersistenceManager.SavedScreen(
-                screen: "note",
-                workspaceId: wsId,
-                agentId: nil,
-                agentName: nil,
-                noteId: "note-live",
-                noteTitle: "Live Note"
-            )
+            agentId: nil,
+            agentName: nil,
+            noteId: "note-live",
+            noteTitle: "Live Note"
         )
+        persistence.saveWorkspaceScreen(workspaceId: wsId, screen: savedScreen)
+        persistence.saveLastScreen(savedScreen, for: Self.windowBackend.connectionID)
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -480,9 +481,11 @@ extension AppCoordinatorTests {
                 "content": "hello"
             ] as [String: Any]
         ] as [String: Any]
-        let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
+        let coordinator = AppCoordinator(
+            workspaceStore: store, connection: fake, backendID: Self.windowBackend, persistence: persistence
+        )
 
-        coordinator.onSelectWorkspace(wsId)
+        coordinator.onConnectionSuccess()
         await Self.drainMainQueue()
 
         #expect(fake.didCallMethod("note.get"))

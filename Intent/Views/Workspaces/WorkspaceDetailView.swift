@@ -30,6 +30,8 @@ struct WorkspaceDetailView: View {
         ObjectIdentifier(noteStore.connectionManager)
     }
 
+    var agentStoreForTesting: AgentStore { agentStore }
+
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
 
     private var workspace: Workspace? {
@@ -107,14 +109,6 @@ struct WorkspaceDetailView: View {
         .onChange(of: agentStore.hasLoaded) { _, hasLoaded in
             guard hasLoaded else { return }
             viewModel.agents = agentStore.agents
-            guard selectedTab == 0 else {
-                coordinator.cancelPendingAutoOpen(workspaceId: workspaceId)
-                return
-            }
-            coordinator.autoOpenSoleAgentIfArmed(
-                workspaceId: workspaceId,
-                foregroundAgents: viewModel.foregroundAgents
-            )
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally

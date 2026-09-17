@@ -88,9 +88,8 @@ enum DemoFixtures {
     static let longConversationHookName = "Wait for CI on flake fix"
 
     /// The one workspace whose `workspace.list` row carries a
-    /// `statusImageAssetId` (the "Dark mode for settings screens" workspace:
-    /// no agents, so its row opens the detail header rather than a
-    /// conversation), and the asset id `note.readAsset` answers with
+    /// `statusImageAssetId` (the "Dark mode for settings screens" workspace),
+    /// and the asset id `note.readAsset` answers with
     /// `statusImagePNG` (intent-hq/intent#3868).
     static let statusImageWorkspaceId = "demo-ws-dark-mode"
     static let statusImageAssetId = "m9demo00-5e771n65.png"

@@ -9,9 +9,7 @@ import XCTest
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
     private enum Fixture {
-        /// `DemoFixtures.statusImageWorkspaceId`'s title: a workspace with no
-        /// agents, so tapping its row lands on the detail header rather than
-        /// auto-opening a conversation.
+        /// `DemoFixtures.statusImageWorkspaceId`'s title: a workspace with no agents.
         static let workspaceTitle = "Dark mode for settings screens"
         static let cardIdentifier = "workspaceRow.statusImage"
         static let detailIdentifier = "workspaceDetail.statusImage"
