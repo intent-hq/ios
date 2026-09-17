@@ -83,6 +83,21 @@ enum Fixture {
     static let landedFollowReportPrefix = "lastForcedFollow=landed"
     // Cadence of every poll.
     static let pollInterval: TimeInterval = 0.25
+    // SubmittableTextView's UITextView; tapping it raises the software
+    // keyboard, whose avoidance shrinks the transcript from below (#276).
+    static let composerIdentifier = "composer.textView"
+    // Focus/dismiss cycles: the jump landed on the second cycle when it
+    // was observed, and on a dismiss rather than an open in another run.
+    static let keyboardCycles = 4
+    static let keyboardTimeout: TimeInterval = 5
+    // The transcript must lose at least this much height for the keyboard
+    // to count as raised: a simulator with a hardware keyboard attached
+    // raises none and would pass the cycle without exercising the inset.
+    static let keyboardMinimumShrink: CGFloat = 100
+    // Where a tap dismisses the keyboard: inside the transcript's 16 pt
+    // horizontal padding, so it hits the scroll view's dismiss recognizer
+    // and never a link in a message.
+    static let keyboardDismissTapOffset = CGVector(dx: 0.02, dy: 0.5)
     static let workspaceTimeout: TimeInterval = 30
     static let elementTimeout: TimeInterval = 5
     static let backNavigationAttempts = 2

@@ -153,6 +153,7 @@ struct SubmittableTextView: UIViewRepresentable {
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
         textView.accessibilityLabel = accessibilityLabel
+        textView.accessibilityIdentifier = "composer.textView"
         textView.font = UIFont.preferredFont(forTextStyle: .body)
         textView.backgroundColor = .clear
         #if os(visionOS)
