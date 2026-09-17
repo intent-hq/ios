@@ -511,6 +511,86 @@ struct ConversationDecodingIdentityTests {
         #expect(first.block.id != other.block.id)
     }
 
+    /// ios#258: the batched page decoder (one serialization + one decoder per
+    /// page) must produce exactly what per-row `parseMessage` produced —
+    /// including dropping id-less rows and keeping the `{messageId}:{index}`
+    /// block identity — and must fall back to per-row decoding when one row
+    /// makes the whole page un-serializable (a non-finite number), so that
+    /// row alone is dropped.
+    @Test func parseMessagesMatchesPerRowParseIncludingMalformedRows() throws {
+        var other = row
+        other["id"] = "msg-2"
+        let idLess: [String: Any] = ["role": "user", "contentBlocks": [["type": "text", "text": "x"]]]
+        let malformedBlocks: [String: Any] = [
+            "id": "msg-3", "role": "user", "contentBlocks": ["not-a-block", ["type": "text", "text": "kept"]]
+        ]
+        let nonFinite: [String: Any] = ["id": "msg-nan", "role": "user", "turnNumber": Double.nan]
+        let rows = [row, idLess, other, malformedBlocks, nonFinite]
+
+        let perRow = rows.compactMap { ConversationMessage.parseMessage($0) }
+        let batched = ConversationMessage.parseMessages(rows)
+        #expect(batched == perRow)
+        #expect(batched.map(\.id) == ["msg-1", "msg-2", "msg-3"])
+        #expect(batched[0].contentBlocks.map(\.id) == ["msg-1:0", "msg-1:1", "wire-2"])
+        #expect(batched[2].contentBlocks.map(\.id) == ["msg-3:1"])
+        #expect(ConversationMessage.parseMessages([]).isEmpty)
+    }
+
+    /// ios#258: batched block decoding carries a per-element fallback identity
+    /// and yields the same block (same id) as the per-item `decode`, with a
+    /// nil slot for an element that does not decode.
+    @Test func decodeBatchMatchesPerItemDecode() throws {
+        let dicts: [[String: Any]] = [
+            ["type": "text", "text": "a"],
+            ["id": "wire-1", "type": "text", "text": "b"],
+            ["type": "tool_result", "toolUseId": "tc-1", "output": "full"],
+            ["type": "text", "text": Double.infinity]
+        ]
+        let identities: [ContentBlock.FallbackIdentity] = [
+            .fingerprint(messageId: "m-a"), .indexed(messageId: "m-b", index: 4), .fixed("msg-1:3"), .fixed("never")
+        ]
+        let perItem = zip(dicts, identities).map { ContentBlock.decode($0, fallbackIdentity: $1) }
+        let batched = ContentBlock.decodeBatch(dicts, fallbackIdentities: identities)
+        #expect(batched.count == dicts.count)
+        #expect(batched == perItem)
+        #expect(batched[0]?.id.hasPrefix("m-a:") == true)
+        #expect(batched[1]?.id == "wire-1")
+        #expect(batched[2]?.id == "msg-1:3")
+        #expect(batched[3] == nil)
+        #expect(ContentBlock.decodeBatch([], fallbackIdentities: []).isEmpty)
+    }
+
+    /// ios#258: the batched delta decoder yields the same entities, in order,
+    /// as decoding each entity on its own; non-block-shaped entities and
+    /// entities without a `messageId` are dropped exactly as before, and a
+    /// delta with no block-shaped entity stays nil.
+    @Test func decodeChatBlocksMatchesPerEntityDecode() throws {
+        let added: [[String: Any]] = [
+            ["messageId": "msg-a", "block": ["type": "text", "text": "chunk"], "streamingComplete": true],
+            ["id": "collection-row", "name": "not a block"],
+            ["block": ["type": "text", "text": "no message id"]]
+        ]
+        let updated: [[String: Any]] = [
+            ["messageId": "msg-b", "role": "user", "timestamp": "t1", "block": ["id": "wire-7", "type": "text", "text": "x"]],
+            ["messageId": "msg-c", "block": ["type": "text", "text": Double.nan]]
+        ]
+        let perEntity = (added + updated).compactMap { SubscriptionPush.ChatBlockEntity(entity: $0) }
+        let batched = try #require(SubscriptionPush.DeltaPayload.decodeChatBlocks(added: added, updated: updated))
+        #expect(batched.count == perEntity.count)
+        #expect(batched.map(\.messageId) == ["msg-a", "msg-b"])
+        for (lhs, rhs) in zip(batched, perEntity) {
+            #expect(lhs.messageId == rhs.messageId)
+            #expect(lhs.block == rhs.block)
+            #expect(lhs.role == rhs.role)
+            #expect(lhs.timestamp == rhs.timestamp)
+            #expect(lhs.streamingComplete == rhs.streamingComplete)
+        }
+        #expect(batched[0].block.id.hasPrefix("msg-a:"))
+        #expect(batched[1].block.id == "wire-7")
+        #expect(batched[1].role == .user)
+        #expect(SubscriptionPush.DeltaPayload.decodeChatBlocks(added: [["id": "row"]], updated: []) == nil)
+    }
+
     @Test func hydratedBlockWithoutIdKeepsRequestedIdentity() async throws {
         let idLess: [String: Any] = [
             "block": ["type": "tool_result", "toolUseId": "tc-1", "output": "full"]
