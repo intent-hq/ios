@@ -125,11 +125,11 @@ struct ConnectionManagerTests {
 
     // MARK: - Message dispatch (response routing)
 
-    @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async {
+    @Test @MainActor func dispatchResponseResolvesCorrectContinuation() async throws {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 999)
-        await waitForPendingRequest(manager, id: 999)
+        try await waitForPendingRequest(manager, id: 999)
 
         let response = """
         {"jsonrpc":"2.0","id":999,"result":{"workspaces":[]}}
@@ -140,11 +140,11 @@ struct ConnectionManagerTests {
         #expect(capture.value is [String: Any])
     }
 
-    @Test @MainActor func dispatchErrorResponseRejectsContinuation() async {
+    @Test @MainActor func dispatchErrorResponseRejectsContinuation() async throws {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 888)
-        await waitForPendingRequest(manager, id: 888)
+        try await waitForPendingRequest(manager, id: 888)
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":888,"error":{"code":-1,"message":"Something went wrong"}}
@@ -198,10 +198,16 @@ struct ConnectionManagerTests {
                 capture.error = error
             }
         }
-        await waitForPendingRequest(manager, id: 7001)
+        try await waitForPendingRequest(manager, id: 7001)
 
         // The 0.05s timeout clears the continuation; a response after that is late.
-        try await waitUntil("the per-call timeout to clear the request") { manager.pendingRequests[7001] == nil }
+        // The wait is bounded well below the 10s default so a timeout that regressed
+        // toward the default still fails here instead of being absorbed by the wait.
+        let perCallTimeoutClearBoundSeconds = 1
+        try await waitUntil(
+            "the per-call timeout to clear the request",
+            timeout: .seconds(perCallTimeoutClearBoundSeconds)
+        ) { manager.pendingRequests[7001] == nil }
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
         """)
@@ -220,7 +226,7 @@ struct ConnectionManagerTests {
     /// A response arriving after a delay but within the per-call override must
     /// resolve the request instead of timing out (the daemon's structured
     /// result wins over the client-side transport timeout).
-    @Test @MainActor func perCallTimeoutOverrideHonored() async {
+    @Test @MainActor func perCallTimeoutOverrideHonored() async throws {
         let manager = ConnectionManager.shared
         let capture = ResponseCapture()
         let pending = Task { @MainActor in
@@ -230,7 +236,7 @@ struct ConnectionManagerTests {
                 capture.error = error
             }
         }
-        await waitForPendingRequest(manager, id: 7002)
+        try await waitForPendingRequest(manager, id: 7002)
 
         try? await Task.sleep(nanoseconds: 100_000_000) // outlast a hypothetical short bound
         manager.dispatchMessage("""
@@ -245,7 +251,7 @@ struct ConnectionManagerTests {
 }
 
 extension ConnectionManagerTests {
-    @Test @MainActor func cancellingRequestCancelsWriteAndRemovesPendingResponse() async {
+    @Test @MainActor func cancellingRequestCancelsWriteAndRemovesPendingResponse() async throws {
         let manager = ConnectionManager.shared
         let writeCancelled = OSAllocatedUnfairLock(initialState: false)
         let capture = ResponseCapture()
@@ -264,7 +270,7 @@ extension ConnectionManagerTests {
                 capture.error = error
             }
         }
-        await waitForPendingRequest(manager, id: 7004)
+        try await waitForPendingRequest(manager, id: 7004)
 
         pending.cancel()
         await pending.value
@@ -309,28 +315,26 @@ extension ConnectionManagerTests {
         return (task, capture)
     }
 
+    /// Throws on timeout so a test fails at the wait instead of dispatching into a
+    /// never-registered continuation and then hanging on the awaiting task.
     @MainActor
-    private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async {
+    private func waitForPendingRequest(_ manager: ConnectionManager, id: Int) async throws {
         let pendingRequestTimeoutSeconds = 5
-        let deadline = ContinuousClock.now + .seconds(pendingRequestTimeoutSeconds)
-        while manager.pendingRequests[id] == nil {
-            if ContinuousClock.now >= deadline {
-                Issue.record("Timed out waiting for pendingRequests[\(id)] to be registered")
-                return
-            }
-            await Task.yield()
-        }
+        try await waitUntil(
+            "pendingRequests[\(id)] to be registered",
+            timeout: .seconds(pendingRequestTimeoutSeconds)
+        ) { manager.pendingRequests[id] != nil }
     }
 
     // MARK: - failAllPending
 
-    @Test @MainActor func failAllPendingClearsRequests() async {
+    @Test @MainActor func failAllPendingClearsRequests() async throws {
         let manager = ConnectionManager.shared
 
         let (task1, capture1) = installPendingResponse(manager, id: 100)
         let (task2, capture2) = installPendingResponse(manager, id: 101)
-        await waitForPendingRequest(manager, id: 100)
-        await waitForPendingRequest(manager, id: 101)
+        try await waitForPendingRequest(manager, id: 100)
+        try await waitForPendingRequest(manager, id: 101)
 
         manager.failAllPending(error: "Connection lost")
 
@@ -350,12 +354,12 @@ extension ConnectionManagerTests {
         }
     }
 
-    @Test @MainActor func dispatchErrorResponsePreservesDataCode() async {
+    @Test @MainActor func dispatchErrorResponsePreservesDataCode() async throws {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 889)
 
-        await waitForPendingRequest(manager, id: 889)
+        try await waitForPendingRequest(manager, id: 889)
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":889,"error":{"code":-32602,"message":"unknown agent id: gone","data":{"code":"not-found"}}}
@@ -374,12 +378,12 @@ extension ConnectionManagerTests {
         }
     }
 
-    @Test @MainActor func dispatchErrorResponseWithoutDataOmitsDataCode() async {
+    @Test @MainActor func dispatchErrorResponseWithoutDataOmitsDataCode() async throws {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 890)
 
-        await waitForPendingRequest(manager, id: 890)
+        try await waitForPendingRequest(manager, id: 890)
 
         // Legacy daemons emit -32602 with no data (monorepo#1365)
         let errorResponse = """

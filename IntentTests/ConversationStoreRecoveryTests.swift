@@ -100,6 +100,9 @@ extension ConversationStoreTests {
             code: -32_602,
             userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"]
         )
+        // Shorter than the observation window below, so a retry wrongly scheduled
+        // after the terminal error would fire inside it (default delay is 250 ms).
+        store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
         try await waitUntil("the seek to settle") { store.pendingQuestionRecovery?.status != .loading }
