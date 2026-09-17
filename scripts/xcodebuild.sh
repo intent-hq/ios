@@ -149,6 +149,9 @@ Usage: scripts/xcodebuild.sh <subcommand>
 
 Optional env knobs: SIM_UDID, SPM_CLONE_DIR, RESULT_BUNDLE, ONLY_TESTING,
 TAILCATKIT_AUTOBUILD, SIM_LOCK_TIMEOUT, SIM_LOCK_DIR (see script header).
+ONLY_TESTING selectors (Target[/Suite[/test]], not file names) are gated: each
+is resolved against the enumerated tests before the run and checked against
+the result bundle after it, with a per-selector table printed at the end.
 Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated),
 81 (timed out waiting for the simulator lock), 82 (an ONLY_TESTING selector
 matched or executed no test) and 83 (the ONLY_TESTING selection could not be

@@ -27,13 +27,13 @@ refuses `-sdk`. `test-ios` remains the pre-PR gate; for iteration, re-running on
 crashed suite, or mutation checks use the subset forms — `scripts/xcodebuild.sh
 test-ios-unit` (skips the `IntentUITests` bundle) and
 `ONLY_TESTING='IntentTests/SomeTests ...' scripts/xcodebuild.sh test-without-building`
-(one `-only-testing:` per whitespace-separated `Target[/Class[/method]]`; also honoured
-by `test-ios` and `test-ios-unit`). Selectors are enumerated `Target/Suite` names, not
-file names: the wrapper resolves each against `xcodebuild -enumerate-tests` first and
-exits 82 naming any unmatched selector (with look-alike suggestions), or 83 when the
-catalog could not be enumerated. `gh workflow run ci.yml --repo intent-hq/ios --ref
-<branch> -f only_testing='IntentTests/SomeTests'` runs the same filter in CI as a
-non-gating `iOS Filtered Tests` job. iOS builds link the gitignored prebuilt
+(one `-only-testing:` per whitespace-separated selector; also honoured by `test-ios`
+and `test-ios-unit`). Each selector must resolve to a runnable `Target[/Suite[/test]]`
+(a file name is not a selector): the wrapper exits 82 when one matches nothing or
+executes nothing, and 83 when the selection cannot be verified. `gh workflow run
+ci.yml --repo intent-hq/ios --ref <branch> -f only_testing='IntentTests/SomeTests'`
+runs the same filter in CI as a non-gating `iOS Filtered Tests` job, with the
+per-selector table in the job summary. iOS builds link the gitignored prebuilt
 `TailcatKit/build/TailcatKit.xcframework`: `scripts/xcodebuild.sh` builds it via
 `TailcatKit/build_xcframework.sh` when Go is on PATH and otherwise exits naming that
 script; `TAILCATKIT_AUTOBUILD=0` disables the auto-build.
