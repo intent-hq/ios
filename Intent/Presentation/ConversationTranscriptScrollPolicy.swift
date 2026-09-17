@@ -115,8 +115,12 @@ enum ConversationTranscriptScrollPolicy {
     enum ContainerRePinDecision: Equatable {
         /// Following, but under the finger or decelerating; re-check on settle.
         case deferred
+        /// Settled short of the bottom inside the at-bottom band while
+        /// following: the ordinary automatic follow closes the gap.
+        case follow
         /// The container is unchanged or the viewport is not following.
         case none
+        /// Pin straight back to the bottom.
         case rePin
     }
 
@@ -148,18 +152,26 @@ enum ConversationTranscriptScrollPolicy {
         return isInteracting ? .deferred : .rePin
     }
 
-    /// The settle re-check of a container re-pin deferred while interacting.
-    /// Still interacting, or with a follow in flight that another settle
-    /// source (`bottomBandRePinDecision`, the past-end clamp) already issued
-    /// — the re-pin would cancel it mid-animation and re-issue the same
-    /// scroll — it is deferred again and reads the landed distance instead.
-    /// Settled, the viewport is followed to the bottom when it is still
-    /// following and rests short of the bottom within the at-bottom band — a
-    /// row shorter than the threshold leaves exactly that gap under the last
-    /// message, with no Go to End and no further geometry edge to close it.
-    /// A fling that carried the user past the threshold applied its edge on
-    /// the way and is left where it stopped; an unknown distance (no scroll
-    /// view) proves nothing.
+    /// The settle re-check after a container resize: of a re-pin deferred
+    /// while interacting, and of the per-frame re-pins a resize animation
+    /// issued (the keyboard). Still interacting, or with a follow in flight
+    /// that another settle source (`bottomBandRePinDecision`, the past-end
+    /// clamp) already issued — the re-pin would cancel it mid-animation and
+    /// re-issue the same scroll — it is deferred again and reads the landed
+    /// distance instead. Settled short of the bottom within the at-bottom
+    /// band while still following, the viewport is followed to the bottom —
+    /// a row shorter than the threshold leaves exactly that gap under the
+    /// last message, with no Go to End and no further geometry edge to close
+    /// it. Settled past the threshold while still following, it is pinned
+    /// straight back: only a gesture may set `userIsScrolledAway`, so a
+    /// following viewport resting away with no gesture is one the resize
+    /// displaced — the keyboard shrinking the transcript while the lazy
+    /// stack re-estimated its rows walked the offset to the very top (#276),
+    /// and the per-frame re-pins had consumed the away edge the growth
+    /// re-pin would otherwise act on. A fling that carried the user past the
+    /// threshold set the flag as its phase ended and is left where it
+    /// stopped; a rest past the end belongs to the #271 clamp; an unknown
+    /// distance (no scroll view) proves nothing.
     static func deferredContainerRePinDecision(
         distanceToBottom: CGFloat?,
         isInteracting: Bool,
@@ -174,12 +186,15 @@ enum ConversationTranscriptScrollPolicy {
             userIsScrolledAway: userIsScrolledAway
         ) else { return .none }
         if isInteracting || isFollowing { return .deferred }
-        guard let distanceToBottom, isDriftedWithinBottomBand(
+        guard let distanceToBottom else { return .none }
+        if isScrolledAway(distanceToBottom: distanceToBottom, atBottomThreshold: atBottomThreshold) {
+            return .rePin
+        }
+        return isDriftedWithinBottomBand(
             distanceToBottom: distanceToBottom,
             driftTolerance: driftTolerance,
             atBottomThreshold: atBottomThreshold
-        ) else { return .none }
-        return .rePin
+        ) ? .follow : .none
     }
 
     enum BottomBandRePinDecision: Equatable {

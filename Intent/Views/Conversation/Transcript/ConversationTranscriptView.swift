@@ -536,9 +536,13 @@ private extension ConversationTranscriptView {
     /// at the old bottom. Under the finger or decelerating, the pin is
     /// deferred to a settle re-check and the edge is applied as usual (see
     /// `ConversationTranscriptScrollPolicy.containerHeightChangeDecision`).
-    /// Scrolled away, the content under the reader already stays put (the
-    /// container resizes at its bottom edge). Returns false when the edge is
-    /// to be applied as usual.
+    /// A pin issued is re-checked on settle too: a resize animated over
+    /// several frames (the keyboard) pins on each of them against a lazy
+    /// stack still re-estimating its rows, and could leave the viewport far
+    /// from the bottom with the away edge consumed here (#276). Scrolled
+    /// away, the content under the reader already stays put (the container
+    /// resizes at its bottom edge). Returns false when the edge is to be
+    /// applied as usual.
     private func rePinAfterContainerHeightChange(
         from oldContainerHeight: CGFloat,
         to newContainerHeight: CGFloat,
@@ -561,15 +565,25 @@ private extension ConversationTranscriptView {
             if scrollDebounceTask != nil {
                 scrollToBottom(proxy: proxy, forced: scrollState.pendingFollowIsForced)
             }
+            scheduleDeferredContainerRePin(proxy: proxy)
             return true
+        case .follow:
+            return false
         }
     }
 
-    /// Re-checks a container re-pin deferred while interacting once the
-    /// gesture has had time to settle, and re-checks again while it has not;
-    /// a viewport that came to rest short of the bottom while still following
-    /// is followed there through the ordinary automatic follow, which
-    /// re-validates the geometry when it runs.
+    /// Re-checks the viewport once the container resize has had time to
+    /// settle — a re-pin deferred while interacting, or the last of the
+    /// per-frame pins of an animated resize — and re-checks again while the
+    /// gesture has not settled. Short of the bottom inside the band while
+    /// still following, the viewport is followed there through the ordinary
+    /// automatic follow, which re-validates the geometry when it runs; past
+    /// the threshold with no gesture, the resize displaced it and it is
+    /// pinned straight back through a forced follow, whose landing is
+    /// verified against the live scroll view (#276). The gesture predicate
+    /// includes the SwiftUI phase: UIKit clears its deceleration flag a
+    /// moment before the phase ending records where the fling left the
+    /// viewport, and a fling past the threshold must not be snapped back.
     private func scheduleDeferredContainerRePin(proxy: ScrollViewProxy) {
         scrollState.containerRePinTask?.cancel()
         scrollState.containerRePinTask = Task { @MainActor in
@@ -578,16 +592,19 @@ private extension ConversationTranscriptView {
             scrollState.containerRePinTask = nil
             switch ConversationTranscriptScrollPolicy.deferredContainerRePinDecision(
                 distanceToBottom: scrollMomentumProxy.distanceToBottom,
-                isInteracting: scrollMomentumProxy.isInteracting,
+                isInteracting: isUserInteracting,
                 isFollowing: isFollowing,
                 hasInitiallyScrolled: hasInitiallyScrolled,
                 userIsScrolledAway: userIsScrolledAway
             ) {
             case .deferred:
                 scheduleDeferredContainerRePin(proxy: proxy)
-            case .rePin:
-                AppLog.userInterface.debug("[SCROLL] Container changed while interacting; following to the bottom after settle")
+            case .follow:
+                AppLog.userInterface.debug("[SCROLL] Container changed; following to the bottom after settle")
                 scrollToBottom(proxy: proxy, forced: false)
+            case .rePin:
+                AppLog.userInterface.debug("[SCROLL] Container change left the viewport away; pinning back after settle")
+                scrollToBottom(proxy: proxy, forced: true, animated: false)
             case .none:
                 break
             }
