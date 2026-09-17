@@ -314,16 +314,18 @@ func assertRestsAtBottom(
 /// across two consecutive polls. A row the lazy stack has not realized
 /// (viewport past the end) never satisfies this. Fails the test — with
 /// the follow's report and the resting state of the row and of
-/// `alsoReporting` — when that does not happen within
-/// `Fixture.settleTimeout`, and returns whether it did so callers can
-/// stop instead of asserting on a transcript still in motion.
+/// `alsoReporting`, plus whatever `diagnostics` describes at that moment
+/// — when that does not happen within `Fixture.settleTimeout`, and
+/// returns whether it did so callers can stop instead of asserting on a
+/// transcript still in motion.
 @MainActor @discardableResult
 func waitUntilSettled(
     on lastRow: XCUIElement,
     named rowName: String,
     in opened: OpenConversation,
     context: String,
-    alsoReporting extra: (row: XCUIElement, name: String)? = nil
+    alsoReporting extra: (row: XCUIElement, name: String)? = nil,
+    diagnostics: (() -> String)? = nil
 ) -> Bool {
     let transcript = opened.transcript
     var previousMaxY: CGFloat = .nan
@@ -341,6 +343,9 @@ func waitUntilSettled(
             + "\(Int(Fixture.settleTimeout)) s — " + restingState(of: lastRow, named: rowName, in: opened)
         if let extra {
             message += "; " + restingState(of: extra.row, named: extra.name, in: opened)
+        }
+        if let diagnostics {
+            message += "; " + diagnostics()
         }
         XCTFail(message)
     }

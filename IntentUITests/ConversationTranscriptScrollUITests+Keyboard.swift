@@ -79,13 +79,17 @@ extension ConversationTranscriptScrollUITests {
                     + "(bottom edge \(bottomAfterDismiss) vs \(bottomBeforeKeyboard) before the keyboard) — "
                     + "the keyboard did not dismiss"
             )
-            assertRestsAtBottom(
-                lastRow: endRow.element,
+            let dismissed = "cycle \(cycle): after the keyboard dismissed"
+            guard waitUntilSettled(
+                on: endRow.element,
                 named: endRow.name,
-                endRow: endRow,
                 in: opened,
-                context: "cycle \(cycle): after the keyboard dismissed"
-            )
+                context: dismissed,
+                alsoReporting: (lastMessage, "last assistant paragraph"),
+                diagnostics: { self.endOfTranscriptDiagnostics(in: app, opened: opened) }
+            ) else { return }
+            assertAtEnd(endRow, in: opened, context: dismissed)
+            assertStaysAtBottom(lastRow: endRow.element, named: endRow.name, endRow: endRow, in: opened, context: dismissed)
             XCTAssertTrue(
                 isInside(lastMessage, transcript),
                 "cycle \(cycle): after the keyboard dismissed, the last assistant paragraph is not on screen "
@@ -93,5 +97,31 @@ extension ConversationTranscriptScrollUITests {
                     + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
             )
         }
+    }
+
+    /// What the transcript's end looks like when the end row is missing:
+    /// each suggested prompt's frame (or absence), whether a send is in
+    /// flight (the thinking indicator, or a user row echoing the first
+    /// prompt — a dismiss tap that also hit a prompt hides the prompts),
+    /// and the text rows intersecting the transcript, top to bottom.
+    @MainActor
+    private func endOfTranscriptDiagnostics(in app: XCUIApplication, opened: OpenConversation) -> String {
+        let transcript = opened.transcript
+        let prompts = (0 ..< 3).map { index -> String in
+            let prompt = app.buttons["transcript.suggestedPrompt.\(index)"].firstMatch
+            return "prompt \(index) " + (frame(of: prompt).map { "\($0)" } ?? "absent")
+        }
+        let inFlight = "thinking indicator "
+            + (app.staticTexts[Fixture.thinkingIndicatorLabel].firstMatch.exists ? "PRESENT" : "absent")
+            + ", user row echoing prompt 0 "
+            + (message(in: app, containing: Fixture.firstSuggestedPrompt).exists ? "PRESENT" : "absent")
+        let visible = rows(intersecting: transcript).compactMap { row -> String? in
+            guard let rowFrame = frame(of: row) else { return nil }
+            let label = row.label.replacingOccurrences(of: "\n", with: " ")
+            return "[\(Int(rowFrame.minY))…\(Int(rowFrame.maxY))] \(label.prefix(40))"
+        }
+        return "diagnostics: " + prompts.joined(separator: ", ") + "; " + inFlight
+            + "; \(transcript.staticTexts.count) text rows in hierarchy, on screen: "
+            + visible.joined(separator: " | ")
     }
 }
