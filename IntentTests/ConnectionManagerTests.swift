@@ -201,12 +201,12 @@ struct ConnectionManagerTests {
         try await waitForPendingRequest(manager, id: 7001)
 
         // The 0.05s timeout clears the continuation; a response after that is late.
-        // The wait is bounded well below the 10s default so a timeout that regressed
-        // toward the default still fails here instead of being absorbed by the wait.
-        let perCallTimeoutClearBoundSeconds = 1
+        // The wait keeps the original 200 ms observation budget (the fixed sleep it
+        // replaced), so a timeout that fires later than that still fails here.
+        let perCallTimeoutClearBoundMilliseconds = 200
         try await waitUntil(
             "the per-call timeout to clear the request",
-            timeout: .seconds(perCallTimeoutClearBoundSeconds)
+            timeout: .milliseconds(perCallTimeoutClearBoundMilliseconds)
         ) { manager.pendingRequests[7001] == nil }
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
