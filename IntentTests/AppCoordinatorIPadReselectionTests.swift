@@ -5,10 +5,7 @@ import Testing
 extension AppCoordinatorTests {
     @Test @MainActor func onSelectAgent_bumpsConversationRequestId_afterBackAndReselect() {
         let wsId = "test-coord-reselect-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         let initial = coordinator.conversationRequestId
@@ -38,10 +35,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func onSelectAgent_sameAgentWhileScreenUnchanged_stillBumpsConversationRequestId() {
         let wsId = "test-coord-reselect-stale-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
@@ -99,10 +93,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func changedAgentSelection_secondSyncTriggerDoesNotRepushBeforeDeferredTick() {
         let wsId = "test-coord-double-trigger-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-A", workspaceId: wsId, agentName: "A")
