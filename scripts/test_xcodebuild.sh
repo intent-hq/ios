@@ -23,8 +23,9 @@ stubs=$work/bin
 mkdir -p "$stubs"
 
 # xcrun records its argv as "xcrun: [arg] ..." lines in STUB_ARGS; an
-# xcresulttool test-results query prints $STUB_RESULTS (fixture JSON) or fails
-# under STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
+# xcresulttool test-results query prints $STUB_RESULTS (fixture JSON; a
+# "-retry" bundle path prints $STUB_RESULTS_RETRY when set) or fails under
+# STUB_RESULTS_FAIL=1; every other invocation (simctl) exits 0.
 cat > "$stubs/xcrun" <<'EOF'
 #!/usr/bin/env bash
 if [ -n "${STUB_ARGS:-}" ]; then
@@ -36,13 +37,18 @@ case " $* " in
       echo "Error: the result bundle could not be opened (stub)" >&2
       exit 1
     fi
-    cat "$STUB_RESULTS" ;;
+    case " $* " in
+      *"-retry"*) cat "${STUB_RESULTS_RETRY:-$STUB_RESULTS}" ;;
+      *) cat "$STUB_RESULTS" ;;
+    esac ;;
 esac
 exit 0
 EOF
 
 # STUB_MODE picks the canned xcodebuild outcome (marker prints STUB_MARKER as
-# the only crash line; pass prints STUB_PREAMBLE first when set); STUB_SLEEP
+# the only crash line; pass prints STUB_PREAMBLE first when set); with
+# STUB_THEN=<mode> and STUB_STATE=<file>, the first test invocation uses
+# STUB_MODE and creates the file, every later one uses STUB_THEN; STUB_SLEEP
 # holds the "device" for that many seconds; STUB_LOG records start/end epoch
 # seconds; STUB_LINGER leaves a detached child (like xcodebuild's helper
 # daemons) alive for that many seconds with every inherited fd except
@@ -50,7 +56,8 @@ EOF
 # peer process is still alive; STUB_RESIST=<secs> spawns a child that ignores
 # SIGTERM for that long (logged as "child <pid>") and STUB_RESIST_ROOT=1 makes
 # the stub itself ignore SIGTERM. STUB_ARGS records every invocation's argv as
-# one "argv: [arg] [arg] ..." line. A -resultBundlePath is created as a
+# one "argv: [arg] [arg] ..." line. STUB_NO_FAILING=1 drops the "Failing
+# tests" list from the marker outcome. A -resultBundlePath is created as a
 # directory (not under STUB_NO_BUNDLE=1). An -enumerate-tests invocation
 # copies $STUB_CATALOG to the requested -test-enumeration-output-path and
 # exits 0 (nonzero with STUB_ENUMERATE_FAIL=1) without running the canned
@@ -91,13 +98,19 @@ fi
 [ -z "${STUB_LINGER:-}" ] || (sleep "$STUB_LINGER" >/dev/null 2>&1 &)
 sleep "${STUB_SLEEP:-0}"
 [ -z "${STUB_LOG:-}" ] || echo "end $(date +%s) $$" >> "$STUB_LOG"
-case "${STUB_MODE:-pass}" in
+mode=${STUB_MODE:-pass}
+if [ -n "${STUB_THEN:-}" ]; then
+  if [ -e "$STUB_STATE" ]; then mode=$STUB_THEN; else : > "$STUB_STATE"; fi
+fi
+case "$mode" in
   marker)
     echo "Test Suite 'FooTests' started"
     echo "$STUB_MARKER"
-    echo "Failing tests:"
-    echo "	IntentTests:"
-    echo "		FooTests.testBar()"
+    if [ -z "${STUB_NO_FAILING:-}" ]; then
+      echo "Failing tests:"
+      echo "	IntentTests:"
+      echo "		FooTests.testBar()"
+    fi
     echo "** TEST EXECUTE FAILED **"
     exit 65 ;;
   pass)
@@ -260,8 +273,11 @@ time.sleep(120)' "$lock" "$work/held" &
   while [ ! -e "$work/held" ]; do sleep 0.1; done
   rm -f "$work/held"
 }
-# kept_log <outfile>: the retained log path named in a crash diagnostic.
-kept_log() { sed -n 's/^Full xcodebuild output kept at: //p' "$1"; }
+# kept_log <outfile>: the retained log path named in the first crash diagnostic.
+kept_log() { sed -n 's/^Full xcodebuild output kept at: //p' "$1" | head -n 1; }
+# retry_argv <name>: the recorded re-run, i.e. the second real test invocation
+# (enumeration calls excluded).
+retry_argv() { grep '^argv:' "$work/$1.args" | grep -v -- '-enumerate-tests' | sed -n '2p'; }
 
 mkdir -p "$SIM_LOCK_DIR"
 
@@ -280,8 +296,8 @@ assert_lacks "failing tests are not reported as a crash" "$(cat "$work/fail.out"
 assert_contains "failing tests keep xcodebuild's own report" "$(cat "$work/fail.out")" "Failing tests:"
 assert_lock_free "lock released after failing run"
 
-echo "# test-process crash"
-status=$(STUB_MODE=crash run_wrapper "$work/crash.out" test-without-building)
+echo "# test-process crash (the re-run crashes too: exactly one retry, exit 80)"
+status=$(run_filtered crash "" test-without-building STUB_MODE=crash)
 out=$(cat "$work/crash.out")
 assert_eq "crash exits 80, not 65" "$status" 80
 assert_contains "crash prints the distinguishing diagnostic" "$out" "crashed or was terminated (exit 65 is NOT a plain test failure)"
@@ -289,9 +305,106 @@ assert_contains "crash names the test that was running" "$out" "IntentTests.AppC
 assert_contains "crash quotes the signal line" "$out" "Test crashed with signal kill."
 assert_contains "crash keeps the full log" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
 [ -s "$(kept_log "$work/crash.out")" ] && pass "crash log file exists and is non-empty" || fail "crash log file missing"
-assert_eq "crash diagnostic dedupes repeated restart lines" \
-  "$(grep -c 'Restarting after unexpected exit' "$work/crash.out")" 3
+assert_eq "crash diagnostic dedupes repeated restart lines (primary run and re-run)" \
+  "$(grep -c 'Restarting after unexpected exit' "$work/crash.out")" 6
+assert_eq "a crash is retried exactly once" "$(argv_count crash)" 2
+assert_contains "the re-run is scoped to the interrupted suites" "$(argv_line crash 2)" \
+  "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/AppCoordinatorTests] [-only-testing:IntentTests/BackgroundHookStoreTests]"
+assert_contains "a re-run that crashes again is reported" "$out" "crashed as well; not retrying again"
+assert_contains "a re-run that crashes again exits 80" "$out" "Exiting 80 (test-process crash), not 65"
 assert_lock_free "lock released after crash"
+
+echo "# a crashed suite is re-run once and the run is green when it passes"
+rm -f -- "$work"/xcodebuild-retry.*
+: > "$work/step-summary-crash.md"
+status=$(run_filtered crashpass "" test-without-building STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/crashpass.state" \
+  GITHUB_STEP_SUMMARY="$work/step-summary-crash.md")
+out=$(cat "$work/crashpass.out")
+assert_eq "crash then green re-run exits 0" "$status" 0
+assert_eq "crash then green re-run makes two xcodebuild calls" "$(argv_count crashpass)" 2
+assert_eq "the re-run keeps the destination and adds only the interrupted suites" "$(argv_line crashpass 2)" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-only-testing:IntentTests/AppCoordinatorTests] [-only-testing:IntentTests/BackgroundHookStoreTests]"
+assert_contains "the crash signature is still printed" "$out" "crashed or was terminated (exit 65 is NOT a plain test failure)"
+assert_contains "the re-run is announced with its suites" "$out" \
+  "re-running the interrupted suite(s) once, alone: IntentTests/AppCoordinatorTests IntentTests/BackgroundHookStoreTests"
+assert_contains "the merged verdict is printed" "$out" "the re-run of IntentTests/AppCoordinatorTests IntentTests/BackgroundHookStoreTests passed"
+assert_contains "the crash log is kept after a green re-run" "$out" "Full xcodebuild output kept at: $work/xcodebuild-test."
+[ -s "$(kept_log "$work/crashpass.out")" ] && pass "the kept crash log exists after a green re-run" || fail "crash log missing after a green re-run"
+assert_eq "a green re-run keeps no log of its own" "$(ls "$work" | grep -c '^xcodebuild-retry\.')" 0
+summary_md=$(cat "$work/step-summary-crash.md")
+assert_contains "the job summary records the restart" "$summary_md" "### Test-runner restart (this run)"
+assert_contains "the job summary quotes the crash line" "$summary_md" \
+  "Restarting after unexpected exit, crash, or test timeout in IntentTests.AppCoordinatorTests/testBoot()"
+assert_contains "the job summary quotes the signal line" "$summary_md" "Test crashed with signal kill."
+assert_contains "the job summary records the re-run verdict" "$summary_md" \
+  'Re-ran once, alone: `IntentTests/AppCoordinatorTests IntentTests/BackgroundHookStoreTests` — passed; the run is green (exit 0).'
+assert_lock_free "lock released after a green re-run"
+
+echo "# a crash without a step summary still prints the signature; a failing re-run keeps 65"
+status=$(run_filtered crashfail "" test-without-building STUB_MODE=crash STUB_THEN=fail STUB_STATE="$work/crashfail.state")
+out=$(cat "$work/crashfail.out")
+assert_eq "crash then failing re-run exits 65" "$status" 65
+assert_eq "crash then failing re-run makes two xcodebuild calls" "$(argv_count crashfail)" 2
+assert_contains "the failing re-run is reported as real failures" "$out" "failed (exit 65) without a crash: these are real test failures"
+assert_contains "the failing re-run keeps xcodebuild's own report" "$out" "Failing tests:"
+assert_lacks "the failing re-run is not classified as a crash" "$out" "crashed as well"
+assert_eq "a failing re-run keeps no re-run log (its failure is not a crash)" "$(ls "$work" | grep -c '^xcodebuild-retry\.')" 0
+
+echo "# TEST_CRASH_RETRY=0 disables the re-run"
+status=$(run_filtered noretry "" test-without-building STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/noretry.state" TEST_CRASH_RETRY=0)
+assert_eq "TEST_CRASH_RETRY=0 exits 80" "$status" 80
+assert_eq "TEST_CRASH_RETRY=0 makes one xcodebuild call" "$(argv_count noretry)" 1
+assert_contains "TEST_CRASH_RETRY=0 says why" "$(cat "$work/noretry.out")" "TEST_CRASH_RETRY=0: not re-running"
+
+echo "# a crash line without a test name falls back to the Failing tests list"
+status=$(run_filtered signalonly "" test-without-building STUB_MODE=marker STUB_MARKER="Test crashed with signal segv." \
+  STUB_THEN=pass STUB_STATE="$work/signalonly.state")
+assert_eq "signal-only crash then green re-run exits 0" "$status" 0
+assert_contains "signal-only crash re-runs the suite named under Failing tests" "$(argv_line signalonly 2)" \
+  "[-parallel-testing-enabled] [NO] [-only-testing:IntentTests/FooTests]"
+
+echo "# a restart that names nothing and lists no failing test is not retried"
+status=$(run_filtered nameless "" test-without-building STUB_MODE=marker STUB_MARKER="Lost connection to the test manager service" \
+  STUB_THEN=pass STUB_STATE="$work/nameless.state" STUB_NO_FAILING=1)
+assert_eq "a nameless crash exits 80" "$status" 80
+assert_eq "a nameless crash makes one xcodebuild call" "$(argv_count nameless)" 1
+assert_contains "a nameless crash says nothing could be re-run" "$(cat "$work/nameless.out")" "nothing to re-run"
+
+echo "# the re-run honours ONLY_TESTING selectors narrower than the interrupted suite and merges the result bundles"
+make_results "$work/crashprimary.json" "IntentTests/DemoFixturesTests/testFoo()=Failed" "IntentTests/DemoFixturesTests/testBar()=Passed" \
+  "IntentTests/NewMessagesDividerViewTests/testDividerAppears()=Passed"
+make_results "$work/crashretry.json" "IntentTests/DemoFixturesTests/testFoo()=Passed" "IntentTests/DemoFixturesTests/testBar()=Passed"
+status=$(run_filtered crashonly "IntentTests/DemoFixturesTests/testFoo IntentTests/DemoFixturesTests/testBar() IntentTests/NewMessagesDividerViewTests" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/crashonly.state" \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testFoo(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/crashprimary.json" STUB_RESULTS_RETRY="$work/crashretry.json")
+out=$(cat "$work/crashonly.out")
+assert_eq "filtered crash then green re-run exits 0" "$status" 0
+assert_eq "filtered crash enumerates once and tests twice" "$(argv_count crashonly)" 3
+retry=$(retry_argv crashonly)
+assert_contains "the re-run writes a sibling result bundle" "$retry" "[-resultBundlePath] [$work/xcodebuild-result."
+assert_contains "the re-run bundle is named after the primary one" "$retry" "/Intent-retry.xcresult]"
+assert_contains "the re-run narrows to the ONLY_TESTING selectors inside the interrupted suite" "$retry" \
+  "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests/testFoo] [-only-testing:IntentTests/DemoFixturesTests/testBar()] [-only-testing:IntentTests/FooTests]"
+assert_lacks "the re-run leaves out selectors of uninterrupted suites" "$retry" "NewMessagesDividerViewTests"
+assert_eq "both result bundles are read" "$(xcresulttool_count crashonly)" 2
+assert_contains "the re-run result overrides the crashed test's primary result" "$out" \
+  "  IntentTests/DemoFixturesTests/testFoo           1         1        0       0        0"
+assert_contains "the uninterrupted selector keeps its primary result" "$out" \
+  "  IntentTests/NewMessagesDividerViewTests         1         1        0       0        0"
+assert_contains "the merged summary says so" "$out" "merged with the re-run"
+assert_eq "the temporary bundles are removed after a green merged run" "$(temp_bundles)" 0
+
+echo "# RESULT_BUNDLE set: the re-run writes <bundle>-retry beside it"
+status=$(run_filtered crashown "" test-without-building RESULT_BUNDLE="$work/crashown.xcresult" \
+  STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/crashown.state")
+assert_eq "RESULT_BUNDLE crash then green re-run exits 0" "$status" 0
+assert_contains "the re-run bundle sits beside RESULT_BUNDLE" "$(argv_line crashown 2)" "[-resultBundlePath] [$work/crashown-retry.xcresult]"
+[ -d "$work/crashown.xcresult" ] && pass "RESULT_BUNDLE is left in place after the re-run" || fail "RESULT_BUNDLE was removed"
+[ -d "$work/crashown-retry.xcresult" ] && pass "the re-run bundle is left in place" || fail "the re-run bundle is missing"
+status=$(run_filtered crashown2 "" test-without-building RESULT_BUNDLE="$work/TestResults" \
+  STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/crashown2.state")
+assert_contains "an extension-less RESULT_BUNDLE gets a -retry suffix" "$(argv_line crashown2 2)" "[-resultBundlePath] [$work/TestResults-retry]"
 
 echo "# each termination marker alone is classified as a crash"
 markers=(
@@ -777,7 +890,7 @@ assert_contains "step summary flags the zero-executed selector" "$(cat "$work/st
 rm -rf -- "$work"/xcodebuild-result.*
 status=$(run_filtered nosummary "IntentTests/DemoFixturesTests" test-without-building)
 assert_eq "without GITHUB_STEP_SUMMARY the run exits 0" "$status" 0
-assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 2
+assert_eq "without GITHUB_STEP_SUMMARY no summary file appears" "$(ls "$work" | grep -c 'step-summary')" 3
 
 echo
 if [ "$failures" -eq 0 ]; then
