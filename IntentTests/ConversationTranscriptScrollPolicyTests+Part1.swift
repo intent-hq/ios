@@ -104,12 +104,15 @@ extension ConversationTranscriptScrollPolicyTests {
     /// gesture may set it; the per-frame re-pins consumed the away edge).
     /// The settle re-check pins such a viewport straight back. A fling that
     /// carried the user past the threshold is still interacting until its
-    /// phase ends, and that ending sets the flag — both leave it alone.
+    /// phase ends, and that ending sets the flag — both leave it alone. A
+    /// follow already in flight (#346) still defers however far away the
+    /// viewport settled, rather than restarting its landing.
     @Test func deferredContainerRePinPinsBackAViewportTheResizeDisplaced() {
         #expect(deferredContainerRePin(distanceToBottom: 400) == .rePin)
         #expect(deferredContainerRePin(distanceToBottom: 12_000) == .rePin)
         #expect(deferredContainerRePin(distanceToBottom: kTestAtBottomThreshold) == .follow)
         #expect(deferredContainerRePin(distanceToBottom: 400, isInteracting: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 400, isFollowing: true) == .deferred)
         #expect(deferredContainerRePin(distanceToBottom: 400, userIsScrolledAway: true) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 400, hasInitiallyScrolled: false) == .none)
     }
