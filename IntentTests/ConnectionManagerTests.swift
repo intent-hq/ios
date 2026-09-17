@@ -129,8 +129,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 999)
-
-        try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
+        await waitForPendingRequest(manager, id: 999)
 
         let response = """
         {"jsonrpc":"2.0","id":999,"result":{"workspaces":[]}}
@@ -145,8 +144,7 @@ struct ConnectionManagerTests {
         let manager = ConnectionManager.shared
 
         let (expectation, capture) = installPendingResponse(manager, id: 888)
-
-        try? await Task.sleep(nanoseconds: 10_000_000) // let Task store continuation
+        await waitForPendingRequest(manager, id: 888)
 
         let errorResponse = """
         {"jsonrpc":"2.0","id":888,"error":{"code":-1,"message":"Something went wrong"}}
@@ -202,12 +200,11 @@ struct ConnectionManagerTests {
         }
         await waitForPendingRequest(manager, id: 7001)
 
-        try? await Task.sleep(nanoseconds: 200_000_000) // let the 0.05s timeout fire
+        await pending.value // the 0.05s timeout fires and settles the request
         manager.dispatchMessage("""
         {"jsonrpc":"2.0","id":7001,"result":{"late":true}}
         """)
 
-        await pending.value
         if let error = capture.error {
             #expect(error.localizedDescription.contains("timed out"))
         } else {
@@ -330,8 +327,8 @@ extension ConnectionManagerTests {
 
         let (task1, capture1) = installPendingResponse(manager, id: 100)
         let (task2, capture2) = installPendingResponse(manager, id: 101)
-
-        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        await waitForPendingRequest(manager, id: 100)
+        await waitForPendingRequest(manager, id: 101)
 
         manager.failAllPending(error: "Connection lost")
 

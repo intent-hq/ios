@@ -1,6 +1,36 @@
 import Combine
 import Foundation
 @testable import Intent
+import Testing
+
+/// Bounded poll until `condition` holds. Records a failure at the call site on
+/// timeout so a missed state transition cannot pass silently. Use this instead
+/// of a fixed `Task.sleep` after spawning store work (ios#261).
+@MainActor
+func waitUntil(
+    _ description: String,
+    timeout: Duration = .seconds(2),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: () -> Bool
+) async throws {
+    let pollIntervalMilliseconds = 5
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try await Task.sleep(for: .milliseconds(pollIntervalMilliseconds))
+    }
+    if condition() { return }
+    Issue.record("Timed out waiting for \(description)", sourceLocation: sourceLocation)
+}
+
+/// Yield the main actor enough turns for any (wrongly) spawned MainActor task
+/// to have run against a fake that resolves without delay. For negative
+/// assertions only — positive ones must use `waitUntil`.
+@MainActor
+func drainMainActor() async {
+    let drainYieldCount = 20
+    for _ in 0..<drainYieldCount { await Task.yield() }
+}
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
 /// to SessionConnectionManaging for testing purposes. It provides full control over connection
@@ -292,6 +322,44 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
+    }
+
+    /// Number of requests for `method` currently suspended by `pendingMethods`.
+    func pendingRequestCount(_ method: String) -> Int {
+        pendingContinuations[method]?.count ?? 0
+    }
+
+    /// Bounded poll until at least `count` requests for `method` are suspended
+    /// by `pendingMethods` — i.e. resolvable via `resolvePending` / `failPending`.
+    func waitForPendingRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) suspended request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            pendingRequestCount(method) >= count
+        }
+    }
+
+    /// Bounded poll until `method` has been requested at least `count` times.
+    func waitForRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            paramsForMethod(method).count >= count
+        }
     }
 
     /// Check if a handler is registered for a given subscriptionId.

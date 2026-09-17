@@ -115,7 +115,8 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = false
 
         await waitForMarkSeen(fake)
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "the fired debounce leaves nothing scheduled")
+        await drainMainActor()
         let params = fake.paramsForMethod("agent.markSeen")
         #expect(params.count == 1, "a single turn finish fires exactly once")
         #expect(params.first?["messageId"] as? String == "m2")
@@ -129,7 +130,8 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled off screen")
+        await drainMainActor()
         #expect(
             !fake.didCallMethod("agent.markSeen"),
             "turn finish is gated on the conversation being on screen"
@@ -144,7 +146,7 @@ extension ConversationViewModelTests {
         viewModel.scenePhaseChanged(isActive: false)
         // Let the backgrounding boundary fire settle (it dedupes against the
         // current marker, so no RPC goes out for it).
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await drainMainActor()
         #expect(!fake.didCallMethod("agent.markSeen"))
 
         // A turn finishing while backgrounded must not schedule the debounce
@@ -153,7 +155,8 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled while inactive")
+        await drainMainActor()
         #expect(
             !fake.didCallMethod("agent.markSeen"),
             "turn finish is gated on the app being active"
@@ -166,7 +169,8 @@ extension ConversationViewModelTests {
 
         viewModel.conversationAppeared()
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "entry schedules no debounce")
+        await drainMainActor()
         #expect(
             !fake.didCallMethod("agent.markSeen"),
             "entry never marks seen — the divider anchor must survive"
@@ -184,7 +188,8 @@ extension ConversationViewModelTests {
         viewModel.store = ConversationStore(connectionManager: newFake)
         oldStore.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "the detached store schedules no debounce")
+        await drainMainActor()
         #expect(!oldFake.didCallMethod("agent.markSeen"))
         #expect(!newFake.didCallMethod("agent.markSeen"))
     }
@@ -215,7 +220,8 @@ extension ConversationViewModelTests {
 
         await viewModel.sendMessage("hello")
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "a failed send schedules no debounce")
+        await drainMainActor()
         #expect(
             !fake.didCallMethod("agent.markSeen"),
             "a failed send must not schedule the debounced markSeen"
@@ -242,14 +248,18 @@ extension ConversationViewModelTests {
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false // schedules the 200ms debounce
+        let pendingDebounce = viewModel.markSeenDebounceTask
+        #expect(pendingDebounce != nil)
 
         viewModel.conversationDisappeared() // immediate fire supersedes the debounce
+        #expect(viewModel.markSeenDebounceTask == nil, "the debounce is dropped, not left to fire")
         await waitForMarkSeen(fake)
         // A message lands after the boundary; the cancelled debounce must NOT
-        // fire a second call targeting it once its window elapses.
+        // fire a second call targeting it once it unwinds.
         viewModel.store.messages.append(textMessage(role: .assistant, text: "late", id: "m2"))
 
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        await pendingDebounce?.value
+        await drainMainActor()
         let params = fake.paramsForMethod("agent.markSeen")
         #expect(params.count == 1, "the pending debounce was dropped, not just deduped")
         #expect(params.first?["messageId"] as? String == "m1")
@@ -278,7 +288,7 @@ extension ConversationViewModelTests {
 
         viewModel.conversationDisappeared()
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
+        await drainMainActor()
         #expect(
             !fake.didCallMethod("agent.markSeen"),
             "all triggers funnel through the store's dedupe"

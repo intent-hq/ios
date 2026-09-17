@@ -33,8 +33,7 @@ extension ConversationStoreTests {
         // the wizard unmounts immediately — no in-flight window where a Send
         // or second Dismiss can race the same question message.
         let fake = FakeConnectionManager()
-        fake.responseMap["agent.dismissQuestions"] = ["success": true] as [String: Any]
-        fake.delayMap["agent.dismissQuestions"] = 50_000_000
+        fake.pendingMethods.insert("agent.dismissQuestions")
         let store = ConversationStore(connectionManager: fake)
 
         let inFlight = Task { try await store.dismissQuestions(
@@ -43,12 +42,13 @@ extension ConversationStoreTests {
             workspaceId: "w"
         )
         }
-        try await Task.sleep(nanoseconds: 10_000_000)
+        try await fake.waitForPendingRequests("agent.dismissQuestions")
 
         #expect(
             store.dismissedQuestionsMessageId == "a1",
             "the marker is raised optimistically while the RPC is in flight"
         )
+        fake.resolvePending("agent.dismissQuestions", with: ["success": true] as [String: Any])
         try await inFlight.value
         #expect(store.dismissedQuestionsMessageId == "a1")
     }
@@ -57,8 +57,7 @@ extension ConversationStoreTests {
         // If another client's dismissal lands (agent:updated push) while our
         // failing RPC is in flight, the rollback must not clobber it.
         let fake = FakeConnectionManager()
-        fake.errorMap["agent.dismissQuestions"] = NSError(domain: "WebSocket", code: -32_000)
-        fake.delayMap["agent.dismissQuestions"] = 50_000_000
+        fake.pendingMethods.insert("agent.dismissQuestions")
         let store = ConversationStore(connectionManager: fake)
 
         let inFlight = Task { try await store.dismissQuestions(
@@ -67,9 +66,10 @@ extension ConversationStoreTests {
             workspaceId: "w"
         )
         }
-        try await Task.sleep(nanoseconds: 10_000_000)
+        try await fake.waitForPendingRequests("agent.dismissQuestions")
         store.dismissedQuestionsMessageId = "a2"
 
+        fake.failPending("agent.dismissQuestions", with: NSError(domain: "WebSocket", code: -32_000))
         await #expect(throws: (any Error).self) { try await inFlight.value }
         #expect(
             store.dismissedQuestionsMessageId == "a2",
@@ -294,7 +294,7 @@ extension ConversationStoreTests {
         store.pendingQuestionsMessageId = "a1"
 
         let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.isLoading)
 
         store.handleStreamEvent("events.event", params: [
@@ -336,7 +336,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         store.handleStreamEvent("events.event", params: [
             "event": [
@@ -390,7 +390,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         let refresh = Task { await store.fetchAgentStreamingState(agentId: "a") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.get")
 
         fake.resolvePending("agent.get", with: [
             "agent": [
