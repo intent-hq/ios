@@ -55,7 +55,9 @@
 #                         selector — requested, resolved, executed, skipped,
 #                         failed, unknown — to stdout; a selector whose tests
 #                         neither executed nor were skipped exits 82 even when
-#                         xcodebuild exited 0, an all-skipped selector is a
+#                         xcodebuild exited 0 (so does a crash re-run that left
+#                         an interrupted suite or failed test unrecovered), an
+#                         all-skipped selector is a
 #                         notice, and an unreadable bundle or an unrecognised
 #                         result on a green run exits 83 (see the exit codes
 #                         below). Unset/empty skips all of this and leaves the
@@ -127,8 +129,12 @@
 #       is not started even when other selectors resolved — or, after the run,
 #       a resolved selector for which the result bundle records no executed or
 #       skipped test although xcodebuild exited 0 (other selectors having run
-#       does not rescue it). A selector whose tests were all skipped at runtime
-#       (XCTSkip, .disabled) is reported as a notice and keeps exit 0.
+#       does not rescue it), or a crash re-run (exit code 80 above) that
+#       recorded nothing for an interrupted suite it re-ran or did not record a
+#       test that failed in the crashed run (the crashed run's results are no
+#       evidence, so the failure counts as unrecovered). A selector whose tests
+#       were all skipped at runtime (XCTSkip, .disabled) is reported as a
+#       notice and keeps exit 0.
 #   83  the ONLY_TESTING selection could not be verified: test enumeration
 #       failed or produced no parsable catalog, or the result bundle of a run
 #       that exited 0 is missing, unreadable, or records a test result other
@@ -177,7 +183,8 @@ A test-process crash re-runs the interrupted suites once, alone; a green
 re-run keeps the run green (TEST_CRASH_RETRY=0 disables this).
 Exit codes: xcodebuild's own, plus 80 (test process crashed/terminated, and
 the re-run did not recover), 81 (timed out waiting for the simulator lock),
-82 (an ONLY_TESTING selector matched or executed no test) and 83 (the
+82 (an ONLY_TESTING selector matched or executed no test, or the crash re-run
+left an interrupted suite or failed test unrecovered) and 83 (the
 ONLY_TESTING selection could not be verified).
 EOF
   exit 2
