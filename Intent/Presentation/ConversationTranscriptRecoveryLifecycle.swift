@@ -39,7 +39,8 @@ enum ConversationTranscriptRecoveryLifecycle {
         /// A follow from its request until its terminal is reported.
         case follow(FollowToken, forced: Bool)
         /// A recovery from its first correction until its terminal is
-        /// reported — today's `isRecoveringUnrealizedEnd`.
+        /// reported — today's `isRecoveringUnrealizedEnd` — except while a
+        /// follow requested meanwhile owns (`ArmedRecovery.demoted`).
         case recovery(RecoveryToken)
     }
 
@@ -54,12 +55,27 @@ enum ConversationTranscriptRecoveryLifecycle {
         case transferred(to: FollowToken)
     }
 
+    /// A recovery alive without owning the viewport. It may coexist with a
+    /// follow owner: it reads `isFollowing` and settles until the follow
+    /// drains.
+    enum ArmedRecovery: Equatable {
+        /// Polling without having claimed the viewport yet.
+        case polling(RecoveryToken)
+        /// Had claimed the viewport when a follow took it — today's
+        /// `isRecoveringUnrealizedEnd` stays raised through the follow —
+        /// and owns again once that follow drains.
+        case demoted(RecoveryToken)
+
+        var token: RecoveryToken {
+            switch self {
+            case .polling(let token), .demoted(let token): return token
+            }
+        }
+    }
+
     struct State: Equatable {
         var owner: ViewportOwner = .idle
-        /// A recovery polling without having claimed the viewport yet. It
-        /// may coexist with a follow owner: it reads `isFollowing` and
-        /// settles until the follow drains.
-        var armedRecovery: RecoveryToken? = nil
+        var armedRecovery: ArmedRecovery? = nil
         var fallback: GiveUpFallback = .none
         /// The end row (the `scroll-bottom` marker) is realized by the lazy
         /// stack.
@@ -70,7 +86,7 @@ enum ConversationTranscriptRecoveryLifecycle {
 
         /// The one recovery task alive right now, armed or owning.
         var currentRecovery: RecoveryToken? {
-            if let armedRecovery { return armedRecovery }
+            if let armedRecovery { return armedRecovery.token }
             switch owner {
             case .recovery(let token): return token
             case .idle, .follow: return nil
@@ -152,8 +168,9 @@ enum ConversationTranscriptRecoveryLifecycle {
                 effects.append(.cancelFollowTask(current))
             case .recovery(let recovery):
                 // The follow owns the viewport from here; the recovery keeps
-                // polling and settles until the follow drains.
-                state.armedRecovery = recovery
+                // polling and settles until the follow drains, then owns
+                // again.
+                state.armedRecovery = .demoted(recovery)
             case .idle:
                 break
             }
@@ -180,6 +197,13 @@ enum ConversationTranscriptRecoveryLifecycle {
         case .followFinished(let token, let terminal):
             guard case .follow(token, let forced) = state.owner else { return (state, []) }
             state.owner = .idle
+            if case .demoted(let recovery) = state.armedRecovery {
+                // The correction the follow took the viewport from owns
+                // again: the replayed edge reads `isFollowing`, and its
+                // pending follow back is granted as it would have been.
+                state.armedRecovery = nil
+                state.owner = .recovery(recovery)
+            }
             let transferred = dischargeFallback(&state, for: token)
             switch terminal {
             case .executed:
@@ -295,7 +319,7 @@ enum ConversationTranscriptRecoveryLifecycle {
 
     private static func armRecovery(_ state: inout State, _ effects: inout [Effect]) {
         let token = RecoveryToken(id: mintTokenId(&state))
-        state.armedRecovery = token
+        state.armedRecovery = .polling(token)
         effects.append(.startRecoveryTask(token))
     }
 

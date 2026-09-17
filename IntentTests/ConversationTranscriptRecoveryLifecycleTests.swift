@@ -41,9 +41,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         if case .transferred(let follow) = after.fallback {
             #expect(followOwner(of: after) == follow, "fallback transferred to a non-owner", sourceLocation: sourceLocation)
         }
-        // Single owner: the armed recovery is never also the owner.
+        // Single owner: the armed recovery is never also the owner, and a
+        // demoted one only exists under the follow that demoted it.
         if let armed = after.armedRecovery {
-            #expect(after.owner != .recovery(armed), "armed recovery also owns", sourceLocation: sourceLocation)
+            #expect(after.owner != .recovery(armed.token), "armed recovery also owns", sourceLocation: sourceLocation)
+            if case .demoted = armed {
+                #expect(followOwner(of: after) != nil, "demoted recovery with no follow owning", sourceLocation: sourceLocation)
+            }
         }
         #expect(after.nextTokenId >= before.nextTokenId, "token counter went backwards", sourceLocation: sourceLocation)
         // Stale identity: a token that is not current changes nothing.
@@ -70,18 +74,72 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         if case .endRealized(true) = event {
             #expect(effects.contains(.replayLiveEdge(isInteracting: nil)), sourceLocation: sourceLocation)
         }
-        // A terminal for the transferred follow discharges it (invariant 3).
+        // A terminal for the transferred follow discharges it, with the
+        // effect of that terminal: Go to End once if it did not execute over
+        // a still-unrealized end, nothing if it did or the end realized, and
+        // an executed drain over an unrealized end re-arms (invariant 3).
         if case .transferred(let follow) = before.fallback {
+            var executed: Bool?
             switch event {
-            case .followFinished(follow, _):
-                #expect(after.fallback == .none, "terminal left the transfer", sourceLocation: sourceLocation)
+            case .followFinished(follow, .executed):
+                executed = true
+            case .followFinished(follow, .dropped), .followFinished(follow, .yielded),
+                 .followFinished(follow, .cancelled), .followFinished(follow, .replaced):
+                executed = false
             case .followCancelledByGesture:
-                #expect(after.fallback == .none, "takeover left the transfer", sourceLocation: sourceLocation)
+                executed = false
             case .endDerealized, .endRealized, .followRequested, .followDue, .followFinished, .explicitClaim,
                  .recoveryStep, .recoveryPagedUp, .recoveryFinished, .viewDisappeared:
                 break
             }
+            if let executed {
+                #expect(after.fallback == .none, "terminal left the transfer", sourceLocation: sourceLocation)
+                let shownByTerminal = effects.filter { $0 == .showGoToEnd }.count
+                if !executed, !before.isEndRealized {
+                    #expect(shownByTerminal == 1, "unexecuted terminal over an unrealized end did not show Go to End", sourceLocation: sourceLocation)
+                } else {
+                    #expect(shownByTerminal == 0, "Go to End shown by an executed drain or over a realized end", sourceLocation: sourceLocation)
+                }
+                if executed, !before.isEndRealized, before.currentRecovery == nil {
+                    #expect(effects.contains(where: isStartRecovery), "executed drain over an unrealized end did not re-arm", sourceLocation: sourceLocation)
+                }
+            }
         }
+        // Go to End is shown at most once, and only by a give-up or the
+        // terminal it was transferred to.
+        let shown = effects.filter { $0 == .showGoToEnd }.count
+        #expect(shown <= 1, "Go to End shown twice", sourceLocation: sourceLocation)
+        if shown == 1 {
+            switch event {
+            case .recoveryFinished(_, .giveUp, _), .followFinished, .followCancelledByGesture:
+                break
+            case .endDerealized, .endRealized, .followRequested, .followDue, .explicitClaim, .recoveryStep,
+                 .recoveryPagedUp, .recoveryFinished, .viewDisappeared:
+                Issue.record("Go to End shown by \(event)", sourceLocation: sourceLocation)
+            }
+        }
+        // Budget identity (invariant 6): the reducer keeps no count; the one
+        // outcome recorded is the terminal's own, once, by a current terminal.
+        let outcomes = effects.compactMap { effect -> (Lifecycle.RecoveryTerminal, Int)? in
+            if case .recordRecoveryOutcome(let terminal, let corrections) = effect { return (terminal, corrections) }
+            return nil
+        }
+        if case .recoveryFinished(let token, let terminal, let corrections) = event, before.currentRecovery == token {
+            if corrections > 0 {
+                #expect(outcomes.count == 1, "outcome not recorded exactly once", sourceLocation: sourceLocation)
+                #expect(outcomes.first?.0 == terminal, "outcome recorded a different terminal", sourceLocation: sourceLocation)
+                #expect(outcomes.first?.1 == corrections, "outcome recorded a different count", sourceLocation: sourceLocation)
+            } else {
+                #expect(outcomes.isEmpty, "outcome recorded for a recovery that corrected nothing", sourceLocation: sourceLocation)
+            }
+        } else {
+            #expect(outcomes.isEmpty, "outcome recorded outside a current recovery terminal", sourceLocation: sourceLocation)
+        }
+    }
+
+    private func isStartRecovery(_ effect: Effect) -> Bool {
+        if case .startRecoveryTask = effect { return true }
+        return false
     }
 
     private func followOwner(of state: State) -> FollowToken? {
@@ -123,7 +181,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
     private func state(
         owner: Lifecycle.ViewportOwner = .idle,
-        armed: RecoveryToken? = nil,
+        armed: Lifecycle.ArmedRecovery? = nil,
         fallback: Lifecycle.GiveUpFallback = .none,
         realized: Bool = false,
         next: Int = 3
@@ -146,12 +204,12 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func endDerealizedArmsExactlyOneRecovery() {
         var s = State()
         #expect(step(&s, .endDerealized) == [.startRecoveryTask(r1)])
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .polling(r1))
         #expect(s.owner == .idle)
         #expect(!s.isFollowing)
         // A recovery already polling keeps its budget.
         #expect(step(&s, .endDerealized).isEmpty)
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .polling(r1))
     }
 
     @Test func endDerealizedArmsNothingWhileARecoveryOwns() {
@@ -166,19 +224,19 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var s = state(owner: .follow(f1, forced: true), realized: true)
         #expect(step(&s, .endDerealized) == [.startRecoveryTask(RecoveryToken(id: 3))])
         #expect(s.owner == .follow(f1, forced: true))
-        #expect(s.armedRecovery == RecoveryToken(id: 3))
+        #expect(s.armedRecovery == .polling(RecoveryToken(id: 3)))
         #expect(s.isFollowing)
     }
 
     @Test func endRealizedReplaysOnlyWhenScrolledAway() {
-        var s = state(armed: r1)
+        var s = state(armed: .polling(r1))
         #expect(step(&s, .endRealized(userIsScrolledAway: false)).isEmpty)
         #expect(s.isEndRealized)
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .polling(r1))
         s.isEndRealized = false
         #expect(step(&s, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(isInteracting: nil)])
         #expect(s.isEndRealized)
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .polling(r1))
     }
 
     // MARK: - followRequested
@@ -192,7 +250,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func automaticFollowNeverPreemptsAForcedOne() {
-        var s = state(owner: .follow(f1, forced: true), armed: r2)
+        var s = state(owner: .follow(f1, forced: true), armed: .polling(r2))
         let before = s
         #expect(step(&s, .followRequested(forced: false)).isEmpty)
         #expect(s == before)
@@ -227,21 +285,34 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         let follow = FollowToken(id: 3)
         #expect(step(&s, .followRequested(forced: false)) == [.startFollowTask(follow, forced: false)])
         #expect(s.owner == .follow(follow, forced: false))
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .demoted(r1))
         #expect(s.currentRecovery == r1)
     }
 
     @Test func followRequestedKeepsAnArmedRecovery() {
-        var s = state(armed: r1)
+        var s = state(armed: .polling(r1))
         step(&s, .followRequested(forced: true))
-        #expect(s.armedRecovery == r1)
+        #expect(s.armedRecovery == .polling(r1))
         #expect(s.owner == .follow(FollowToken(id: 3), forced: true))
+    }
+
+    @Test func aReplacingFollowKeepsTheDemotedRecoveryForItsOwnDrain() {
+        var s = state(owner: .follow(f1, forced: false), armed: .demoted(r2))
+        let replacement = FollowToken(id: 3)
+        step(&s, .followRequested(forced: true))
+        #expect(s.owner == .follow(replacement, forced: true))
+        #expect(s.armedRecovery == .demoted(r2))
+        #expect(step(&s, .followFinished(f1, .replaced)).isEmpty)
+        #expect(s.armedRecovery == .demoted(r2))
+        #expect(step(&s, .followFinished(replacement, .cancelled)).isEmpty)
+        #expect(s.owner == .recovery(r2))
+        #expect(s.armedRecovery == nil)
     }
 
     // MARK: - followDue
 
     @Test(arguments: [false, true]) func followDueThatExecutesScrollsToEnd(forced: Bool) {
-        var s = state(owner: .follow(f1, forced: forced), armed: r2)
+        var s = state(owner: .follow(f1, forced: forced), armed: .polling(r2))
         let before = s
         #expect(step(&s, .followDue(f1, execute: true)) == [.scrollToEnd])
         #expect(s == before)
@@ -279,15 +350,85 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func executedFollowOverAnUnrealizedEndReArmsTheRecovery() {
         var s = state(owner: .follow(f1, forced: true), realized: false)
         #expect(step(&s, .followFinished(f1, .executed(.giveUp))) == [.startRecoveryTask(RecoveryToken(id: 3))])
-        #expect(s.armedRecovery == RecoveryToken(id: 3))
+        #expect(s.armedRecovery == .polling(RecoveryToken(id: 3)))
         #expect(s.owner == .idle)
     }
 
     @Test func executedFollowDoesNotDoubleArmARecoveryAlreadyPolling() {
-        var s = state(owner: .follow(f1, forced: false), armed: r2, realized: false)
+        var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), realized: false)
         #expect(step(&s, .followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
-        #expect(s.armedRecovery == r2)
+        #expect(s.armedRecovery == .polling(r2))
         #expect(s.nextTokenId == 3)
+    }
+
+    @Test func executedFollowOverAnUnrealizedEndRestoresADemotedRecoveryInsteadOfReArming() {
+        var s = state(owner: .follow(f1, forced: false), armed: .demoted(r2), realized: false)
+        #expect(step(&s, .followFinished(f1, .executed(.giveUp))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(s.owner == .recovery(r2))
+        #expect(s.armedRecovery == nil)
+        #expect(s.nextTokenId == 3)
+    }
+
+    /// The verifier's repro of the shipped view's order at a drain: a
+    /// message appended mid-correction requests an automatic follow whose
+    /// debounce (100 ms) elapses before the page up settles (150 ms) and is
+    /// dropped on the paged-up distance; the view keeps
+    /// `isRecoveringUnrealizedEnd` raised, so the drain's replayed edge sees
+    /// `isFollowing` and the page-up check then follows back.
+    @Test func aDrainedFollowRestoresTheRecoveryItDemoted() {
+        var s = State()
+        step(&s, .endDerealized)
+        #expect(nonLog(step(&s, .recoveryStep(r1, .recover(pageOffsetY: 120)))) == [.pageUp(offsetY: 120)])
+        #expect(s.owner == .recovery(r1))
+        #expect(step(&s, .followRequested(forced: false)) == [.startFollowTask(f2, forced: false)])
+        #expect(s.owner == .follow(f2, forced: false))
+        #expect(s.armedRecovery == .demoted(r1))
+        #expect(s.isFollowing)
+        #expect(step(&s, .followDue(f2, execute: false)).isEmpty)
+        // The drain replays the swallowed edge with the recovery owning
+        // again: `isFollowing` still reads true for that replay, no re-arm.
+        #expect(step(&s, .followFinished(f2, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(s.owner == .recovery(r1))
+        #expect(s.armedRecovery == nil)
+        #expect(s.isFollowing)
+        #expect(s.currentRecovery == r1)
+        // Then the settled page up is granted its follow back.
+        #expect(step(&s, .recoveryPagedUp(r1, mayFollowBack: true)) == [.scrollToEnd])
+        #expect(s.owner == .recovery(r1))
+        #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 1)) == [
+            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(isInteracting: nil),
+        ])
+        #expect(s.owner == .idle)
+        #expect(!s.isFollowing)
+    }
+
+    /// Correcting recovery → follow → drain → geometry edge: the geometry
+    /// paths read `isFollowing` from the restored owner until the recovery's
+    /// own terminal, where a never-claimed polling recovery leaves it false.
+    @Test func aRestoredRecoveryKeepsIsFollowingForTheGeometryEdgeUntilItsTerminal() {
+        var corrected = State()
+        step(&corrected, .endDerealized)
+        step(&corrected, .recoveryStep(r1, .followToEnd))
+        step(&corrected, .followRequested(forced: true))
+        step(&corrected, .followDue(f2, execute: false))
+        #expect(step(&corrected, .followFinished(f2, .yielded)).isEmpty)
+        #expect(corrected.owner == .recovery(r1))
+        #expect(corrected.isFollowing)
+        #expect(step(&corrected, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(corrected.isFollowing)
+        #expect(step(&corrected, .recoveryFinished(r1, .notNeeded, corrections: 1)) == [
+            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(isInteracting: nil),
+        ])
+        #expect(!corrected.isFollowing)
+
+        var polling = State()
+        step(&polling, .endDerealized)
+        step(&polling, .followRequested(forced: true))
+        step(&polling, .followDue(f2, execute: false))
+        #expect(step(&polling, .followFinished(f2, .yielded)).isEmpty)
+        #expect(polling.owner == .idle)
+        #expect(polling.armedRecovery == .polling(r1))
+        #expect(!polling.isFollowing)
     }
 
     @Test func executedFollowDischargesATransferWithNoGoToEndAndReArms() {
@@ -325,9 +466,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func droppedAutomaticFollowWithoutATransferReplaysTheLiveEdge() {
-        var s = state(owner: .follow(f1, forced: false), armed: r2, realized: false)
+        var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), realized: false)
         #expect(step(&s, .followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
-        #expect(s.armedRecovery == r2)
+        #expect(s.armedRecovery == .polling(r2))
         #expect(s.owner == .idle)
     }
 
@@ -363,8 +504,11 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(s.owner == .idle)
     }
 
-    @Test func gestureCancelsTheFollowAndTheArmedRecoveryTogether() {
-        var s = state(owner: .follow(f1, forced: true), armed: r2, realized: false)
+    @Test(arguments: [
+        ConversationTranscriptRecoveryLifecycle.ArmedRecovery.polling(ConversationTranscriptRecoveryLifecycle.RecoveryToken(id: 2)),
+        .demoted(ConversationTranscriptRecoveryLifecycle.RecoveryToken(id: 2)),
+    ]) func gestureCancelsTheFollowAndTheArmedRecoveryTogether(armed: ConversationTranscriptRecoveryLifecycle.ArmedRecovery) {
+        var s = state(owner: .follow(f1, forced: true), armed: armed, realized: false)
         #expect(nonLog(step(&s, .followCancelledByGesture)) == [.cancelFollowTask(f1), .cancelRecoveryTask(r2)])
         #expect(s.owner == .idle)
         #expect(s.armedRecovery == nil)
@@ -386,7 +530,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func gestureDischargesATransferOverAnUnrealizedEndAsGoToEnd() {
-        var s = state(owner: .follow(f1, forced: false), armed: r2, fallback: .transferred(to: f1), realized: false)
+        var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), fallback: .transferred(to: f1), realized: false)
         let effects = step(&s, .followCancelledByGesture)
         #expect(nonLog(effects) == [.cancelFollowTask(f1), .cancelRecoveryTask(r2), .showGoToEnd])
         #expect(s.fallback == .none)
@@ -403,11 +547,20 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
     @Test(arguments: [ConversationTranscriptRecoveryLifecycle.Event.explicitClaim, .viewDisappeared])
     func claimCancelsTheRecoveryOnly(event: ConversationTranscriptRecoveryLifecycle.Event) {
-        var armedUnderFollow = state(owner: .follow(f1, forced: true), armed: r2, fallback: .transferred(to: f1))
+        var armedUnderFollow = state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(to: f1))
         #expect(step(&armedUnderFollow, event) == [.cancelRecoveryTask(r2)])
         #expect(armedUnderFollow.owner == .follow(f1, forced: true))
         #expect(armedUnderFollow.fallback == .transferred(to: f1))
         #expect(armedUnderFollow.armedRecovery == nil)
+
+        // A demoted recovery is cancelled too: the follow's drain restores
+        // nothing.
+        var demotedUnderFollow = state(owner: .follow(f1, forced: false), armed: .demoted(r2))
+        #expect(step(&demotedUnderFollow, event) == [.cancelRecoveryTask(r2)])
+        #expect(demotedUnderFollow.owner == .follow(f1, forced: false))
+        #expect(demotedUnderFollow.armedRecovery == nil)
+        #expect(step(&demotedUnderFollow, .followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(demotedUnderFollow.owner == .idle)
 
         var owning = state(owner: .recovery(r1))
         #expect(step(&owning, event) == [.cancelRecoveryTask(r1)])
@@ -422,7 +575,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     // MARK: - recoveryStep / recoveryPagedUp
 
     @Test func settlingStepIsSilent() {
-        var armed = state(armed: r1)
+        var armed = state(armed: .polling(r1))
         let before = armed
         #expect(step(&armed, .recoveryStep(r1, .settling)).isEmpty)
         #expect(armed == before)
@@ -432,7 +585,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func followToEndCorrectionClaimsTheViewport() {
-        var s = state(armed: r1)
+        var s = state(armed: .polling(r1))
         let effects = step(&s, .recoveryStep(r1, .followToEnd))
         #expect(nonLog(effects) == [.scrollToEnd])
         #expect(logs(effects) == ["[SCROLL] End row off screen short of the bottom; following to the end"])
@@ -445,7 +598,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func recoverCorrectionClaimsTheViewportAndPagesUp() {
-        var s = state(armed: r1)
+        var s = state(armed: .polling(r1))
         let effects = step(&s, .recoveryStep(r1, .recover(pageOffsetY: 120)))
         #expect(nonLog(effects) == [.pageUp(offsetY: 120)])
         #expect(logs(effects) == ["[SCROLL] Blank viewport at the bottom; paging up and following back"])
@@ -457,10 +610,12 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         for continuation in [
             Lifecycle.RecoveryContinuation.followToEnd, .recover(pageOffsetY: 40),
         ] {
-            var s = state(owner: .follow(f1, forced: false), armed: r2)
-            let before = s
-            #expect(step(&s, .recoveryStep(r2, continuation)).isEmpty)
-            #expect(s == before)
+            for armed in [Lifecycle.ArmedRecovery.polling(r2), .demoted(r2)] {
+                var s = state(owner: .follow(f1, forced: false), armed: armed)
+                let before = s
+                #expect(step(&s, .recoveryStep(r2, continuation)).isEmpty)
+                #expect(s == before)
+            }
         }
     }
 
@@ -474,7 +629,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(owning.owner == .recovery(r1))
         // Demoted under a follow requested meanwhile: the token is current
         // but no longer owns, so no follow back is issued over the follow.
-        var demoted = state(owner: .follow(f1, forced: true), armed: r2)
+        var demoted = state(owner: .follow(f1, forced: true), armed: .demoted(r2))
         let before = demoted
         #expect(step(&demoted, .recoveryPagedUp(r2, mayFollowBack: true)).isEmpty)
         #expect(demoted == before)
@@ -492,8 +647,11 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(s.currentRecovery == nil)
     }
 
-    @Test func giveUpUnderAFollowTransfersToThatFollow() {
-        var s = state(owner: .follow(f1, forced: false), armed: r2, realized: false)
+    @Test(arguments: [
+        ConversationTranscriptRecoveryLifecycle.ArmedRecovery.polling(ConversationTranscriptRecoveryLifecycle.RecoveryToken(id: 2)),
+        .demoted(ConversationTranscriptRecoveryLifecycle.RecoveryToken(id: 2)),
+    ]) func giveUpUnderAFollowTransfersToThatFollow(armed: ConversationTranscriptRecoveryLifecycle.ArmedRecovery) {
+        var s = state(owner: .follow(f1, forced: false), armed: armed, realized: false)
         let effects = step(&s, .recoveryFinished(r2, .giveUp, corrections: 3))
         #expect(effects == [.recordRecoveryOutcome(.giveUp, corrections: 3), .replayLiveEdge(isInteracting: nil)])
         #expect(s.fallback == .transferred(to: f1))
@@ -511,14 +669,16 @@ struct ConversationTranscriptRecoveryLifecycleTests {
             .recordRecoveryOutcome(terminal, corrections: 1), .replayLiveEdge(isInteracting: nil),
         ])
         #expect(owning.owner == .idle)
-        var armed = state(owner: .follow(f1, forced: true), armed: r2)
-        #expect(step(&armed, .recoveryFinished(r2, terminal, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
-        #expect(armed.owner == .follow(f1, forced: true))
-        #expect(armed.armedRecovery == nil)
+        for armed in [Lifecycle.ArmedRecovery.polling(r2), .demoted(r2)] {
+            var underFollow = state(owner: .follow(f1, forced: true), armed: armed)
+            #expect(step(&underFollow, .recoveryFinished(r2, terminal, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
+            #expect(underFollow.owner == .follow(f1, forced: true))
+            #expect(underFollow.armedRecovery == nil)
+        }
     }
 
     @Test func aRecoveryThatCorrectedNothingRecordsNoOutcome() {
-        var s = state(armed: r1, realized: true)
+        var s = state(armed: .polling(r1), realized: true)
         #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
         #expect(s.armedRecovery == nil)
     }
@@ -528,7 +688,8 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func staleTokensChangeNothing() {
         let states = [
             State(),
-            state(owner: .follow(f1, forced: true), armed: r2, fallback: .transferred(to: f1)),
+            state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(to: f1)),
+            state(owner: .follow(f1, forced: false), armed: .demoted(r2)),
             state(owner: .recovery(r1)),
         ]
         let events: [Event] = [
@@ -583,17 +744,23 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     // MARK: - Tables
 
     /// Every well-formed owner / armed / fallback combination the two
-    /// terminal events can meet. `f1` is the follow, `r2` the recovery.
+    /// terminal events can meet. `f1` is the follow, `r2` the recovery. A
+    /// demoted recovery exists only under a follow, and never with a
+    /// transfer: a transfer names the follow that owns, while a demotion is
+    /// made over an owning recovery.
     private var terminalStates: [State] {
         var states: [State] = []
         for realized in [false, true] {
-            for armed in [nil, r2] {
+            for armed in [nil, Lifecycle.ArmedRecovery.polling(r2)] {
                 states.append(state(owner: .idle, armed: armed, realized: realized))
                 for forced in [false, true] {
                     for fallback in [Lifecycle.GiveUpFallback.none, .transferred(to: f1)] {
                         states.append(state(owner: .follow(f1, forced: forced), armed: armed, fallback: fallback, realized: realized))
                     }
                 }
+            }
+            for forced in [false, true] {
+                states.append(state(owner: .follow(f1, forced: forced), armed: .demoted(r2), realized: realized))
             }
             states.append(state(owner: .recovery(r2), realized: realized))
         }
@@ -638,19 +805,17 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 }
             }
         }
-        #expect(cases == 22 * 3 * 2 * 2)
+        #expect(cases == 26 * 3 * 2 * 2)
     }
 
+    /// Every terminal state, including the recovery-owner ones where any
+    /// follow token is stale.
     @Test func followFinishedTable() {
         let terminals: [Lifecycle.FollowTerminal] = [
             .executed(nil), .executed(.landed), .dropped, .yielded, .cancelled, .replaced,
         ]
         var cases = 0
-        let followStates = terminalStates.filter {
-            if case .recovery = $0.owner { return false }
-            return true
-        }
-        for original in followStates {
+        for original in terminalStates {
             for terminal in terminals {
                 for token in [f1, staleFollow] {
                     cases += 1
@@ -664,6 +829,10 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                     var expected = original
                     var expectedEffects: [Effect] = []
                     expected.owner = .idle
+                    if case .demoted(let recovery) = original.armedRecovery {
+                        expected.owner = .recovery(recovery)
+                        expected.armedRecovery = nil
+                    }
                     let transferred = original.fallback == .transferred(to: token)
                     expected.fallback = .none
                     switch terminal {
@@ -671,7 +840,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                         if !forced { expectedEffects.append(.replayLiveEdge(isInteracting: nil)) }
                         if !original.isEndRealized, original.armedRecovery == nil {
                             let armed = RecoveryToken(id: original.nextTokenId)
-                            expected.armedRecovery = armed
+                            expected.armedRecovery = .polling(armed)
                             expected.nextTokenId += 1
                             expectedEffects.append(.startRecoveryTask(armed))
                         }
@@ -687,6 +856,6 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 }
             }
         }
-        #expect(cases == 20 * 6 * 2)
+        #expect(cases == 26 * 6 * 2)
     }
 }
