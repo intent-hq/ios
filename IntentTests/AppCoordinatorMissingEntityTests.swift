@@ -9,10 +9,7 @@ import UIKit
 extension AppCoordinatorTests {
     @Test @MainActor func reconnect_missingAgent_bootsToWorkspaceDetail() async throws {
         let wsId = "test-coord-reconnect-gone-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -37,19 +34,11 @@ extension AppCoordinatorTests {
         try await waitUntil(".workspaceDetail after reconnect with missing agent") {
             Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
-
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-            "Per-workspace saved sub-screen should be cleared for the missing agent"
-        )
     }
 
     @Test @MainActor func reconnect_agentStillExists_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-alive-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -70,10 +59,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func reconnect_agentTransientError_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-transient-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -99,10 +85,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func reconnect_agentBare32602_staysOnConversation() async throws {
         let wsId = "test-coord-reconnect-bare32602-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -129,10 +112,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func reconnect_notOnConversation_doesNotValidateAgent() async throws {
         let wsId = "test-coord-reconnect-detail-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let fake = FakeConnectionManager()
@@ -152,16 +132,12 @@ extension AppCoordinatorTests {
 
     // MARK: - Missing agent handling (conversation fallback)
 
-    @Test @MainActor func handleMissingAgent_navigatesToWorkspaceDetail_andClearsSavedScreen() {
+    @Test @MainActor func handleMissingAgent_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-agent-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-gone", workspaceId: wsId, agentName: "Doomed")
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil)
 
         coordinator.handleMissingAgent(agentId: "agent-gone", workspaceId: wsId)
 
@@ -170,10 +146,6 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceDetail after handleMissingAgent, got \(coordinator.currentScreen)")
         }
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-            "Per-workspace saved sub-screen should be cleared for the missing agent"
-        )
     }
 
     @Test @MainActor func handleMissingAgent_ignoredWhenNotOnConversationScreen() {
@@ -181,10 +153,7 @@ extension AppCoordinatorTests {
         // time the agent:deleted fallback fires the screen is already
         // .workspaceDetail — the guard must make it a no-op (no double navigation).
         let wsId = "test-coord-missing-agent-noop-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -200,10 +169,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func handleMissingAgent_ignoredForDifferentWorkspace() {
         let wsId = "test-coord-missing-agent-otherws-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
@@ -224,10 +190,7 @@ extension AppCoordinatorTests {
         // A stale validation for agent A must not evict a live conversation
         // with agent B in the same workspace.
         let wsId = "test-coord-missing-agent-otheragent-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-b", workspaceId: wsId, agentName: "Alive")
@@ -240,25 +203,17 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("handleMissingAgent for another agent must not navigate, got \(coordinator.currentScreen)")
         }
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
-            "The live conversation's saved sub-screen must not be cleared"
-        )
     }
 
     // MARK: - Missing note handling
 
-    @Test @MainActor func handleMissingNote_navigatesToWorkspaceDetail_andClearsSavedScreen() {
+    @Test @MainActor func handleMissingNote_navigatesToWorkspaceDetail() {
         let wsId = "test-coord-missing-note-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
         coordinator.onSelectNote("note-gone", workspaceId: wsId, noteTitle: "Doomed Note")
-        #expect(persistence.loadWorkspaceScreen(workspaceId: wsId) != nil)
 
         coordinator.handleMissingNote(noteId: "note-gone", workspaceId: wsId)
 
@@ -267,18 +222,11 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("Expected .workspaceDetail after handleMissingNote, got \(coordinator.currentScreen)")
         }
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) == nil,
-            "Per-workspace saved note screen should be cleared for the missing note"
-        )
     }
 
     @Test @MainActor func handleMissingNote_ignoredWhenNotOnNoteScreen() {
         let wsId = "test-coord-missing-note-noop-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectAgent("agent-1", workspaceId: wsId, agentName: "Worker")
@@ -295,10 +243,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func handleMissingNote_ignoredForDifferentWorkspace() {
         let wsId = "test-coord-missing-note-otherws-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -318,10 +263,7 @@ extension AppCoordinatorTests {
         // A stale validation for note A must not evict a live note B screen
         // in the same workspace (reachable via note-to-note links).
         let wsId = "test-coord-missing-note-othernote-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let coordinator = AppCoordinator(persistence: persistence)
         coordinator.onSelectWorkspace(wsId)
@@ -335,20 +277,13 @@ extension AppCoordinatorTests {
         } else {
             Issue.record("handleMissingNote for another note must not navigate, got \(coordinator.currentScreen)")
         }
-        #expect(
-            persistence.loadWorkspaceScreen(workspaceId: wsId) != nil,
-            "The live note screen's saved sub-screen must not be cleared"
-        )
     }
 
     // MARK: - Note validation on cold-start restore
 
     @Test @MainActor func restoreLastScreen_restoredNoteMissing_fallsBackToDetail() async throws {
         let wsId = "test-coord-restore-dead-note-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
@@ -398,10 +333,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func restoreLastScreen_restoredNoteTransientError_staysOnNote() async throws {
         let wsId = "test-coord-restore-note-transient-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(
@@ -442,10 +374,7 @@ extension AppCoordinatorTests {
 extension AppCoordinatorTests {
     @Test @MainActor func restoreLastScreen_restoredNoteAlive_staysOnNote() async throws {
         let wsId = "test-coord-restore-note-alive-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         persistence.saveLastScreen(
             PersistenceManager.SavedScreen(

@@ -23,6 +23,7 @@ $(SRCROOT)/Intent/Models/AnyCodable.swift
 $(SRCROOT)/Intent/Models/AttentionNotice.swift
 $(SRCROOT)/Intent/Models/BackgroundHook.swift
 $(SRCROOT)/Intent/Models/CommentThread.swift
+$(SRCROOT)/Intent/Models/ContentBlock+Identity.swift
 $(SRCROOT)/Intent/Models/ContentBlock.swift
 $(SRCROOT)/Intent/Models/ContextMention.swift
 $(SRCROOT)/Intent/Models/ConversationMessage.swift
@@ -263,6 +264,7 @@ $(SRCROOT)/IntentTests/ConnectionPersistenceMigrationTests.swift
 $(SRCROOT)/IntentTests/ConnectionPersistenceTests.swift
 $(SRCROOT)/IntentTests/ContextMentionTests.swift
 $(SRCROOT)/IntentTests/ConversationContentBlockTests.swift
+$(SRCROOT)/IntentTests/ConversationDecodingIdentityTests.swift
 $(SRCROOT)/IntentTests/ConversationMessageTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreBindingGenerationTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreHydrationTests.swift
@@ -276,7 +278,6 @@ $(SRCROOT)/IntentTests/ConversationStoreQueueTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreRecoveryTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreSeenTests.swift
 $(SRCROOT)/IntentTests/ConversationStoreTests.swift
-$(SRCROOT)/IntentTests/ConversationTranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part1.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part2.swift
 $(SRCROOT)/IntentTests/ConversationTranscriptScrollPolicyTests+Part3.swift
@@ -377,6 +378,14 @@ $(SRCROOT)/IntentTests/TestSourceInputs.swift
 $(SRCROOT)/IntentTests/TextInputDescendantWalkTests.swift
 $(SRCROOT)/IntentTests/ToolClassifierClassificationTests.swift
 $(SRCROOT)/IntentTests/TranscriptDecodingMeasurementTests.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+EdgeSequences.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Follow.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Harness.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Invariants.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Recovery.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Sequences.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests+Tables.swift
+$(SRCROOT)/IntentTests/TranscriptRecoveryLifecycleTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift

@@ -73,7 +73,7 @@ nonisolated final class ConversationTranscriptScrollUITests: XCTestCase {
         .appendingPathComponent("transcript-block-hydration-\(UUID().uuidString).trigger")
 
     /// The file the fixture's end-derealization gate waits on (see
-    /// `Fixture.endDerealizationTriggerFileArgumentPrefix`), passed only by
+    /// `Fixture.endDerealizationTriggerArgumentPrefix`), passed only by
     /// the two controlled-recovery tests.
     let endDerealizationTriggerFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("transcript-end-derealization-\(UUID().uuidString).trigger")

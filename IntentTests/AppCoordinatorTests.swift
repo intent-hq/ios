@@ -294,10 +294,7 @@ extension AppCoordinatorTests {
 
     @Test @MainActor func firstFetch_archivedWorkspace_bootsToWorkspaceListFromConversation() async throws {
         let wsId = "test-coord-archived-\(UUID().uuidString)"
-        defer {
-            persistence.clearWorkspaceScreen(workspaceId: wsId)
-            cleanupLastScreen()
-        }
+        defer { cleanupLastScreen() }
 
         let store = WorkspaceStore(forTesting: true)
         let coordinator = AppCoordinator(workspaceStore: store, connection: FakeConnectionManager(), persistence: persistence)
