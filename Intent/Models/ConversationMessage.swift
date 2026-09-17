@@ -362,6 +362,32 @@ nonisolated struct ConversationMessage: Identifiable, Codable, Equatable {
         return try? JSONDecoder().decode(Self.self, from: data)
     }
 
+    /// `parseMessage` for a whole page (ios#258): one validation walk, one
+    /// serialization and one `JSONDecoder` for all rows instead of one of each
+    /// per row. Rows that do not decode are dropped, so the result equals
+    /// `rows.compactMap(parseMessage)`; a page that cannot be serialized as a
+    /// whole (a non-finite number in one row) falls back to per-row parsing so
+    /// only the offending row is dropped.
+    static func parseMessages(_ rows: [[String: Any]]) -> [Self] {
+        guard !rows.isEmpty else { return [] }
+        guard JSONSerialization.isValidJSONObject(rows),
+              let data = try? JSONSerialization.data(withJSONObject: rows),
+              let page = try? JSONDecoder().decode(LenientPage.self, from: data) else {
+            return rows.compactMap { parseMessage($0) }
+        }
+        return page.messages
+    }
+
+    /// Array decoder that drops undecodable rows instead of failing the page.
+    private struct LenientPage: Decodable {
+        let messages: [ConversationMessage]
+
+        init(from decoder: Decoder) throws {
+            var container = try decoder.unkeyedContainer()
+            messages = ConversationMessage.decodeLenientArray(ConversationMessage.self, from: &container)
+        }
+    }
+
     private static func decodeContentBlocks(
         from container: inout UnkeyedDecodingContainer,
         messageId: String

@@ -56,20 +56,52 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
 
         /// Nil when the entity is not block-shaped or its block does not decode.
         init?(entity: [String: Any]) {
-            guard let messageId = entity["messageId"] as? String,
-                  let blockDictionary = entity["block"] as? [String: Any],
-                  let block = ContentBlock.decode(
-                      blockDictionary,
-                      fallbackIdentity: .fingerprint(messageId: messageId)
-                  )
+            guard let shaped = Shaped(entity: entity),
+                  let block = ContentBlock.decode(shaped.block, fallbackIdentity: shaped.fallbackIdentity)
             else {
                 return nil
             }
-            self.messageId = messageId
+            self.init(shaped: shaped, block: block)
+        }
+
+        private init(shaped: Shaped, block: ContentBlock) {
+            messageId = shaped.messageId
             self.block = block
-            role = MessageRole(rawValue: entity["role"] as? String ?? "assistant") ?? .system
-            timestamp = entity["timestamp"] as? String
-            streamingComplete = entity["streamingComplete"] as? Bool ?? false
+            role = MessageRole(rawValue: shaped.entity["role"] as? String ?? "assistant") ?? .system
+            timestamp = shaped.entity["timestamp"] as? String
+            streamingComplete = shaped.entity["streamingComplete"] as? Bool ?? false
+        }
+
+        /// A block-shaped entity (`messageId` + `block`) before its block is
+        /// decoded; the shape check shared by the per-entity and batched paths.
+        private struct Shaped {
+            let entity: [String: Any]
+            let messageId: String
+            let block: [String: Any]
+
+            var fallbackIdentity: ContentBlock.FallbackIdentity { .fingerprint(messageId: messageId) }
+
+            init?(entity: [String: Any]) {
+                guard let messageId = entity["messageId"] as? String,
+                      let block = entity["block"] as? [String: Any] else { return nil }
+                self.entity = entity
+                self.messageId = messageId
+                self.block = block
+            }
+        }
+
+        /// Decodes every entity's block in one `ContentBlock.decodeBatch`
+        /// pass (ios#258): same elements, in order, as mapping `init?(entity:)`
+        /// (non-block-shaped entities and undecodable blocks dropped).
+        static func decodeAll(_ entities: [[String: Any]]) -> [Self] {
+            let shaped = entities.compactMap { Shaped(entity: $0) }
+            let blocks = ContentBlock.decodeBatch(
+                shaped.map(\.block),
+                fallbackIdentities: shaped.map(\.fallbackIdentity)
+            )
+            return zip(shaped, blocks).compactMap { entry, block in
+                block.map { Self(shaped: entry, block: $0) }
+            }
         }
     }
 
@@ -105,7 +137,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         ) -> [ChatBlockEntity]? { // swiftlint:disable:this discouraged_optional_collection
             let entities = added + updated
             guard entities.contains(where: { $0["block"] is [String: Any] }) else { return nil }
-            return entities.compactMap { ChatBlockEntity(entity: $0) }
+            return ChatBlockEntity.decodeAll(entities)
         }
     }
 
@@ -150,7 +182,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             snapshot: conversationSnapshot,
             delta: nil,
             snapshotMeta: metadata,
-            snapshotMessages: conversationSnapshot.compactMap { ConversationMessage.parseMessage($0) }
+            snapshotMessages: ConversationMessage.parseMessages(conversationSnapshot)
         )
     }
 
@@ -227,7 +259,7 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
             snapshot: messages,
             delta: nil,
             snapshotMeta: metadata,
-            snapshotMessages: messages.compactMap { ConversationMessage.parseMessage($0) }
+            snapshotMessages: ConversationMessage.parseMessages(messages)
         )
     }
 }

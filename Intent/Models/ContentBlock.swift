@@ -262,10 +262,61 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         _ dictionary: [String: Any],
         fallbackIdentity: FallbackIdentity = .fingerprint(messageId: nil)
     ) -> Self? {
-        guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
+        guard JSONSerialization.isValidJSONObject(dictionary),
+              let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
         let decoder = JSONDecoder()
         decoder.userInfo[fallbackIdentityUserInfoKey] = fallbackIdentity
         return try? decoder.decode(Self.self, from: data)
+    }
+
+    /// `decode` for a whole batch (ios#258): one serialization and one
+    /// `JSONDecoder` for every dictionary instead of one pair per element.
+    /// Element `i` decodes with `fallbackIdentities[i]`; the result keeps one
+    /// slot per input, nil where that element does not decode. When the batch
+    /// as a whole cannot be serialized (a non-finite number in one element)
+    /// every element is decoded on its own, so the outcome per element is the
+    /// same either way.
+    static func decodeBatch(
+        _ dictionaries: [[String: Any]],
+        fallbackIdentities: [FallbackIdentity]
+    ) -> [Self?] {
+        precondition(dictionaries.count == fallbackIdentities.count)
+        guard !dictionaries.isEmpty else { return [] }
+        guard JSONSerialization.isValidJSONObject(dictionaries),
+              let data = try? JSONSerialization.data(withJSONObject: dictionaries) else {
+            return zip(dictionaries, fallbackIdentities).map { decode($0, fallbackIdentity: $1) }
+        }
+        let decoder = JSONDecoder()
+        decoder.userInfo[batchFallbackIdentitiesUserInfoKey] = fallbackIdentities
+        guard let batch = try? decoder.decode(Batch.self, from: data),
+              batch.blocks.count == dictionaries.count else {
+            return zip(dictionaries, fallbackIdentities).map { decode($0, fallbackIdentity: $1) }
+        }
+        return batch.blocks
+    }
+
+    private static let batchFallbackIdentitiesUserInfoKey = CodingUserInfoKey(
+        rawValue: "ContentBlock.batchFallbackIdentities"
+    )! // swiftlint:disable:this force_unwrapping
+
+    /// Lenient array decoder for `decodeBatch`: each element decodes with its
+    /// own positional `FallbackIdentity`; a failing element yields nil.
+    private struct Batch: Decodable {
+        let blocks: [ContentBlock?]
+
+        init(from decoder: Decoder) throws {
+            let identities = decoder.userInfo[ContentBlock.batchFallbackIdentitiesUserInfoKey] as? [FallbackIdentity] ?? []
+            var container = try decoder.unkeyedContainer()
+            var blocks: [ContentBlock?] = []
+            blocks.reserveCapacity(container.count ?? identities.count)
+            while !container.isAtEnd {
+                let index = container.currentIndex
+                let elementDecoder = try container.superDecoder()
+                let identity = index < identities.count ? identities[index] : .fingerprint(messageId: nil)
+                blocks.append(try? ContentBlock(from: elementDecoder, fallbackIdentity: identity))
+            }
+            self.blocks = blocks
+        }
     }
 
     private static let fnvOffsetBasis: UInt64 = 0xcbf2_9ce4_8422_2325
