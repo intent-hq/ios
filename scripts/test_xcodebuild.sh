@@ -395,6 +395,43 @@ assert_contains "the uninterrupted selector keeps its primary result" "$out" \
 assert_contains "the merged summary says so" "$out" "merged with the re-run"
 assert_eq "the temporary bundles are removed after a green merged run" "$(temp_bundles)" 0
 
+echo "# a selector naming the interrupted suite (or its target) keeps the whole suite in the re-run"
+make_results "$work/overlapprimary.json" "IntentTests/DemoFixturesTests/testFoo()=Passed" "IntentTests/DemoFixturesTests/testBar()=Failed"
+make_results "$work/overlapretry.json" "IntentTests/DemoFixturesTests/testFoo()=Passed" "IntentTests/DemoFixturesTests/testBar()=Passed"
+status=$(run_filtered overlap "IntentTests/DemoFixturesTests/testFoo IntentTests/DemoFixturesTests" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/overlap.state" STUB_NO_FAILING=1 \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testBar(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/overlapprimary.json" STUB_RESULTS_RETRY="$work/overlapretry.json")
+out=$(cat "$work/overlap.out")
+assert_eq "suite + nested selector: crash then green re-run exits 0" "$status" 0
+retry=$(retry_argv overlap)
+assert_contains "the suite selector wins over the nested one in the re-run" "$retry" "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests]"
+assert_lacks "the nested selector is not re-run on its own" "$retry" "[-only-testing:IntentTests/DemoFixturesTests/testFoo]"
+assert_contains "the whole suite's re-run results replace the crashed suite's" "$out" \
+  "  IntentTests/DemoFixturesTests                 2         2        0       0        0"
+status=$(run_filtered overlaptarget "IntentTests IntentTests/DemoFixturesTests/testFoo" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/overlaptarget.state" STUB_NO_FAILING=1 \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testBar(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/overlapprimary.json" STUB_RESULTS_RETRY="$work/overlapretry.json")
+assert_eq "target + nested selector: crash then green re-run exits 0" "$status" 0
+assert_contains "a target selector keeps the whole interrupted suite in the re-run" "$(retry_argv overlaptarget)" \
+  "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests]"
+
+echo "# a re-run that records nothing for a selector leaves it unexecuted (the crashed suite's results are not trusted)"
+make_results "$work/emptyretry.json"
+status=$(run_filtered emptyretry "IntentTests/DemoFixturesTests/testBar" test-without-building \
+  STUB_MODE=marker STUB_THEN=pass STUB_STATE="$work/emptyretry.state" STUB_NO_FAILING=1 \
+  STUB_MARKER="Restarting after unexpected exit, crash, or test timeout in IntentTests.DemoFixturesTests/testBar(); summary will include totals from previous launches." \
+  STUB_RESULTS="$work/overlapprimary.json" STUB_RESULTS_RETRY="$work/emptyretry.json")
+out=$(cat "$work/emptyretry.out")
+assert_eq "an empty re-run bundle is not green: exit 82" "$status" 82
+assert_contains "the re-run narrowed to the selector" "$(retry_argv emptyretry)" "/Intent-retry.xcresult] [-only-testing:IntentTests/DemoFixturesTests/testBar]"
+assert_contains "the primary Failed record is dropped rather than counted" "$out" \
+  "  IntentTests/DemoFixturesTests/testBar         1         0        0       0        0"
+assert_contains "the selector is reported as executing nothing" "$out" "executed nothing although xcodebuild exited 0"
+assert_contains "both bundles are kept for inspection" "$out" "Re-run result bundle kept at: $work/xcodebuild-result."
+rm -rf -- "$work"/xcodebuild-result.*
+
 echo "# RESULT_BUNDLE set: the re-run writes <bundle>-retry beside it"
 status=$(run_filtered crashown "" test-without-building RESULT_BUNDLE="$work/crashown.xcresult" \
   STUB_MODE=crash STUB_THEN=pass STUB_STATE="$work/crashown.state")
