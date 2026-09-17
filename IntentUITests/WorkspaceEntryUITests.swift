@@ -14,6 +14,10 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         /// workspace with exactly one top-level agent (its delegates are
         /// background sub-agents).
         static let workspaceTitle = "Deflake payment integration tests"
+        /// `WorkspaceListView`'s navigation title: the list is the only
+        /// screen that shows it, whereas `workspaceTitle` is also the
+        /// overview's navigation title and the conversation's back button.
+        static let workspaceListTitle = "Workspaces"
         /// `DemoFixtures.longConversationAgents`' top-level agent name: the
         /// agent row on the overview and, once opened, the conversation title.
         static let agentName = "Test Stabilizer"
@@ -101,17 +105,21 @@ nonisolated final class WorkspaceEntryUITests: XCTestCase {
         XCTAssertTrue(overviewOnly.exists, "\(context): the workspace overview was left")
     }
 
-    /// Navigates back until the workspace list shows `workspaceRow`; on a
-    /// collapsed iPad sidebar the first nav button reveals the list.
+    /// Navigates back until the workspace list's own navigation bar shows,
+    /// then waits for `workspaceRow` in it; on a collapsed iPad sidebar the
+    /// first nav button reveals the list. Gating on the row's text alone
+    /// would stop on the overview, whose navigation title is the same text.
     @MainActor
     private func showWorkspaceList(in app: XCUIApplication, workspaceRow: XCUIElement) {
+        let workspaceList = app.navigationBars[Fixture.workspaceListTitle].firstMatch
         var backTapsLeft = Fixture.backNavigationAttempts
-        while backTapsLeft > 0, !workspaceRow.waitForExistence(timeout: Fixture.backNavigationTimeout) {
+        while backTapsLeft > 0, !workspaceList.waitForExistence(timeout: Fixture.backNavigationTimeout) {
             let back = app.navigationBars.buttons.element(boundBy: 0)
             guard back.exists else { break }
             back.tap()
             backTapsLeft -= 1
         }
+        XCTAssertTrue(workspaceList.exists, "the workspace list never appeared")
         XCTAssertTrue(
             workspaceRow.waitForExistence(timeout: Fixture.workspaceTimeout),
             "the fixture workspace row never appeared in the workspace list"
