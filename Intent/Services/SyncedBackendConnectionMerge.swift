@@ -123,16 +123,18 @@ enum SyncedBackendConnectionMerge {
     }
 
     /// The record's candidate hosts: primary `host` first, then the rest of
-    /// `hosts`, deduped — keeping only hosts usable in a WebSocket URL,
-    /// bracket-normalizing raw IPv6 literals. Registry strings are untrusted
+    /// `hosts`, keeping only hosts usable in a WebSocket URL and
+    /// bracket-normalizing raw IPv6 literals, then deduped. Validation runs
+    /// BEFORE dedup so `2001:DB8::1` and `[2001:db8::1]` collapse to one
+    /// route and an unusable primary (e.g. padded with spaces) never masks
+    /// a usable spelling of the same host. Registry strings are untrusted
     /// input and `ConnectionManager.raceHosts` force-unwraps `URL(string:)`,
     /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(
-            existing: [record.host],
-            incoming: record.hosts
+            existing: [record.host].compactMap(usableHost),
+            incoming: record.hosts.compactMap(usableHost)
         )
-        .compactMap(usableHost)
     }
 
     /// The URL-embeddable form of the host string, or nil when it has no

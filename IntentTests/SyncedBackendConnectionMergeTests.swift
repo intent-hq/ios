@@ -175,6 +175,26 @@ struct SyncedBackendConnectionMergeTests {
         #expect(updated.connections.map(\.server.hosts) == [["host.local", "192.168.1.2"]])
     }
 
+    @Test func unusableEntriesNeverMaskUsableSpellingsOfTheSameHost() {
+        // Review finding on ios#341: a padded primary is unusable (spaces)
+        // but trims to the same dedup key as the clean fallback. Validation
+        // must run before dedup so the fallback survives; malformed input
+        // is never trimmed into acceptance.
+        let padded = record(host: " MAC.local ", hosts: [" mac.local", "mac.local", " 2001:db8::1 ", "2001:db8::1"])
+        #expect(SyncedBackendConnectionMerge.candidateHosts(of: padded) == ["mac.local", "[2001:db8::1]"])
+        let added = SyncedBackendConnectionMerge.merge(records: [padded], into: [])
+        #expect(added.connections.map(\.server.hosts) == [["mac.local", "[2001:db8::1]"]])
+
+        // Same on the update path: the newer record's clean route reaches
+        // the existing connection.
+        let existing = local(hosts: ["10.0.0.1"], syncUpdatedAt: 50)
+        let updated = SyncedBackendConnectionMerge.merge(
+            records: [record(host: " MAC.local ", hosts: ["mac.local", "10.0.0.1"], updatedAt: 100)],
+            into: [existing]
+        )
+        #expect(updated.connections.map(\.server.hosts) == [["mac.local", "10.0.0.1"]])
+    }
+
     @Test func rawIPv6LiteralsAreBracketNormalizedNotDropped() {
         // intentd advertises RAW unbracketed IPv6 strings in pairing/registry
         // hosts (collect_local_ipv6s emits e.g. "2001:db8::1"); they must be
