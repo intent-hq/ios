@@ -275,9 +275,12 @@ jobs:
       # on every run — the full bundle above stays failure-only — by
       # exporting the bundle's attachments to a scratch dir and copying the
       # prefix-matched ones. `xcresulttool export attachments` (Xcode 16+)
-      # writes a manifest.json naming each exported file; the bundle is
-      # symlinked under a .xcresult name since RESULT_BUNDLE has none. No-op
-      # when the bundle is missing or the suite did not run (filtered lane).
+      # writes a manifest.json naming each exported file; each bundle is
+      # symlinked under a .xcresult name since RESULT_BUNDLE has none. When
+      # scripts/xcodebuild.sh re-ran a crashed suite, its sibling bundle
+      # (RESULT_BUNDLE-retry) holds that suite's records; they land under
+      # retry/ so the artifact keeps both launches' evidence. No-op when the
+      # bundle is missing or the suite did not run (filtered lane).
       - name: Export transcript recovery evidence
         id: recovery-evidence
         if: always()
@@ -285,16 +288,23 @@ jobs:
           out="$RUNNER_TEMP/recovery-evidence"
           mkdir -p "$out"
           count=0
-          if [ -d "$RESULT_BUNDLE" ]; then
-            bundle="$RUNNER_TEMP/recovery-evidence-bundle.xcresult"
-            ln -s "$PWD/$RESULT_BUNDLE" "$bundle"
-            exported="$RUNNER_TEMP/recovery-evidence-export"
+          for source in "$RESULT_BUNDLE" "$RESULT_BUNDLE-retry"; do
+            if [ ! -d "$source" ]; then
+              echo "No result bundle at $source; nothing to export"
+              continue
+            fi
+            dest="$out"
+            [ "$source" = "$RESULT_BUNDLE" ] || dest="$out/retry"
+            mkdir -p "$dest"
+            bundle="$RUNNER_TEMP/recovery-evidence-$(basename "$source").xcresult"
+            ln -s "$PWD/$source" "$bundle"
+            exported="$RUNNER_TEMP/recovery-evidence-export-$(basename "$source")"
             mkdir -p "$exported"
             if xcrun xcresulttool export attachments --path "$bundle" --output-path "$exported" \
               && [ -f "$exported/manifest.json" ]; then
               while IFS=$'\t' read -r src name; do
                 [ -n "$src" ] && [ -f "$exported/$src" ] || continue
-                cp "$exported/$src" "$out/$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')"
+                cp "$exported/$src" "$dest/$(printf '%s' "$name" | tr -cs 'A-Za-z0-9._-' '_')"
                 count=$((count + 1))
               done < <(jq -r --arg prefix transcript-recovery-evidence- '
                 .[]? | .attachments[]?
@@ -303,11 +313,9 @@ jobs:
                 | [.exportedFileName, (.suggestedHumanReadableName // .exportedFileName)] | @tsv
               ' "$exported/manifest.json")
             else
-              echo "::warning::could not export attachments from $RESULT_BUNDLE"
+              echo "::warning::could not export attachments from $source"
             fi
-          else
-            echo "No result bundle at $RESULT_BUNDLE; nothing to export"
-          fi
+          done
           echo "Recovery evidence records: $count"
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
