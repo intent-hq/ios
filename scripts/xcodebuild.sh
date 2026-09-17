@@ -533,9 +533,11 @@ EOF
 
 # Names the suites a test-process crash interrupted, from the log at argv[1]:
 # every "Restarting after unexpected exit, crash, or test timeout in
-# Target.Suite/test()" line plus every entry of every "Failing tests:" block
-# (Target on its own tab-indented line, then Suite.test() or Suite/test()
-# entries), since xcodebuild lists whichever tests were in flight there.
+# Target.Suite/test()" line plus every entry of every "Failing tests:" block,
+# since xcodebuild lists whichever tests were in flight there. The block comes
+# grouped (Target on its own tab-indented line, then Suite.test() or
+# Suite/test() entries) or flat (one tab, fully qualified Target.Suite/test()
+# or Target.Suite.test() entries, no target header).
 # Prints the unique Target/Suite identifiers, space-separated, in order of
 # first appearance; nothing when no suite can be named.
 TEST_CRASH_SUITES_PY='
@@ -565,6 +567,10 @@ with open(sys.argv[1], errors="replace") as f:
         m = re.match(r"^\t\t([A-Za-z_][A-Za-z0-9_]*)[./]", line)
         if m and target:
             add(target, m.group(1))
+            continue
+        m = re.match(r"^\t([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)[./]", line)
+        if m:
+            add(m.group(1), m.group(2))
             continue
         in_failing = False
 print(" ".join(suites))
