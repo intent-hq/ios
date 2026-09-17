@@ -61,7 +61,7 @@ final class ConversationTranscriptScrollState {
     /// transcript's accessibility value under `--demo-data` so the XCUITests
     /// can tell a landed follow from one that gave up with the pin kept
     /// (#304, #305).
-    var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingStep?
+    var lastForcedFollowOutcome: ConversationTranscriptScrollPolicy.FollowLandingTerminal?
     /// Corrections (scroll again / clamp) the last forced follow has spent.
     var lastForcedFollowCorrections = 0
     /// How the last unrealized-end recovery episode ended (#338): recorded

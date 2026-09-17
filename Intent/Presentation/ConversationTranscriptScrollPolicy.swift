@@ -475,21 +475,60 @@ enum ConversationTranscriptScrollPolicy {
         var verticalInsets: CGFloat { topInset + bottomInset }
     }
 
-    enum FollowLandingStep: Equatable {
-        /// At rest past the end of the content: clamp the offset back.
-        case clampPastEnd
-        /// Timed out, or the bounded corrections are spent: leave the pin.
-        case giveUp
-        /// At rest within `landingTolerance` of the bottom.
-        case landed
+    // Outcome order follows the landing state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
+    /// An intermediate step of a forced follow's landing loop: the loop
+    /// polls again after it.
+    enum FollowLandingContinuation: Equatable {
+        /// No scroll view yet, or the geometry moved since the last poll.
+        case settling
         /// At rest short of the bottom, even inside the at-bottom band:
         /// issue the scroll again.
         case scrollAgain
-        /// No scroll view yet, or the geometry moved since the last poll.
-        case settling
+        /// At rest past the end of the content: clamp the offset back.
+        case clampPastEnd
+    }
+
+    /// How a forced follow's landing loop ends; the only outcomes the
+    /// landing report (see `forcedFollowLandingSummary`) can carry.
+    enum FollowLandingTerminal: Equatable {
+        /// At rest within `landingTolerance` of the bottom.
+        case landed
         /// The user took over the scroll view; the gesture rule owns the flag.
         case yieldToUser
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
     }
+    // swiftlint:enable sorted_enum_cases
+
+    /// One poll of the landing loop: either a step the loop continues from
+    /// or the terminal that ends it, so a drain can be handed only the
+    /// latter.
+    enum FollowLandingStep: Equatable {
+        case `continue`(FollowLandingContinuation)
+        case finish(FollowLandingTerminal)
+    }
+
+    // Outcome order follows the follow state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
+    /// Every way a follow ends once requested, terminal for the drain that
+    /// resolves a give-up the end recovery deferred to it (see
+    /// `shouldShowGoToEndAfterFollow`, `shouldArmUnrealizedEndRecoveryAfterFollow`).
+    enum FollowTerminal: Equatable {
+        /// The follow scrolled; a forced one carries its landing terminal,
+        /// an automatic one (which only waits out its animation) carries nil.
+        case executed(FollowLandingTerminal?)
+        /// An automatic follow whose re-validation at the due time failed
+        /// (see `shouldExecuteFollow`).
+        case dropped
+        /// A forced follow that came due under a gesture, or scrolled away.
+        case yielded
+        /// A gesture took the pending follow over.
+        case cancelled
+        /// A newer request superseded the follow before it came due.
+        case replaced
+    }
+    // swiftlint:enable sorted_enum_cases
 
     /// A forced follow (entry, a new user message, the thinking indicator,
     /// Go to End) is complete only when the live geometry confirms it (#281).
@@ -527,9 +566,9 @@ enum ConversationTranscriptScrollPolicy {
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> FollowLandingStep {
-        if isInteracting || userIsScrolledAway { return .yieldToUser }
-        if timedOut { return .giveUp }
-        guard let geometry, geometry == previous else { return .settling }
+        if isInteracting || userIsScrolledAway { return .finish(.yieldToUser) }
+        if timedOut { return .finish(.giveUp) }
+        guard let geometry, geometry == previous else { return .continue(.settling) }
         let distance = geometry.distanceToBottom
         if isPastEnd(
             distanceToBottom: distance,
@@ -538,20 +577,19 @@ enum ConversationTranscriptScrollPolicy {
             verticalInsets: geometry.verticalInsets,
             atBottomThreshold: atBottomThreshold
         ) {
-            return correctionsLeft > 0 ? .clampPastEnd : .giveUp
+            return correctionsLeft > 0 ? .continue(.clampPastEnd) : .finish(.giveUp)
         }
         if isScrolledAway(distanceToBottom: distance, atBottomThreshold: landingTolerance) {
-            return correctionsLeft > 0 ? .scrollAgain : .giveUp
+            return correctionsLeft > 0 ? .continue(.scrollAgain) : .finish(.giveUp)
         }
-        return .landed
+        return .finish(.landed)
     }
 
     // Outcome order follows the recovery state machine rather than spelling.
     // swiftlint:disable sorted_enum_cases
-    enum UnrealizedEndRecoveryStep: Equatable {
-        /// The end row is realized, the viewport is not following, or the
-        /// content is shorter than the container.
-        case none
+    /// An intermediate step of the unrealized-end recovery loop: the loop
+    /// polls again after it.
+    enum UnrealizedEndRecoveryContinuation: Equatable {
         /// No scroll view yet, a follow or gesture in flight, the geometry
         /// moved since the last poll, or a geometry another path corrects.
         case settling
@@ -562,6 +600,15 @@ enum ConversationTranscriptScrollPolicy {
         /// follow that changed nothing: page the offset up to `pageOffsetY`
         /// so the lazy stack realizes rows again, then follow back to the end.
         case recover(pageOffsetY: CGFloat)
+    }
+
+    /// How the unrealized-end recovery ends; the only outcomes its drain
+    /// (see `unrealizedEndRecoveryDrain`) and its report (see
+    /// `unrealizedEndRecoveryReport`) can be handed.
+    enum UnrealizedEndRecoveryTerminal: Equatable {
+        /// The end row is realized, the viewport is not following, or the
+        /// content is shorter than the container.
+        case notNeeded
         /// Timed out, or the bounded corrections are spent, with the end row
         /// still unrealized: show Go to End (see `unrealizedEndRecoveryDrain`).
         case giveUp
@@ -570,6 +617,14 @@ enum ConversationTranscriptScrollPolicy {
         case yieldToUser
     }
     // swiftlint:enable sorted_enum_cases
+
+    /// One poll of the recovery loop: either a step the loop continues from
+    /// or the terminal that ends it, so the drain can be handed only the
+    /// latter.
+    enum UnrealizedEndRecoveryStep: Equatable {
+        case `continue`(UnrealizedEndRecoveryContinuation)
+        case finish(UnrealizedEndRecoveryTerminal)
+    }
 
     // swiftlint:disable function_parameter_count function_default_parameter_at_end
     /// Every re-pin judges the viewport by geometry alone, and the geometry
@@ -607,15 +662,17 @@ enum ConversationTranscriptScrollPolicy {
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> UnrealizedEndRecoveryStep {
-        if isEndRealized { return .none }
+        if isEndRealized { return .finish(.notNeeded) }
         guard shouldFollowToBottom(
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: userIsScrolledAway
-        ) else { return .none }
-        if timedOut { return .giveUp }
-        if isInteracting || isFollowing { return .settling }
-        guard let geometry, geometry == previous else { return .settling }
-        guard geometry.contentHeight > geometry.containerHeight - geometry.verticalInsets else { return .none }
+        ) else { return .finish(.notNeeded) }
+        if timedOut { return .finish(.giveUp) }
+        if isInteracting || isFollowing { return .continue(.settling) }
+        guard let geometry, geometry == previous else { return .continue(.settling) }
+        guard geometry.contentHeight > geometry.containerHeight - geometry.verticalInsets else {
+            return .finish(.notNeeded)
+        }
         let distance = geometry.distanceToBottom
         if isPastEnd(
             distanceToBottom: distance,
@@ -624,17 +681,18 @@ enum ConversationTranscriptScrollPolicy {
             verticalInsets: geometry.verticalInsets,
             atBottomThreshold: atBottomThreshold
         ) || isScrolledAway(distanceToBottom: distance, atBottomThreshold: atBottomThreshold) {
-            return .settling
+            return .continue(.settling)
         }
-        guard correctionsLeft > 0 else { return .giveUp }
+        guard correctionsLeft > 0 else { return .finish(.giveUp) }
         if correctionsSpent == 0, isDriftedWithinBottomBand(
             distanceToBottom: distance,
             driftTolerance: landingTolerance,
             atBottomThreshold: atBottomThreshold
         ) {
-            return .followToEnd
+            return .continue(.followToEnd)
         }
-        return .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
+        return .continue(.recover(
+            pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight)))
     }
     // swiftlint:enable function_parameter_count function_default_parameter_at_end
 
@@ -683,13 +741,13 @@ enum ConversationTranscriptScrollPolicy {
     /// deferred to the follow's drain, which re-arms the recovery if the
     /// follow executed and shows Go to End if it did not.
     static func unrealizedEndRecoveryDrain(
-        outcome: UnrealizedEndRecoveryStep,
+        outcome: UnrealizedEndRecoveryTerminal,
         isFollowing: Bool
     ) -> UnrealizedEndRecoveryDrain {
         switch outcome {
         case .giveUp:
             return isFollowing ? .deferToFollow : .showGoToEnd
-        case .none, .yieldToUser, .settling, .followToEnd, .recover:
+        case .notNeeded, .yieldToUser:
             return .replayEdge
         }
     }
@@ -702,13 +760,19 @@ enum ConversationTranscriptScrollPolicy {
     /// `shouldArmUnrealizedEndRecoveryAfterFollow`). So a deferred give-up
     /// whose follow did not execute, with the end row still unrealized,
     /// shows Go to End as the undeferred give-up would have; a realized end
-    /// row needs nothing.
+    /// row needs nothing. Only `.executed` counts as executed.
     static func shouldShowGoToEndAfterFollow(
-        executed: Bool,
+        terminal: FollowTerminal,
         isEndRealized: Bool,
         giveUpDeferred: Bool
     ) -> Bool {
-        giveUpDeferred && !executed && !isEndRealized
+        guard giveUpDeferred, !isEndRealized else { return false }
+        switch terminal {
+        case .executed:
+            return false
+        case .dropped, .yielded, .cancelled, .replaced:
+            return true
+        }
     }
 
     /// The recovery is armed by the end row derealizing — an edge — and an
@@ -720,10 +784,16 @@ enum ConversationTranscriptScrollPolicy {
     /// A realized end row needs nothing, and `unrealizedEndRecoveryStep`
     /// bounds what an armed recovery may do from here.
     static func shouldArmUnrealizedEndRecoveryAfterFollow(
-        executed: Bool,
+        terminal: FollowTerminal,
         isEndRealized: Bool
     ) -> Bool {
-        executed && !isEndRealized
+        guard !isEndRealized else { return false }
+        switch terminal {
+        case .executed:
+            return true
+        case .dropped, .yielded, .cancelled, .replaced:
+            return false
+        }
     }
 
     /// The transcript's accessibility value under `--demo-data`: the last
@@ -736,7 +806,7 @@ enum ConversationTranscriptScrollPolicy {
     /// `UnrealizedEndRecoveryReport.summary`) is appended once the follow
     /// has reported, never to the pending report the tests compare whole.
     static func forcedFollowLandingSummary(
-        outcome: FollowLandingStep?,
+        outcome: FollowLandingTerminal?,
         corrections: Int,
         endRecovery: String? = nil
     ) -> String {
@@ -746,9 +816,6 @@ enum ConversationTranscriptScrollPolicy {
         case .landed: name = "landed"
         case .giveUp: name = "giveUp"
         case .yieldToUser: name = "yieldToUser"
-        case .settling: name = "settling"
-        case .scrollAgain: name = "scrollAgain"
-        case .clampPastEnd: name = "clampPastEnd"
         }
         let summary = "lastForcedFollow=\(name) corrections=\(corrections)"
         guard let endRecovery else { return summary }
@@ -801,17 +868,18 @@ enum ConversationTranscriptScrollPolicy {
         }
     }
 
-    /// Classifies the last recovery episode. `outcome` is the step the
+    /// Classifies the last recovery episode. `outcome` is the terminal the
     /// episode resolved on, nil while it is still running (or, with no
     /// episode armed, before the first); `cancelled` names an episode whose
-    /// task was cancelled and overrides whatever step it last took. No
+    /// task was cancelled and overrides whatever terminal it reached. No
     /// episode is `notAttempted`. A cancelled, yielded or given-up episode
-    /// is never `recovered`, nor is a `.none` resolution that spent no
+    /// is never `recovered`, nor is a `.notNeeded` resolution that spent no
     /// correction (`noCorrectionNeeded`) or left the end row unrealized
     /// (`unverified`): `recovered` needs a correction and the end row
-    /// realized at the finish, both. A non-terminal step is `recovering`.
+    /// realized at the finish, both. An episode still on an intermediate
+    /// step has no terminal yet, so it is `recovering`.
     static func unrealizedEndRecoveryReport(
-        outcome: UnrealizedEndRecoveryStep?,
+        outcome: UnrealizedEndRecoveryTerminal?,
         corrections: Int,
         episodes: Int,
         endRealized: Bool,
@@ -833,7 +901,7 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     private static func unrealizedEndRecoveryReason(
-        outcome: UnrealizedEndRecoveryStep?,
+        outcome: UnrealizedEndRecoveryTerminal?,
         corrections: Int,
         episodes: Int,
         endRealized: Bool,
@@ -843,13 +911,11 @@ enum ConversationTranscriptScrollPolicy {
         if cancelled { return .cancelled }
         guard let outcome else { return .recovering }
         switch outcome {
-        case .settling, .followToEnd, .recover:
-            return .recovering
         case .giveUp:
             return .gaveUp
         case .yieldToUser:
             return .yieldedToUser
-        case .none:
+        case .notNeeded:
             guard corrections > 0 else { return .noCorrectionNeeded }
             return endRealized ? .recovered : .unverified
         }

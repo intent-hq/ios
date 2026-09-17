@@ -339,16 +339,16 @@ private extension ConversationTranscriptView {
                 )
                 previous = geometry
                 switch step {
-                case .settling:
+                case .continue(.settling):
                     continue
-                case .followToEnd:
+                case .continue(.followToEnd):
                     correctionsLeft -= 1
                     scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
                     AppLog.userInterface.debug("[SCROLL] End row off screen short of the bottom; following to the end")
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
-                case .recover(let pageOffsetY):
+                case .continue(.recover(let pageOffsetY)):
                     correctionsLeft -= 1
                     scrollState.unrealizedEndRecoveryCorrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
@@ -370,8 +370,8 @@ private extension ConversationTranscriptView {
                     }
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
-                case .none, .giveUp, .yieldToUser:
-                    finishUnrealizedEndRecovery(outcome: step, proxy: proxy)
+                case .finish(let terminal):
+                    finishUnrealizedEndRecovery(outcome: terminal, proxy: proxy)
                     return
                 }
             }
@@ -390,7 +390,7 @@ private extension ConversationTranscriptView {
     /// or, with a follow in flight, defers that to the follow's drain (see
     /// `resolveDeferredUnrealizedEndGiveUp`).
     private func finishUnrealizedEndRecovery(
-        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep,
+        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryTerminal,
         proxy: ScrollViewProxy
     ) {
         recordUnrealizedEndRecoveryReport(outcome: outcome, cancelled: false)
@@ -420,9 +420,11 @@ private extension ConversationTranscriptView {
     /// Returns true when Go to End was shown, so the caller replays no edge
     /// over it.
     @discardableResult
-    private func resolveDeferredUnrealizedEndGiveUp(followExecuted: Bool) -> Bool {
+    private func resolveDeferredUnrealizedEndGiveUp(
+        followTerminal: ConversationTranscriptScrollPolicy.FollowTerminal
+    ) -> Bool {
         let showGoToEnd = ConversationTranscriptScrollPolicy.shouldShowGoToEndAfterFollow(
-            executed: followExecuted,
+            terminal: followTerminal,
             isEndRealized: scrollState.isEndRealized,
             giveUpDeferred: scrollState.unrealizedEndGiveUpDeferredToFollow
         )
@@ -449,10 +451,10 @@ private extension ConversationTranscriptView {
 
     /// Records how the episode ended, with the corrections it spent and
     /// the end row's realization at this moment, so every terminal path —
-    /// resolved on any step, or cancelled — is observable under
+    /// resolved on any terminal, or cancelled — is observable under
     /// `--demo-data` (see `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport`).
     private func recordUnrealizedEndRecoveryReport(
-        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep?,
+        outcome: ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryTerminal?,
         cancelled: Bool
     ) {
         scrollState.lastUnrealizedEndRecoveryReport = ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
@@ -1089,7 +1091,7 @@ private extension ConversationTranscriptView {
         scrollState.pendingFollowIsForced = false
         isScrollingToBottom = false
         cancelUnrealizedEndRecovery()
-        resolveDeferredUnrealizedEndGiveUp(followExecuted: false)
+        resolveDeferredUnrealizedEndGiveUp(followTerminal: .cancelled)
     }
 
     /// An explicit request — Go to End, or the user's own message — takes
@@ -1168,12 +1170,18 @@ private extension ConversationTranscriptView {
             isScrollingToBottom = false
             scrollState.pendingFollowIsForced = false
             scrollDebounceTask = nil
-            let showedGoToEnd = resolveDeferredUnrealizedEndGiveUp(followExecuted: shouldExecute)
+            let followTerminal: ConversationTranscriptScrollPolicy.FollowTerminal
+            if shouldExecute {
+                followTerminal = .executed(forced ? scrollState.lastForcedFollowOutcome : nil)
+            } else {
+                followTerminal = forced ? .yielded : .dropped
+            }
+            let showedGoToEnd = resolveDeferredUnrealizedEndGiveUp(followTerminal: followTerminal)
             if !forced, !showedGoToEnd {
                 applyLiveScrolledAwayEdge(proxy: proxy)
             }
             if ConversationTranscriptScrollPolicy.shouldArmUnrealizedEndRecoveryAfterFollow(
-                executed: shouldExecute,
+                terminal: followTerminal,
                 isEndRealized: scrollState.isEndRealized
             ) {
                 scheduleUnrealizedEndRecovery(proxy: proxy)
@@ -1225,9 +1233,9 @@ private extension ConversationTranscriptView {
             )
             previous = geometry
             switch step {
-            case .settling:
+            case .continue(.settling):
                 continue
-            case .scrollAgain:
+            case .continue(.scrollAgain):
                 correctionsLeft -= 1
                 scrollState.lastForcedFollowCorrections += 1
                 AppLog.userInterface.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
@@ -1237,18 +1245,18 @@ private extension ConversationTranscriptView {
                     try? await Task.sleep(for: .seconds(Constants.Conversation.Transcript.scrollAnimationDuration))
                     guard !Task.isCancelled else { return }
                 }
-            case .clampPastEnd:
+            case .continue(.clampPastEnd):
                 correctionsLeft -= 1
                 scrollState.lastForcedFollowCorrections += 1
                 AppLog.userInterface.debug("[SCROLL] Forced follow landed past the end, clamping")
                 _ = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: geometry)
                 previous = nil
-            case .yieldToUser:
-                scrollState.lastForcedFollowOutcome = step
+            case .finish(.yieldToUser):
+                scrollState.lastForcedFollowOutcome = .yieldToUser
                 applyLiveScrolledAwayEdge(isInteracting: true, proxy: proxy)
                 return
-            case .landed, .giveUp:
-                scrollState.lastForcedFollowOutcome = step
+            case .finish(let terminal):
+                scrollState.lastForcedFollowOutcome = terminal
                 return
             }
         }
