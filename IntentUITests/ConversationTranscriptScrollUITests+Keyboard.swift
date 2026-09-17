@@ -13,11 +13,14 @@ extension ConversationTranscriptScrollUITests {
     /// run and on the dismiss in another, from the second cycle on — so
     /// the cycle is repeated). Each cycle first asserts the transcript
     /// actually resized, so a simulator with a hardware keyboard attached
-    /// fails here instead of passing without exercising the inset. While
-    /// the keyboard is up the transcript is shorter than the last
-    /// assistant paragraph plus the rows after it, so that half-cycle
-    /// settles on the end row itself; once the keyboard is down the
-    /// paragraph fits again and is the settle target, as elsewhere.
+    /// fails here instead of passing without exercising the inset. Both
+    /// half-cycles settle on the end row itself: while the keyboard is up
+    /// the transcript is shorter than the last assistant paragraph plus
+    /// the rows after it, and once the keyboard is down the paragraph
+    /// comes to rest inside the grown transcript a beat before the rows
+    /// under it are realized again — settling on the paragraph there
+    /// asserted on a transcript still re-laying out its end. With the
+    /// keyboard down the paragraph fits, so it must also be on screen.
     @MainActor
     func testKeyboardOpenAndDismissKeepTranscriptAtEnd() {
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
@@ -77,11 +80,17 @@ extension ConversationTranscriptScrollUITests {
                     + "the keyboard did not dismiss"
             )
             assertRestsAtBottom(
-                lastRow: lastMessage,
-                named: "last assistant paragraph",
+                lastRow: endRow.element,
+                named: endRow.name,
                 endRow: endRow,
                 in: opened,
                 context: "cycle \(cycle): after the keyboard dismissed"
+            )
+            XCTAssertTrue(
+                isInside(lastMessage, transcript),
+                "cycle \(cycle): after the keyboard dismissed, the last assistant paragraph is not on screen "
+                    + "although it fits under the end row — "
+                    + restingState(of: lastMessage, named: "last assistant paragraph", in: opened)
             )
         }
     }
