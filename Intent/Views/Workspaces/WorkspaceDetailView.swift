@@ -12,7 +12,7 @@ struct WorkspaceDetailView: View {
     @State private var showDeleteConfirmation = false
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
-    @State private var selectedTab = 0  // 0 = Agents, 1 = Context
+    @State private var selectedTab = WorkspaceTab.agents
     @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
 
@@ -63,7 +63,7 @@ struct WorkspaceDetailView: View {
             Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
             Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
             if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
-                selectedTab = savedTab
+                selectedTab = WorkspaceTab(persistedValue: savedTab)
             }
         }
         .onDisappear {
@@ -96,10 +96,16 @@ struct WorkspaceDetailView: View {
             noteStore.startObservingEvents()
             Task { await agentStore.fetchAgents(workspaceId: newId) }
             Task { await noteStore.fetchNotes(workspaceId: newId) }
-            selectedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: newId) ?? 0
+            selectedTab = WorkspaceTab.restored(
+                persistedValue: PersistenceManager.shared.loadWorkspaceTab(workspaceId: newId),
+                fallback: .agents
+            )
         }
         .onChange(of: selectedTab) { _, newTab in
-            PersistenceManager.shared.saveWorkspaceTab(workspaceId: workspaceId, tab: newTab)
+            PersistenceManager.shared.saveWorkspaceTab(
+                workspaceId: workspaceId,
+                tab: newTab.persistedValue
+            )
         }
         .onChange(of: agentStore.agents) { _, newAgents in
             viewModel.agents = newAgents
@@ -166,8 +172,8 @@ struct WorkspaceDetailView: View {
             // visibly belongs to the workspace rather than the sidebar.
             ToolbarItem(placement: .topBarTrailing) {
                 Picker("Workspace Content", selection: $selectedTab) {
-                    Label("Agents", systemImage: "person.2").tag(0)
-                    Label("Context", systemImage: "doc.text").tag(1)
+                    Label("Agents", systemImage: "person.2").tag(WorkspaceTab.agents)
+                    Label("Context", systemImage: "doc.text").tag(WorkspaceTab.context)
                 }
                 .pickerStyle(.segmented)
             }
@@ -251,8 +257,8 @@ private extension WorkspaceDetailView {
     var workspacePicker: some View {
         #if !os(visionOS)
         Picker("Workspace Content", selection: $selectedTab) {
-            Text("Agents").tag(0)
-            Text("Context").tag(1)
+            Text("Agents").tag(WorkspaceTab.agents)
+            Text("Context").tag(WorkspaceTab.context)
         }
         .pickerStyle(.segmented)
         .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
@@ -265,7 +271,7 @@ private extension WorkspaceDetailView {
 
     @ViewBuilder
     var tabContent: some View {
-        if selectedTab == 0 {
+        if selectedTab == .agents {
             if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty {
                 Spacer()
                 ProgressView("Loading agents...")

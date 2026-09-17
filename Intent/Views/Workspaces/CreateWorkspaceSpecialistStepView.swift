@@ -124,40 +124,24 @@ struct CreateWorkspaceSpecialistStepView: View {
     }
 
     private var providerPicker: some View {
-        Picker("Provider", selection: Binding(
-            get: { selectedProvider?.id ?? "" },
-            set: { id in
-                if let provider = providers.first(where: { $0.id == id }) {
-                    onSelectProvider(provider)
-                }
-            }
-        )) {
-            ForEach(providers) { provider in
-                Text(provider.authenticated == false
-                    ? "\(provider.displayName) (not signed in)"
-                    : provider.displayName)
-                    .tag(provider.id)
-            }
-        }
-        .pickerStyle(.menu)
+        ProviderPicker(
+            providers: providers,
+            selectedProvider: selectedProvider,
+            onSelect: onSelectProvider
+        )
         .labelsHidden()
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
     private var modelPicker: some View {
-        Picker("Model", selection: Binding(
-            get: { selectedModel?.id ?? "" },
-            set: { id in selectedModel = models.first { $0.id == id } }
-        )) {
-            Text(SpecialistInfo.daemonDefaultLabel(
+        ModelPicker(
+            models: models,
+            selectedModel: $selectedModel,
+            daemonDefaultLabel: SpecialistInfo.daemonDefaultLabel(
                 for: selectedSpecialist,
                 providerId: selectedProvider?.id
-            )).tag("")
-            ForEach(models) { model in
-                Text(model.name).tag(model.id)
-            }
-        }
-        .pickerStyle(.menu)
+            )
+        )
         .labelsHidden()
         .listRowBackground(Theme.card(for: colorScheme))
     }

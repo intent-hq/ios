@@ -58,7 +58,7 @@ struct CreateWorkspaceView: View {
     /// Specialists offered by the picker: the modal-pickable set with the
     /// orchestrator pinned first, then by name.
     private var specialists: [SpecialistInfo] {
-        Self.pickerSpecialists(optionsStore.specialists)
+        CreationSelectionPolicy.workspacePickerSpecialists(optionsStore.specialists)
     }
     private var providers: [ProviderInfo] { optionsStore.providers }
     /// The selected provider's cached catalog; empty until loaded, which
@@ -147,7 +147,7 @@ struct CreateWorkspaceView: View {
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
-            selectedModel = Self.reconciledModel(current: selectedModel, models: models)
+            selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
         }
     }
 
@@ -310,7 +310,7 @@ struct CreateWorkspaceView: View {
     /// re-defaults or clears it when the selected specialist left the
     /// pickable set.
     private func reconcileSpecialistSelection() {
-        selectedSpecialist = Self.preselectedSpecialist(
+        selectedSpecialist = CreationSelectionPolicy.preselectedWorkspaceSpecialist(
             current: selectedSpecialist,
             catalog: optionsStore.specialists
         )
@@ -323,7 +323,7 @@ struct CreateWorkspaceView: View {
     /// provider's catalog shares a bare model id with the old one.
     private func reconcileProviderSelection() async {
         let previousProviderId = selectedProvider?.id
-        selectedProvider = Self.preselectedProvider(
+        selectedProvider = CreationSelectionPolicy.preselectedProvider(
             current: selectedProvider,
             providers: providers
         )
@@ -357,38 +357,6 @@ struct CreateWorkspaceView: View {
 }
 
 extension CreateWorkspaceView {
-    /// The picker's specialist list: the modal-pickable set (no hidden or
-    /// internal specialists) with the orchestrator pinned first, then by
-    /// name.
-    static func pickerSpecialists(_ specialists: [SpecialistInfo]) -> [SpecialistInfo] {
-        let pickable = specialists.modalPickable
-        let orchestratorId = pickable.orchestrator?.id
-        return pickable.sorted { firstSpecialist, secondSpecialist in
-            let firstIsOrchestrator = firstSpecialist.id == orchestratorId
-            let secondIsOrchestrator = secondSpecialist.id == orchestratorId
-            if firstIsOrchestrator != secondIsOrchestrator { return firstIsOrchestrator }
-            return firstSpecialist.name < secondSpecialist.name
-        }
-    }
-
-    /// Keeps the selection while `current`'s id is still pickable in the
-    /// unfiltered `catalog`, rebound to the fresh entry so refreshed
-    /// metadata (default-model preview) is what the picker shows; otherwise
-    /// the orchestrator, else the first pickable specialist, else nil when
-    /// the catalog lists nothing pickable (a hidden id must never be
-    /// submitted). An empty catalog (cold load or reconnect clear) keeps
-    /// `current` so the selection survives the reload.
-    static func preselectedSpecialist(
-        current: SpecialistInfo?, catalog: [SpecialistInfo]
-    ) -> SpecialistInfo? {
-        guard !catalog.isEmpty else { return current }
-        let specialists = pickerSpecialists(catalog)
-        if let current, let fresh = specialists.first(where: { $0.id == current.id }) {
-            return fresh
-        }
-        return specialists.orchestrator ?? specialists.first
-    }
-
     /// The pickers' loading state: shown while the store runs a cold load
     /// (first load or reconnect reload) and before this sheet's first load
     /// has settled on an empty cache; never for a warm cache revalidating,
@@ -410,31 +378,6 @@ extension CreateWorkspaceView {
         catalogCached == false && !settled
     }
     // swiftlint:enable discouraged_optional_boolean
-
-    /// Keeps the selection while `current`'s id is still selectable, rebound
-    /// to the fresh entry; otherwise auggie when selectable, else the first
-    /// selectable provider, else nil (nothing selectable — the picker shows
-    /// setup guidance). An empty list keeps `current` so the selection
-    /// survives a reconnect reload.
-    static func preselectedProvider(
-        current: ProviderInfo?, providers: [ProviderInfo]
-    ) -> ProviderInfo? {
-        guard !providers.isEmpty else { return current }
-        let selectable = providers.filter(\.isSelectable)
-        if let current, let fresh = selectable.first(where: { $0.id == current.id }) {
-            return fresh
-        }
-        return selectable.first { $0.id == "auggie" } ?? selectable.first
-    }
-
-    /// Keeps an explicit model only while the displayed catalog still lists
-    /// it for the same provider (rebound to the fresh entry); anything else
-    /// — the model retired, the catalog cleared, or a provider switch whose
-    /// catalog reuses the bare id — falls back to the daemon default (nil).
-    static func reconciledModel(current: ModelInfo?, models: [ModelInfo]) -> ModelInfo? {
-        guard let current else { return nil }
-        return models.first { $0.id == current.id && $0.provider == current.provider }
-    }
 
     static let createRequestTimeout: TimeInterval = 120
 

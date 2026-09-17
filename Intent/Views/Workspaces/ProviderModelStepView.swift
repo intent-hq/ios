@@ -78,25 +78,17 @@ struct ProviderModelStepView: View {
     }
 
     private var providerPicker: some View {
-        Picker("Provider", selection: Binding(
-            get: { selectedProvider?.id ?? "" },
-            set: { newId in selectProvider(newId) }
-        )) {
-            ForEach(providers) { provider in
-                Text(provider.authenticated == false
-                    ? "\(provider.displayName) (not signed in)"
-                    : provider.displayName)
-                    .tag(provider.id)
-            }
-        }
-        .pickerStyle(.menu)
+        ProviderPicker(
+            providers: providers,
+            selectedProvider: selectedProvider,
+            onSelect: selectProvider
+        )
         .disabled(isCreating)
         .listRowBackground(Theme.card(for: colorScheme))
     }
 
-    private func selectProvider(_ newId: String) {
-        guard let provider = providers.first(where: { $0.id == newId }),
-              SpecialistPickerView.isSelectable(provider) else { return }
+    private func selectProvider(_ provider: ProviderInfo) {
+        guard provider.isSelectable else { return }
         selectedProvider = provider
     }
 
@@ -127,19 +119,14 @@ struct ProviderModelStepView: View {
     }
 
     private var modelPicker: some View {
-        Picker("Model", selection: Binding(
-            get: { selectedModel?.id ?? "" },
-            set: { newId in selectedModel = models.first { $0.id == newId } }
-        )) {
-            Text(SpecialistInfo.daemonDefaultLabel(
+        ModelPicker(
+            models: models,
+            selectedModel: $selectedModel,
+            daemonDefaultLabel: SpecialistInfo.daemonDefaultLabel(
                 for: selectedSpecialist,
                 providerId: selectedProvider?.id
-            )).tag("")
-            ForEach(models) { model in
-                Text(model.name).tag(model.id)
-            }
-        }
-        .pickerStyle(.menu)
+            )
+        )
         .listRowBackground(Theme.card(for: colorScheme))
     }
 

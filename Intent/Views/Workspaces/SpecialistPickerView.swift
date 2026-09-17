@@ -80,7 +80,7 @@ struct SpecialistPickerView: View {
             Task { await reconcileProviderSelection() }
         }
         .onChange(of: models) { _, models in
-            selectedModel = CreateWorkspaceView.reconciledModel(current: selectedModel, models: models)
+            selectedModel = CreationSelectionPolicy.reconciledModel(current: selectedModel, models: models)
         }
         // A user pick in the Provider menu: an explicit model never survives
         // a provider switch; the new provider's catalog is instant when
@@ -199,7 +199,7 @@ struct SpecialistPickerView: View {
     /// when cold. An explicit model never survives a provider switch.
     private func reconcileProviderSelection() async {
         let previousProviderId = selectedProvider?.id
-        selectedProvider = CreateWorkspaceView.preselectedProvider(
+        selectedProvider = CreationSelectionPolicy.preselectedProvider(
             current: selectedProvider,
             providers: providers
         )

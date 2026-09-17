@@ -1,0 +1,335 @@
+import Foundation
+@testable import Intent
+import SwiftUI
+import Testing
+import UIKit
+
+@MainActor
+struct CreationPickerControlsTests {
+    @Test func providerPickersKeepCallbacksIndependentAndUseHostPolicy() {
+        let signedIn = ProviderInfo(id: "auggie", authenticated: .signedIn)
+        let signedOut = ProviderInfo(id: "codex", authenticated: .signedOut)
+        let unknown = ProviderInfo(id: "grok", authenticated: .unknown)
+        let providers = [signedIn, signedOut, unknown]
+        var firstSelection: ProviderInfo? = signedIn
+        var secondSelection: ProviderInfo? = signedIn
+        var firstCallbacks: [String] = []
+        var secondCallbacks: [String] = []
+        let firstPicker = ProviderPicker(
+            providers: providers,
+            selectedProvider: firstSelection
+        ) { provider in
+            firstCallbacks.append(provider.id)
+            guard provider.isSelectable, provider.id != firstSelection?.id else { return }
+            firstSelection = provider
+        }
+        let secondPicker = ProviderPicker(
+            providers: providers,
+            selectedProvider: secondSelection
+        ) { provider in
+            secondCallbacks.append(provider.id)
+            guard provider.isSelectable else { return }
+            secondSelection = provider
+        }
+
+        firstPicker.selection.wrappedValue = signedIn.id
+        #expect(firstSelection == signedIn)
+        #expect(firstCallbacks == [signedIn.id])
+        #expect(secondSelection == signedIn)
+
+        firstPicker.selection.wrappedValue = signedOut.id
+        #expect(firstSelection == signedIn)
+        #expect(firstCallbacks == [signedIn.id, signedOut.id])
+        #expect(secondSelection == signedIn)
+        #expect(secondCallbacks.isEmpty)
+
+        firstPicker.selection.wrappedValue = unknown.id
+        #expect(firstSelection == unknown)
+        #expect(firstCallbacks == [signedIn.id, signedOut.id, unknown.id])
+        #expect(secondSelection == signedIn)
+
+        secondPicker.selection.wrappedValue = signedOut.id
+        #expect(secondSelection == signedIn)
+        #expect(secondCallbacks == [signedOut.id])
+        #expect(firstSelection == unknown)
+    }
+
+    @Test func providerLabelsDistinguishOnlyKnownSignedOutOptions() {
+        let signedOut = ProviderInfo(id: "codex", authenticated: .signedOut)
+        let unknown = ProviderInfo(id: "grok", authenticated: .unknown)
+
+        #expect(ProviderPicker.optionLabel(for: signedOut) == "Codex (not signed in)")
+        #expect(ProviderPicker.optionLabel(for: unknown) == "Grok")
+    }
+
+    @Test func modelPickersKeepBindingsIndependentForDefaultAndExplicitChoices() {
+        let firstModels = [ModelInfo(id: "first", name: "First", provider: "auggie")]
+        let secondModels = [ModelInfo(id: "second", name: "Second", provider: "grok")]
+        var firstSelection: ModelInfo?
+        var secondSelection: ModelInfo?
+        let firstPicker = ModelPicker(
+            models: firstModels,
+            selectedModel: Binding(
+                get: { firstSelection },
+                set: { firstSelection = $0 }
+            ),
+            daemonDefaultLabel: "Provider default"
+        )
+        let secondPicker = ModelPicker(
+            models: secondModels,
+            selectedModel: Binding(
+                get: { secondSelection },
+                set: { secondSelection = $0 }
+            ),
+            daemonDefaultLabel: "Provider default"
+        )
+
+        firstPicker.selection.wrappedValue = firstModels[0].id
+        #expect(firstSelection == firstModels[0])
+        #expect(secondSelection == nil)
+
+        secondPicker.selection.wrappedValue = secondModels[0].id
+        #expect(secondSelection == secondModels[0])
+        #expect(firstSelection == firstModels[0])
+
+        firstPicker.selection.wrappedValue = ModelPicker.defaultSelectionID
+        #expect(firstSelection == nil)
+        #expect(secondSelection == secondModels[0])
+    }
+
+    @Test(
+        .enabled(
+            Comment(
+                rawValue:
+                    "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+                    + "for the process (scripts/xcodebuild.sh enables it on the simulator; a "
+                    + "physical-device unit-test run needs VoiceOver or an XCUITest session)"
+            )
+        ) {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        }
+    )
+    func bothSurroundingLayoutsRenderReadablePickersAtDynamicTypeSizes() throws {
+        for layout in PickerHostLayout.allCases {
+            let normal = try render(layout: layout, dynamicTypeSize: .large)
+            let accessibility = try render(layout: layout, dynamicTypeSize: .accessibility3)
+            for snapshot in [normal, accessibility] {
+                #expect(snapshot.provider.label?.contains("Provider") == true)
+                #expect(snapshot.provider.label?.contains(PickerLayoutHost.provider.displayName) == true)
+                #expect(snapshot.provider.value == nil)
+                #expect(snapshot.model.label?.contains("Model") == true)
+                #expect(snapshot.model.label?.contains(layout.expectedModelValue) == true)
+                #expect(snapshot.model.value == nil)
+                #expect(snapshot.provider.hasFiniteNonemptyFrame)
+                #expect(snapshot.model.hasFiniteNonemptyFrame)
+                #expect(snapshot.horizontallyContains(snapshot.provider.frame))
+                #expect(snapshot.horizontallyContains(snapshot.model.frame))
+                #expect(snapshot.hostFrame.intersects(snapshot.provider.frame))
+                #expect(snapshot.hostFrame.intersects(snapshot.model.frame))
+                #expect(snapshot.provider.frame.maxY <= snapshot.model.frame.minY)
+            }
+            #expect(accessibility.provider.frame.height >= normal.provider.frame.height)
+            #expect(accessibility.model.frame.height >= normal.model.frame.height)
+        }
+    }
+
+    @Test(
+        .enabled(
+            Comment(
+                rawValue:
+                    "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+                    + "for the process (scripts/xcodebuild.sh enables it on the simulator; a "
+                    + "physical-device unit-test run needs VoiceOver or an XCUITest session)"
+            )
+        ) {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        }
+    )
+    func addAgentLayoutDisablesProviderPickerDuringCreation() throws {
+        let snapshot = try render(layout: .agent, dynamicTypeSize: .large, isCreating: true)
+        #expect(snapshot.provider.traits.contains(.notEnabled))
+    }
+
+    private func render(
+        layout: PickerHostLayout,
+        dynamicTypeSize: DynamicTypeSize,
+        isCreating: Bool = false
+    ) throws -> PickerLayoutSnapshot {
+        let content = NavigationStack {
+            PickerLayoutHost(layout: layout, isCreating: isCreating)
+        }
+        .environment(\.dynamicTypeSize, dynamicTypeSize)
+        return try SyntheticBadgeHost.render(content, width: 430, height: 900) { hostView, window in
+            let provider = try Self.pickerElement(
+                identifier: "creation.providerPicker",
+                in: hostView
+            )
+            let model = try Self.pickerElement(
+                identifier: "creation.modelPicker",
+                in: hostView
+            )
+            return PickerLayoutSnapshot(
+                hostFrame: window.bounds,
+                provider: Self.snapshot(provider, in: window),
+                model: Self.snapshot(model, in: window)
+            )
+        }
+    }
+
+    private static func snapshot(_ element: NSObject, in window: UIWindow) -> PickerElementSnapshot {
+        PickerElementSnapshot(
+            label: element.accessibilityLabel,
+            value: element.accessibilityValue,
+            frame: window.convert(element.accessibilityFrame, from: nil),
+            traits: element.accessibilityTraits
+        )
+    }
+
+    private static func pickerElement(identifier: String, in hostView: UIView) throws -> NSObject {
+        let deadline = Date(timeIntervalSinceNow: 3)
+        var element = accessibilityElements(under: hostView).first { element in
+            SyntheticBadgeHost.accessibilityIdentifier(of: element) == identifier
+        }
+        while element == nil, Date() < deadline {
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+            hostView.layoutIfNeeded()
+            element = accessibilityElements(under: hostView).first { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element) == identifier
+            }
+        }
+        return try #require(element, "Hosted picker \(identifier) did not publish an accessibility element")
+    }
+
+    private static func accessibilityElements(under root: NSObject) -> [NSObject] {
+        var visited: Set<ObjectIdentifier> = []
+        func visit(_ object: NSObject, depth: Int) -> [NSObject] {
+            guard depth < 12, visited.insert(ObjectIdentifier(object)).inserted else { return [] }
+            var children = (object.accessibilityElements ?? []).compactMap { $0 as? NSObject }
+            let count = object.accessibilityElementCount()
+            if count != NSNotFound, count > 0 {
+                children += (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
+            }
+            if let view = object as? UIView { children += view.subviews }
+            return [object] + children.flatMap { visit($0, depth: depth + 1) }
+        }
+        return visit(root, depth: 0)
+    }
+}
+
+private enum PickerHostLayout: CaseIterable {
+    case agent
+    case workspace
+
+    var expectedModelValue: String {
+        switch self {
+        case .workspace:
+            SpecialistInfo.daemonDefaultLabel(
+                for: PickerLayoutHost.specialist,
+                providerId: PickerLayoutHost.provider.id
+            )
+        case .agent:
+            PickerLayoutHost.model.name
+        }
+    }
+}
+
+private struct PickerElementSnapshot {
+    let label: String?
+    let value: String?
+    let frame: CGRect
+    let traits: UIAccessibilityTraits
+
+    var hasFiniteNonemptyFrame: Bool {
+        let values = [frame.minX, frame.minY, frame.width, frame.height]
+        return values.allSatisfy { $0.isFinite } && frame.width > 0 && frame.height > 0
+    }
+}
+
+private struct PickerLayoutSnapshot {
+    let hostFrame: CGRect
+    let provider: PickerElementSnapshot
+    let model: PickerElementSnapshot
+
+    func horizontallyContains(_ frame: CGRect) -> Bool {
+        frame.minX >= hostFrame.minX && frame.maxX <= hostFrame.maxX
+    }
+}
+
+private struct PickerLayoutHost: View {
+    static let provider = ProviderInfo(
+        id: "provider-with-an-extraordinarily-long-name",
+        authenticated: .unknown
+    )
+    static let model = ModelInfo(
+        id: "model-with-an-extraordinarily-long-id",
+        name: "Model with an extraordinarily long descriptive name",
+        provider: provider.id
+    )
+    static let specialist = SpecialistInfo(
+        id: "implementor",
+        name: "Implementor",
+        description: "Implements tasks",
+        resolvedModel: model.id,
+        resolvedProvider: provider.id
+    )
+
+    let layout: PickerHostLayout
+    let isCreating: Bool
+    @State private var selectedSpecialist: SpecialistInfo? = Self.specialist
+    @State private var selectedProvider: ProviderInfo? = Self.provider
+    @State private var selectedModel: ModelInfo?
+    @State private var message = ""
+    @State private var showError = false
+
+    init(layout: PickerHostLayout, isCreating: Bool) {
+        self.layout = layout
+        self.isCreating = isCreating
+        _selectedModel = State(initialValue: layout == .agent ? Self.model : nil)
+    }
+
+    @ViewBuilder
+    var body: some View {
+        switch layout {
+        case .workspace:
+            CreateWorkspaceSpecialistStepView(
+                repositoryFullName: "intent-hq/repository-with-a-long-name",
+                branch: "feature/long-picker-accessibility-values",
+                specialists: [Self.specialist],
+                isLoadingSpecialists: false,
+                selectedSpecialist: $selectedSpecialist,
+                providers: [Self.provider],
+                isLoadingProviders: false,
+                selectedProvider: $selectedProvider,
+                models: [Self.model],
+                selectedModel: $selectedModel,
+                messageText: $message,
+                isCreating: isCreating,
+                errorMessage: nil,
+                showError: $showError,
+                colorScheme: .light,
+                onSelectProvider: selectWorkspaceProvider,
+                onCreate: {},
+                onLoad: {}
+            )
+        case .agent:
+            ProviderModelStepView(
+                providers: [Self.provider],
+                isLoadingProviders: false,
+                selectedProvider: $selectedProvider,
+                models: [Self.model],
+                isLoadingModels: false,
+                selectedModel: $selectedModel,
+                selectedSpecialist: Self.specialist,
+                isCreating: isCreating,
+                isCreateDisabled: isCreating,
+                colorScheme: .light,
+            ) {}
+        }
+    }
+
+    private func selectWorkspaceProvider(_ provider: ProviderInfo) {
+        guard provider.isSelectable, provider.id != selectedProvider?.id else { return }
+        selectedProvider = provider
+        selectedModel = nil
+    }
+}
