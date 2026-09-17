@@ -88,7 +88,15 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 executed = false
             case .followCancelledByGesture:
                 executed = false
-            case .endDerealized, .endRealized, .followRequested, .followDue, .followFinished, .explicitClaim,
+            case .followRequested:
+                // A replacing follow inherits the transfer; an ignored request
+                // (automatic under forced) leaves it with the same owner.
+                if let owner = followOwner(of: after) {
+                    #expect(after.fallback == .transferred(to: owner), "follow request did not carry the transfer to the owner", sourceLocation: sourceLocation)
+                } else {
+                    Issue.record("follow request over a transfer left no follow owning", sourceLocation: sourceLocation)
+                }
+            case .endDerealized, .endRealized, .followDue, .followFinished, .explicitClaim,
                  .recoveryStep, .recoveryPagedUp, .recoveryFinished, .viewDisappeared:
                 break
             }
