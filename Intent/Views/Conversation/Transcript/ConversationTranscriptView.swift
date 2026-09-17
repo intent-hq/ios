@@ -604,7 +604,9 @@ private extension ConversationTranscriptView {
             case .deferred:
                 scheduleBottomBandRePin(proxy: proxy)
             case .rePin:
-                AppLog.ui.debug("[SCROLL] Pinned viewport rests short of the bottom after settle; following to the bottom")
+                AppLog.userInterface.debug(
+                    "[SCROLL] Pinned viewport rests short of the bottom after settle; following to the bottom"
+                )
                 scrollToBottom(proxy: proxy, forced: false)
             case .none:
                 break
