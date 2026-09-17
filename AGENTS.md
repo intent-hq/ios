@@ -51,6 +51,34 @@ the crash lines and keeps the full log instead. Both behaviours are covered by
 `scripts/test_xcodebuild.sh` (bash + python3, stubbed xcodebuild; run it after editing the
 wrapper — CI runs it on the Linux job).
 
+## Releases
+
+`Intent.xcodeproj/project.pbxproj` is the version-settings source:
+`MARKETING_VERSION` becomes the user-visible `CFBundleShortVersionString`, while
+`CURRENT_PROJECT_VERSION` becomes the `CFBundleVersion` build identifier. The app's
+iOS and visionOS plists deliberately omit those keys because Xcode generates them
+from build settings. Keep both settings consistent across Debug and Release for
+`Intent`, `IntentTests`, and `IntentUITests`; preserve the shared iOS/visionOS setup.
+
+Before choosing either number, check the repository settings and App Store Connect/
+TestFlight, including uploaded or in-flight builds. Never derive a concrete next pair
+from possibly stale checkout values; ask the user if the baseline or intended release
+is unclear. For an ordinary fix, default to a patch marketing-version bump unless the
+user specifies another release version. Every new release/upload needs that deliberate
+marketing-version increase and a fresh build number higher than all known prior uploads.
+Apple permits several builds for one version, but project policy allows retaining the
+marketing version only for an explicitly requested rebuild of that same unreleased
+release; even then, use a fresh, never-reused build number.
+
+Automatic build numbering does not bump the marketing version. If CI or Xcode Cloud
+assigns an effective build number, distinguish it from the local
+`CURRENT_PROJECT_VERSION` and verify the effective value; do not assume this repository
+has release automation. Before upload, inspect `CFBundleShortVersionString` and
+`CFBundleVersion` in the actual archived or exported app. Stop on any mismatch and
+rebuild—never relabel an old archive. After App Store Connect finishes processing,
+confirm the displayed pair and record it in the release handoff. Archive upload,
+submission, and release remain human-controlled.
+
 ## Where to look
 
 - Thread-hopping ObjC callback APIs (registry + `@Sendable` guard): `IntentTests/ObjCCallbackIsolationTests.swift` — closures passed to these are inferred MainActor-isolated and crash on device when invoked off-main unless explicitly `@Sendable`.
