@@ -94,10 +94,13 @@ enum Fixture {
     // to count as raised: a simulator with a hardware keyboard attached
     // raises none and would pass the cycle without exercising the inset.
     static let keyboardMinimumShrink: CGFloat = 100
-    // Where a tap dismisses the keyboard: inside the transcript's 16 pt
-    // horizontal padding, so it hits the scroll view's dismiss recognizer
-    // and never a link in a message.
-    static let keyboardDismissTapOffset = CGVector(dx: 0.02, dy: 0.5)
+    // Where a tap dismisses the keyboard: on the last assistant paragraph
+    // (plain prose, no links), low enough to clear the navigation bar the
+    // transcript scrolls under. The scroll view's dismiss recognizer sees
+    // every tap inside it; a tap in the stack's horizontal padding level
+    // with the suggested prompts also fired the first prompt's button and
+    // sent it, hiding the prompts the test waits for.
+    static let keyboardDismissTapOffset = CGVector(dx: 0.5, dy: 0.8)
     static let workspaceTimeout: TimeInterval = 30
     static let elementTimeout: TimeInterval = 5
     static let backNavigationAttempts = 2

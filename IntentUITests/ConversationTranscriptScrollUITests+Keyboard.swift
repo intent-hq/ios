@@ -65,10 +65,11 @@ extension ConversationTranscriptScrollUITests {
                 context: "cycle \(cycle): after the keyboard opened"
             )
 
-            // 2. Dismiss it with a tap on the transcript's own padding (the
-            //    scroll view's keyboard-dismiss recognizer; the padding
-            //    holds no link): the transcript grows back.
-            transcript.coordinate(withNormalizedOffset: Fixture.keyboardDismissTapOffset).tap()
+            // 2. Dismiss it with a tap on the last assistant paragraph (the
+            //    scroll view's keyboard-dismiss recognizer sees it; the
+            //    paragraph holds no link or button): the transcript grows
+            //    back.
+            lastMessage.coordinate(withNormalizedOffset: Fixture.keyboardDismissTapOffset).tap()
             var bottomAfterDismiss = transcript.frame.maxY
             XCTAssertTrue(
                 waitUntil(timeout: Fixture.keyboardTimeout) {
@@ -80,7 +81,14 @@ extension ConversationTranscriptScrollUITests {
                     + "the keyboard did not dismiss"
             )
             let dismissed = "cycle \(cycle): after the keyboard dismissed"
-            guard waitUntilSettled(
+            let sentAPrompt = app.staticTexts[Fixture.thinkingIndicatorLabel].firstMatch.exists
+                || message(in: app, containing: Fixture.firstSuggestedPrompt).exists
+            XCTAssertFalse(
+                sentAPrompt,
+                "\(dismissed): the dismiss tap also sent a suggested prompt — "
+                    + endOfTranscriptDiagnostics(in: app, opened: opened)
+            )
+            guard !sentAPrompt, waitUntilSettled(
                 on: endRow.element,
                 named: endRow.name,
                 in: opened,
