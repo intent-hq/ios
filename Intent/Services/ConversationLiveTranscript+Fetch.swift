@@ -114,7 +114,7 @@ extension ConversationLiveTranscript {
         guard let response = result.value as? [String: Any],
               let items = response["messages"] as? [[String: Any]] else { return nil }
         return ConversationPage(
-            messages: items.compactMap { ConversationMessage.parseMessage($0) },
+            messages: ConversationMessage.parseMessages(items),
             truncated: response["truncated"] as? Bool ?? false,
             totalMessages: response["totalMessages"] as? Int
         )

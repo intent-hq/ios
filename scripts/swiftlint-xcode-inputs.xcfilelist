@@ -374,6 +374,7 @@ $(SRCROOT)/IntentTests/TestBundleInputsTests.swift
 $(SRCROOT)/IntentTests/TestSourceInputs.swift
 $(SRCROOT)/IntentTests/TextInputDescendantWalkTests.swift
 $(SRCROOT)/IntentTests/ToolClassifierClassificationTests.swift
+$(SRCROOT)/IntentTests/TranscriptDecodingMeasurementTests.swift
 $(SRCROOT)/IntentTests/UprightPreviewTransformTests.swift
 $(SRCROOT)/IntentTests/WakeAttributionTests.swift
 $(SRCROOT)/IntentTests/WorkspaceAttentionCueTests.swift
