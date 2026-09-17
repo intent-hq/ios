@@ -54,6 +54,14 @@ second crash exits 80 (`TEST_CRASH_RETRY=0` skips the re-run). Both behaviours a
 `scripts/test_xcodebuild.sh` (bash + python3, stubbed xcodebuild; run it after editing the
 wrapper — CI runs it on the Linux job).
 
+`scripts/swiftlint.sh` is the pre-PR lint gate: it runs SwiftLint 0.65.1 (the wrapper
+rejects any other version) with `--strict` from the repository root, and CI runs it on
+every PR in the merge-blocking `SwiftLint` job (the release is pinned by sha256 in
+`.github/workflows/ci.yml`). `SWIFTLINT_REPORTER=<name>` overrides the config's
+reporter — CI sets `github-actions-logging` for PR annotations; leave it unset locally.
+`scripts/test-swiftlint.sh` (bash, stubbed swiftlint) covers the wrapper; run it after
+editing the wrapper — CI runs it on the Linux job too.
+
 ## Releases
 
 `Intent.xcodeproj/project.pbxproj` is the version-settings source:
