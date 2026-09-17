@@ -913,6 +913,19 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     private typealias Geometry = ConversationTranscriptScrollPolicy.ViewportGeometry
     private typealias RecoveryStep = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep
 
+    /// The reducer's log lines, so a sequence asserts each transition's
+    /// full ordered effect list.
+    private enum Log {
+        static let followToEnd = Effect.log("[SCROLL] End row off screen short of the bottom; following to the end")
+        static let pageUp = Effect.log("[SCROLL] Blank viewport at the bottom; paging up and following back")
+        static let recoveryYielded = Effect.log("[SCROLL] End recovery yielded the paged-up viewport to the user")
+        static let gaveUp = Effect.log("[SCROLL] End recovery gave up over an unrealized end row; showing Go to End")
+        static let deferredGaveUp = Effect.log(
+            "[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End")
+        static let forcedYielded = Effect.log("[SCROLL] Forced follow yielded to the user's gesture")
+        static let forcedCancelled = Effect.log("[SCROLL] Forced follow cancelled: the user took over")
+    }
+
     /// Drives the reducer the way the view does, with its asynchrony
     /// replaced by explicit events and its effects executed against
     /// scripted geometry. The live tasks are the token sets the start /
@@ -920,10 +933,11 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// task); `replayLiveEdge` and a raw `geometryEdge` apply
     /// `scrolledAwayTransition` and `shouldRePinAfterContentGrowth` to the
     /// harness's `userIsScrolledAway`, counting growth re-pins; `showGoToEnd`
-    /// raises the flag; the recovery loop's polls go through
-    /// `unrealizedEndRecoveryStep` against the live state. No clock: the
-    /// sequence is the schedule. Every transition is checked against the
-    /// contract's invariants.
+    /// raises the flag; a recorded outcome is rendered through
+    /// `unrealizedEndRecoverySummary` as the demo-data report does; the
+    /// recovery loop's polls go through `unrealizedEndRecoveryStep` against
+    /// the live state. No clock: the sequence is the schedule. Every
+    /// transition is checked against the contract's invariants.
     private struct LifecycleHarness {
         static let threshold: CGFloat = 50
         var state: State
@@ -938,6 +952,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var rePins = 0
         var goToEndShown = 0
         var outcomes: [Effect] = []
+        var summaries: [String?] = []
         let check: (State, Event, State, [Effect], SourceLocation) -> Void
 
         var followOwns: Bool {
@@ -972,7 +987,10 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 case .showGoToEnd:
                     userIsScrolledAway = true
                     goToEndShown += 1
-                case .recordRecoveryOutcome: outcomes.append(effect)
+                case .recordRecoveryOutcome(let terminal, let corrections):
+                    outcomes.append(effect)
+                    summaries.append(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
+                        outcome: terminal, corrections: corrections))
                 case .log: break
                 }
             }
@@ -1023,12 +1041,17 @@ struct ConversationTranscriptRecoveryLifecycleTests {
             return effects
         }
 
-        /// Go to End: the flag cleared, the recovery claimed, a forced follow.
+        /// Go to End: the flag cleared, the recovery claimed (cancelling
+        /// `cancelling`, asserted as its own transition), a forced follow
+        /// whose request effects are returned.
         @discardableResult
-        mutating func tapGoToEnd(sourceLocation: SourceLocation = #_sourceLocation) -> [Effect] {
+        mutating func tapGoToEnd(
+            cancelling recovery: RecoveryToken? = nil, sourceLocation: SourceLocation = #_sourceLocation
+        ) -> [Effect] {
             userIsScrolledAway = false
-            let claim = send(.explicitClaim, sourceLocation: sourceLocation)
-            return claim + send(.followRequested(forced: true), sourceLocation: sourceLocation)
+            let claim: [Effect] = recovery.map { [.cancelRecoveryTask($0)] } ?? []
+            #expect(send(.explicitClaim, sourceLocation: sourceLocation) == claim, sourceLocation: sourceLocation)
+            return send(.followRequested(forced: true), sourceLocation: sourceLocation)
         }
 
         /// `shouldExecuteFollow` for the pending follow against the live
@@ -1099,7 +1122,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
         #expect(h.isLive(r1))
         #expect(h.poll(blank) == .continue(.recover(pageOffsetY: 1_600)))
-        #expect(nonLog(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600)))) == [.pageUp(offsetY: 1_600)])
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600))) == [Log.pageUp, .pageUp(offsetY: 1_600)])
         #expect(h.state.owner == .recovery(r1))
         #expect(h.pageUps == [1_600])
         #expect(h.gestureBegins(distanceToBottom: 700) == [.cancelRecoveryTask(r1)])
@@ -1131,7 +1154,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var h = harness()
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
         #expect(h.poll(geometry(offsetY: 260)) == .continue(.followToEnd))
-        #expect(nonLog(h.send(.recoveryStep(r1, .followToEnd))) == [.scrollToEnd])
+        #expect(h.send(.recoveryStep(r1, .followToEnd)) == [Log.followToEnd, .scrollToEnd])
         #expect(h.scrolls == 1)
         #expect(h.send(.followRequested(forced: false)) == [.startFollowTask(f2, forced: false)])
         #expect(h.state.owner == .follow(f2, forced: false))
@@ -1153,11 +1176,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         h.distanceToBottom = 120
         #expect(!h.execute())
         #expect(h.send(.followDue(f2, execute: false)).isEmpty)
-        let drain = h.send(.followFinished(f2, .dropped))
-        #expect(nonLog(drain) == [.showGoToEnd])
-        #expect(logs(drain) == [
-            "[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End",
-        ])
+        #expect(h.send(.followFinished(f2, .dropped)) == [Log.deferredGaveUp, .showGoToEnd])
         #expect(h.state.fallback == .none)
         #expect(h.state.owner == .idle)
         #expect(h.state.currentRecovery == nil)
@@ -1188,6 +1207,48 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         return h
     }
 
+    /// Migrated from `deferredGiveUpShowsGoToEndWhenTheFollowIsDropped`
+    /// (the executed half): a follow that executed clears the transfer and
+    /// re-arms the recovery instead of showing Go to End — automatic (no
+    /// landing) or forced, whatever its landing. Without a transfer, a
+    /// dropped automatic follow's drain is the raw edge replay.
+    @Test func aTransferredGiveUpIsClearedByAnyExecutedDrainWhichReArmsTheRecovery() {
+        var automatic = transferredGiveUp(forced: false)
+        #expect(automatic.execute())
+        #expect(automatic.send(.followDue(f2, execute: true)) == [.scrollToEnd])
+        #expect(automatic.send(.followFinished(f2, .executed(nil))) == [
+            .replayLiveEdge(isInteracting: nil), .startRecoveryTask(r3),
+        ])
+        #expect(automatic.state.fallback == .none)
+        #expect(automatic.state.owner == .idle)
+        #expect(automatic.state.armedRecovery == .polling(r3))
+        #expect(automatic.isLive(r3))
+        #expect(automatic.goToEndShown == 0)
+        #expect(!automatic.userIsScrolledAway)
+
+        for landing in [ConversationTranscriptScrollPolicy.FollowLandingTerminal.landed, .giveUp, .yieldToUser] {
+            var forced = transferredGiveUp(forced: true)
+            #expect(forced.execute())
+            #expect(forced.send(.followDue(f2, execute: true)) == [.scrollToEnd])
+            #expect(forced.send(.followFinished(f2, .executed(landing))) == [.startRecoveryTask(r3)])
+            #expect(forced.state.fallback == .none)
+            #expect(forced.state.armedRecovery == .polling(r3))
+            #expect(forced.goToEndShown == 0)
+            #expect(!forced.userIsScrolledAway)
+        }
+
+        var plain = harness()
+        #expect(plain.send(.followRequested(forced: false)) == [.startFollowTask(f1, forced: false)])
+        plain.distanceToBottom = 120
+        #expect(!plain.execute())
+        #expect(plain.send(.followDue(f1, execute: false)).isEmpty)
+        #expect(plain.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(plain.state.fallback == .none)
+        #expect(plain.goToEndShown == 0)
+        #expect(!plain.userIsScrolledAway)
+        #expect(plain.rePins == 1)
+    }
+
     /// Scenario 3 (7e0ecbc): the transferred give-up does not depend on the
     /// follow executing. A forced follow yielding to the finger and an
     /// automatic one a gesture cancels each show Go to End once; a follow a
@@ -1200,10 +1261,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var yielded = transferredGiveUp(forced: true)
         yielded.isInteracting = true
         #expect(!yielded.execute())
-        #expect(nonLog(yielded.send(.followDue(f2, execute: false))) == [.replayLiveEdge(isInteracting: true)])
+        #expect(yielded.send(.followDue(f2, execute: false)) == [Log.forcedYielded, .replayLiveEdge(isInteracting: true)])
         #expect(!yielded.userIsScrolledAway)
-        let yield = yielded.send(.followFinished(f2, .yielded))
-        #expect(nonLog(yield) == [.showGoToEnd])
+        #expect(yielded.send(.followFinished(f2, .yielded)) == [Log.deferredGaveUp, .showGoToEnd])
         #expect(yielded.state.fallback == .none)
         #expect(yielded.state.owner == .idle)
         #expect(yielded.userIsScrolledAway)
@@ -1212,7 +1272,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(yielded.goToEndShown == 1)
 
         var cancelled = transferredGiveUp(forced: false)
-        #expect(nonLog(cancelled.gestureBegins(distanceToBottom: 200)) == [.cancelFollowTask(f2), .showGoToEnd])
+        #expect(cancelled.gestureBegins(distanceToBottom: 200) == [
+            .cancelFollowTask(f2), Log.deferredGaveUp, .showGoToEnd,
+        ])
         #expect(cancelled.state.fallback == .none)
         #expect(cancelled.state.owner == .idle)
         #expect(!cancelled.isLive(f2))
@@ -1242,8 +1304,10 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(!replaced.userIsScrolledAway)
         replacementYielded.isInteracting = true
         #expect(!replacementYielded.execute())
-        #expect(nonLog(replacementYielded.send(.followDue(f3, execute: false))) == [.replayLiveEdge(isInteracting: true)])
-        #expect(nonLog(replacementYielded.send(.followFinished(f3, .yielded))) == [.showGoToEnd])
+        #expect(replacementYielded.send(.followDue(f3, execute: false)) == [
+            Log.forcedYielded, .replayLiveEdge(isInteracting: true),
+        ])
+        #expect(replacementYielded.send(.followFinished(f3, .yielded)) == [Log.deferredGaveUp, .showGoToEnd])
         #expect(replacementYielded.state.fallback == .none)
         #expect(replacementYielded.state.currentRecovery == nil)
         #expect(replacementYielded.goToEndShown == 1)
@@ -1265,12 +1329,15 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.rePins == 1)
     }
 
-    /// Scenario 4 (b0c0941): Go to End over a blank with nothing armed. The
-    /// tap's forced follow executes and drains with the end row still
-    /// unrealized, so the recovery is re-armed from the level — whatever
-    /// the landing reported — and judges the blank from geometry; a follow
-    /// that yielded landed nowhere and arms nothing; a realized end row
-    /// needs nothing.
+    /// Scenario 4 (b0c0941; migrated from
+    /// `followDrainingOverAnUnrealizedEndRowArmsTheRecovery`): Go to End
+    /// over a blank with nothing armed. The tap's forced follow executes and
+    /// drains with the end row still unrealized, so the recovery is
+    /// re-armed from the level — whatever the landing reported — and judges
+    /// the blank from geometry; an automatic follow (the user's message)
+    /// that executed re-arms it the same way; a follow that yielded or was
+    /// dropped landed nowhere and arms nothing; a realized end row needs
+    /// nothing either way.
     @Test func aFollowDrainingOverAnAlreadyUnrealizedEndRowReArmsTheRecovery() {
         var h = harness(realized: false, scrolledAway: true)
         #expect(h.tapGoToEnd() == [.startFollowTask(f1, forced: true)])
@@ -1298,11 +1365,46 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
         yielded.isInteracting = true
         #expect(!yielded.execute())
-        #expect(nonLog(yielded.send(.followDue(f1, execute: false))) == [.replayLiveEdge(isInteracting: true)])
+        #expect(yielded.send(.followDue(f1, execute: false)) == [Log.forcedYielded, .replayLiveEdge(isInteracting: true)])
         #expect(yielded.send(.followFinished(f1, .yielded)).isEmpty)
         #expect(yielded.state.owner == .idle)
         #expect(yielded.state.currentRecovery == nil)
         #expect(yielded.scrolls == 0)
+
+        var automatic = harness(realized: false)
+        #expect(automatic.send(.followRequested(forced: false)) == [.startFollowTask(f1, forced: false)])
+        var dropped = automatic
+        var realizedAutomatic = automatic
+        #expect(automatic.execute())
+        #expect(automatic.send(.followDue(f1, execute: true)) == [.scrollToEnd])
+        #expect(automatic.send(.followFinished(f1, .executed(nil))) == [
+            .replayLiveEdge(isInteracting: nil), .startRecoveryTask(r2),
+        ])
+        #expect(automatic.state.armedRecovery == .polling(r2))
+        #expect(automatic.isLive(r2))
+        #expect(automatic.poll(blank) == .continue(.recover(pageOffsetY: 1_600)))
+
+        #expect(realizedAutomatic.send(.endRealized(userIsScrolledAway: false)).isEmpty)
+        #expect(realizedAutomatic.send(.followDue(f1, execute: true)) == [.scrollToEnd])
+        #expect(realizedAutomatic.send(.followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(realizedAutomatic.state.currentRecovery == nil)
+
+        dropped.distanceToBottom = 120
+        #expect(!dropped.execute())
+        #expect(dropped.send(.followDue(f1, execute: false)).isEmpty)
+        #expect(dropped.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(dropped.state.currentRecovery == nil)
+        #expect(dropped.goToEndShown == 0)
+
+        var yieldedRealized = harness(realized: true, scrolledAway: true)
+        #expect(yieldedRealized.tapGoToEnd() == [.startFollowTask(f1, forced: true)])
+        yieldedRealized.isInteracting = true
+        #expect(!yieldedRealized.execute())
+        #expect(yieldedRealized.send(.followDue(f1, execute: false)) == [
+            Log.forcedYielded, .replayLiveEdge(isInteracting: true),
+        ])
+        #expect(yieldedRealized.send(.followFinished(f1, .yielded)).isEmpty)
+        #expect(yieldedRealized.state.currentRecovery == nil)
     }
 
     /// Scenario 5 (7e0ecbc, e3cd988): the recovery spends its budget over
@@ -1318,20 +1420,20 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var h = harness()
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
         #expect(h.poll(blank) == .continue(.recover(pageOffsetY: 1_600)))
-        #expect(nonLog(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600)))) == [.pageUp(offsetY: 1_600)])
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600))) == [Log.pageUp, .pageUp(offsetY: 1_600)])
         h.distanceToBottom = 700
         #expect(h.mayFollowBack())
         #expect(h.send(.recoveryPagedUp(r1, mayFollowBack: true)) == [.scrollToEnd])
         h.distanceToBottom = 0
         #expect(h.poll(blank, correctionsLeft: 1, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 1_600)))
-        #expect(nonLog(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600)))) == [.pageUp(offsetY: 1_600)])
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600))) == [Log.pageUp, .pageUp(offsetY: 1_600)])
         let secondFollowBack = h.mayFollowBack()
         #expect(secondFollowBack)
         #expect(h.send(.recoveryPagedUp(r1, mayFollowBack: secondFollowBack)) == [.scrollToEnd])
         #expect(h.poll(blank, correctionsLeft: 0, correctionsSpent: 2) == .finish(.giveUp))
-        let finish = h.send(.recoveryFinished(r1, .giveUp, corrections: 2))
-        #expect(nonLog(finish) == [.recordRecoveryOutcome(.giveUp, corrections: 2), .showGoToEnd])
-        #expect(logs(finish) == ["[SCROLL] End recovery gave up over an unrealized end row; showing Go to End"])
+        #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 2)) == [
+            .recordRecoveryOutcome(.giveUp, corrections: 2), Log.gaveUp, .showGoToEnd,
+        ])
         #expect(h.state.owner == .idle)
         #expect(h.state.currentRecovery == nil)
         #expect(h.userIsScrolledAway)
@@ -1350,7 +1452,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.scrolls == 2)
 
         var pinned = harness()
-        pinned.send(.endDerealized)
+        #expect(pinned.send(.endDerealized) == [.startRecoveryTask(r1)])
         pinned.geometryEdge(distanceToBottom: 0)
         #expect(!pinned.userIsScrolledAway)
         pinned.geometryEdge(distanceToBottom: 120)
@@ -1418,22 +1520,22 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// the flag released. Recovered (the end row realized) short of the
     /// end, the viewport is re-pinned by the growth path; yielded under the
     /// finger, the edge is the gesture it is — scrolled away, nothing
-    /// scrolls the user back; yielded to a follow that claimed the viewport,
-    /// the landing is the follow's and the replay re-pins nothing over it;
-    /// recovered at the bottom, the edge does nothing.
+    /// scrolls the user back, and the outcome reports as
+    /// `endRecovery=yieldToUser`; yielded to a follow that claimed the
+    /// viewport, the landing is the follow's and the replay re-pins nothing
+    /// over it; recovered at the bottom, the edge does nothing.
     @Test func aCorrectionSuppressesTheGrowthRePinUntilItsDrainReplaysTheEdge() {
         var h = harness()
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
         #expect(h.poll(geometry(offsetY: 260)) == .continue(.followToEnd))
-        #expect(nonLog(h.send(.recoveryStep(r1, .followToEnd))) == [.scrollToEnd])
+        #expect(h.send(.recoveryStep(r1, .followToEnd)) == [Log.followToEnd, .scrollToEnd])
         #expect(h.state.isFollowing)
         h.geometryEdge(distanceToBottom: 120)
         #expect(!h.userIsScrolledAway)
         #expect(h.rePins == 0)
         #expect(h.poll(geometry(offsetY: 260), correctionsLeft: 1, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 0)))
-        #expect(nonLog(h.send(.recoveryStep(r1, .recover(pageOffsetY: 0)))) == [.pageUp(offsetY: 0)])
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 0))) == [Log.pageUp, .pageUp(offsetY: 0)])
         h.distanceToBottom = 300
-        var yielded = h
         var toFollow = h
 
         #expect(h.mayFollowBack())
@@ -1458,19 +1560,22 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(!atBottom.userIsScrolledAway)
         #expect(atBottom.rePins == 0)
 
+        var yielded = harness()
+        #expect(yielded.send(.endDerealized) == [.startRecoveryTask(r1)])
+        #expect(yielded.poll(blank) == .continue(.recover(pageOffsetY: 1_600)))
+        #expect(yielded.send(.recoveryStep(r1, .recover(pageOffsetY: 1_600))) == [Log.pageUp, .pageUp(offsetY: 1_600)])
         yielded.isInteracting = true
         yielded.distanceToBottom = 120
         #expect(!yielded.mayFollowBack())
-        let yield = yielded.send(.recoveryPagedUp(r1, mayFollowBack: false))
-        #expect(nonLog(yield).isEmpty)
-        #expect(logs(yield) == ["[SCROLL] End recovery yielded the paged-up viewport to the user"])
-        #expect(yielded.send(.recoveryFinished(r1, .yieldToUser, corrections: 2)) == [
-            .recordRecoveryOutcome(.yieldToUser, corrections: 2), .replayLiveEdge(isInteracting: nil),
+        #expect(yielded.send(.recoveryPagedUp(r1, mayFollowBack: false)) == [Log.recoveryYielded])
+        #expect(yielded.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
+            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
         ])
+        #expect(yielded.summaries == ["endRecovery=yieldToUser corrections=1"])
         #expect(yielded.userIsScrolledAway)
         #expect(yielded.rePins == 0)
         #expect(yielded.goToEndShown == 0)
-        #expect(yielded.scrolls == 1)
+        #expect(yielded.scrolls == 0)
 
         #expect(toFollow.send(.followRequested(forced: false)) == [.startFollowTask(f2, forced: false)])
         #expect(toFollow.state.armedRecovery == .demoted(r1))
@@ -1493,14 +1598,15 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// Go to End where the edge alone would have re-pinned blind to a row
     /// that is not there. Scrolled away, growth re-pins nothing over the
     /// button; the tap follows through the verified path and its executed
-    /// drain re-arms the recovery from the level.
+    /// drain re-arms the recovery from the level. The outcome reports as
+    /// `endRecovery=giveUp` with the corrections spent.
     @Test func aGiveUpShowsGoToEndInsteadOfRePinningBlind() {
         var h = harness()
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
         #expect(h.poll(geometry(offsetY: 260)) == .continue(.followToEnd))
-        #expect(nonLog(h.send(.recoveryStep(r1, .followToEnd))) == [.scrollToEnd])
+        #expect(h.send(.recoveryStep(r1, .followToEnd)) == [Log.followToEnd, .scrollToEnd])
         #expect(h.poll(geometry(offsetY: 260), correctionsLeft: 1, correctionsSpent: 1) == .continue(.recover(pageOffsetY: 0)))
-        #expect(nonLog(h.send(.recoveryStep(r1, .recover(pageOffsetY: 0)))) == [.pageUp(offsetY: 0)])
+        #expect(h.send(.recoveryStep(r1, .recover(pageOffsetY: 0))) == [Log.pageUp, .pageUp(offsetY: 0)])
         h.distanceToBottom = 300
         let followBack = h.mayFollowBack()
         #expect(followBack)
@@ -1508,8 +1614,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         h.distanceToBottom = 40
         #expect(h.poll(geometry(offsetY: 260), correctionsLeft: 0, correctionsSpent: 2) == .finish(.giveUp))
         #expect(h.poll(geometry(offsetY: 300), correctionsSpent: 2, timedOut: true) == .finish(.giveUp))
-        let finish = h.send(.recoveryFinished(r1, .giveUp, corrections: 2))
-        #expect(nonLog(finish) == [.recordRecoveryOutcome(.giveUp, corrections: 2), .showGoToEnd])
+        h.isInteracting = true
+        #expect(h.poll(geometry(offsetY: 300), timedOut: true) == .finish(.giveUp))
+        h.isInteracting = false
+        #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 2)) == [
+            .recordRecoveryOutcome(.giveUp, corrections: 2), Log.gaveUp, .showGoToEnd,
+        ])
+        #expect(h.summaries == ["endRecovery=giveUp corrections=2"])
         #expect(h.userIsScrolledAway)
         #expect(h.goToEndShown == 1)
         #expect(h.rePins == 0)
