@@ -19,6 +19,14 @@ struct MarkdownTextView: View {
     @Environment(BackendSession.self) private var session: BackendSession?
     @State private var lightboxItem: LightboxItem?
 
+    private static let taskListTopSpacing: CGFloat = 2
+    private static let taskListBottomSpacing: CGFloat = 4
+    private static let maximumBlockIndent = 3
+    private static let minimumFenceLength = 3
+    private static let indentedCodeWidth = 4
+    private static let listContinuationIndent = 2
+    private static let tabWidth = 4
+
     init(
         text: String,
         onOpenURL: ((URL) -> OpenURLAction.Result)? = nil,
@@ -44,13 +52,16 @@ struct MarkdownTextView: View {
             .textual.structuredTextStyle(.compact)
             .textual.imageAttachmentLoader(
                 IntentFileAttachmentLoader(
-                    workspaceId: workspaceId, fallback: .image(),
-                    fileImage: fileImageFetcher)
+                    workspaceId: workspaceId,
+                    fallback: .image(),
+                    fileImage: fileImageFetcher
+                )
             )
             .textual.listItemSpacing(
                 .fontScaled(
-                    top: 2 / CompactMarkdownStyle.baseFontSize,
-                    bottom: 4 / CompactMarkdownStyle.baseFontSize)
+                    top: Self.taskListTopSpacing / CompactMarkdownStyle.baseFontSize,
+                    bottom: Self.taskListBottomSpacing / CompactMarkdownStyle.baseFontSize
+                )
             )
             .textual.textSelection(.enabled)
             .textual.onAttachmentTap { attachment in
@@ -98,17 +109,19 @@ struct MarkdownTextView: View {
         guard text.contains("[") else { return text }
         var fenceMarker: Character?
         var inList = false
-        return text.components(separatedBy: "\n").map { line -> String in
+        func replaceMarker(in line: String) -> String {
             let indent = leadingIndentWidth(of: line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
             if let marker = fenceMarker {
-                if indent <= 3, trimmed.count >= 3, trimmed.allSatisfy({ $0 == marker }) {
+                if indent <= Self.maximumBlockIndent,
+                   trimmed.count >= Self.minimumFenceLength,
+                   trimmed.allSatisfy({ $0 == marker }) {
                     fenceMarker = nil
                 }
                 return line
             }
-            if indent <= 3 || inList {
+            if indent <= Self.maximumBlockIndent || inList {
                 if trimmed.hasPrefix("```") {
                     fenceMarker = "`"
                     return line
@@ -119,7 +132,7 @@ struct MarkdownTextView: View {
                 }
             }
             if trimmed.isEmpty { return line }
-            if indent >= 4, !inList { return line }
+            if indent >= Self.indentedCodeWidth, !inList { return line }
 
             if let match = line.prefixMatch(of: taskListMarker) {
                 inList = true
@@ -128,11 +141,14 @@ struct MarkdownTextView: View {
             }
             if line.prefixMatch(of: listItemMarker) != nil {
                 inList = true
-            } else if indent < 2 {
+            } else if indent < Self.listContinuationIndent {
                 inList = false
             }
             return line
-        }.joined(separator: "\n")
+        }
+        return text.components(separatedBy: "\n")
+            .map(replaceMarker)
+            .joined(separator: "\n")
     }
 
     /// Leading indentation in columns; a tab advances to the next multiple
@@ -143,7 +159,7 @@ struct MarkdownTextView: View {
             if char == " " {
                 width += 1
             } else if char == "\t" {
-                width += 4 - width % 4
+                width += Self.tabWidth - width % Self.tabWidth
             } else {
                 break
             }
@@ -158,4 +174,3 @@ private struct LightboxItem: Identifiable {
     let id = UUID()
     let image: UIImage
 }
-

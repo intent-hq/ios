@@ -5,17 +5,28 @@ import SwiftUI
 /// arc for the in-progress fraction drawn immediately after the completed
 /// one. Arcs start at 12 o'clock and run clockwise.
 struct TaskProgressRingView: View {
+    private enum Geometry {
+        static let referenceSize: CGFloat = 14
+        static let standardStrokeWidth: CGFloat = 2.5
+        static let increasedStrokeWidth: CGFloat = 3.25
+        static let increasedTrackOpacity = 0.65
+        static let differentiatedDashMultiplier: CGFloat = 1.5
+        static let startAngle = Angle.radians(-.pi / 2)
+    }
+
     let stats: TaskStats
     var size: CGFloat = 14
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     private var strokeWidth: CGFloat {
-        size * (colorSchemeContrast == .increased ? 3.25 : 2.5) / 14
+        size * (colorSchemeContrast == .increased
+            ? Geometry.increasedStrokeWidth
+            : Geometry.standardStrokeWidth) / Geometry.referenceSize
     }
 
     private var trackColor: Color {
-        colorSchemeContrast == .increased ? .primary.opacity(0.65) : Palette.track
+        colorSchemeContrast == .increased ? .primary.opacity(Geometry.increasedTrackOpacity) : Palette.track
     }
 
     private enum Palette {
@@ -44,7 +55,11 @@ struct TaskProgressRingView: View {
                         style: StrokeStyle(
                             lineWidth: strokeWidth,
                             lineCap: .round,
-                            dash: differentiateWithoutColor ? [strokeWidth, strokeWidth * 1.5] : []))
+                            dash: differentiateWithoutColor
+                                ? [strokeWidth, strokeWidth * Geometry.differentiatedDashMultiplier]
+                                : []
+                        )
+                    )
                     .frame(width: diameter, height: diameter)
             }
             if stats.completed > 0 {
@@ -55,7 +70,7 @@ struct TaskProgressRingView: View {
             }
         }
         // SwiftUI trims start at 3 o'clock; the fe ring starts at 12.
-        .rotationEffect(.degrees(-90))
+        .rotationEffect(Geometry.startAngle)
         // Keep the arc geometry stable under RTL layout mirroring.
         .environment(\.layoutDirection, .leftToRight)
         .frame(width: size, height: size)

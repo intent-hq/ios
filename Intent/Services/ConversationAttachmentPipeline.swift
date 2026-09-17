@@ -5,12 +5,25 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+enum ComposerImageRecovery {
+    case preserveCurrentSelection
+    case restore([UIImage])
+
+    func apply(to pendingImages: inout [UIImage]) {
+        guard pendingImages.isEmpty, case let .restore(images) = self else { return }
+        pendingImages = images
+    }
+}
+
 /// Main-actor-owned composer attachment state and send-time placement logic.
 /// Security-scoped access begins when a file is added and remains held until
 /// removal, clear after a successful send/queue, or deinitialization.
 @MainActor
 @Observable final class ConversationAttachmentPipeline {
-    static let maxImageReferenceBytes = 30 * 1024 * 1024
+    // This named aggregate limit mirrors the daemon-facing image contract.
+    static let maxImageReferenceBytes = 30 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: TimeInterval = 1000
 
     enum ImagePlacementError: LocalizedError {
         case encodingFailed(index: Int)
@@ -20,13 +33,13 @@ import UniformTypeIdentifiers
 
         var errorDescription: String? {
             switch self {
-            case .encodingFailed(let index):
+            case let .encodingFailed(index):
                 return "Image \(index) could not be encoded for sending."
-            case .imageTooLarge(let index):
+            case let .imageTooLarge(index):
                 return "Image \(index) is too large to send (over 30 MiB as JPEG)."
             case .imagesTooLarge:
                 return "The attached images are too large to send together (over 30 MiB total as JPEG)."
-            case .placementFailed(let index, let underlying):
+            case let .placementFailed(index, underlying):
                 return "Image \(index) could not be uploaded. \(underlying.localizedDescription)"
             }
         }
@@ -38,9 +51,9 @@ import UniformTypeIdentifiers
 
         var errorDescription: String? {
             switch self {
-            case .fileTooLarge(let name):
+            case let .fileTooLarge(name):
                 return "\"\(name)\" is too large to send (over 1 GiB)."
-            case .placementFailed(let name, let underlying):
+            case let .placementFailed(name, underlying):
                 return "\"\(name)\" could not be uploaded. \(underlying.localizedDescription)"
             }
         }
@@ -63,11 +76,11 @@ import UniformTypeIdentifiers
 
     init(
         uploadService: AttachmentUploadService = .shared,
-        startSecurityScopedAccess: @escaping @Sendable (URL) -> Bool = {
-            $0.startAccessingSecurityScopedResource()
+        startSecurityScopedAccess: @escaping @Sendable (URL) -> Bool = { url in
+            url.startAccessingSecurityScopedResource()
         },
-        stopSecurityScopedAccess: @escaping @Sendable (URL) -> Void = {
-            $0.stopAccessingSecurityScopedResource()
+        stopSecurityScopedAccess: @escaping @Sendable (URL) -> Void = { url in
+            url.stopAccessingSecurityScopedResource()
         }
     ) {
         self.uploadService = uploadService
@@ -106,7 +119,8 @@ import UniformTypeIdentifiers
             pendingFiles.append(PendingFile(
                 url: url,
                 displayName: values?.name ?? url.lastPathComponent,
-                size: (values?.fileSize).map(Int64.init)))
+                size: (values?.fileSize).map(Int64.init)
+            ))
         }
     }
 
@@ -128,8 +142,8 @@ import UniformTypeIdentifiers
     }
 
     func buildImageBlocks(from images: [UIImage], workspaceId: String) async throws
-        -> [[String: Any]]? {
-        guard !images.isEmpty else { return nil }
+        -> OutgoingImagePayload {
+        guard !images.isEmpty else { return .none }
         var payloads: [Data] = []
         for (index, image) in images.enumerated() {
             guard let data = image.jpegData(
@@ -152,24 +166,25 @@ import UniformTypeIdentifiers
             do {
                 placed = try await uploadService.placeData(
                     workspaceId: workspaceId,
-                    fileName: "image-\(Int(Date().timeIntervalSince1970 * 1000))-\(index + 1).jpg",
+                    fileName: "image-\(Int(Date().timeIntervalSince1970 * Self.millisecondsPerSecond))-\(index + 1).jpg",
                     data: data,
-                    mimeType: "image/jpeg")
+                    mimeType: "image/jpeg"
+                )
             } catch {
                 throw ImagePlacementError.placementFailed(index: index + 1, underlying: error)
             }
             blocks.append([
                 "type": "image",
                 "attachmentId": placed.attachmentId,
-                "mimeType": placed.mimeType ?? "image/jpeg",
+                "mimeType": placed.mimeType ?? "image/jpeg"
             ])
         }
-        return blocks
+        return .attachments(blocks)
     }
 
     func buildFileBlocks(from files: [PendingFile], workspaceId: String) async throws
-        -> [[String: Any]]? {
-        guard !files.isEmpty else { return nil }
+        -> OutgoingFilePayload {
+        guard !files.isEmpty else { return .none }
         for file in files { fileUploadProgress[file.id] = 0 }
         defer { fileUploadProgress.removeAll() }
 
@@ -184,27 +199,29 @@ import UniformTypeIdentifiers
                     workspaceId: workspaceId,
                     fileName: file.displayName,
                     fileURL: file.url,
-                    mimeType: Self.mimeType(for: file.url),
-                    onProgress: { [weak self] fraction in
-                        self?.fileUploadProgress[file.id] = fraction
-                    })
+                    mimeType: Self.mimeType(for: file.url)
+                ) { [weak self] fraction in
+                    self?.fileUploadProgress[file.id] = fraction
+                }
             } catch AttachmentUploadService.UploadError.payloadTooLarge {
                 throw FilePlacementError.fileTooLarge(name: file.displayName)
             } catch {
                 throw FilePlacementError.placementFailed(
-                    name: file.displayName, underlying: error)
+                    name: file.displayName,
+                    underlying: error
+                )
             }
             fileUploadProgress[file.id] = 1
             var block: [String: Any] = [
                 "type": "file",
                 "attachmentId": placed.attachmentId,
                 "fileName": placed.fileName,
-                "size": placed.size,
+                "size": placed.size
             ]
             if let mimeType = placed.mimeType { block["mimeType"] = mimeType }
             blocks.append(block)
         }
-        return blocks
+        return .attachments(blocks)
     }
 
     static func mimeType(for url: URL) -> String? {
@@ -212,18 +229,24 @@ import UniformTypeIdentifiers
     }
 
     func surfaceImagePlacementFailure(
-        _ error: Error, content: String, images: [UIImage]?, messageText: inout String
+        _ error: Error,
+        content: String,
+        imageRecovery: ComposerImageRecovery,
+        messageText: inout String
     ) {
         imagePlacementError = error.localizedDescription
         if messageText.isEmpty { messageText = content }
-        if let images, pendingImages.isEmpty { pendingImages = images }
+        imageRecovery.apply(to: &pendingImages)
     }
 
     func surfaceFilePlacementFailure(
-        _ error: Error, content: String, images: [UIImage]?, messageText: inout String
+        _ error: Error,
+        content: String,
+        imageRecovery: ComposerImageRecovery,
+        messageText: inout String
     ) {
         filePlacementError = error.localizedDescription
         if messageText.isEmpty { messageText = content }
-        if let images, pendingImages.isEmpty { pendingImages = images }
+        imageRecovery.apply(to: &pendingImages)
     }
 }

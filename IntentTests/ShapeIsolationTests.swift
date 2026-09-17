@@ -1,6 +1,6 @@
+@testable import Intent
 import SwiftUI
 import Testing
-@testable import Intent
 
 /// `Shape` conformers must be `nonisolated` (intent-hq/ios#291): SDK 27
 /// declares `Shape` and `path(in:)` nonisolated, so under the app's MainActor

@@ -24,7 +24,10 @@ struct QuestionOption: Equatable, Decodable {
         label = try container.decode(String.self, forKey: .label)
         guard !label.isEmpty else {
             throw DecodingError.dataCorruptedError(
-                forKey: .label, in: container, debugDescription: "label must be non-empty")
+                forKey: .label,
+                in: container,
+                debugDescription: "label must be non-empty"
+            )
         }
         description = container.contains(.description)
             ? try container.decode(String.self, forKey: .description)
@@ -71,8 +74,10 @@ struct Question: Equatable, Identifiable, Decodable {
         question = try container.decode(String.self, forKey: .question)
         guard !header.isEmpty, !question.isEmpty else {
             throw DecodingError.dataCorruptedError(
-                forKey: .header, in: container,
-                debugDescription: "header and question must be non-empty")
+                forKey: .header,
+                in: container,
+                debugDescription: "header and question must be non-empty"
+            )
         }
         explanation = container.contains(.explanation)
             ? try container.decode(String.self, forKey: .explanation)
@@ -80,8 +85,10 @@ struct Question: Equatable, Identifiable, Decodable {
         options = try container.decode([QuestionOption].self, forKey: .options)
         guard options.count >= 2 else {
             throw DecodingError.dataCorruptedError(
-                forKey: .options, in: container,
-                debugDescription: "at least 2 options required")
+                forKey: .options,
+                in: container,
+                debugDescription: "at least 2 options required"
+            )
         }
         multiSelect = container.contains(.multiSelect)
             ? try container.decode(Bool.self, forKey: .multiSelect)
@@ -92,7 +99,7 @@ struct Question: Equatable, Identifiable, Decodable {
         attachmentId: String,
         header: String,
         question: String,
-        explanation: String? = nil,
+        explanation: String?,
         options: [QuestionOption],
         multiSelect: Bool = false
     ) {
@@ -118,20 +125,39 @@ struct Question: Equatable, Identifiable, Decodable {
     /// MIME type does not match or the payload is malformed (FE parity:
     /// `getQuestionFromResourceBlock`, including the legacy
     /// `metadata.resource` fallback).
-    static func question(from block: ContentBlock) -> Question? {
+    static func question(from block: ContentBlock) -> Self? {
         let mimeType: String?
         let text: String?
         if let resource = block.resource {
             mimeType = resource.mimeType
             text = resource.text
-        } else if let dict = block.metadata?["resource"]?.dictValue {
+        } else if case let .value(dict) = block.metadata["resource"]?.dictValue {
             mimeType = dict["mimeType"] as? String
             text = dict["text"] as? String
         } else {
             return nil
         }
         guard mimeType == resourceMimeType, let text else { return nil }
-        return try? JSONDecoder().decode(Question.self, from: Data(text.utf8))
+        return try? JSONDecoder().decode(Self.self, from: Data(text.utf8))
+    }
+}
+
+extension Question {
+    init(
+        attachmentId: String,
+        header: String,
+        question: String,
+        options: [QuestionOption],
+        multiSelect: Bool = false
+    ) {
+        self.init(
+            attachmentId: attachmentId,
+            header: header,
+            question: question,
+            explanation: nil,
+            options: options,
+            multiSelect: multiSelect
+        )
     }
 }
 
@@ -205,7 +231,7 @@ struct PendingQuestionSet: Equatable {
         dismissedQuestionsMessageId: String? = nil,
         pendingQuestionsMessageId: String? = nil,
         queuedAnsweredQuestionsMessageIds: Set<String> = []
-    ) -> PendingQuestionSet? {
+    ) -> Self? {
         if showingPendingUserMessage || messages.isEmpty {
             return nil
         }
@@ -213,34 +239,61 @@ struct PendingQuestionSet: Equatable {
         case .cleared:
             return nil
         case .set(let markedId):
-            guard let marked = messages.first(where: { $0.id == markedId }) else {
-                // Fails open (no wizard, plain composer): the marked row is not
-                // in the loaded window (slim transcript truncation). Recovery is
-                // a follow-up; log so the case is diagnosable in the field.
-                AppLog.conversation.debug(
-                    "[PendingQuestionSet] marker \(markedId) set but row not loaded")
-                return nil
-            }
-            guard marked.role == .assistant, marked.isStreaming != true else {
-                return nil
-            }
-            if queuedAnsweredQuestionsMessageIds.contains(markedId)
-                || isQuestionSetAnswered(messages: messages, messageId: markedId) {
-                return nil
-            }
-            return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+            return deriveMarkedSet(
+                messages: messages,
+                markedId: markedId,
+                dismissedQuestionsMessageId: dismissedQuestionsMessageId,
+                queuedAnsweredQuestionsMessageIds: queuedAnsweredQuestionsMessageIds
+            )
         case .absent:
-            if isTurnActive { return nil }
-            // Match the daemon's pre-marker fallback: trailing system rows are
-            // transparent, but the first non-system row must itself be a
-            // question-bearing assistant message (a user row supersedes).
-            for msg in messages.reversed() {
-                if msg.role == .system { continue }
-                guard msg.role == .assistant, msg.isStreaming != true else { return nil }
-                return questionSet(from: msg, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
-            }
+            return deriveLegacySet(
+                messages: messages,
+                isTurnActive: isTurnActive,
+                dismissedQuestionsMessageId: dismissedQuestionsMessageId
+            )
+        }
+    }
+
+    private static func deriveMarkedSet(
+        messages: [ConversationMessage],
+        markedId: String,
+        dismissedQuestionsMessageId: String?,
+        queuedAnsweredQuestionsMessageIds: Set<String>
+    ) -> Self? {
+        guard let marked = messages.first(where: { $0.id == markedId }) else {
+            // Fails open (no wizard, plain composer): the marked row is not
+            // in the loaded window (slim transcript truncation). Recovery is
+            // a follow-up; log so the case is diagnosable in the field.
+            AppLog.conversation.debug(
+                "[PendingQuestionSet] marker \(markedId) set but row not loaded"
+            )
             return nil
         }
+        guard marked.role == .assistant, marked.isStreaming != true else {
+            return nil
+        }
+        if queuedAnsweredQuestionsMessageIds.contains(markedId)
+            || isQuestionSetAnswered(messages: messages, messageId: markedId) {
+            return nil
+        }
+        return questionSet(from: marked, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+    }
+
+    private static func deriveLegacySet(
+        messages: [ConversationMessage],
+        isTurnActive: Bool,
+        dismissedQuestionsMessageId: String?
+    ) -> Self? {
+        if isTurnActive { return nil }
+        // Match the daemon's pre-marker fallback: trailing system rows are
+        // transparent, but the first non-system row must itself be a
+        // question-bearing assistant message (a user row supersedes).
+        for message in messages.reversed() {
+            if message.role == .system { continue }
+            guard message.role == .assistant, message.isStreaming != true else { return nil }
+            return questionSet(from: message, dismissedQuestionsMessageId: dismissedQuestionsMessageId)
+        }
+        return nil
     }
 
     /// True when a user row in `messages` carries the wizard's answer tag
@@ -250,27 +303,29 @@ struct PendingQuestionSet: Equatable {
     /// clearing the marker, so an answered set never pops back in (FE parity:
     /// `isQuestionSetAnswered`).
     static func isQuestionSetAnswered(
-        messages: [ConversationMessage], messageId: String
+        messages: [ConversationMessage],
+        messageId: String
     ) -> Bool {
         messages.contains { $0.role == .user && $0.answeredQuestionsMessageId == messageId }
     }
 
     private static func questionSet(
-        from message: ConversationMessage, dismissedQuestionsMessageId: String?
-    ) -> PendingQuestionSet? {
+        from message: ConversationMessage,
+        dismissedQuestionsMessageId: String?
+    ) -> Self? {
         if let dismissedId = dismissedQuestionsMessageId, dismissedId == message.id {
             return nil
         }
         var seenAttachmentIds = Set<String>()
         var questions: [Question] = []
-        for block in message.contentBlocks ?? [] {
+        for block in message.contentBlocks {
             guard let question = Question.question(from: block) else { continue }
             if seenAttachmentIds.insert(question.attachmentId).inserted {
                 questions.append(question)
             }
         }
         guard !questions.isEmpty else { return nil }
-        return PendingQuestionSet(messageId: message.id, questions: questions)
+        return Self(messageId: message.id, questions: questions)
     }
 }
 
@@ -282,7 +337,7 @@ extension ConversationMessage {
     /// parity: `getAnsweredQuestionsMessageId`).
     var answeredQuestionsMessageId: String? {
         if let answered = questionAnswersTaggedMessageId(metadata) { return answered }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let answered = questionAnswersTaggedMessageId(block.messageMetadata) { return answered }
         }
         return nil
@@ -303,9 +358,8 @@ extension QueuedMessage {
 
 /// The `answeredQuestionsMessageId` of a `{ type: "question_answers",
 /// answeredQuestionsMessageId }` tag, or nil when `metadata` is not that tag.
-private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]?) -> String? {
-    guard let metadata,
-          metadata["type"]?.stringValue == "question_answers",
+private func questionAnswersTaggedMessageId(_ metadata: [String: AnyCodable]) -> String? {
+    guard metadata["type"]?.stringValue == "question_answers",
           let answered = metadata["answeredQuestionsMessageId"]?.stringValue,
           !answered.isEmpty else {
         return nil
@@ -342,7 +396,7 @@ struct QuestionAnswer: Equatable {
     }
 
     /// Flatten the wizard's answers into the single plain-text user message.
-    static func flattenToMessage(_ answers: [QuestionAnswer]) -> String {
+    static func flattenToMessage(_ answers: [Self]) -> String {
         answers
             .map { "Q: \($0.question.question)\nA: \($0.formattedAnswer)" }
             .joined(separator: "\n\n")

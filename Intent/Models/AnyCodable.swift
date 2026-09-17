@@ -1,5 +1,20 @@
 import Foundation
 
+enum AnyCodableBooleanMatch: Equatable {
+    case typeMismatch
+    case value(Bool)
+}
+
+enum AnyCodableArrayMatch {
+    case typeMismatch
+    case value([Any])
+}
+
+enum AnyCodableDictionaryMatch {
+    case typeMismatch
+    case value([String: Any])
+}
+
 /// A type-erased Codable wrapper for arbitrary JSON values.
 ///
 /// Nonisolated so wire models can be decoded off MainActor. `@unchecked
@@ -24,9 +39,9 @@ nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
             value = double
         } else if let string = try? container.decode(String.self) {
             value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
+        } else if let array = try? container.decode([Self].self) {
             value = array.map { $0.value }
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
+        } else if let dict = try? container.decode([String: Self].self) {
             value = dict.mapValues { $0.value }
         } else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported JSON value")
@@ -47,15 +62,15 @@ nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
         case let string as String:
             try container.encode(string)
         case let array as [Any]:
-            try container.encode(array.map { AnyCodable($0) })
+            try container.encode(array.map { Self($0) })
         case let dict as [String: Any]:
-            try container.encode(dict.mapValues { AnyCodable($0) })
+            try container.encode(dict.mapValues { Self($0) })
         default:
             try container.encodeNil()
         }
     }
 
-    static func == (lhs: AnyCodable, rhs: AnyCodable) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         // Simple equality based on JSON representation
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
@@ -69,9 +84,19 @@ nonisolated struct AnyCodable: Codable, Equatable, @unchecked Sendable {
     var stringValue: String? { value as? String }
     var intValue: Int? { value as? Int }
     var doubleValue: Double? { value as? Double }
-    var boolValue: Bool? { value as? Bool }
-    var arrayValue: [Any]? { value as? [Any] }
-    var dictValue: [String: Any]? { value as? [String: Any] }
+    var boolValue: AnyCodableBooleanMatch {
+        guard let value = value as? Bool else { return .typeMismatch }
+        return .value(value)
+    }
+
+    var arrayValue: AnyCodableArrayMatch {
+        guard let value = value as? [Any] else { return .typeMismatch }
+        return .value(value)
+    }
+
+    var dictValue: AnyCodableDictionaryMatch {
+        guard let value = value as? [String: Any] else { return .typeMismatch }
+        return .value(value)
+    }
     var isNull: Bool { value is NSNull }
 }
-

@@ -1,6 +1,41 @@
 import SwiftUI
 
+// Scroll coordination is intentionally colocated so its gesture, geometry,
+// debounce, and landing state machine can be reviewed as one unit.
+// swiftlint:disable file_length
 struct ConversationTranscriptView: View {
+    private enum Layout {
+        static let transcriptRowSpacing: CGFloat = 16
+        static let transcriptHorizontalPadding: CGFloat = 16
+        static let transcriptTopPadding: CGFloat = 24
+        static let bottomAnchorHeight: CGFloat = 8
+        static let bottomAnchorPadding: CGFloat = 12
+        static let goToEndSpacing: CGFloat = 4
+        static let goToEndHorizontalPadding: CGFloat = 14
+        static let goToEndVerticalPadding: CGFloat = 8
+        static let goToEndShadowOpacity = 0.15
+        static let goToEndShadowRadius: CGFloat = 4
+        static let goToEndShadowYOffset: CGFloat = 2
+        static let goToEndBottomPadding: CGFloat = 8
+        static let thinkingIndicatorSpacing: CGFloat = 6
+        static let thinkingIndicatorScale = 0.7
+        static let thinkingIndicatorSide: CGFloat = 16
+        static let thinkingIndicatorHorizontalPadding: CGFloat = 12
+        static let thinkingIndicatorVerticalPadding: CGFloat = 4
+        static let suggestedPromptSpacing: CGFloat = 8
+        static let suggestedPromptHorizontalPadding: CGFloat = 14
+        static let suggestedPromptVerticalPadding: CGFloat = 10
+        static let suggestedPromptBackgroundOpacity = 0.4
+        static let suggestedPromptCornerRadius: CGFloat = 10
+        static let suggestedPromptBorderOpacity = 0.3
+        static let suggestedPromptBorderWidth: CGFloat = 1
+        static let truncationBannerSpacing: CGFloat = 8
+        static let truncationBannerHorizontalPadding: CGFloat = 16
+        static let truncationBannerVerticalPadding: CGFloat = 12
+        static let truncationBannerBackgroundOpacity = 0.5
+        static let truncationBannerCornerRadius: CGFloat = 10
+    }
+
     let viewModel: ConversationViewModel
     let scrollState: ConversationTranscriptScrollState
     let onNavigateToNote: (String, String, String) -> Void
@@ -49,7 +84,9 @@ struct ConversationTranscriptView: View {
             }
         }
     }
+}
 
+private extension ConversationTranscriptView {
     /// The follow handlers stay gated until the entry-scroll decision finishes,
     /// so stream updates cannot yank the viewport away from the unread divider.
     /// Only discrete transitions scroll; streaming deltas ride the bottom anchor
@@ -132,13 +169,16 @@ struct ConversationTranscriptView: View {
         let containerHeight: CGFloat
     }
 
+    // This modifier chain is one scroll-state machine: splitting it would hide
+    // the ordering between gesture, geometry, and past-end observations.
+    // swiftlint:disable:next function_body_length
     private func transcriptScrollBase(proxy: ScrollViewProxy, dividerAnchorId: String?) -> some View {
         ScrollView {
-            LazyVStack(spacing: 16) {
+            LazyVStack(spacing: Layout.transcriptRowSpacing) {
                 transcriptRows(proxy: proxy, dividerAnchorId: dividerAnchorId)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
+            .padding(.horizontal, Layout.transcriptHorizontalPadding)
+            .padding(.top, Layout.transcriptTopPadding)
             // Hosted on the stack itself, not a lazily realized row, so the
             // UIScrollView is found regardless of which rows exist.
             .background(ScrollViewFinder(proxy: scrollMomentumProxy))
@@ -235,6 +275,7 @@ struct ConversationTranscriptView: View {
         }
     }
 
+    // swiftlint:disable function_body_length
     /// Verifies, once the geometry has settled, that a following viewport
     /// rests on realized rows, and recovers a blank one (#338): the lazy
     /// stack can realize no rows at all under an offset that still reads
@@ -262,6 +303,7 @@ struct ConversationTranscriptView: View {
     /// would only reset the bound.
     private func scheduleUnrealizedEndRecovery(proxy: ScrollViewProxy) {
         guard scrollState.unrealizedEndRecoveryTask == nil else { return }
+        // swiftlint:disable:next closure_body_length
         scrollState.unrealizedEndRecoveryTask = Task { @MainActor in
             let deadline = ContinuousClock.now
                 + .milliseconds(Constants.Conversation.Transcript.followLandingTimeoutMilliseconds)
@@ -292,24 +334,25 @@ struct ConversationTranscriptView: View {
                     correctionsLeft -= 1
                     corrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
-                    AppLog.ui.debug("[SCROLL] End row off screen short of the bottom; following to the end")
+                    AppLog.userInterface.debug("[SCROLL] End row off screen short of the bottom; following to the end")
                     proxy.scrollTo("scroll-bottom", anchor: .bottom)
                     previous = nil
                 case .recover(let pageOffsetY):
                     correctionsLeft -= 1
                     corrections += 1
                     scrollState.isRecoveringUnrealizedEnd = true
-                    AppLog.ui.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
+                    AppLog.userInterface.debug("[SCROLL] Blank viewport at the bottom; paging up and following back")
                     if scrollMomentumProxy.pageTo(offsetY: pageOffsetY) {
                         try? await Task.sleep(
-                            for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds))
+                            for: .milliseconds(Constants.Conversation.Transcript.pastEndSettleMilliseconds)
+                        )
                         guard !Task.isCancelled else { return }
                         guard ConversationTranscriptScrollPolicy.unrealizedEndRecoveryMayFollowBack(
                             isInteracting: isUserInteracting,
                             userIsScrolledAway: userIsScrolledAway,
                             isFollowing: scrollDebounceTask != nil
                         ) else {
-                            AppLog.ui.debug("[SCROLL] End recovery yielded the paged-up viewport to the user")
+                            AppLog.userInterface.debug("[SCROLL] End recovery yielded the paged-up viewport to the user")
                             finishUnrealizedEndRecovery(outcome: .yieldToUser, corrections: corrections, proxy: proxy)
                             return
                         }
@@ -323,6 +366,7 @@ struct ConversationTranscriptView: View {
             }
         }
     }
+    // swiftlint:enable function_body_length
 
     /// Drains the recovery: records the outcome once it has corrected the
     /// viewport, releases the follow flag, and either replays the live edge
@@ -352,7 +396,7 @@ struct ConversationTranscriptView: View {
         case .replayEdge:
             applyLiveScrolledAwayEdge(proxy: proxy)
         case .showGoToEnd:
-            AppLog.ui.debug("[SCROLL] End recovery gave up over an unrealized end row; showing Go to End")
+            AppLog.userInterface.debug("[SCROLL] End recovery gave up over an unrealized end row; showing Go to End")
             userIsScrolledAway = true
         case .deferToFollow:
             scrollState.unrealizedEndGiveUpDeferredToFollow = true
@@ -377,7 +421,9 @@ struct ConversationTranscriptView: View {
         )
         scrollState.unrealizedEndGiveUpDeferredToFollow = false
         if showGoToEnd {
-            AppLog.ui.debug("[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End")
+            AppLog.userInterface.debug(
+                "[SCROLL] End recovery gave up and the follow it deferred to did not execute; showing Go to End"
+            )
             userIsScrolledAway = true
         }
         return showGoToEnd
@@ -496,7 +542,7 @@ struct ConversationTranscriptView: View {
             case .deferred:
                 scheduleDeferredContainerRePin(proxy: proxy)
             case .rePin:
-                AppLog.ui.debug("[SCROLL] Container changed while interacting; following to the bottom after settle")
+                AppLog.userInterface.debug("[SCROLL] Container changed while interacting; following to the bottom after settle")
                 scrollToBottom(proxy: proxy, forced: false)
             case .none:
                 break
@@ -521,8 +567,19 @@ struct ConversationTranscriptView: View {
     /// ending pinned releases it at once. An at-bottom edge over an
     /// unrealized end row clears nothing (#338): the row realizing replays
     /// the live edge (see the marker's `onAppear`).
-    private func applyScrolledAwayEdge(geometryAway: Bool, isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
-        let isInteracting = isInteracting ?? isUserInteracting
+    private func applyScrolledAwayEdge(geometryAway: Bool, proxy: ScrollViewProxy) {
+        applyScrolledAwayEdge(
+            geometryAway: geometryAway,
+            isInteracting: isUserInteracting,
+            proxy: proxy
+        )
+    }
+
+    private func applyScrolledAwayEdge(
+        geometryAway: Bool,
+        isInteracting: Bool,
+        proxy: ScrollViewProxy
+    ) {
         let next = ConversationTranscriptScrollPolicy.scrolledAwayTransition(
             current: userIsScrolledAway,
             geometryAway: geometryAway,
@@ -544,7 +601,7 @@ struct ConversationTranscriptView: View {
             hasInitiallyScrolled: hasInitiallyScrolled,
             userIsScrolledAway: next
         ) {
-            AppLog.ui.debug("[SCROLL] Content grew under the pinned viewport; re-pinning to the bottom")
+            AppLog.userInterface.debug("[SCROLL] Content grew under the pinned viewport; re-pinning to the bottom")
             proxy.scrollTo("scroll-bottom", anchor: .bottom)
         }
     }
@@ -561,7 +618,11 @@ struct ConversationTranscriptView: View {
     /// `applyScrolledAwayEdge`), for the moments the geometry observer's
     /// edges were suppressed or may have been dropped: a follow draining, or
     /// the user taking over from a forced follow.
-    private func applyLiveScrolledAwayEdge(isInteracting: Bool? = nil, proxy: ScrollViewProxy) {
+    private func applyLiveScrolledAwayEdge(proxy: ScrollViewProxy) {
+        applyLiveScrolledAwayEdge(isInteracting: isUserInteracting, proxy: proxy)
+    }
+
+    private func applyLiveScrolledAwayEdge(isInteracting: Bool, proxy: ScrollViewProxy) {
         guard let distance = scrollMomentumProxy.distanceToBottom else { return }
         applyScrolledAwayEdge(
             geometryAway: ConversationTranscriptScrollPolicy.isScrolledAway(distanceToBottom: distance),
@@ -583,17 +644,16 @@ struct ConversationTranscriptView: View {
                 workspaceId: viewModel.workspaceId,
                 onNavigateToNote: onNavigateToNote,
                 onNavigateToAgent: onNavigateToAgent,
-                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id),
-                onHydrateBlock: { blockId in
-                    let messageId = message.id
-                    Task {
-                        await viewModel.store.hydrateBlock(
-                            messageId: messageId,
-                            blockId: blockId
-                        )
-                    }
+                hydratingBlockIds: viewModel.store.hydratingBlockIds(forMessage: message.id)
+            ) { blockId in
+                let messageId = message.id
+                Task {
+                    await viewModel.store.hydrateBlock(
+                        messageId: messageId,
+                        blockId: blockId
+                    )
                 }
-            )
+            }
             .id(message.id)
             if message.id == dividerAnchorId {
                 NewMessagesDividerView()
@@ -604,7 +664,7 @@ struct ConversationTranscriptView: View {
         #if !os(visionOS)
         // On visionOS the composer renders these as large chips above the
         // field instead (MessageInputView).
-        if !viewModel.suggestedPrompts.isEmpty && !viewModel.isStreaming {
+        if !viewModel.suggestedPrompts.isEmpty, !viewModel.isStreaming {
             suggestedPromptsView
                 .id("suggested-prompts")
         }
@@ -623,8 +683,8 @@ struct ConversationTranscriptView: View {
         // realization is the end-row signal the unrealized-end recovery
         // reads (#338): the lazy stack appears and disappears the marker as
         // it realizes and drops it.
-        Color.clear.frame(height: 8)
-            .padding(.bottom, 12)
+        Color.clear.frame(height: Layout.bottomAnchorHeight)
+            .padding(.bottom, Layout.bottomAnchorPadding)
             .id("scroll-bottom")
             .onAppear {
                 scrollState.isEndRealized = true
@@ -646,49 +706,54 @@ struct ConversationTranscriptView: View {
             scrollState.goToEndRequested = true
             userIsScrolledAway = false
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: Layout.goToEndSpacing) {
                 Image(systemName: "chevron.down")
                     .font(.caption.weight(.semibold))
                 Text("Go to End")
                     .font(.caption.weight(.medium))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Layout.goToEndHorizontalPadding)
+            .padding(.vertical, Layout.goToEndVerticalPadding)
             .background(.ultraThinMaterial)
             .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            .shadow(
+                color: .black.opacity(Layout.goToEndShadowOpacity),
+                radius: Layout.goToEndShadowRadius,
+                y: Layout.goToEndShadowYOffset
+            )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("transcript.goToEnd")
-        .padding(.bottom, 8)
+        .padding(.bottom, Layout.goToEndBottomPadding)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
         .animation(
             .easeInOut(duration: Constants.Conversation.Transcript.goToEndVisibilityAnimationDuration),
-            value: userIsScrolledAway)
+            value: userIsScrolledAway
+        )
     }
 
     private var thinkingIndicatorView: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.thinkingIndicatorSpacing) {
             ProgressView()
-                .scaleEffect(0.7)
-                .frame(width: 16, height: 16)
+                .scaleEffect(Layout.thinkingIndicatorScale)
+                .frame(width: Layout.thinkingIndicatorSide, height: Layout.thinkingIndicatorSide)
             Text("Thinking...")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
+        .padding(.horizontal, Layout.thinkingIndicatorHorizontalPadding)
+        .padding(.vertical, Layout.thinkingIndicatorVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     #if !os(visionOS)
     private var suggestedPromptsView: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Layout.suggestedPromptSpacing) {
             ForEach(Array(viewModel.suggestedPrompts.enumerated()), id: \.element) { index, prompt in
                 Button {
                     Task { await viewModel.sendSuggestedPrompt(prompt) }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Layout.suggestedPromptSpacing) {
                         Image(systemName: "paperplane")
                             .font(.caption)
                             .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -697,15 +762,15 @@ struct ConversationTranscriptView: View {
                             .foregroundStyle(Theme.foreground(for: colorScheme))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                    .background(Theme.muted(for: colorScheme).opacity(0.4))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .padding(.horizontal, Layout.suggestedPromptHorizontalPadding)
+                    .padding(.vertical, Layout.suggestedPromptVerticalPadding)
+                    .background(Theme.muted(for: colorScheme).opacity(Layout.suggestedPromptBackgroundOpacity))
+                    .clipShape(RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: Layout.suggestedPromptCornerRadius)
                             .strokeBorder(
-                                Theme.border(for: colorScheme).opacity(0.3),
-                                lineWidth: 1
+                                Theme.border(for: colorScheme).opacity(Layout.suggestedPromptBorderOpacity),
+                                lineWidth: Layout.suggestedPromptBorderWidth
                             )
                     )
                 }
@@ -717,7 +782,7 @@ struct ConversationTranscriptView: View {
     #endif
 
     private var truncationBanner: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Layout.truncationBannerSpacing) {
             Image(systemName: "info.circle")
                 .font(.footnote)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
@@ -726,11 +791,11 @@ struct ConversationTranscriptView: View {
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
                 .multilineTextAlignment(.center)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Layout.truncationBannerHorizontalPadding)
+        .padding(.vertical, Layout.truncationBannerVerticalPadding)
         .frame(maxWidth: .infinity)
-        .background(Theme.muted(for: colorScheme).opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Theme.muted(for: colorScheme).opacity(Layout.truncationBannerBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.truncationBannerCornerRadius))
     }
 
     /// Runs exactly once per transcript lifetime from whichever loading trigger
@@ -797,7 +862,7 @@ struct ConversationTranscriptView: View {
     /// landing is verified from the live geometry like any other.
     private func performInitialScroll(proxy: ScrollViewProxy) {
         guard viewModel.newMessagesDividerAnchorId != nil else {
-            scrollToBottom(proxy: proxy, animated: false, forced: true)
+            scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
         }
         proxy.scrollTo("new-messages-divider", anchor: .top)
@@ -830,9 +895,13 @@ struct ConversationTranscriptView: View {
     /// Waiting for the task to come due is not enough: the gesture's final
     /// away edge can be dropped and its ending delivered first, and the
     /// check would then read idle and pinned and scroll the user back.
-    private func takeOverPendingFollowIfGesture(isInteracting: Bool? = nil) {
+    private func takeOverPendingFollowIfGesture() {
+        takeOverPendingFollowIfGesture(isInteracting: isUserInteracting)
+    }
+
+    private func takeOverPendingFollowIfGesture(isInteracting: Bool) {
         guard ConversationTranscriptScrollPolicy.gestureTakesOverPendingFollow(
-            isInteracting: isInteracting ?? isUserInteracting,
+            isInteracting: isInteracting,
             isFollowing: isFollowing
         ) else { return }
         cancelPendingFollowOnTakeover()
@@ -850,7 +919,7 @@ struct ConversationTranscriptView: View {
     /// End tapped afterwards is a fresh request.
     private func cancelPendingFollowOnTakeover() {
         if scrollState.pendingFollowIsForced {
-            AppLog.ui.debug("[SCROLL] Forced follow cancelled: the user took over")
+            AppLog.userInterface.debug("[SCROLL] Forced follow cancelled: the user took over")
             scrollState.forcedFollowTakenOverByGesture = true
         }
         scrollDebounceTask?.cancel()
@@ -874,6 +943,7 @@ struct ConversationTranscriptView: View {
         cancelUnrealizedEndRecovery()
     }
 
+    // swiftlint:disable function_body_length
     /// Stamps the request time up front so deltas arriving inside the debounce
     /// window are rejected by the policy instead of restarting the debounce.
     /// Forced follows are never preempted by automatic ones; a user gesture
@@ -894,15 +964,15 @@ struct ConversationTranscriptView: View {
     /// this follow is resolved first (see
     /// `resolveDeferredUnrealizedEndGiveUp`): dropped or yielded over an
     /// unrealized end row, the follow shows Go to End and replays no edge.
-    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool = true, forced: Bool) {
+    private func scrollToBottom(proxy: ScrollViewProxy, forced: Bool, animated: Bool = true) {
         if forced, !ConversationTranscriptScrollPolicy.shouldHonorForcedFollow(
             takenOverByGesture: scrollState.forcedFollowTakenOverByGesture
         ) {
-            AppLog.ui.debug("[SCROLL] Forced follow refused: a gesture took over the last one")
+            AppLog.userInterface.debug("[SCROLL] Forced follow refused: a gesture took over the last one")
             return
         }
         scrollState.lastFollowToBottomAt = ProcessInfo.processInfo.systemUptime
-        if !forced && scrollState.pendingFollowIsForced { return }
+        if !forced, scrollState.pendingFollowIsForced { return }
         scrollDebounceTask?.cancel()
         scrollState.pendingFollowIsForced = forced
         if forced {
@@ -910,6 +980,7 @@ struct ConversationTranscriptView: View {
             scrollState.lastForcedFollowOutcome = nil
             scrollState.lastForcedFollowCorrections = 0
         }
+        // swiftlint:disable:next closure_body_length
         scrollDebounceTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(Constants.Conversation.Transcript.scrollDebounceMilliseconds))
             guard !Task.isCancelled else { return }
@@ -928,7 +999,7 @@ struct ConversationTranscriptView: View {
                 }
                 guard !Task.isCancelled else { return }
             } else if forced {
-                AppLog.ui.debug("[SCROLL] Forced follow yielded to the user's gesture")
+                AppLog.userInterface.debug("[SCROLL] Forced follow yielded to the user's gesture")
                 scrollState.lastForcedFollowOutcome = .yieldToUser
                 applyLiveScrolledAwayEdge(isInteracting: true, proxy: proxy)
             }
@@ -947,6 +1018,7 @@ struct ConversationTranscriptView: View {
             }
         }
     }
+    // swiftlint:enable function_body_length
 
     private func issueScrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
         if animated {
@@ -985,9 +1057,9 @@ struct ConversationTranscriptView: View {
                 geometry: geometry,
                 previous: previous,
                 isInteracting: isUserInteracting,
-                userIsScrolledAway: userIsScrolledAway,
                 correctionsLeft: correctionsLeft,
-                timedOut: ContinuousClock.now >= deadline
+                timedOut: ContinuousClock.now >= deadline,
+                userIsScrolledAway: userIsScrolledAway
             )
             previous = geometry
             switch step {
@@ -996,7 +1068,7 @@ struct ConversationTranscriptView: View {
             case .scrollAgain:
                 correctionsLeft -= 1
                 scrollState.lastForcedFollowCorrections += 1
-                AppLog.ui.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
+                AppLog.userInterface.debug("[SCROLL] Forced follow landed short of the bottom, scrolling again")
                 issueScrollToBottom(proxy: proxy, animated: animated)
                 previous = nil
                 if animated {
@@ -1006,7 +1078,7 @@ struct ConversationTranscriptView: View {
             case .clampPastEnd:
                 correctionsLeft -= 1
                 scrollState.lastForcedFollowCorrections += 1
-                AppLog.ui.debug("[SCROLL] Forced follow landed past the end, clamping")
+                AppLog.userInterface.debug("[SCROLL] Forced follow landed past the end, clamping")
                 _ = scrollMomentumProxy.rePinIfRestingPastEnd(confirming: geometry)
                 previous = nil
             case .yieldToUser:

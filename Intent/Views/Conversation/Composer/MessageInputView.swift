@@ -34,142 +34,8 @@ struct MessageInputView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            #if os(visionOS)
-            // Suggested prompts as large gaze-targetable chips above the field
-            if !viewModel.suggestedPrompts.isEmpty && !store.isStreaming {
-                suggestedPromptChipsRow
-            }
-
-            // Inline hint when dictation is unavailable (permissions denied,
-            // recognizer unavailable) — no alert, just guidance.
-            if let hint = dictation.unavailabilityHint {
-                dictationHintRow(hint)
-            }
-            #endif
-
-            // Pending image thumbnails
-            if !viewModel.pendingImages.isEmpty {
-                pendingImagesRow
-            }
-
-            // Pending file chips
-            if !viewModel.pendingFiles.isEmpty {
-                pendingFilesRow
-            }
-
-            // Input row
-            HStack(alignment: .center, spacing: 8) {
-                // Left button: photo picker or stop button
-                if store.isStreaming {
-                    // Stop button replaces photo picker during streaming
-                    Button {
-                        HapticManager.impact(.light)
-                        Task { await viewModel.stopStreaming() }
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(Theme.destructive(for: colorScheme))
-                            .frame(
-                                minWidth: Constants.Conversation.Composer.controlTarget,
-                                minHeight: Constants.Conversation.Composer.controlTarget)
-                    }
-                    .accessibilityLabel("Stop response")
-                } else {
-                    // Attach menu: photos or arbitrary files (only when not streaming)
-                    Menu {
-                        Button {
-                            isPhotoPickerPresented = true
-                        } label: {
-                            Label("Photos", systemImage: "photo.on.rectangle")
-                        }
-                        Button {
-                            isFilePickerPresented = true
-                        } label: {
-                            Label("Files", systemImage: "folder")
-                        }
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .frame(
-                                minWidth: Constants.Conversation.Composer.controlTarget,
-                                minHeight: Constants.Conversation.Composer.controlTarget)
-                    }
-                    .accessibilityLabel("Add attachment")
-                }
-
-                // Text editor — bound to localText to avoid lag during streaming
-                // Uses SubmittableTextView so hardware Enter sends, Shift+Enter inserts newline
-                ZStack(alignment: placeholderAlignment) {
-                    SubmittableTextView(
-                        text: $localText,
-                        isFocused: $isFocused,
-                        onSubmit: { sendCurrentMessage() },
-                        onHeightChange: { newHeight in
-                            textViewHeight = min(
-                                max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
-                                Constants.Conversation.Composer.maximumTextViewHeight)
-                        },
-                        onCaretChange: { offset in
-                            #if os(visionOS)
-                            caretOffset = offset
-                            #else
-                            _ = offset
-                            #endif
-                        }
-                    )
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
-                    .frame(height: textViewHeight)
-
-                    // Placeholder (UITextView has no built-in placeholder)
-                    if localText.isEmpty {
-                        Text("Message...")
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .font(.body)
-                            .padding(.horizontal, 17)
-                            .padding(.vertical, 8)
-                            .allowsHitTesting(false)
-                    }
-                }
-                .background(Theme.muted(for: colorScheme).opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
-
-                #if os(visionOS)
-                dictationButton
-                #endif
-
-                // Send button (right side)
-                VStack(spacing: 4) {
-                    // Send stays disabled while a send is already placing
-                    // files (pendingFiles clears only after success, so a
-                    // second tap would re-upload them).
-                    let hasContent = (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        || viewModel.hasPendingAttachments)
-                        && !viewModel.isUploadingFiles
-
-                    if !store.isStreaming || hasContent {
-                        Button {
-                            sendCurrentMessage()
-                        } label: {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(
-                                    hasContent
-                                        ? Theme.primary(for: colorScheme)
-                                        : Theme.mutedForeground(for: colorScheme)
-                                )
-                                .frame(
-                                    minWidth: Constants.Conversation.Composer.controlTarget,
-                                    minHeight: Constants.Conversation.Composer.controlTarget)
-                        }
-                        .disabled(!hasContent)
-                        .accessibilityLabel("Send message")
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            supplementalRows
+            inputRow
         }
         .background(Theme.card(for: colorScheme))
         .photosPicker(
@@ -214,6 +80,154 @@ struct MessageInputView: View {
         }
         #endif
     }
+}
+
+private extension MessageInputView {
+    @ViewBuilder
+    var supplementalRows: some View {
+        #if os(visionOS)
+        if !viewModel.suggestedPrompts.isEmpty, !store.isStreaming {
+            suggestedPromptChipsRow
+        }
+        if let hint = dictation.unavailabilityHint {
+            dictationHintRow(hint)
+        }
+        #endif
+        if !viewModel.pendingImages.isEmpty {
+            pendingImagesRow
+        }
+        if !viewModel.pendingFiles.isEmpty {
+            pendingFilesRow
+        }
+    }
+
+    var inputRow: some View {
+        HStack(alignment: .center, spacing: Constants.Conversation.Composer.inputRowSpacing) {
+            leadingControl
+            textEditor
+            #if os(visionOS)
+            dictationButton
+            #endif
+            sendButtonStack
+        }
+        .padding(.horizontal, Constants.Conversation.Composer.inputRowHorizontalPadding)
+        .padding(.vertical, Constants.Conversation.Composer.inputRowVerticalPadding)
+    }
+
+    @ViewBuilder
+    var leadingControl: some View {
+        if store.isStreaming {
+            stopButton
+        } else {
+            attachmentMenu
+        }
+    }
+
+    var stopButton: some View {
+        Button {
+            HapticManager.impact(.light)
+            Task { await viewModel.stopStreaming() }
+        } label: {
+            Image(systemName: "stop.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Theme.destructive(for: colorScheme))
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget
+                )
+        }
+        .accessibilityLabel("Stop response")
+    }
+
+    var attachmentMenu: some View {
+        Menu {
+            Button {
+                isPhotoPickerPresented = true
+            } label: {
+                Label("Photos", systemImage: "photo.on.rectangle")
+            }
+            Button {
+                isFilePickerPresented = true
+            } label: {
+                Label("Files", systemImage: "folder")
+            }
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .frame(
+                    minWidth: Constants.Conversation.Composer.controlTarget,
+                    minHeight: Constants.Conversation.Composer.controlTarget
+                )
+        }
+        .accessibilityLabel("Add attachment")
+    }
+
+    var textEditor: some View {
+        ZStack(alignment: placeholderAlignment) {
+            SubmittableTextView(
+                text: $localText,
+                isFocused: $isFocused,
+                onSubmit: { sendCurrentMessage() },
+                onHeightChange: { newHeight in
+                    textViewHeight = min(
+                        max(newHeight, Constants.Conversation.Composer.minimumTextViewHeight),
+                        Constants.Conversation.Composer.maximumTextViewHeight
+                    )
+                },
+                onCaretChange: { offset in
+                    #if os(visionOS)
+                    caretOffset = offset
+                    #else
+                    _ = offset
+                    #endif
+                }
+            )
+            .padding(.horizontal, Constants.Conversation.Composer.textEditorHorizontalPadding)
+            .padding(.vertical, Constants.Conversation.Composer.fieldVerticalPadding)
+            .frame(height: textViewHeight)
+            if localText.isEmpty {
+                Text("Message...")
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .font(.body)
+                    .padding(.horizontal, Constants.Conversation.Composer.placeholderHorizontalPadding)
+                    .padding(.vertical, Constants.Conversation.Composer.placeholderVerticalPadding)
+                    .allowsHitTesting(false)
+            }
+        }
+        .background(Theme.muted(for: colorScheme).opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.Composer.fieldCornerRadius))
+    }
+
+    var hasSendableContent: Bool {
+        (!localText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || viewModel.hasPendingAttachments)
+            && !viewModel.isUploadingFiles
+    }
+
+    var sendButtonStack: some View {
+        VStack(spacing: Constants.Conversation.Composer.sendButtonStackSpacing) {
+            if !store.isStreaming || hasSendableContent {
+                Button {
+                    sendCurrentMessage()
+                } label: {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(
+                            hasSendableContent
+                                ? Theme.primary(for: colorScheme)
+                                : Theme.mutedForeground(for: colorScheme)
+                        )
+                        .frame(
+                            minWidth: Constants.Conversation.Composer.controlTarget,
+                            minHeight: Constants.Conversation.Composer.controlTarget
+                        )
+                }
+                .disabled(!hasSendableContent)
+                .accessibilityLabel("Send message")
+            }
+        }
+    }
 
     /// visionOS centers the placeholder vertically in the 60 pt field;
     /// iOS keeps the original top-leading placement.
@@ -224,113 +238,9 @@ struct MessageInputView: View {
         return .topLeading
         #endif
     }
+}
 
-    // MARK: - Pending images
-
-    @ViewBuilder
-    private var pendingImagesRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(Array(viewModel.pendingImages.enumerated()), id: \.offset) { index, image in
-                    ZStack(alignment: .topTrailing) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(
-                                width: Constants.Conversation.Composer.pendingImageSide,
-                                height: Constants.Conversation.Composer.pendingImageSide)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                        Button {
-                            viewModel.removeImage(at: index)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                                .background(Circle().fill(.black.opacity(0.5)))
-                                .frame(
-                                    minWidth: Constants.Conversation.Composer.controlTarget,
-                                    minHeight: Constants.Conversation.Composer.controlTarget,
-                                    alignment: .topTrailing)
-                                .contentShape(Rectangle())
-                        }
-                        .offset(x: 4, y: -4)
-                        .accessibilityLabel("Remove image \(index + 1)")
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-        }
-        .scrollIndicators(.hidden)
-    }
-
-    // MARK: - Pending files
-
-    @ViewBuilder
-    private var pendingFilesRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 8) {
-                ForEach(Array(viewModel.pendingFiles.enumerated()), id: \.element.id) { index, file in
-                    HStack(spacing: 6) {
-                        // Upload in flight (send-time placement): spinner
-                        // replaces the doc icon; chunked (> 25 MB) uploads
-                        // show fractional progress under the name.
-                        if let progress = viewModel.fileUploadProgress[file.id] {
-                            ProgressView()
-                                .controlSize(.small)
-
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(file.displayName)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                Text(progress > 0 && progress < 1
-                                     ? "Uploading… \(Int(progress * 100))%"
-                                     : "Uploading…")
-                                    .font(.caption2)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            }
-                        } else {
-                            Image(systemName: "doc.fill")
-                                .font(.caption)
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(file.displayName)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                if let formattedSize = file.formattedSize {
-                                    Text(formattedSize)
-                                        .font(.caption2)
-                                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                }
-                            }
-
-                            Button {
-                                viewModel.removePendingFile(at: index)
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                                    .contentShape(Rectangle().inset(
-                                        by: -Constants.Conversation.Composer.controlTarget / 2))
-                            }
-                            .accessibilityLabel("Remove \(file.displayName)")
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: Constants.Conversation.Composer.pendingFileMaximumWidth)
-                    .background(Theme.muted(for: colorScheme).opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-        }
-        .scrollIndicators(.hidden)
-    }
-
+private extension MessageInputView {
     #if os(visionOS)
     // MARK: - visionOS dictation & suggested prompts
 
@@ -350,7 +260,8 @@ struct MessageInputView: View {
                 )
                 .frame(
                     minWidth: Constants.Conversation.Composer.controlTarget,
-                    minHeight: Constants.Conversation.Composer.controlTarget)
+                    minHeight: Constants.Conversation.Composer.controlTarget
+                )
         }
         .accessibilityLabel(dictation.isActive ? "Stop dictation" : "Dictate")
     }
@@ -395,16 +306,17 @@ struct MessageInputView: View {
     }
 
     private func dictationHintRow(_ hint: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Constants.Conversation.Composer.dictationHintSpacing) {
             Image(systemName: "mic.slash")
                 .font(.caption)
+                .accessibilityHidden(true)
             Text(hint)
                 .font(.caption)
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.horizontal, Constants.Conversation.Composer.dictationHintHorizontalPadding)
+        .padding(.top, Constants.Conversation.Composer.dictationHintTopPadding)
     }
 
     /// Suggested prompts as large chips directly above the field, sized for
@@ -418,18 +330,19 @@ struct MessageInputView: View {
                     Button {
                         Task { await viewModel.sendSuggestedPrompt(prompt) }
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: Constants.Conversation.Composer.suggestedPromptContentSpacing) {
                             Image(systemName: "paperplane")
                                 .font(.callout)
                                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                                .accessibilityHidden(true)
                             Text(prompt)
                                 .font(.body)
                                 .lineLimit(2)
                                 .foregroundStyle(Theme.foreground(for: colorScheme))
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptHorizontalPadding)
                         .frame(minHeight: Constants.Conversation.Composer.suggestedPromptChipMinimumHeight)
-                        .background(Theme.muted(for: colorScheme).opacity(0.4))
+                        .background(Theme.muted(for: colorScheme).opacity(Constants.Conversation.Composer.suggestedPromptBackgroundOpacity))
                         .clipShape(Capsule())
                         .contentShape(.hoverEffect, Capsule())
                         .hoverEffect(.highlight)
@@ -437,13 +350,15 @@ struct MessageInputView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
+            .padding(.horizontal, Constants.Conversation.Composer.suggestedPromptsHorizontalPadding)
+            .padding(.top, Constants.Conversation.Composer.suggestedPromptsTopPadding)
         }
         .scrollIndicators(.hidden)
     }
     #endif
+}
 
+private extension MessageInputView {
     // MARK: - Actions
 
     private func sendCurrentMessage() {
@@ -487,4 +402,3 @@ struct MessageInputView: View {
         }
     }
 }
-

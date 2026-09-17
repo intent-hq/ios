@@ -1,11 +1,15 @@
 import CoreGraphics
 import Foundation
 
+// #350's recovery policy remains adjacent to the existing landing policy so
+// the two bounded state machines can be reviewed together.
+// swiftlint:disable file_length type_body_length
+
 enum ConversationTranscriptScrollPolicy {
     enum InitialScrollStep: Equatable {
         case perform
-        case waitForScrollView
         case skip
+        case waitForScrollView
     }
 
     /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
@@ -76,10 +80,10 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum RePinDecision: Equatable {
-        /// The viewport rests within the content.
-        case none
         /// Past the end but still dragging or decelerating; check again later.
         case deferred
+        /// The viewport rests within the content.
+        case none
         case rePin(offsetY: CGFloat)
     }
 
@@ -109,10 +113,10 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum ContainerRePinDecision: Equatable {
-        /// The container is unchanged or the viewport is not following.
-        case none
         /// Following, but under the finger or decelerating; re-check on settle.
         case deferred
+        /// The container is unchanged or the viewport is not following.
+        case none
         case rePin
     }
 
@@ -390,19 +394,19 @@ enum ConversationTranscriptScrollPolicy {
     }
 
     enum FollowLandingStep: Equatable {
-        /// No scroll view yet, or the geometry moved since the last poll.
-        case settling
+        /// At rest past the end of the content: clamp the offset back.
+        case clampPastEnd
+        /// Timed out, or the bounded corrections are spent: leave the pin.
+        case giveUp
         /// At rest within `landingTolerance` of the bottom.
         case landed
         /// At rest short of the bottom, even inside the at-bottom band:
         /// issue the scroll again.
         case scrollAgain
-        /// At rest past the end of the content: clamp the offset back.
-        case clampPastEnd
+        /// No scroll view yet, or the geometry moved since the last poll.
+        case settling
         /// The user took over the scroll view; the gesture rule owns the flag.
         case yieldToUser
-        /// Timed out, or the bounded corrections are spent: leave the pin.
-        case giveUp
     }
 
     /// A forced follow (entry, a new user message, the thinking indicator,
@@ -435,9 +439,9 @@ enum ConversationTranscriptScrollPolicy {
         geometry: ViewportGeometry?,
         previous: ViewportGeometry?,
         isInteracting: Bool,
-        userIsScrolledAway: Bool = false,
         correctionsLeft: Int,
         timedOut: Bool,
+        userIsScrolledAway: Bool = false,
         atBottomThreshold: CGFloat = Constants.Conversation.Transcript.atBottomThreshold,
         landingTolerance: CGFloat = Constants.Conversation.Transcript.followLandingTolerance
     ) -> FollowLandingStep {
@@ -460,6 +464,8 @@ enum ConversationTranscriptScrollPolicy {
         return .landed
     }
 
+    // Outcome order follows the recovery state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
     enum UnrealizedEndRecoveryStep: Equatable {
         /// The end row is realized, the viewport is not following, or the
         /// content is shorter than the container.
@@ -481,7 +487,9 @@ enum ConversationTranscriptScrollPolicy {
         /// the viewport while a correction had it paged up: it is theirs.
         case yieldToUser
     }
+    // swiftlint:enable sorted_enum_cases
 
+    // swiftlint:disable function_parameter_count function_default_parameter_at_end
     /// Every re-pin judges the viewport by geometry alone, and the geometry
     /// can read at the bottom over a blank viewport (#338): a footer row
     /// shrinking the container right after the entry follow landed, on a
@@ -546,6 +554,7 @@ enum ConversationTranscriptScrollPolicy {
         }
         return .recover(pageOffsetY: max(-geometry.topInset, geometry.contentOffsetY - geometry.containerHeight))
     }
+    // swiftlint:enable function_parameter_count function_default_parameter_at_end
 
     /// A correction that paged the viewport up follows back to the end only
     /// if nothing claimed the viewport while the rows realized: a gesture
@@ -561,6 +570,8 @@ enum ConversationTranscriptScrollPolicy {
         !isInteracting && !userIsScrolledAway && !isFollowing
     }
 
+    // Drain order follows the recovery state machine rather than spelling.
+    // swiftlint:disable sorted_enum_cases
     enum UnrealizedEndRecoveryDrain: Equatable {
         /// Replay the live geometry edge with the follow flag released: the
         /// end row is realized (or the viewport is a gesture's or a follow's),
@@ -574,6 +585,7 @@ enum ConversationTranscriptScrollPolicy {
         /// live edge is replayed meanwhile.
         case deferToFollow
     }
+    // swiftlint:enable sorted_enum_cases
 
     /// How the recovery drains. Its follow flag suppressed the growth re-pin
     /// while a correction landed, so the drain replays the live edge — the
@@ -678,3 +690,4 @@ enum ConversationTranscriptScrollPolicy {
         return "endRecovery=\(name) corrections=\(corrections)"
     }
 }
+// swiftlint:enable file_length type_body_length

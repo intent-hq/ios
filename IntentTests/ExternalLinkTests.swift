@@ -1,21 +1,20 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Backend-supplied strings opened via `openURL` (context-mention chips,
 /// PR-monitor chips) must go through the shared `ExternalLink` http/https
 /// allowlist rather than a bare `URL(string:)` (ios#262).
 struct ExternalLinkTests {
-
     private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()  // IntentTests/
-        .deletingLastPathComponent()  // repo root
+        .deletingLastPathComponent() // IntentTests/
+        .deletingLastPathComponent() // repo root
 
     /// Every view that hands a daemon-supplied string to `openURL`.
     private static let externalLinkCallSites = [
         "Intent/Views/Conversation/Content/ContextMentionChipView.swift",
         "Intent/Views/Conversation/Notices/PrMonitorWakeAttributionView.swift",
-        "Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift",
+        "Intent/Views/Conversation/StatusStrip/MonitoredPrsRow.swift"
     ]
 
     // MARK: - Accepted: absolute http/https with a host
@@ -25,7 +24,7 @@ struct ExternalLinkTests {
         "http://example.com",
         "HTTPS://Example.com/Path?q=1#frag",
         "https://linear.app/i/AU-123",
-        "  https://example.com/padded  \n",
+        "  https://example.com/padded  \n"
     ])
     func acceptsAbsoluteHttpAndHttps(_ string: String) {
         let url = ExternalLink.url(from: string)
@@ -52,7 +51,7 @@ struct ExternalLinkTests {
         "ftp://example.com/file",
         "intent://local/note/spec",
         "myapp://open?token=abc",
-        "x-apple.systempreferences:com.apple.preference",
+        "x-apple.systempreferences:com.apple.preference"
     ])
     func rejectsNonHttpSchemes(_ string: String) {
         #expect(ExternalLink.url(from: string) == nil, "expected \(string.debugDescription) to be rejected")
@@ -69,7 +68,7 @@ struct ExternalLinkTests {
         "https:///path-without-host",
         "http:example.com",
         "https:/example.com",
-        "://example.com",
+        "://example.com"
     ])
     func rejectsSchemelessHostlessAndMalformedStrings(_ string: String) {
         #expect(ExternalLink.url(from: string) == nil, "expected \(string.debugDescription) to be rejected")
@@ -87,10 +86,12 @@ struct ExternalLinkTests {
             let contents = try String(contentsOf: url, encoding: .utf8)
             #expect(
                 contents.range(of: #"URL\s*\(\s*string\s*:"#, options: .regularExpression) == nil,
-                "\(relativePath) builds a URL from a backend string without the allowlist")
+                "\(relativePath) builds a URL from a backend string without the allowlist"
+            )
             #expect(
                 contents.contains("ExternalLink.url("),
-                "\(relativePath) does not route its openURL argument through ExternalLink")
+                "\(relativePath) does not route its openURL argument through ExternalLink"
+            )
         }
     }
 }

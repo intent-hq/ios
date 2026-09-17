@@ -6,10 +6,10 @@ import SwiftUI
 /// host:port), saves it (upsert), and marks it active.
 enum ConnectionPairing {
     enum PersistenceError: LocalizedError {
-        case saveFailed
         /// The existing saved-connections data could not be read, so the new
         /// pairing was not written over it (intent-hq/ios#265).
         case registryUndecodable
+        case saveFailed
 
         var errorDescription: String? {
             switch self {
@@ -44,7 +44,9 @@ enum ConnectionPairing {
     /// over, so a pinned session names and refreshes its own backend.
     @discardableResult
     static func finalize(
-        server: PairedServer, token: String, connection: any SessionConnectionManaging,
+        server: PairedServer,
+        token: String,
+        connection: any SessionConnectionManaging,
         persistence: PersistenceManager = .shared
     ) async throws -> StoredConnection {
         var displayName: String?
@@ -53,8 +55,12 @@ enum ConnectionPairing {
         }
         let outcome = persistence.upsertConnectionWithOutcome(
             StoredConnection(
-                server: server, token: token,
-                displayName: displayName, lastConnectedAt: Date()))
+                server: server,
+                token: token,
+                displayName: displayName,
+                lastConnectedAt: Date()
+            )
+        )
         guard !outcome.registryUndecodable else { throw PersistenceError.registryUndecodable }
         guard outcome.persisted else { throw PersistenceError.saveFailed }
         let stored = outcome.connection
@@ -83,36 +89,11 @@ struct ConnectionsView: View {
     @State private var showDeleteError = false
 
     var body: some View {
-        NavigationStack {
-            List {
-                if !connections.isEmpty {
-                    Section("Saved Connections") {
-                        ForEach(connections) { connection in
-                            connectionRow(connection)
-                        }
-                    }
-                }
+        NavigationStack { navigationContent }
+    }
 
-                Section("Pair New") {
-                    // Same platform-filtered options as PairingView: QR scanning
-                    // is excluded on visionOS, which exposes no camera.
-                    let options = PairingOption.available(showsSavedConnections: false)
-                    if options.contains(.qrScan) {
-                        Button {
-                            showQRScanner = true
-                        } label: {
-                            Label("Scan QR Code", systemImage: "camera.fill")
-                        }
-                    }
-                    if options.contains(.manualEntry) {
-                        Button {
-                            showManualEntry = true
-                        } label: {
-                            Label("Manual Connection", systemImage: "keyboard")
-                        }
-                    }
-                }
-            }
+    private var navigationContent: some View {
+        connectionsList
             .navigationTitle("Connect to…")
             .toolbarTitleDisplayMode(.inline)
             .toolbar {
@@ -130,7 +111,8 @@ struct ConnectionsView: View {
                 "Delete Connection?",
                 isPresented: Binding(
                     get: { connectionPendingDelete != nil },
-                    set: { if !$0 { connectionPendingDelete = nil } }),
+                    set: { if !$0 { connectionPendingDelete = nil } }
+                ),
                 presenting: connectionPendingDelete
             ) { connection in
                 Button("Cancel", role: .cancel) {}
@@ -151,6 +133,28 @@ struct ConnectionsView: View {
                 coordinator.refreshSyncedBackends()
                 reload()
             }
+    }
+
+    private var connectionsList: some View {
+        List {
+            if !connections.isEmpty {
+                Section("Saved Connections") {
+                    ForEach(connections) { connectionRow($0) }
+                }
+            }
+            Section("Pair New") {
+                let options = PairingOption.available(showsSavedConnections: false)
+                if options.contains(.qrScan) {
+                    Button { showQRScanner = true } label: {
+                        Label("Scan QR Code", systemImage: "camera.fill")
+                    }
+                }
+                if options.contains(.manualEntry) {
+                    Button { showManualEntry = true } label: {
+                        Label("Manual Connection", systemImage: "keyboard")
+                    }
+                }
+            }
         }
     }
 
@@ -168,46 +172,7 @@ struct ConnectionsView: View {
             }
             dismiss()
         } label: {
-            HStack(spacing: Constants.Connections.rowSpacing) {
-                Image(systemName: "desktopcomputer")
-                    .font(.title3)
-                    .foregroundStyle(Theme.primary(for: colorScheme))
-
-                VStack(alignment: .leading, spacing: Constants.Connections.rowTextSpacing) {
-                    Text(connection.displayName)
-                        .font(.body.weight(.medium))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    if let tcAddress = connection.server.tcAddress {
-                        Label(TcAddressDisplay.truncated(tcAddress), systemImage: "point.3.connected.trianglepath.dotted")
-                            .font(.caption2)
-                            .lineLimit(1)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            .accessibilityLabel(tcAddress)
-                    }
-                    if let lastConnected = connection.lastConnectedAt {
-                        Text("Last connected \(lastConnected.formatted(.relative(presentation: .named)))")
-                            .font(.caption2)
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                    }
-                }
-
-                Spacer()
-
-                if connection.id == windowConnectionId {
-                    HStack(spacing: Constants.Connections.statusSpacing) {
-                        Circle()
-                            .fill(.green)
-                            .frame(width: Constants.Connections.statusDotSize,
-                                   height: Constants.Connections.statusDotSize)
-                        Text("Connected")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
+            connectionRowLabel(connection)
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // Not role: .destructive — the row must stay until the deletion is confirmed.
@@ -224,6 +189,51 @@ struct ConnectionsView: View {
             if supportsMultipleWindows {
                 openInNewWindowButton(connection)
             }
+        }
+    }
+
+    private func connectionRowLabel(_ connection: StoredConnection) -> some View {
+        HStack(spacing: Constants.Connections.rowSpacing) {
+            Image(systemName: "desktopcomputer")
+                .font(.title3)
+                .foregroundStyle(Theme.primary(for: colorScheme))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: Constants.Connections.rowTextSpacing) {
+                Text(connection.displayName)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(Theme.foreground(for: colorScheme))
+                Text(verbatim: "\(connection.server.hosts.joined(separator: ", ")):\(connection.server.port)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                if let tcAddress = connection.server.tcAddress {
+                    Label(TcAddressDisplay.truncated(tcAddress), systemImage: "point.3.connected.trianglepath.dotted")
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                        .accessibilityLabel(tcAddress)
+                }
+                if let lastConnected = connection.lastConnectedAt {
+                    Text("Last connected \(lastConnected.formatted(.relative(presentation: .named)))")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+            }
+            Spacer()
+            if connection.id == windowConnectionId { connectedStatus }
+        }
+    }
+
+    private var connectedStatus: some View {
+        HStack(spacing: Constants.Connections.statusSpacing) {
+            Circle()
+                .fill(.green)
+                .frame(
+                    width: Constants.Connections.statusDotSize,
+                    height: Constants.Connections.statusDotSize
+                )
+            Text("Connected")
+                .font(.caption)
+                .foregroundStyle(.primary)
         }
     }
 

@@ -4,6 +4,7 @@ import UserNotifications
 @MainActor
 protocol LocalNotificationCenter: AnyObject {
     var delegate: (any UNUserNotificationCenterDelegate)? { get set }
+
     func getAuthorizationStatus(
         completionHandler: @escaping @MainActor @Sendable (UNAuthorizationStatus) -> Void
     )
@@ -102,12 +103,14 @@ final class LocalNotificationService: NSObject {
             "agentId": agentId,
             "workspaceId": workspaceId,
             "agentName": agentName,
-            "connectionId": connectionId.uuidString,
+            "connectionId": connectionId.uuidString
         ]
 
         let request = UNNotificationRequest(
             identifier: Self.notificationIdentifier(
-                forAgentId: agentId, connectionId: connectionId),
+                forAgentId: agentId,
+                connectionId: connectionId
+            ),
             content: content,
             trigger: nil
         )
@@ -116,8 +119,13 @@ final class LocalNotificationService: NSObject {
 
     func removeDeliveredNotifications(forAgentId agentId: String, connectionId: UUID) {
         center.removeDeliveredNotifications(
-            withIdentifiers: [Self.notificationIdentifier(
-                forAgentId: agentId, connectionId: connectionId)])
+            withIdentifiers: [
+                Self.notificationIdentifier(
+                    forAgentId: agentId,
+                    connectionId: connectionId
+                )
+            ]
+        )
     }
 
     nonisolated static func notificationIdentifier(
@@ -161,15 +169,14 @@ final class LocalNotificationService: NSObject {
     }
 
     nonisolated static func presentationOptionsForForegroundNotification()
-        -> UNNotificationPresentationOptions
-    {
+        -> UNNotificationPresentationOptions {
         []
     }
 }
 
 extension LocalNotificationService: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
+        _: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler:
             @escaping @Sendable (UNNotificationPresentationOptions) -> Void
@@ -179,11 +186,13 @@ extension LocalNotificationService: UNUserNotificationCenterDelegate {
             userInfo: notification.request.content.userInfo
         )
         deliverForegroundNotification(
-            forwardedResponse, completionHandler: completionHandler)
+            forwardedResponse,
+            completionHandler: completionHandler
+        )
     }
 
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
+        _: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
@@ -193,6 +202,8 @@ extension LocalNotificationService: UNUserNotificationCenterDelegate {
             userInfo: userInfo
         )
         deliverNotificationResponse(
-            forwardedResponse, completionHandler: completionHandler)
+            forwardedResponse,
+            completionHandler: completionHandler
+        )
     }
 }

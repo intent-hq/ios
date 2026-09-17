@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct RepoOwnerAvatarViewTests {
     @Test func avatarURLForOwner() {

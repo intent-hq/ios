@@ -8,6 +8,8 @@ import Foundation
 /// metadata returns nil so the message renders exactly as before (FE parity:
 /// `EventWakeupBanner.svelte`).
 struct EventWakeAttribution: Equatable {
+    private static let summaryEventCountThreshold = 5
+
     /// One structured event from the wake's `events` payload.
     struct Event: Equatable {
         let type: String
@@ -27,11 +29,14 @@ struct EventWakeAttribution: Equatable {
 
     /// Extracts event-wake attribution from an opaque metadata dictionary.
     /// Returns nil unless `metadata.type == "event_notification"`.
-    static func from(_ metadata: [String: AnyCodable]?) -> EventWakeAttribution? {
-        guard let metadata, metadata["type"]?.stringValue == "event_notification" else { return nil }
-        let eventTypes = (metadata["eventTypes"]?.arrayValue ?? [])
-            .compactMap { $0 as? String }
-        let events: [Event] = (metadata["events"]?.arrayValue ?? []).compactMap { raw in
+    static func from(_ metadata: [String: AnyCodable]) -> Self? {
+        guard metadata["type"]?.stringValue == "event_notification" else { return nil }
+        let rawEventTypes: [Any]
+        if case let .value(values) = metadata["eventTypes"]?.arrayValue { rawEventTypes = values } else { rawEventTypes = [] }
+        let eventTypes = rawEventTypes.compactMap { $0 as? String }
+        let rawEvents: [Any]
+        if case let .value(values) = metadata["events"]?.arrayValue { rawEvents = values } else { rawEvents = [] }
+        let events: [Event] = rawEvents.compactMap { raw in
             guard let dict = raw as? [String: Any],
                   let type = dict["type"] as? String else { return nil }
             let data = dict["data"] as? [String: Any] ?? [:]
@@ -39,17 +44,18 @@ struct EventWakeAttribution: Equatable {
         }
         let eventCount = metadata["eventCount"]?.intValue
             ?? (events.isEmpty ? eventTypes.count : events.count)
-        return EventWakeAttribution(
+        return Self(
             eventCount: eventCount,
             eventTypes: eventTypes,
-            events: events)
+            events: events
+        )
     }
 
     /// Compact human summary of the wake, in daemon order. Large bursts stay
     /// count-only; small wakes list deduplicated per-event labels (FE parity:
     /// EventWakeupBanner `friendlySummary`).
     var summaryLabel: String {
-        if eventCount >= 5 { return "\(eventCount) events" }
+        if eventCount >= Self.summaryEventCountThreshold { return "\(eventCount) events" }
         let sources = events.isEmpty
             ? eventTypes.map { Event(type: $0, agentName: nil) }
             : events
@@ -110,7 +116,7 @@ struct EventWakeAttribution: Equatable {
         ("comment:", "Comment updates"),
         ("workspace:", "Workspace updates"),
         ("spec:", "Spec updates"),
-        ("goal:", "Goal updates"),
+        ("goal:", "Goal updates")
     ]
 
     private static func categoryLabel(for type: String) -> String? {
@@ -134,7 +140,8 @@ struct EventWakeAttribution: Equatable {
     static func looksLikeAgentId(_ value: String) -> Bool {
         value.range(
             of: "^agent-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-            options: .regularExpression) != nil
+            options: .regularExpression
+        ) != nil
     }
 }
 
@@ -145,7 +152,7 @@ extension ConversationMessage {
     /// (FE parity: ChatPanel.svelte event-notification turn branch).
     var eventWakeAttribution: EventWakeAttribution? {
         if let attribution = EventWakeAttribution.from(metadata) { return attribution }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let attribution = EventWakeAttribution.from(block.messageMetadata) {
                 return attribution
             }
@@ -153,7 +160,7 @@ extension ConversationMessage {
         // Legacy rows carry no metadata, only the machine-text prefix. Fall
         // back to an empty attribution so the banner (generic label) replaces
         // the raw machine text (FE parity: `isEventWakeMessage`).
-        let text = (contentBlocks ?? [])
+        let text = contentBlocks
             .first { $0.type == .text }?
             .resolvedText?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""

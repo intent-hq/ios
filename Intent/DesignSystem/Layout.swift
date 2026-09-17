@@ -483,7 +483,8 @@ extension Constants.QRScanner {
 }
 
 extension Constants.Loading {
-    static let phaseDuration: Duration = .milliseconds(1_200)
+    private static let phaseDurationMilliseconds = 1200
+    static let phaseDuration: Duration = .milliseconds(Self.phaseDurationMilliseconds)
 }
 
 extension Constants.Splash {

@@ -10,6 +10,13 @@ struct ContextMentionChipView: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
+    private static let labelSpacing: CGFloat = 4
+    private static let iconOpacity: Double = 0.6
+    private static let horizontalPadding: CGFloat = 8
+    private static let verticalPadding: CGFloat = 3
+    private static let backgroundOpacity: Double = 0.7
+    private static let cornerRadius: CGFloat = 5
+
     var body: some View {
         if let url = ExternalLink.url(from: mention.url) {
             Button {
@@ -24,19 +31,20 @@ struct ContextMentionChipView: View {
     }
 
     private var chipLabel: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Self.labelSpacing) {
             Image(systemName: Self.iconName(for: mention.provider))
                 .font(.caption2)
-                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(0.6))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme).opacity(Self.iconOpacity))
+                .accessibilityHidden(true)
             Text(Self.displayTitle(mention.title))
                 .font(.caption.weight(.medium))
                 .lineLimit(1)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Theme.muted(for: colorScheme).opacity(0.7))
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .padding(.horizontal, Self.horizontalPadding)
+        .padding(.vertical, Self.verticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
     }
 
     /// Chip label: the decoded title hard-truncated to ~30 characters (the
@@ -67,7 +75,7 @@ struct ContextMentionChipView: View {
 struct ChipFlowLayout: Layout {
     var spacing: CGFloat = 6
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
         var x: CGFloat = 0
         var y: CGFloat = 0
@@ -75,7 +83,7 @@ struct ChipFlowLayout: Layout {
         var width: CGFloat = 0
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > 0 && x + size.width > maxWidth {
+            if x > 0, x + size.width > maxWidth {
                 x = 0
                 y += rowHeight + spacing
                 rowHeight = 0
@@ -87,13 +95,13 @@ struct ChipFlowLayout: Layout {
         return CGSize(width: width, height: y + rowHeight)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
         var x = bounds.minX
         var y = bounds.minY
         var rowHeight: CGFloat = 0
         for subview in subviews {
             let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX {
+            if x > bounds.minX, x + size.width > bounds.maxX {
                 x = bounds.minX
                 y += rowHeight + spacing
                 rowHeight = 0

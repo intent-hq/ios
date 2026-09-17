@@ -58,56 +58,61 @@ struct CreateWorkspaceSpecialistStepView: View {
 
     private var optionsList: some View {
         List {
-            Section("Source") {
-                VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
-                    ForEach(CreateWorkspaceView.creationContextRows(
-                        repositoryFullName: repositoryFullName,
-                        branch: branch
-                    )) { row in
-                        contextRow(row)
-                    }
-                }
-            }
-            Section("Agent") {
-                adaptiveField("Specialist") {
-                    specialistPicker
-                }
-
-                if providers.noneSelectable {
-                    noProvidersSignedInPlaceholder
-                        .listRowBackground(Theme.card(for: colorScheme))
-                } else if !providers.isEmpty {
-                    adaptiveField("Provider") {
-                        providerPicker
-                    }
-                }
-
-                if !models.isEmpty {
-                    adaptiveField("Model") {
-                        modelPicker
-                    }
-                }
-            }
-            Section {
-                TextField("What should the first agent work on?", text: $messageText, axis: .vertical)
-                    .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
-                    .font(.body)
-                    .foregroundStyle(Theme.foreground(for: colorScheme))
-                    .listRowBackground(Theme.card(for: colorScheme))
-            } header: {
-                Text("Message")
-            } footer: {
-                Text("Optional. Add instructions for the first agent in this workspace.")
-            }
+            sourceSection
+            agentSection
+            messageSection
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
     }
 
+    private var sourceSection: some View {
+        Section("Source") {
+            VStack(alignment: .leading, spacing: Constants.CreateWorkspace.branchBadgeVerticalPadding) {
+                ForEach(CreateWorkspaceView.creationContextRows(
+                    repositoryFullName: repositoryFullName,
+                    branch: branch
+                )) { row in
+                    contextRow(row)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var agentSection: some View {
+        Section("Agent") {
+            adaptiveField("Specialist") { specialistPicker }
+            if providers.noneSelectable {
+                noProvidersSignedInPlaceholder
+                    .listRowBackground(Theme.card(for: colorScheme))
+            } else if !providers.isEmpty {
+                adaptiveField("Provider") { providerPicker }
+            }
+            if !models.isEmpty {
+                adaptiveField("Model") { modelPicker }
+            }
+        }
+    }
+
+    private var messageSection: some View {
+        Section {
+            TextField("What should the first agent work on?", text: $messageText, axis: .vertical)
+                .lineLimit(CreateWorkspaceView.initialMessageLineCountRange)
+                .font(.body)
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+                .listRowBackground(Theme.card(for: colorScheme))
+        } header: {
+            Text("Message")
+        } footer: {
+            Text("Optional. Add instructions for the first agent in this workspace.")
+        }
+    }
+
     private var specialistPicker: some View {
         Picker("Specialist", selection: Binding(
             get: { selectedSpecialist?.id ?? "" },
-            set: { id in selectedSpecialist = specialists.first(where: { $0.id == id }) }
+            set: { id in selectedSpecialist = specialists.first { $0.id == id } }
         )) {
             ForEach(specialists) { specialist in
                 Text(specialist.name).tag(specialist.id)
@@ -142,7 +147,7 @@ struct CreateWorkspaceSpecialistStepView: View {
     private var modelPicker: some View {
         Picker("Model", selection: Binding(
             get: { selectedModel?.id ?? "" },
-            set: { id in selectedModel = models.first(where: { $0.id == id }) }
+            set: { id in selectedModel = models.first { $0.id == id } }
         )) {
             Text(SpecialistInfo.daemonDefaultLabel(
                 for: selectedSpecialist,
@@ -232,6 +237,13 @@ struct CreateWorkspaceSpecialistStepView: View {
 }
 
 extension CreateWorkspaceView {
+    struct InitialAgentInput {
+        let specialist: SpecialistInfo?
+        let provider: ProviderInfo?
+        let model: ModelInfo?
+        let message: String
+    }
+
     static var initialMessageLineCountRange: ClosedRange<Int> {
         1...Constants.CreateWorkspace.messageLineCountRange.upperBound
     }
@@ -248,26 +260,25 @@ extension CreateWorkspaceView {
         githubUrl: String,
         baseRef: String,
         idempotencyKey: String,
-        specialist: SpecialistInfo?,
-        provider: ProviderInfo? = nil,
-        model: ModelInfo?,
-        message: String
+        initialAgent: InitialAgentInput
     ) -> [String: Any] {
         var params: [String: Any] = [
             "githubUrl": githubUrl,
             "baseRef": baseRef,
             "idempotencyKey": idempotencyKey
         ]
-        let isNonAuggieProvider = provider.map { $0.id != "auggie" } ?? false
-        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNonAuggieProvider = initialAgent.provider.map { $0.id != "auggie" } ?? false
+        let trimmedMessage = initialAgent.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasMessage = !trimmedMessage.isEmpty
-        if specialist != nil || hasMessage || model != nil || isNonAuggieProvider {
-            var initialAgent: [String: Any] = [:]
-            if let specialist { initialAgent["specialist"] = specialist.id }
-            if isNonAuggieProvider, let provider { initialAgent["provider"] = provider.id }
-            if let model { initialAgent["model"] = model.id }
-            if hasMessage { initialAgent["prompt"] = trimmedMessage }
-            params["initialAgent"] = initialAgent
+        if initialAgent.specialist != nil || hasMessage || initialAgent.model != nil || isNonAuggieProvider {
+            var initialAgentParams: [String: Any] = [:]
+            if let specialist = initialAgent.specialist { initialAgentParams["specialist"] = specialist.id }
+            if isNonAuggieProvider, let provider = initialAgent.provider {
+                initialAgentParams["provider"] = provider.id
+            }
+            if let model = initialAgent.model { initialAgentParams["model"] = model.id }
+            if hasMessage { initialAgentParams["prompt"] = trimmedMessage }
+            params["initialAgent"] = initialAgentParams
         }
         return params
     }

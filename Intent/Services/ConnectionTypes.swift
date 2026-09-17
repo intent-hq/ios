@@ -2,10 +2,25 @@ import Combine
 import Foundation
 
 enum ConnectionState: Equatable {
-    case disconnected
-    case connecting
     case connected
+    case connecting
+    case disconnected
     case reconnecting(attempt: Int)
+}
+
+nonisolated enum InboundFrame: Sendable {
+    case error(id: Int, error: NSError)
+    case notification(method: String, params: InboundJSONValue)
+    case response(id: Int, result: InboundJSONValue)
+    case subscriptionPush(SubscriptionPush)
+
+    var label: String {
+        switch self {
+        case let .response(id, _), let .error(id, _): "id=\(id)"
+        case .subscriptionPush: "method=subscription.push"
+        case let .notification(method, _): "method=\(method)"
+        }
+    }
 }
 
 /// How a store reacts to one bus event type (or one discriminating payload
@@ -14,12 +29,12 @@ enum ConnectionState: Equatable {
 /// `IntentTests/EventCatalogCoverageTests.swift` can prove every type intentd
 /// emits on the store's channels is a deliberate decision.
 nonisolated enum EventClassification: Equatable, Sendable {
-    /// Refetch the store's list (non-live fallback only).
-    case refetch
-    /// Apply the payload to the row in place; no refetch.
-    case patchInPlace
     /// Deliberately dropped: no rendered field depends on it.
     case ignore
+    /// Apply the payload to the row in place; no refetch.
+    case patchInPlace
+    /// Refetch the store's list (non-live fallback only).
+    case refetch
 }
 
 /// The subset of ConnectionManager surface that subscribe-channel stores depend on.
@@ -28,6 +43,7 @@ nonisolated enum EventClassification: Equatable, Sendable {
 protocol ConnectionManagerRouting: AnyObject {
     var connectionState: ConnectionState { get }
     var connectionStatePublisher: AnyPublisher<ConnectionState, Never> { get }
+
     func request(_ method: String, params: [String: Any], timeout: TimeInterval) async throws -> Any
     @discardableResult func onEvent(_ handler: @escaping (String, Any) -> Void) -> UUID
     func removeEventHandler(id: UUID)
@@ -46,16 +62,21 @@ extension ConnectionManagerRouting {
 }
 
 nonisolated extension NSError {
+    private static let jsonRPCInvalidParametersErrorCode = -32_602
+    private static let webSocketErrorDomain = "WebSocket"
+
     /// userInfo key carrying the JSON-RPC `error.data.code` discriminator (PROTOCOL §3.3).
     static let intentErrorDataCodeKey = "intentErrorDataCode"
 
     /// The JSON-RPC `error.data.code` discriminator attached by the daemon, if any.
     var intentErrorDataCode: String? {
-        userInfo[NSError.intentErrorDataCodeKey] as? String
+        userInfo[Self.intentErrorDataCodeKey] as? String
     }
 
     /// True only for a definitive entity-not-found JSON-RPC error.
     var isEntityNotFound: Bool {
-        domain == "WebSocket" && code == -32602 && intentErrorDataCode == "not-found"
+        domain == Self.webSocketErrorDomain
+            && code == Self.jsonRPCInvalidParametersErrorCode
+            && intentErrorDataCode == "not-found"
     }
 }

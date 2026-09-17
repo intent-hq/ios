@@ -24,8 +24,8 @@ struct AgentMessageAttribution: Equatable {
     /// Extracts sender attribution from an opaque metadata dictionary.
     /// Returns nil unless `metadata.type == "agent_message"` and
     /// `metadata.fromAgentId` is a non-empty string.
-    static func from(_ metadata: [String: AnyCodable]?) -> AgentMessageAttribution? {
-        guard let metadata, metadata["type"]?.stringValue == "agent_message" else { return nil }
+    static func from(_ metadata: [String: AnyCodable]) -> Self? {
+        guard metadata["type"]?.stringValue == "agent_message" else { return nil }
         let fromAgentId = (metadata["fromAgentId"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !fromAgentId.isEmpty else { return nil }
@@ -36,8 +36,11 @@ struct AgentMessageAttribution: Equatable {
         let displayName = rawName.count > maxNameLength
             ? String(rawName.prefix(maxNameLength - 1)) + "…"
             : rawName
-        return AgentMessageAttribution(
-            fromAgentId: fromAgentId, rawName: rawName, displayName: displayName)
+        return Self(
+            fromAgentId: fromAgentId,
+            rawName: rawName,
+            displayName: displayName
+        )
     }
 }
 
@@ -49,7 +52,7 @@ extension ConversationMessage {
     /// this repo's `hookWakeAttribution` precedent as a harmless superset.
     var agentMessageAttribution: AgentMessageAttribution? {
         if let attribution = AgentMessageAttribution.from(metadata) { return attribution }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let attribution = AgentMessageAttribution.from(block.messageMetadata) {
                 return attribution
             }

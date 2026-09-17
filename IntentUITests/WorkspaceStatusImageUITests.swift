@@ -8,7 +8,6 @@ import XCTest
 ///
 /// Runs under the `Intent` scheme (`scripts/xcodebuild.sh test-ios`, CI).
 nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
-
     private enum Fixture {
         /// `DemoFixtures.statusImageWorkspaceId`'s title: a workspace with no
         /// agents, so tapping its row lands on the detail header rather than
@@ -21,7 +20,13 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
     }
 
     override func setUpWithError() throws {
+        try super.setUpWithError()
         continueAfterFailure = false
+    }
+
+    override func tearDownWithError() throws {
+        continueAfterFailure = true
+        try super.tearDownWithError()
     }
 
     @MainActor
@@ -43,10 +48,13 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
         let cardImages = app.descendants(matching: .any).matching(identifier: Fixture.cardIdentifier)
         XCTAssertTrue(
             cardImages.firstMatch.waitForExistence(timeout: 15),
-            "status image thumbnail never appeared on the fixture workspace row")
+            "status image thumbnail never appeared on the fixture workspace row"
+        )
         XCTAssertEqual(
-            cardImages.count, 1,
-            "only the fixture workspace carrying statusImageAssetId may render a thumbnail")
+            cardImages.count,
+            1,
+            "only the fixture workspace carrying statusImageAssetId may render a thumbnail"
+        )
 
         workspaceRow.tap()
 
@@ -54,7 +62,8 @@ nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
             .matching(identifier: Fixture.detailIdentifier).firstMatch
         XCTAssertTrue(
             detailImage.waitForExistence(timeout: 15),
-            "status image never appeared in the workspace detail header")
+            "status image never appeared in the workspace detail header"
+        )
         let inlineWidth = detailImage.frame.width
         detailImage.tap()
 

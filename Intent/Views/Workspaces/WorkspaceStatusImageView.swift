@@ -19,6 +19,7 @@ nonisolated enum WorkspaceStatusImageLayout {
     static let cornerRadius: CGFloat = 8
     static let borderWidth: CGFloat = 0.5
     static let detailPlaceholderHeight: CGFloat = 44
+    static let placeholderSpacing: CGFloat = 6
 
     /// The daemon omits the field until set and folds blanks to a clear;
     /// mirror that so an empty id never reaches the loader.
@@ -52,7 +53,7 @@ nonisolated enum WorkspaceStatusImageLayout {
         }
     }
 
-    static func accessibilityLabel(for style: Style) -> String {
+    static func accessibilityLabel(for _: Style) -> String {
         "Workspace status image"
     }
 }
@@ -117,6 +118,7 @@ struct WorkspaceStatusImageView: View {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFit()
+                        .accessibilityLabel(Layout.accessibilityLabel(for: style))
                         .frame(maxHeight: Layout.detailMaxHeight)
                         .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
                         .overlay(border)
@@ -140,8 +142,10 @@ struct WorkspaceStatusImageView: View {
                 Color.clear.frame(width: 0, height: 0)
             } else {
                 Button { attempt += 1 } label: {
-                    placeholder(systemImage: "photo.badge.exclamationmark",
-                                text: "Status image unavailable — tap to retry")
+                    placeholder(
+                        systemImage: "photo.badge.exclamationmark",
+                        text: "Status image unavailable — tap to retry"
+                    )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Status image unavailable")
@@ -165,6 +169,7 @@ struct WorkspaceStatusImageView: View {
         Image(uiImage: image)
             .resizable()
             .scaledToFill()
+            .accessibilityLabel(Layout.accessibilityLabel(for: style))
             .frame(width: Layout.cardThumbnailSide, height: Layout.cardThumbnailSide)
             .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
             .overlay(border)
@@ -178,9 +183,10 @@ struct WorkspaceStatusImageView: View {
     /// Fixed-height, full-width band standing in for the detail banner so
     /// the header neither jumps on load nor looks broken on failure.
     private func placeholder(systemImage: String?, text: LocalizedStringKey) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.placeholderSpacing) {
             if let systemImage {
                 Image(systemName: systemImage)
+                    .accessibilityHidden(true)
             } else {
                 ProgressView()
                     .controlSize(.mini)

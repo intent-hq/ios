@@ -75,7 +75,9 @@ final class AttachmentImageLoader {
         }
         let task = Task<String, Error> {
             let result = try await self.connection.request(
-                "file.getAttachmentInfo", params: ["attachmentId": attachmentId])
+                "file.getAttachmentInfo",
+                params: ["attachmentId": attachmentId]
+            )
             guard let dict = result as? [String: Any],
                   let path = dict["path"] as? String,
                   let exists = dict["exists"] as? Bool

@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 /// Observable task state for a single workspace.
@@ -187,7 +187,7 @@ import Observation
     /// `task:created` changes membership; `task:status-changed` changes
     /// status/updatedAt.
     nonisolated static let refetchEventTypes: Set<String> = [
-        "task:created", "task:status-changed",
+        "task:created", "task:status-changed"
     ]
 
     /// Deliberately ignored: `task:agent-linked` / `task:agent-unlinked` — the
@@ -195,7 +195,7 @@ import Observation
     /// `note:updated`, not `task:*`, so they never reached this store either
     /// way.
     nonisolated static let ignoredEventTypes: Set<String> = [
-        "task:agent-linked", "task:agent-unlinked",
+        "task:agent-linked", "task:agent-unlinked"
     ]
 
     /// `task:ready-tasks-changed` is classified per `data.triggeredBy.reason`
@@ -206,7 +206,7 @@ import Observation
     /// emission is the only `task:*` signal that a row left the list.
     nonisolated static let readyTasksChangedReasonClassification: [String: EventClassification] = [
         "note-deleted": .refetch,
-        "relations-changed": .ignore,
+        "relations-changed": .ignore
     ]
 
     /// The status-change emission has no `reason` (`triggeredBy` is
@@ -217,7 +217,10 @@ import Observation
     /// Pure classification of one event; `nil` means the tables above do not
     /// name the type (or, for `task:ready-tasks-changed`, the reason), which
     /// `handleEvent` treats as ignore.
-    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
+    nonisolated static func classify(
+        type: String,
+        data: [String: Any]? // swiftlint:disable:this discouraged_optional_collection
+    ) -> EventClassification? {
         if refetchEventTypes.contains(type) { return .refetch }
         if ignoredEventTypes.contains(type) { return .ignore }
         if type == "task:ready-tasks-changed" {
@@ -279,7 +282,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await connectionManager.request("task.unsubscribe", params: [
+                _ = try await connectionManager.request("task.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {

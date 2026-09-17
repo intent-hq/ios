@@ -23,14 +23,21 @@ protocol SessionConnectionManaging: ConnectionManagerRouting {
     /// once its bounded retries are exhausted, which the window surfaces
     /// with a retry action routed to `retryGlobalSubscription()` (ios#254).
     var globalSubscriptionState: ConnectionManager.GlobalSubscriptionState { get }
+
     func retryGlobalSubscription()
 
     func connect(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     ) async throws
     func updateCachedCredentials(
-        hosts: [String], port: Int, token: String, certFingerprint: String?,
+        hosts: [String],
+        port: Int,
+        token: String,
+        certFingerprint: String?,
         tcAddress: String?
     )
     func refreshHostRoutes() async

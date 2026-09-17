@@ -1,6 +1,8 @@
 import Foundation
 import Security
 
+// MARK: - Payload codec (v1 wire contract)
+
 /// Read-only view of the iCloud-synced backend registry written by the
 /// desktop app's keychain helper (cloudlands-fe `keychain-sync.ts` +
 /// `sync-helper.swift`): ONE generic-password item per backend under the
@@ -9,8 +11,6 @@ import Security
 /// versioned JSON payload. This layer only LISTS records — no writes, no
 /// reconcile — and is fail-soft: any SecItem failure (including entitlement
 /// rejection) surfaces as `.unavailable`, never as "no items".
-
-// MARK: - Payload codec (v1 wire contract)
 
 /// One synced backend record — the decoded keychain payload. Tombstones keep
 /// the identity fields but always carry an empty `token`.
@@ -46,8 +46,8 @@ extension SyncedBackendRecord {
     /// Prefixed so a colon-separated fingerprint can never collide with a
     /// `host:port` key.
     var registryKey: String {
-        let fp = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if !fp.isEmpty { return "fp:\(fp)" }
+        let normalizedFingerprint = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if !normalizedFingerprint.isEmpty { return "fp:\(normalizedFingerprint)" }
         return "addr:\(accountKey)"
     }
 
@@ -76,13 +76,16 @@ extension SyncedBackendRecord {
     /// (~30 days): the desktop purges expired tombstones from the keychain,
     /// so a straggler item the purge has not reached yet must not still act
     /// as a delete here.
-    static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000
+    static let tombstoneTTLMs: Double = 30 * 24 * 60 * 60 * 1000 // swiftlint:disable:this no_magic_numbers
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: Double = 1000
 
     /// Whether this record is a tombstone past its TTL (`deletedAt`,
     /// falling back to `updatedAt`, anchors the TTL — same as the fe's
     /// `isExpiredTombstone`).
     func isExpiredTombstone(now: Date) -> Bool {
-        deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs <= now.timeIntervalSince1970 * 1000
+        deleted && (deletedAt ?? updatedAt) + Self.tombstoneTTLMs
+            <= now.timeIntervalSince1970 * Self.millisecondsPerSecond
     }
 }
 
@@ -96,9 +99,9 @@ enum SyncedBackendPayload {
     static let version = 1
 
     enum Parsed: Equatable {
-        case record(SyncedBackendRecord)
-        case newerVersion
         case invalid
+        case newerVersion
+        case record(SyncedBackendRecord)
     }
 
     static func parse(_ payload: String) -> Parsed {
@@ -106,8 +109,8 @@ enum SyncedBackendPayload {
             let raw = try? JSONSerialization.jsonObject(with: data),
             let object = raw as? [String: Any]
         else { return .invalid }
-        guard let v = number(object["v"])?.doubleValue else { return .invalid }
-        if v > Double(version) { return .newerVersion }
+        guard let payloadVersion = number(object["v"])?.doubleValue else { return .invalid }
+        if payloadVersion > Double(version) { return .newerVersion }
         guard let label = object["label"] as? String,
             let host = object["host"] as? String,
             !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -122,13 +125,16 @@ enum SyncedBackendPayload {
             port: port,
             fingerprint: fingerprint,
             hostname: object["hostname"] as? String,
-            detectHosts: bool(object["detectHosts"]) ?? true,
+            detectHosts: {
+                if case let .value(value) = bool(object["detectHosts"]) { return value }
+                return true
+            }(),
             token: object["token"] as? String ?? "",
             updatedAt: updatedAt,
             deleted: false,
             deletedAt: nil
         )
-        if bool(object["deleted"]) == true {
+        if case .value(true) = bool(object["deleted"]) {
             record.deleted = true
             record.deletedAt = number(object["deletedAt"])?.doubleValue ?? updatedAt
             record.token = ""
@@ -140,8 +146,10 @@ enum SyncedBackendPayload {
     /// NSNumber; the wire contract's `typeof x === "number"` must reject
     /// booleans). Compared as Double: the fe compares `v` numerically, so
     /// e.g. `v: 1.5` must count as newer than 1, never truncate to 1.
-    private static func number(_ value: Any?) -> NSNumber? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) != CFBooleanGetTypeID()
+    /// NSNumber remains required to distinguish CFBoolean from numeric JSON values.
+    private static func number(_ value: Any?) -> NSNumber? { // swiftlint:disable:this legacy_objc_type
+        guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
+              CFGetTypeID(value) != CFBooleanGetTypeID()
         else { return nil }
         return value
     }
@@ -155,10 +163,11 @@ enum SyncedBackendPayload {
     }
 
     /// JSON bool (never a JSON number).
-    private static func bool(_ value: Any?) -> Bool? {
-        guard let value = value as? NSNumber, CFGetTypeID(value) == CFBooleanGetTypeID()
-        else { return nil }
-        return value.boolValue
+    private static func bool(_ value: Any?) -> AnyCodableBooleanMatch {
+        guard let value = value as? NSNumber, // swiftlint:disable:this legacy_objc_type
+              CFGetTypeID(value) == CFBooleanGetTypeID()
+        else { return .typeMismatch }
+        return .value(value.boolValue)
     }
 }
 
@@ -168,9 +177,9 @@ enum SyncedBackendPayload {
 /// is a SUCCESSFUL empty read; every other failure means "keychain state
 /// unknown" and must never be treated as "no items".
 enum SyncedKeychainListOutcome {
-    case rows([[String: Any]])
-    case notFound
     case failure(OSStatus)
+    case notFound
+    case rows([[String: Any]])
 }
 
 /// Abstraction over `SecItemCopyMatching` list queries so tests can run
@@ -225,7 +234,7 @@ struct SyncedBackendRegistry {
     static let sharedAccessGroupSuffix = "dev.intentapp.backends"
 
     var keychain: SyncedKeychainListing = SecItemSyncedKeychain()
-    var accessGroup: String? = SyncedBackendRegistry.resolveSharedAccessGroup()
+    var accessGroup: String? = Self.resolveSharedAccessGroup()
 
     /// Team-prefixed shared access group. iOS has no public entitlement
     /// introspection (the Mac helper uses SecTaskCopyValueForEntitlement),
@@ -234,7 +243,8 @@ struct SyncedBackendRegistry {
     static func resolveSharedAccessGroup(bundle: Bundle = .main) -> String? {
         sharedAccessGroup(
             appIdentifierPrefix: bundle.object(forInfoDictionaryKey: "AppIdentifierPrefix")
-                as? String)
+                as? String
+        )
     }
 
     /// Pure assembly: "TEAMID." prefix + group suffix, nil when the prefix
@@ -262,7 +272,7 @@ struct SyncedBackendRegistry {
             kSecAttrSynchronizable as String: kSecAttrSynchronizableAny,
             kSecMatchLimit as String: kSecMatchLimitAll,
             kSecReturnAttributes as String: true,
-            kSecReturnData as String: true,
+            kSecReturnData as String: true
         ]
     }
 

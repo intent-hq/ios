@@ -16,13 +16,12 @@ extension RootView {
                                     noteId: noteDetailNoteId,
                                     workspaceId: noteDetailWorkspaceId,
                                     noteTitle: noteDetailNoteTitle,
-                                    session: session,
-                                    onNavigateToNote: { noteId, wsId, title in
-                                        noteDetailNoteId = noteId
-                                        noteDetailWorkspaceId = wsId
-                                        noteDetailNoteTitle = title
-                                    }
-                                )
+                                    session: session
+                                ) { noteId, workspaceId, title in
+                                    noteDetailNoteId = noteId
+                                    noteDetailWorkspaceId = workspaceId
+                                    noteDetailNoteTitle = title
+                                }
                                 .id(noteDetailNoteId)
                             }
                     }
@@ -75,116 +74,123 @@ extension RootView {
     }
 
     func syncNavigationState() {
-        if case .agentConversation(let agentId, let workspaceId, let agentName) = coordinator.currentScreen {
-            let agentChanged = conversationAgentId != agentId
-            let isNewRequest = handledConversationRequestId != coordinator.conversationRequestId
-            handledConversationRequestId = coordinator.conversationRequestId
-            conversationAgentId = agentId
-            conversationWorkspaceId = workspaceId
-            conversationAgentName = agentName
-            if !noteStack.isEmpty { noteStack = NavigationPath() }
-            if showingNoteDetail { showingNoteDetail = false }
-
-            if !showingWorkspaceDetail {
-                showingWorkspaceDetail = true
-                pendingConversationPush = true
-            } else if !showingConversation {
-                // A changed-agent selection updates both currentScreenDescription
-                // and conversationRequestId, so this runs twice in one update
-                // pass. If the first pass started the tear-down below, do not
-                // undo it here; the deferred block re-pushes on the next tick.
-                if RootView.canPushConversationNow(repushInFlight: programmaticConversationDismiss) {
-                    showingConversation = true
-                }
-            } else if RootView.needsConversationRepush(
-                agentChanged: agentChanged,
-                isNewRequest: isNewRequest,
-                isRegularWidth: sizeClass == .regular
-            ) {
-                // iPad NavigationStack rebuild race: when the workspace detail is
-                // rebuilt (different workspace) but showingConversation is still
-                // true, SwiftUI may not push the new conversation. Tear down
-                // first, then re-push on the next runloop tick so the rebuilt
-                // NavigationStack accepts the new destination.
-                // The same tear-down/re-push serves a same-agent re-select: a
-                // user pop can leave showingConversation stale at true, so the
-                // conversation is not on screen even though the state says so.
-                programmaticConversationDismiss = true
-                showingConversation = false
-                let pendingAgentId = agentId
-                // Ordering note: the onChange(of: showingConversation) pass for the
-                // tear-down above runs in the current runloop's view update, before
-                // this next-tick block, so the flag is normally consumed there and
-                // the clear below is just a backstop.
-                DispatchQueue.main.async {
-                    programmaticConversationDismiss = false
-                    if RootView.shouldRepushConversation(
-                        currentScreen: coordinator.currentScreen,
-                        pendingAgentId: pendingAgentId,
-                        conversationAgentId: conversationAgentId
-                    ) {
-                        showingConversation = true
-                    }
-                }
-            }
-            // If showingConversation is already true and agent changed,
-            // the .id(conversationAgentId) modifier forces SwiftUI to
-            // destroy and recreate ConversationView with fresh @State-owned state
-        } else if case .noteDetail(let nId, let wId, let nTitle) = coordinator.currentScreen {
-            if sizeClass == .compact {
-                // iPhone: use isPresented-based navigation (not noteStack)
-                noteDetailNoteId = nId
-                noteDetailWorkspaceId = wId
-                noteDetailNoteTitle = nTitle
-                if showingConversation { showingConversation = false }
-                if !showingWorkspaceDetail {
-                    showingWorkspaceDetail = true
-                    pendingNoteDetailPush = true
-                } else if !showingNoteDetail {
-                    showingNoteDetail = true
-                }
-            } else {
-                // iPad: use noteStack path-based navigation
-                if showingConversation { showingConversation = false }
-                if !showingWorkspaceDetail {
-                    showingWorkspaceDetail = true
-                }
-                // Tear down then rebuild on next runloop tick so a freshly
-                // rebuilt NavigationStack (e.g. after workspace switch) picks
-                // up the new destination reliably.
-                if !noteStack.isEmpty {
-                    noteStack = NavigationPath()
-                }
-                let pendingNoteId = nId
-                let pendingWorkspaceId = wId
-                let pendingTitle = nTitle
-                DispatchQueue.main.async {
-                    if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
-                        noteStack = NavigationPath()
-                        noteStack.append(NoteDestination(noteId: pendingNoteId, workspaceId: pendingWorkspaceId, noteTitle: pendingTitle))
-                    }
-                }
-            }
-        } else if case .workspaceDetail = coordinator.currentScreen {
-            if !showingWorkspaceDetail { showingWorkspaceDetail = true }
-            if showingConversation { showingConversation = false }
-            if showingNoteDetail { showingNoteDetail = false }
-            if !noteStack.isEmpty { noteStack = NavigationPath() }
-        } else {
-            if showingWorkspaceDetail { showingWorkspaceDetail = false }
-            if showingConversation { showingConversation = false }
-            if showingNoteDetail { showingNoteDetail = false }
-            if !noteStack.isEmpty { noteStack = NavigationPath() }
+        switch coordinator.currentScreen {
+        case let .agentConversation(agentId, workspaceId, agentName):
+            syncAgentConversation(agentId: agentId, workspaceId: workspaceId, agentName: agentName)
+        case let .noteDetail(noteId, workspaceId, noteTitle):
+            syncNoteDetail(noteId: noteId, workspaceId: workspaceId, noteTitle: noteTitle)
+        case .workspaceDetail:
+            syncWorkspaceDetail()
+        default:
+            resetNavigationState()
         }
     }
 
-    /// Whether `syncNavigationState()` must tear down and re-push a conversation
-    /// that `showingConversation` already reports as shown. Only on regular
-    /// width (iPad), where the NavigationStack may not honour a still-true
-    /// isPresented binding: after a workspace-detail rebuild with a different
-    /// agent, or when the user re-selects the agent recorded as shown (the
-    /// binding can stay true after a pop, so nothing is actually on screen).
-    /// Compact width pops reset the binding reliably, so it never tears down.
+    private func syncAgentConversation(agentId: String, workspaceId: String, agentName: String) {
+        let agentChanged = conversationAgentId != agentId
+        let isNewRequest = handledConversationRequestId != coordinator.conversationRequestId
+        handledConversationRequestId = coordinator.conversationRequestId
+        conversationAgentId = agentId
+        conversationWorkspaceId = workspaceId
+        conversationAgentName = agentName
+        if !noteStack.isEmpty { noteStack = NavigationPath() }
+        if showingNoteDetail { showingNoteDetail = false }
+
+        if !showingWorkspaceDetail {
+            showingWorkspaceDetail = true
+            pendingConversationPush = true
+        } else if !showingConversation {
+            if Self.canPushConversationNow(repushInFlight: programmaticConversationDismiss) {
+                showingConversation = true
+            }
+        } else if Self.needsConversationRepush(
+            agentChanged: agentChanged,
+            isNewRequest: isNewRequest,
+            isRegularWidth: sizeClass == .regular
+        ) {
+            // iPad NavigationStack rebuild race: when the workspace detail is
+            // rebuilt (different workspace) but showingConversation is still
+            // true, SwiftUI may not push the new conversation. Tear down
+            // first, then re-push on the next runloop tick so the rebuilt
+            // NavigationStack accepts the new destination.
+            programmaticConversationDismiss = true
+            showingConversation = false
+            let pendingAgentId = agentId
+            // Ordering note: the onChange(of: showingConversation) pass for the
+            // tear-down above runs in the current runloop's view update, before
+            // this next-tick block, so the flag is normally consumed there and
+            // the clear below is just a backstop.
+            DispatchQueue.main.async {
+                programmaticConversationDismiss = false
+                if Self.shouldRepushConversation(
+                    currentScreen: coordinator.currentScreen,
+                    pendingAgentId: pendingAgentId,
+                    conversationAgentId: conversationAgentId
+                ) {
+                    showingConversation = true
+                }
+            }
+        }
+        // If showingConversation is already true and agent changed,
+        // the .id(conversationAgentId) modifier forces SwiftUI to
+        // destroy and recreate ConversationView with fresh @State-owned state
+    }
+
+    private func syncNoteDetail(noteId: String, workspaceId: String, noteTitle: String) {
+        if sizeClass == .compact {
+            // iPhone: use isPresented-based navigation (not noteStack)
+            noteDetailNoteId = noteId
+            noteDetailWorkspaceId = workspaceId
+            noteDetailNoteTitle = noteTitle
+            if showingConversation { showingConversation = false }
+            if !showingWorkspaceDetail {
+                showingWorkspaceDetail = true
+                pendingNoteDetailPush = true
+            } else if !showingNoteDetail {
+                showingNoteDetail = true
+            }
+        } else {
+            // iPad: use noteStack path-based navigation
+            if showingConversation { showingConversation = false }
+            if !showingWorkspaceDetail {
+                showingWorkspaceDetail = true
+            }
+            // Tear down then rebuild on next runloop tick so a freshly
+            // rebuilt NavigationStack (e.g. after workspace switch) picks
+            // up the new destination reliably.
+            if !noteStack.isEmpty {
+                noteStack = NavigationPath()
+            }
+            let pendingNoteId = noteId
+            let pendingWorkspaceId = workspaceId
+            let pendingTitle = noteTitle
+            DispatchQueue.main.async {
+                if case .noteDetail(let curId, _, _) = coordinator.currentScreen, curId == pendingNoteId {
+                    noteStack = NavigationPath()
+                    noteStack.append(NoteDestination(
+                        noteId: pendingNoteId,
+                        workspaceId: pendingWorkspaceId,
+                        noteTitle: pendingTitle
+                    ))
+                }
+            }
+        }
+    }
+
+    private func syncWorkspaceDetail() {
+        if !showingWorkspaceDetail { showingWorkspaceDetail = true }
+        if showingConversation { showingConversation = false }
+        if showingNoteDetail { showingNoteDetail = false }
+        if !noteStack.isEmpty { noteStack = NavigationPath() }
+    }
+
+    private func resetNavigationState() {
+        if showingWorkspaceDetail { showingWorkspaceDetail = false }
+        if showingConversation { showingConversation = false }
+        if showingNoteDetail { showingNoteDetail = false }
+        if !noteStack.isEmpty { noteStack = NavigationPath() }
+    }
+
     static func needsConversationRepush(
         agentChanged: Bool,
         isNewRequest: Bool,
@@ -193,12 +199,6 @@ extension RootView {
         isRegularWidth && (agentChanged || isNewRequest)
     }
 
-    /// Whether `syncNavigationState()` may set `showingConversation = true`
-    /// immediately when it is currently false. It must not while the iPad
-    /// tear-down/re-push is in flight (`programmaticConversationDismiss` set):
-    /// a changed-agent selection triggers the sync twice in one update pass,
-    /// and the second run would otherwise undo the tear-down the first run
-    /// started, before the deferred re-push tick.
     static func canPushConversationNow(repushInFlight: Bool) -> Bool {
         !repushInFlight
     }

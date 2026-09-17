@@ -1,5 +1,11 @@
 import Foundation
 
+struct UserBlockPartition {
+    let text: [ContentBlock]
+    let images: [ContentBlock]
+    let files: [ContentBlock]
+}
+
 enum MessageBlockPartitioning {
     static func plainTextContent(
         from blocks: [ContentBlock],
@@ -16,14 +22,16 @@ enum MessageBlockPartitioning {
                     text = PrMonitorWakeAttribution.displayText(text)
                 }
                 let plain = ContextMention.replacingTokensWithTitles(
-                    in: stripSupervisorTags(text))
+                    in: stripSupervisorTags(text)
+                )
                 return plain.isEmpty ? nil : plain
             case .code:
                 return block.resolvedText
             default:
                 return nil
             }
-        }.joined(separator: "\n\n")
+        }
+        .joined(separator: "\n\n")
     }
 
     static func userCopyText(
@@ -34,7 +42,8 @@ enum MessageBlockPartitioning {
         plainTextContent(
             from: partitionUserBlocks(blocks).text,
             hookWake: hookWake,
-            prWake: prWake)
+            prWake: prWake
+        )
     }
 
     static func agentMessagePreview(from blocks: [ContentBlock]) -> String {
@@ -63,7 +72,8 @@ enum MessageBlockPartitioning {
             default:
                 return nil
             }
-        }.joined(separator: "\n\n")
+        }
+        .joined(separator: "\n\n")
     }
 
     static func stripSupervisorTags(_ text: String) -> String {
@@ -71,15 +81,18 @@ enum MessageBlockPartitioning {
             of: "<supervisor>[\\s\\S]*?</supervisor>",
             with: "",
             options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func partitionUserBlocks(
         _ blocks: [ContentBlock]
-    ) -> (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock]) {
-        (blocks.filter { $0.type == .text },
-         blocks.filter { $0.type == .image },
-         blocks.filter { $0.type == .file })
+    ) -> UserBlockPartition {
+        UserBlockPartition(
+            text: blocks.filter { $0.type == .text },
+            images: blocks.filter { $0.type == .image },
+            files: blocks.filter { $0.type == .file }
+        )
     }
 
     private static let groupTagRegex = #/<group:([^>\r\n<]+)>|<\/group(:[^>\r\n<]+)?>/#
@@ -89,102 +102,136 @@ enum MessageBlockPartitioning {
         _ blocks: [ContentBlock],
         isStreaming: Bool = false
     ) -> [RenderBlock] {
+        var partitioner = GroupContentBlockPartitioner(isStreaming: isStreaming)
+        return partitioner.partition(blocks)
+    }
+
+    private struct ActiveResponseGroup {
+        let id: String
+        let name: String
+        var children: [ContentBlock]
+    }
+
+    private struct GroupContentBlockPartitioner {
+        let isStreaming: Bool
         var result: [RenderBlock] = []
-        var currentGroup: (id: String, name: String, children: [ContentBlock])?
+        var currentGroup: ActiveResponseGroup?
         var segmentCounts: [String: Int] = [:]
         var groupOrdinals: [String: Int] = [:]
 
-        func addBlock(_ block: ContentBlock) {
-            if currentGroup != nil {
-                currentGroup!.children.append(block)
-            } else {
-                result.append(.contentBlock(block))
+        mutating func partition(_ blocks: [ContentBlock]) -> [RenderBlock] {
+            for block in blocks {
+                process(block)
             }
+            closeCurrentGroup()
+            return result
         }
 
-        func nextSegmentId(from source: ContentBlock) -> String {
-            let index = segmentCounts[source.id, default: 0]
-            segmentCounts[source.id] = index + 1
-            return index == 0 ? source.id : "\(source.id)#seg\(index)"
-        }
-
-        func addTextIfNonEmpty(_ text: String, from source: ContentBlock) {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                addBlock(ContentBlock(
-                    id: nextSegmentId(from: source), type: .text, text: trimmed))
-            }
-        }
-
-        func closeCurrentGroup() {
-            if let group = currentGroup {
-                result.append(.group(ResponseGroup(
-                    id: group.id, name: group.name, children: group.children)))
-                currentGroup = nil
-            }
-        }
-
-        for block in blocks {
+        private mutating func process(_ block: ContentBlock) {
             guard block.type == .text,
                   let blockText = block.resolvedText,
                   !blockText.isEmpty else {
                 if block.type != .text { addBlock(block) }
-                continue
+                return
             }
-
             var processedText = blockText
             if isStreaming {
-                processedText = processedText.replacing(incompleteGroupTagRegex, with: "")
-                if processedText.isEmpty { continue }
+                processedText = processedText.replacing(
+                    MessageBlockPartitioning.incompleteGroupTagRegex,
+                    with: ""
+                )
+                if processedText.isEmpty { return }
             }
-
-            let matches = processedText.matches(of: groupTagRegex)
-            if matches.isEmpty {
-                if processedText == blockText {
-                    addBlock(block)
-                } else {
-                    addBlock(ContentBlock(
-                        id: nextSegmentId(from: block), type: .text, text: processedText))
-                }
-                continue
+            let matches = processedText.matches(of: MessageBlockPartitioning.groupTagRegex)
+            guard !matches.isEmpty else {
+                addUngroupedText(processedText, originalText: blockText, source: block)
+                return
             }
+            processMatches(in: processedText, source: block)
+        }
 
-            var lastIndex = processedText.startIndex
-            for match in matches {
+        private mutating func addUngroupedText(
+            _ processedText: String,
+            originalText: String,
+            source: ContentBlock
+        ) {
+            if processedText == originalText {
+                addBlock(source)
+            } else {
+                addBlock(ContentBlock(
+                    id: nextSegmentId(from: source),
+                    type: .text,
+                    text: processedText
+                ))
+            }
+        }
+
+        private mutating func processMatches(in text: String, source: ContentBlock) {
+            var lastIndex = text.startIndex
+            for match in text.matches(of: MessageBlockPartitioning.groupTagRegex) {
                 let matchStart = match.range.lowerBound
                 let matchEnd = match.range.upperBound
-
                 if let capturedName = match.output.1 {
-                    let groupName = String(capturedName)
-                        .trimmingCharacters(in: .whitespaces)
+                    let groupName = String(capturedName).trimmingCharacters(in: .whitespaces)
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(
-                            String(processedText[lastIndex..<matchStart]), from: block)
+                        addTextIfNonEmpty(String(text[lastIndex..<matchStart]), from: source)
                     }
                     closeCurrentGroup()
-                    let ordinal = groupOrdinals[block.id, default: 0]
-                    groupOrdinals[block.id] = ordinal + 1
-                    currentGroup = (
-                        id: "\(block.id)#group\(ordinal):\(groupName)",
+                    let ordinal = groupOrdinals[source.id, default: 0]
+                    groupOrdinals[source.id] = ordinal + 1
+                    currentGroup = ActiveResponseGroup(
+                        id: "\(source.id)#group\(ordinal):\(groupName)",
                         name: groupName,
-                        children: [])
+                        children: []
+                    )
                 } else {
                     if matchStart > lastIndex {
-                        addTextIfNonEmpty(
-                            String(processedText[lastIndex..<matchStart]), from: block)
+                        addTextIfNonEmpty(String(text[lastIndex..<matchStart]), from: source)
                     }
                     closeCurrentGroup()
                 }
                 lastIndex = matchEnd
             }
-
-            if lastIndex < processedText.endIndex {
-                addTextIfNonEmpty(String(processedText[lastIndex...]), from: block)
+            if lastIndex < text.endIndex {
+                addTextIfNonEmpty(String(text[lastIndex...]), from: source)
             }
         }
 
-        closeCurrentGroup()
-        return result
+        private mutating func addBlock(_ block: ContentBlock) {
+            if currentGroup != nil {
+                currentGroup?.children.append(block)
+            } else {
+                result.append(.contentBlock(block))
+            }
+        }
+
+        private mutating func nextSegmentId(from source: ContentBlock) -> String {
+            let index = segmentCounts[source.id, default: 0]
+            segmentCounts[source.id] = index + 1
+            return index == 0 ? source.id : "\(source.id)#seg\(index)"
+        }
+
+        private mutating func addTextIfNonEmpty(_ text: String, from source: ContentBlock) {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                addBlock(ContentBlock(
+                    id: nextSegmentId(from: source),
+                    type: .text,
+                    text: trimmed
+                ))
+            }
+        }
+
+        private mutating func closeCurrentGroup() {
+            if let group = currentGroup {
+                result.append(.group(ResponseGroup(
+                    id: group.id,
+                    name: group.name,
+                    children: group.children
+                )))
+                currentGroup = nil
+            }
+        }
     }
 }
 
@@ -195,7 +242,10 @@ extension MessageView {
         prWake: PrMonitorWakeAttribution? = nil
     ) -> String {
         MessageBlockPartitioning.plainTextContent(
-            from: blocks, hookWake: hookWake, prWake: prWake)
+            from: blocks,
+            hookWake: hookWake,
+            prWake: prWake
+        )
     }
 
     static func userCopyText(
@@ -204,7 +254,10 @@ extension MessageView {
         prWake: PrMonitorWakeAttribution? = nil
     ) -> String {
         MessageBlockPartitioning.userCopyText(
-            from: blocks, hookWake: hookWake, prWake: prWake)
+            from: blocks,
+            hookWake: hookWake,
+            prWake: prWake
+        )
     }
 
     static func agentMessagePreview(from blocks: [ContentBlock]) -> String {
@@ -217,7 +270,7 @@ extension MessageView {
 
     static func partitionUserBlocks(
         _ blocks: [ContentBlock]
-    ) -> (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock]) {
+    ) -> UserBlockPartition {
         MessageBlockPartitioning.partitionUserBlocks(blocks)
     }
 

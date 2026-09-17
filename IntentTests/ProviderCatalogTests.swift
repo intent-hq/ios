@@ -1,13 +1,12 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for the shared provider/model catalog helpers on AgentStore:
 /// host.providerAuthStatus parsing, models.list parsing, and the
 /// provider/model params on agent.create.
 @MainActor
 struct ProviderCatalogTests {
-
     // MARK: - fetchProviders (host.providerAuthStatus)
 
     @Test func fetchProvidersParsesTriStateAuthenticated() async {
@@ -18,7 +17,7 @@ struct ProviderCatalogTests {
                 ["id": "auggie", "authenticated": true],
                 ["id": "claude-code", "authenticated": false],
                 ["id": "grok", "authenticated": NSNull()],
-                ["id": "pi"],
+                ["id": "pi"]
             ]
         ]
 
@@ -27,8 +26,8 @@ struct ProviderCatalogTests {
         #expect(providers.count == 4)
         #expect(providers[0] == ProviderInfo(id: "auggie", authenticated: true))
         #expect(providers[1] == ProviderInfo(id: "claude-code", authenticated: false))
-        #expect(providers[2] == ProviderInfo(id: "grok", authenticated: nil))
-        #expect(providers[3] == ProviderInfo(id: "pi", authenticated: nil))
+        #expect(providers[2] == ProviderInfo(id: "grok", authenticated: .unknown))
+        #expect(providers[3] == ProviderInfo(id: "pi", authenticated: .unknown))
         #expect(fake.didCallMethod("host.providerAuthStatus"))
     }
 
@@ -38,7 +37,7 @@ struct ProviderCatalogTests {
         fake.responseMap["host.providerAuthStatus"] = [
             "providers": [
                 ["authenticated": true],
-                ["id": "codex", "authenticated": true],
+                ["id": "codex", "authenticated": true]
             ]
         ]
         #expect(await store.fetchProviders() == [ProviderInfo(id: "codex", authenticated: true)])
@@ -56,7 +55,7 @@ struct ProviderCatalogTests {
         #expect(ProviderInfo.displayName(for: "grok") == "Grok")
         #expect(ProviderInfo.displayName(for: "pi") == "Pi")
         #expect(ProviderInfo.displayName(for: "gemini") == "Gemini")
-        #expect(ProviderInfo(id: "grok", authenticated: nil).displayName == "Grok")
+        #expect(ProviderInfo(id: "grok", authenticated: .unknown).displayName == "Grok")
     }
 
     // MARK: - fetchModels (models.list)
@@ -70,8 +69,8 @@ struct ProviderCatalogTests {
             "models": [
                 ["id": "sonnet4.5", "name": "Sonnet 4.5", "provider": "auggie", "isDefault": true],
                 ["id": "haiku4.5", "name": "Haiku 4.5", "provider": "auggie"],
-                ["name": "missing id"],
-            ],
+                ["name": "missing id"]
+            ]
         ]
 
         let models = await store.fetchModels(providerId: "auggie")

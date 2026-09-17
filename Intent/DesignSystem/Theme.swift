@@ -1,7 +1,10 @@
 import SwiftUI
 import UIKit
 
-struct Theme {
+enum Theme {
+    private static let increasedMutedForegroundOpacity = 0.9
+    private static let increasedBorderOpacity = 0.55
+
     static func background(for scheme: ColorScheme) -> Color {
         resolvedColor(UIColor(resource: .themeBackground), for: scheme)
     }
@@ -31,19 +34,21 @@ struct Theme {
     }
 
     static func mutedForeground(
-        for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+        for scheme: ColorScheme,
+        contrast: ColorSchemeContrast = .standard
     ) -> Color {
         if contrast == .increased {
-            return foreground(for: scheme).opacity(0.9)
+            return foreground(for: scheme).opacity(Self.increasedMutedForegroundOpacity)
         }
         return resolvedColor(UIColor(resource: .themeMutedForeground), for: scheme)
     }
 
     static func border(
-        for scheme: ColorScheme, contrast: ColorSchemeContrast = .standard
+        for scheme: ColorScheme,
+        contrast: ColorSchemeContrast = .standard
     ) -> Color {
         if contrast == .increased {
-            return foreground(for: scheme).opacity(0.55)
+            return foreground(for: scheme).opacity(Self.increasedBorderOpacity)
         }
         return resolvedColor(UIColor(resource: .themeBorder), for: scheme)
     }

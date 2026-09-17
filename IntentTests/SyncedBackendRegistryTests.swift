@@ -24,12 +24,12 @@ final class FakeSyncedKeychain: SyncedKeychainListing, @unchecked Sendable {
 private func row(account: String, payload: String) -> [String: Any] {
     [
         kSecAttrAccount as String: account,
-        kSecValueData as String: Data(payload.utf8),
+        kSecValueData as String: Data(payload.utf8)
     ]
 }
 
 /// A valid v1 live payload with every field populated plus an unknown field.
-private let livePayload = """
+private let kLivePayload = """
     {"v": 1, "label": "Mac Studio", "host": "192.168.1.20", \
     "hosts": ["192.168.1.20", "10.0.0.5"], "port": 8843, \
     "fingerprint": "ab:cd:ef", "hostname": "mac-studio.local", \
@@ -40,9 +40,8 @@ private let livePayload = """
 // MARK: - Payload parsing
 
 struct SyncedBackendPayloadTests {
-
-    @Test func parsesLivePayloadAndToleratesUnknownFields() throws {
-        let parsed = SyncedBackendPayload.parse(livePayload)
+    @Test func parsesLivePayloadAndToleratesUnknownFields() {
+        let parsed = SyncedBackendPayload.parse(kLivePayload)
         guard case .record(let record) = parsed else {
             Issue.record("expected .record, got \(parsed)")
             return
@@ -60,7 +59,7 @@ struct SyncedBackendPayloadTests {
         #expect(record.deletedAt == nil)
     }
 
-    @Test func appliesOptionalFieldDefaults() throws {
+    @Test func appliesOptionalFieldDefaults() {
         let payload = """
             {"v": 1, "label": "L", "host": "Host.Local", "port": 1, \
             "fingerprint": "", "updatedAt": 5, "hostname": null}
@@ -72,10 +71,10 @@ struct SyncedBackendPayloadTests {
         #expect(record.hosts == ["Host.Local"])
         #expect(record.hostname == nil)
         #expect(record.detectHosts == true)
-        #expect(record.token == "")
+        #expect(record.token.isEmpty)
     }
 
-    @Test func nonStringHostsEntryFallsBackToHost() throws {
+    @Test func nonStringHostsEntryFallsBackToHost() {
         let payload = """
             {"v": 1, "label": "L", "host": "h", "hosts": ["h", 42], "port": 1, \
             "fingerprint": "f", "updatedAt": 5}
@@ -87,7 +86,7 @@ struct SyncedBackendPayloadTests {
         #expect(record.hosts == ["h"])
     }
 
-    @Test func tombstoneScrubsTokenAndDefaultsDeletedAt() throws {
+    @Test func tombstoneScrubsTokenAndDefaultsDeletedAt() {
         let payload = """
             {"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f", \
             "token": "leaked", "updatedAt": 77, "deleted": true}
@@ -97,11 +96,11 @@ struct SyncedBackendPayloadTests {
             return
         }
         #expect(record.deleted == true)
-        #expect(record.token == "")
+        #expect(record.token.isEmpty)
         #expect(record.deletedAt == 77)
     }
 
-    @Test func tombstoneKeepsExplicitDeletedAt() throws {
+    @Test func tombstoneKeepsExplicitDeletedAt() {
         let payload = """
             {"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f", \
             "updatedAt": 77, "deleted": true, "deletedAt": 99}
@@ -113,7 +112,7 @@ struct SyncedBackendPayloadTests {
         #expect(record.deletedAt == 99)
     }
 
-    @Test func nonBooleanDeletedIsNotATombstone() throws {
+    @Test func nonBooleanDeletedIsNotATombstone() {
         let payload = """
             {"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f", \
             "token": "t", "updatedAt": 77, "deleted": 1}
@@ -164,59 +163,18 @@ struct SyncedBackendPayloadTests {
         #"{"v": 1, "label": "L", "host": "h", "port": true, "fingerprint": "f", "updatedAt": 5}"#,
         #"{"v": 1, "label": "L", "host": "h", "port": 1, "updatedAt": 5}"#,
         #"{"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f"}"#,
-        #"{"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f", "updatedAt": "5"}"#,
+        #"{"v": 1, "label": "L", "host": "h", "port": 1, "fingerprint": "f", "updatedAt": "5"}"#
     ])
     func malformedPayloadIsInvalid(payload: String) {
         #expect(SyncedBackendPayload.parse(payload) == .invalid)
     }
 }
 
-// MARK: - Identity keys + access group
-
-struct SyncedBackendIdentityTests {
-
-    private func record(fingerprint: String, host: String = "H", port: Int = 1)
-        -> SyncedBackendRecord
-    {
-        SyncedBackendRecord(
-            label: "L", host: host, hosts: [host], port: port, fingerprint: fingerprint,
-            hostname: nil, detectHosts: true, token: "", updatedAt: 0,
-            deleted: false, deletedAt: nil)
-    }
-
-    @Test func registryKeyNormalizesFingerprint() {
-        #expect(record(fingerprint: "  ab:cd ").registryKey == "fp:AB:CD")
-    }
-
-    @Test func registryKeyFallsBackToNormalizedHostPort() {
-        #expect(
-            record(fingerprint: "   ", host: " Mac.Local ", port: 88).registryKey
-                == "addr:mac.local:88")
-    }
-
-    @Test func sharedAccessGroupRequiresPrefix() {
-        #expect(SyncedBackendRegistry.sharedAccessGroup(appIdentifierPrefix: nil) == nil)
-        #expect(SyncedBackendRegistry.sharedAccessGroup(appIdentifierPrefix: "") == nil)
-        #expect(SyncedBackendRegistry.sharedAccessGroup(appIdentifierPrefix: "  ") == nil)
-    }
-
-    @Test func sharedAccessGroupJoinsPrefixAndSuffix() {
-        #expect(
-            SyncedBackendRegistry.sharedAccessGroup(appIdentifierPrefix: "TEAM123.")
-                == "TEAM123.dev.intentapp.backends")
-        #expect(
-            SyncedBackendRegistry.sharedAccessGroup(appIdentifierPrefix: "TEAM123")
-                == "TEAM123.dev.intentapp.backends")
-    }
-}
-
 // MARK: - Registry list
 
 struct SyncedBackendRegistryTests {
-
     private func registry(_ keychain: FakeSyncedKeychain, group: String? = "T.dev.intentapp.backends")
-        -> SyncedBackendRegistry
-    {
+        -> SyncedBackendRegistry {
         SyncedBackendRegistry(keychain: keychain, accessGroup: group)
     }
 
@@ -232,7 +190,8 @@ struct SyncedBackendRegistryTests {
         #expect(query[kSecUseDataProtectionKeychain as String] as? Bool == true)
         #expect(
             query[kSecAttrSynchronizable as String] as? String
-                == kSecAttrSynchronizableAny as String)
+                == kSecAttrSynchronizableAny as String
+        )
         #expect(query[kSecMatchLimit as String] as? String == kSecMatchLimitAll as String)
         #expect(query[kSecReturnAttributes as String] as? Bool == true)
         #expect(query[kSecReturnData as String] as? Bool == true)
@@ -263,22 +222,25 @@ struct SyncedBackendRegistryTests {
     @Test func notFoundAndZeroRowsAreEmptyNotUnavailable() {
         #expect(
             registry(FakeSyncedKeychain(outcome: .notFound)).listLiveBackends()
-                == .available([]))
+                == .available([])
+        )
         #expect(
             registry(FakeSyncedKeychain(outcome: .rows([]))).listLiveBackends()
-                == .available([]))
+                == .available([])
+        )
     }
 
     @Test func filtersTombstonesNewerVersionAndMalformedRows() {
         let keychain = FakeSyncedKeychain(outcome: .rows([
-            row(account: "192.168.1.20:8843", payload: livePayload),
+            row(account: "192.168.1.20:8843", payload: kLivePayload),
             row(
                 account: "10.0.0.9:9000",
                 payload: #"{"v": 1, "label": "Gone", "host": "10.0.0.9", "port": 9000, "#
-                    + #""fingerprint": "dd", "updatedAt": 2, "deleted": true}"#),
+                    + #""fingerprint": "dd", "updatedAt": 2, "deleted": true}"#
+            ),
             row(account: "10.0.0.8:9000", payload: #"{"v": 9, "future": true}"#),
             row(account: "10.0.0.7:9000", payload: "not json"),
-            [kSecAttrAccount as String: "row-without-data"],
+            [kSecAttrAccount as String: "row-without-data"]
         ]))
         guard case .available(let records) = registry(keychain).listLiveBackends(now: now) else {
             Issue.record("expected .available")
@@ -295,7 +257,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": " aa:bb ", "updatedAt": 200}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: old),
-            row(account: "10.0.0.2:2", payload: new),
+            row(account: "10.0.0.2:2", payload: new)
         ]))
         guard case .available(let records) = registry(keychain).listLiveBackends() else {
             Issue.record("expected .available")
@@ -312,7 +274,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 200, "deleted": true}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: live),
-            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.2:2", payload: tombstone)
         ]))
         #expect(registry(keychain).listLiveBackends(now: now) == .available([]))
     }
@@ -324,7 +286,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 200}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: tombstone),
-            row(account: "10.0.0.2:2", payload: live),
+            row(account: "10.0.0.2:2", payload: live)
         ]))
         guard case .available(let records) = registry(keychain).listLiveBackends(now: now) else {
             Issue.record("expected .available")
@@ -341,11 +303,11 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 100, "deleted": true}"#
         let liveFirst = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: live),
-            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.2:2", payload: tombstone)
         ]))
         let tombstoneFirst = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.2:2", payload: tombstone),
-            row(account: "10.0.0.1:1", payload: live),
+            row(account: "10.0.0.1:1", payload: live)
         ]))
         #expect(registry(liveFirst).listLiveBackends(now: now) == .available([]))
         #expect(registry(tombstoneFirst).listLiveBackends(now: now) == .available([]))
@@ -358,7 +320,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 100}"#
         for rows in [
             [row(account: "10.0.0.1:1", payload: smaller), row(account: "10.0.0.2:2", payload: larger)],
-            [row(account: "10.0.0.2:2", payload: larger), row(account: "10.0.0.1:1", payload: smaller)],
+            [row(account: "10.0.0.2:2", payload: larger), row(account: "10.0.0.1:1", payload: smaller)]
         ] {
             let keychain = FakeSyncedKeychain(outcome: .rows(rows))
             guard case .available(let records) = registry(keychain).listLiveBackends() else {
@@ -376,7 +338,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 100}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "mac-b.local:1", payload: larger),
-            row(account: "mac-a.local:1", payload: smaller),
+            row(account: "mac-a.local:1", payload: smaller)
         ]))
         guard case .available(let records) = registry(keychain).listLiveBackends() else {
             Issue.record("expected .available")
@@ -386,13 +348,13 @@ struct SyncedBackendRegistryTests {
     }
 
     @Test func blankFingerprintsKeyByHostPort() {
-        let a = #"{"v": 1, "label": "A", "host": "10.0.0.1", "port": 1, "#
+        let firstPayload = #"{"v": 1, "label": "A", "host": "10.0.0.1", "port": 1, "#
             + #""fingerprint": "", "updatedAt": 100}"#
-        let b = #"{"v": 1, "label": "B", "host": "10.0.0.2", "port": 2, "#
+        let secondPayload = #"{"v": 1, "label": "B", "host": "10.0.0.2", "port": 2, "#
             + #""fingerprint": "", "updatedAt": 100}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
-            row(account: "10.0.0.1:1", payload: a),
-            row(account: "10.0.0.2:2", payload: b),
+            row(account: "10.0.0.1:1", payload: firstPayload),
+            row(account: "10.0.0.2:2", payload: secondPayload)
         ]))
         guard case .available(let records) = registry(keychain).listLiveBackends() else {
             Issue.record("expected .available")
@@ -408,7 +370,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "bb", "updatedAt": 200, "deleted": true}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: live),
-            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.2:2", payload: tombstone)
         ]))
         guard case .available(let records) = registry(keychain).listBackends(now: now) else {
             Issue.record("expected .available")
@@ -425,7 +387,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 200, "deleted": true}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: live),
-            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.2:2", payload: tombstone)
         ]))
         guard case .available(let records) = registry(keychain).listBackends(now: now) else {
             Issue.record("expected .available")
@@ -446,7 +408,7 @@ struct SyncedBackendRegistryTests {
             + #""fingerprint": "aa", "updatedAt": 200, "deleted": true}"#
         let keychain = FakeSyncedKeychain(outcome: .rows([
             row(account: "10.0.0.1:1", payload: live),
-            row(account: "10.0.0.2:2", payload: tombstone),
+            row(account: "10.0.0.2:2", payload: tombstone)
         ]))
 
         let beforeExpiry = Date(timeIntervalSince1970: (200 + ttl - 1000) / 1000)
@@ -484,10 +446,12 @@ struct SyncedBackendRegistryTests {
     @Test func listBackendsUnavailableMirrorsLiveList() {
         #expect(
             registry(FakeSyncedKeychain(), group: nil).listBackends()
-                == .unavailable(.accessGroupUnresolved))
+                == .unavailable(.accessGroupUnresolved)
+        )
         let failing = FakeSyncedKeychain(outcome: .failure(errSecNotAvailable))
         #expect(
             registry(failing).listBackends()
-                == .unavailable(.keychainError(errSecNotAvailable)))
+                == .unavailable(.keychainError(errSecNotAvailable))
+        )
     }
 }

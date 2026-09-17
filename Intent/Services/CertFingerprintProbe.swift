@@ -15,8 +15,15 @@ import os
 enum CertFingerprintProbe {
     /// Decision for a completed TLS probe.
     enum Outcome: Equatable {
-        case confirmFingerprint(String)
         case abort(message: String)
+        case confirmFingerprint(String)
+    }
+
+    nonisolated enum FailureDomain: String, Sendable {
+        case dns = "DNS"
+        case network = "Network"
+        case posix = "POSIX"
+        case tls = "TLS"
     }
 
     /// Safe-by-construction rendering of the NWError behind a probe failure:
@@ -24,17 +31,10 @@ enum CertFingerprintProbe {
     /// well-known codes). Never carries foreign error strings, hosts, or
     /// user input, so it can be shown to the user in Release builds.
     nonisolated struct FailureCause: Equatable, Sendable, CustomStringConvertible {
-        nonisolated enum Domain: String, Sendable {
-            case posix = "POSIX"
-            case dns = "DNS"
-            case tls = "TLS"
-            case network = "Network"
-        }
-
-        let domain: Domain
+        let domain: FailureDomain
         let code: Int32
 
-        init(domain: Domain, code: Int32) {
+        init(domain: FailureDomain, code: Int32) {
             self.domain = domain
             self.code = code
         }
@@ -44,6 +44,7 @@ enum CertFingerprintProbe {
             case .posix(let code): self.init(domain: .posix, code: code.rawValue)
             case .dns(let code): self.init(domain: .dns, code: code)
             case .tls(let status): self.init(domain: .tls, code: status)
+            case .wifiAware(let code): self.init(domain: .network, code: code)
             @unknown default: self.init(domain: .network, code: 0)
             }
         }
@@ -75,23 +76,23 @@ enum CertFingerprintProbe {
     /// tell an unreachable endpoint from a TLS problem instead of collapsing
     /// everything to "no certificate".
     nonisolated enum ProbeResult: Equatable, Sendable {
+        /// The probing task was cancelled before it settled.
+        case cancelled
         /// The handshake presented a leaf certificate; its fingerprint.
         case fingerprint(String)
         /// The port is outside 1...65535; nothing was dialed.
         case invalidPort
+        /// The handshake completed without presenting a certificate.
+        case noCertificate
         /// No host was given to probe; nothing was dialed.
         case noHosts
-        /// The TCP connection never came up (refused, unroutable, DNS).
-        case unreachable(cause: FailureCause)
         /// Neither a handshake nor a failure arrived within the deadline.
         case timeout
         /// TCP connected, but the TLS handshake failed (e.g. a plain-TCP or
         /// HTTP listener on that port).
         case tlsFailed(cause: FailureCause)
-        /// The handshake completed without presenting a certificate.
-        case noCertificate
-        /// The probing task was cancelled before it settled.
-        case cancelled
+        /// The TCP connection never came up (refused, unroutable, DNS).
+        case unreachable(cause: FailureCause)
 
         /// User-facing abort message naming the stage that failed. An empty
         /// `.fingerprint` is the degenerate no-certificate case.
@@ -118,10 +119,15 @@ enum CertFingerprintProbe {
     /// How the NWConnection behind a probe settled, if it did before the
     /// deadline.
     nonisolated enum Settlement: Equatable, Sendable {
-        /// `.ready`: the TLS handshake completed.
-        case handshakeCompleted
         /// `.waiting` / `.failed` with the reported error.
         case failed(FailureCause)
+        /// `.ready`: the TLS handshake completed.
+        case handshakeCompleted
+    }
+
+    nonisolated private struct ProbeState: @unchecked Sendable {
+        let captured = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let settled = OSAllocatedUnfairLock<Settlement?>(initialState: nil)
     }
 
     static func outcome(forProbe result: ProbeResult) -> Outcome {
@@ -135,7 +141,8 @@ enum CertFingerprintProbe {
     /// QR payload probes hosts sequentially, so a hung host would otherwise
     /// stall the pairing spinner for minutes. 4s matches the websocket
     /// timeout ConnectionManager.raceHosts uses per host.
-    nonisolated static let probeTimeout: Duration = .seconds(4)
+    nonisolated private static let probeTimeoutSeconds = 4
+    nonisolated static let probeTimeout: Duration = .seconds(probeTimeoutSeconds)
 
     /// Validated NWEndpoint.Port for a user-supplied port number, or nil when
     /// the value is outside 1...65535 (pure, unit-testable).
@@ -154,7 +161,84 @@ enum CertFingerprintProbe {
             return nil
         }
         return WebSocketConnection.fingerprint(
-            ofCertificate: SecCertificateCopyData(serverCert) as Data)
+            ofCertificate: SecCertificateCopyData(serverCert) as Data
+        )
+    }
+
+    nonisolated private static func makeProbeConnection(
+        host: String,
+        port: NWEndpoint.Port,
+        state: ProbeState,
+        continuation: AsyncStream<Void>.Continuation,
+        queue: DispatchQueue
+    ) -> NWConnection {
+        let tlsOptions = NWProtocolTLS.Options()
+        sec_protocol_options_set_verify_block(
+            tlsOptions.securityProtocolOptions,
+            { _, trustRef, complete in
+                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
+                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
+                    state.captured.withLock { $0 = fingerprint }
+                }
+                complete(true)
+            },
+            queue
+        )
+
+        let connection = NWConnection(
+            host: NWEndpoint.Host(host),
+            port: port,
+            using: NWParameters(tls: tlsOptions)
+        )
+        connection.stateUpdateHandler = { connectionState in
+            switch connectionState {
+            case .setup, .preparing:
+                break
+            case .ready:
+                AppLog.connection.debug("[CertProbe] \(host): handshake completed")
+                state.settled.withLock { $0 = $0 ?? .handshakeCompleted }
+                continuation.finish()
+            case .waiting(let error):
+                let cause = FailureCause(error)
+                AppLog.connection.debug("[CertProbe] \(host): waiting (\(cause))")
+                state.settled.withLock { $0 = $0 ?? .failed(cause) }
+                continuation.finish()
+            case .failed(let error):
+                let cause = FailureCause(error)
+                AppLog.connection.debug("[CertProbe] \(host): failed (\(cause))")
+                state.settled.withLock { $0 = $0 ?? .failed(cause) }
+                continuation.finish()
+            case .cancelled:
+                continuation.finish()
+            @unknown default:
+                break
+            }
+        }
+        return connection
+    }
+
+    nonisolated private static func awaitProbeSettlement(
+        connection: NWConnection,
+        queue: DispatchQueue,
+        lifecycleEvents: AsyncStream<Void>,
+        timeout: Duration
+    ) async {
+        await withTaskCancellationHandler {
+            connection.start(queue: queue)
+            await withTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for await _ in lifecycleEvents {}
+                }
+                group.addTask {
+                    try? await Task.sleep(for: timeout)
+                }
+                await group.next()
+                group.cancelAll()
+            }
+        } onCancel: {
+            connection.cancel()
+        }
+        connection.cancel()
     }
 
     /// Probe the server's TLS certificate fingerprint via a bare TLS
@@ -169,83 +253,34 @@ enum CertFingerprintProbe {
     /// probe's private queue, where an inherited MainActor assertion traps
     /// (EXC_BREAKPOINT in dispatch_assert_queue_fail).
     nonisolated static func probe(
-        host: String, port: Int, timeout: Duration = probeTimeout
+        host: String,
+        port: Int,
+        timeout: Duration = probeTimeout
     ) async -> ProbeResult {
         guard let nwPort = endpointPort(port) else { return .invalidPort }
 
-        let captured = OSAllocatedUnfairLock<String?>(initialState: nil)
-        // nil until the connection settles; the first settlement wins.
-        let settled = OSAllocatedUnfairLock<Settlement?>(initialState: nil)
+        let state = ProbeState()
         let queue = DispatchQueue(label: "CertFingerprintProbe.\(host)")
         let (lifecycleEvents, lifecycleContinuation) = AsyncStream<Void>.makeStream()
-
-        let tlsOptions = NWProtocolTLS.Options()
-        sec_protocol_options_set_verify_block(
-            tlsOptions.securityProtocolOptions,
-            { _, trustRef, complete in
-                let serverTrust = sec_trust_copy_ref(trustRef).takeRetainedValue()
-                if let fingerprint = fingerprint(fromServerTrust: serverTrust) {
-                    captured.withLock { $0 = fingerprint }
-                }
-                // Accept the handshake: trust is informational only for the
-                // probe — the fingerprint is surfaced to the user to confirm
-                // and the connection is closed immediately after capture.
-                complete(true)
-            },
-            queue)
-
-        let connection = NWConnection(
-            host: NWEndpoint.Host(host), port: nwPort, using: NWParameters(tls: tlsOptions))
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .setup, .preparing:
-                break
-            case .ready:
-                AppLog.connection.debug("[CertProbe] \(host): handshake completed")
-                settled.withLock { $0 = $0 ?? .handshakeCompleted }
-                lifecycleContinuation.finish()
-            case .waiting(let error):
-                // NWConnection retries in .waiting on unreachable/refusing
-                // hosts; treat it as terminal so sequential probing moves on.
-                let cause = FailureCause(error)
-                AppLog.connection.debug("[CertProbe] \(host): waiting (\(cause))")
-                settled.withLock { $0 = $0 ?? .failed(cause) }
-                lifecycleContinuation.finish()
-            case .failed(let error):
-                let cause = FailureCause(error)
-                AppLog.connection.debug("[CertProbe] \(host): failed (\(cause))")
-                settled.withLock { $0 = $0 ?? .failed(cause) }
-                lifecycleContinuation.finish()
-            case .cancelled:
-                lifecycleContinuation.finish()
-            @unknown default:
-                break
-            }
-        }
-
-        await withTaskCancellationHandler {
-            connection.start(queue: queue)
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    // No values are ever yielded; the stream just terminates
-                    // when the handshake settles.
-                    for await _ in lifecycleEvents {}
-                }
-                group.addTask {
-                    try? await Task.sleep(for: timeout)
-                }
-                await group.next()
-                group.cancelAll()
-            }
-        } onCancel: {
-            connection.cancel()
-        }
-        connection.cancel()
+        let connection = makeProbeConnection(
+            host: host,
+            port: nwPort,
+            state: state,
+            continuation: lifecycleContinuation,
+            queue: queue
+        )
+        await awaitProbeSettlement(
+            connection: connection,
+            queue: queue,
+            lifecycleEvents: lifecycleEvents,
+            timeout: timeout
+        )
 
         let result = classify(
-            captured: captured.withLock { $0 },
-            settled: settled.withLock { $0 },
-            cancelled: Task.isCancelled)
+            captured: state.captured.withLock { $0 },
+            settled: state.settled.withLock { $0 },
+            cancelled: Task.isCancelled
+        )
         AppLog.connection.debug("[CertProbe] \(host): \(String(describing: result))")
         return result
     }
@@ -280,8 +315,11 @@ enum CertFingerprintProbe {
     /// cause of the failure survive). Nonisolated for the same reason as
     /// `probe(host:port:)`. The probe function is injectable for tests.
     nonisolated static func probeFirst(
-        hosts: [String], port: Int,
-        probe: @Sendable (String, Int) async -> ProbeResult = { await Self.probe(host: $0, port: $1) }
+        hosts: [String],
+        port: Int,
+        probe: @Sendable (String, Int) async -> ProbeResult = { host, port in
+            await Self.probe(host: host, port: port)
+        }
     ) async -> ProbeResult {
         var last: ProbeResult = .noHosts
         for host in hosts {
@@ -316,7 +354,9 @@ enum CertFingerprintProbe {
         dialer: any TunnelDialing,
         tcAddress: String,
         remotePort: Int,
-        probe: @Sendable (String, Int) async -> ProbeResult = { await Self.probe(host: $0, port: $1) }
+        probe: @Sendable (String, Int) async -> ProbeResult = { host, port in
+            await Self.probe(host: host, port: port)
+        }
     ) async throws -> ProbeResult {
         guard endpointPort(remotePort) != nil else { return .invalidPort }
         let tunnel = try await dialer.open(tcAddress: tcAddress, remotePort: remotePort)

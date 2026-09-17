@@ -1,6 +1,19 @@
 import Foundation
 
 struct AgentSession: Identifiable, Equatable {
+    private struct AttentionRequestSurface {
+        let kind: String
+        let reason: String?
+        let timestamp: String?
+
+        init?(_ values: [String: Any]) {
+            guard let kind = values["attentionRequestKind"] as? String else { return nil }
+            self.kind = kind
+            reason = values["attentionRequestReason"] as? String
+            timestamp = values["attentionRequestTimestamp"] as? String
+        }
+    }
+
     let id: String
     let name: String
     let status: String
@@ -34,12 +47,17 @@ struct AgentSession: Identifiable, Equatable {
     /// are unanswered; the empty string is the authoritative "nothing pending"
     /// clear, and both are omitted by legacy marker-less sessions. Defaulted so
     /// existing memberwise construction sites keep compiling.
-    var pendingQuestionsMessageId: String? = nil
-    var dismissedQuestionsMessageId: String? = nil
+    var pendingQuestionsMessageId: String?
+    var dismissedQuestionsMessageId: String?
 
     private static let activeStatuses: Set<String> = [
-        "active", "pending", "processing",
-        "streaming", "busy", "responding", "waiting"
+        "active",
+        "pending",
+        "processing",
+        "streaming",
+        "busy",
+        "responding",
+        "waiting"
     ]
 
     var isActive: Bool {
@@ -132,7 +150,8 @@ struct AgentSession: Identifiable, Equatable {
             of: "\\s+",
             with: " ",
             options: .regularExpression
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
         return collapsed.isEmpty ? nil : collapsed
     }
 
@@ -148,8 +167,8 @@ struct AgentSession: Identifiable, Equatable {
     /// overlay: the role flips with the response overlay only (a digest-only
     /// payload keeps the persisted role, same as the daemon), so the
     /// agent-side preview resumes once streamed response text is derivable.
-    func applyingPreview(lastAgentResponse: String?, digest: String?) -> AgentSession {
-        AgentSession(
+    func applyingPreview(lastAgentResponse: String?, digest: String?) -> Self {
+        Self(
             id: id,
             name: name,
             status: status,
@@ -176,12 +195,12 @@ struct AgentSession: Identifiable, Equatable {
         )
     }
 
-    static func parseAgent(_ dict: [String: Any]) -> AgentSession? {
+    static func parseAgent(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let name = dict["name"] as? String else { return nil }
         let metadata = dict["metadata"] as? [String: Any]
         let attentionSurface = attentionRequestSurface(dict)
-        return AgentSession(
+        return Self(
             id: id,
             name: name,
             status: dict["status"] as? String ?? "Idle",
@@ -200,9 +219,9 @@ struct AgentSession: Identifiable, Equatable {
             digest: dict["digest"] as? String,
             specialist: metadata?["specialist"] as? String,
             createdByAgentId: metadata?["createdByAgentId"] as? String,
-            attentionRequestKind: attentionSurface?["attentionRequestKind"] as? String,
-            attentionRequestReason: attentionSurface?["attentionRequestReason"] as? String,
-            attentionRequestTimestamp: attentionSurface?["attentionRequestTimestamp"] as? String,
+            attentionRequestKind: attentionSurface?.kind,
+            attentionRequestReason: attentionSurface?.reason,
+            attentionRequestTimestamp: attentionSurface?.timestamp,
             pendingQuestionsMessageId: metadata?["pendingQuestionsMessageId"] as? String,
             dismissedQuestionsMessageId: metadata?["dismissedQuestionsMessageId"] as? String
         )
@@ -213,11 +232,11 @@ struct AgentSession: Identifiable, Equatable {
     /// agent.get); absent on both when no request is pending (PROTOCOL §5.5).
     /// The whole trio is read from whichever surface carries the kind so a
     /// mixed payload cannot blend fields from the two surfaces.
-    private static func attentionRequestSurface(_ dict: [String: Any]) -> [String: Any]? {
-        if dict["attentionRequestKind"] is String { return dict }
+    private static func attentionRequestSurface(_ dict: [String: Any]) -> AttentionRequestSurface? {
+        if let surface = AttentionRequestSurface(dict) { return surface }
         if let metadata = dict["metadata"] as? [String: Any],
-           metadata["attentionRequestKind"] is String {
-            return metadata
+           let surface = AttentionRequestSurface(metadata) {
+            return surface
         }
         return nil
     }
@@ -226,12 +245,11 @@ struct AgentSession: Identifiable, Equatable {
     /// without requiring the full session parse (which needs id/name), so
     /// attention state can still raise/clear on a partial payload.
     static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
-        guard let surface = attentionRequestSurface(dict),
-              let kind = surface["attentionRequestKind"] as? String else { return nil }
+        guard let surface = attentionRequestSurface(dict) else { return nil }
         return PendingAttentionRequest(
-            kind: AgentAttentionKind(wire: kind),
-            reason: oneLiner(surface["attentionRequestReason"] as? String),
-            raisedAt: ISO8601DateFormatter.lenientDate(from: surface["attentionRequestTimestamp"] as? String)
+            kind: AgentAttentionKind(wire: surface.kind),
+            reason: oneLiner(surface.reason),
+            raisedAt: ISO8601DateFormatter.lenientDate(from: surface.timestamp)
         )
     }
 }
@@ -256,8 +274,8 @@ struct PendingAttentionRequest: Equatable {
 /// (PROTOCOL §5.5). Unknown wire kinds fall back to the discussion treatment
 /// so newer daemons still surface an indicator.
 enum AgentAttentionKind: Equatable {
-    case discussion
     case blocker
+    case discussion
 
     init(wire: String) {
         self = wire == "blocker" ? .blocker : .discussion
@@ -285,20 +303,20 @@ enum AgentAttentionKind: Equatable {
 /// attention (blocker/discussion, unless a turn is live) > waiting >
 /// running > idle.
 enum AgentAvatarState: Equatable {
+    case attentionBlocker
+    case attentionDiscussion
+    case completed
+    case failed
     case idle
+    case question
     case running
     case waiting
-    case failed
-    case completed
-    case question
-    case attentionDiscussion
-    case attentionBlocker
 
-    static func state(for session: AgentSession) -> AgentAvatarState {
+    static func state(for session: AgentSession) -> Self {
         let status = session.status.lowercased()
         // A completed status yields to live work: a re-woken agent keeps its
         // stale "completed" status until the turn settles.
-        if status == "completed" && !isRunning(session) {
+        if status == "completed", !Self.isRunning(session) {
             return .completed
         }
         if session.isErrored {
@@ -349,7 +367,10 @@ enum AgentAvatarState: Equatable {
     }
 
     private static let terminalStatuses: Set<String> = [
-        "completed", "error", "failed", "deleted"
+        "completed",
+        "error",
+        "failed",
+        "deleted"
     ]
 
     private static func isTerminal(_ session: AgentSession) -> Bool {
@@ -384,4 +405,3 @@ enum AgentAvatarState: Equatable {
         return !isTerminal(session) && session.isActive
     }
 }
-

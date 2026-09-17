@@ -1,9 +1,12 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
 
 @MainActor
 @Observable class NoteStore {
+    // JSON-RPC Invalid params, also used by the daemon for unknown entity ids.
+    private static let invalidParametersErrorCode = -32_602
+
     var notes: [Note] = []
     var isLoading = false
     /// True once a `note.list` for the current workspace has completed
@@ -22,8 +25,9 @@ import Observation
     private var resnapshotInProgress = false
     private var connectionObserver: AnyCancellable?
 
-    /// Live `noteChanges()` streams, keyed per consumer; see `noteChanges()`.
-    @ObservationIgnored private var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
+    /// Optional callback invoked when a note event is received (for detail view refresh)
+    var onNoteChanged: (() -> Void)?
+    @ObservationIgnored var noteChangeContinuations: [UUID: AsyncStream<Void>.Continuation] = [:]
 
     init(connectionManager: ConnectionManagerRouting = ConnectionManager.shared) {
         self.connectionManager = connectionManager
@@ -42,45 +46,6 @@ import Observation
         if let subscriptionId = noteSubscriptionId {
             connectionManager.unregisterSubscriptionHandler(id: subscriptionId)
         }
-    }
-
-    /// Sorted notes: spec (isDefault) first, then by createdAt ascending (oldest first). Archived notes excluded.
-    var sortedNotes: [Note] {
-        notes
-            .filter { !$0.isArchived }
-            .sorted { a, b in
-                if a.isDefault != b.isDefault {
-                    return a.isDefault
-                }
-                // Match Electron behavior: sort by createdAt ascending (oldest first, newest at bottom)
-                return a.createdAt < b.createdAt
-            }
-    }
-
-    /// Root notes (no parentId, or parentId not found in current notes). Archived excluded.
-    var rootNotes: [Note] {
-        let noteIds = Set(notes.map { $0.id })
-        return sortedNotes.filter { note in
-            guard let parentId = note.parentId else { return true }
-            return !noteIds.contains(parentId)
-        }
-    }
-
-    /// Get child notes for a given parent ID, sorted by createdAt ascending.
-    func childNotes(of parentId: String) -> [Note] {
-        notes
-            .filter { !$0.isArchived && $0.parentId == parentId }
-            .sorted { a, b in a.createdAt < b.createdAt }
-    }
-
-    /// Check if a note has children
-    func hasChildren(_ noteId: String) -> Bool {
-        notes.contains { !$0.isArchived && $0.parentId == noteId }
-    }
-
-    /// Find a note by ID
-    func note(byId id: String) -> Note? {
-        notes.first { $0.id == id }
     }
 
     // MARK: - Connection observation
@@ -107,7 +72,7 @@ import Observation
         resnapshotInProgress = false
 
         // If we have a workspace context, refetch and subscribe
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await fetchNotes(workspaceId: workspaceId)
             await subscribeLiveState(workspaceId: workspaceId)
         }
@@ -144,16 +109,11 @@ import Observation
         }
         do {
             let items = try await requestNoteList(workspaceId: workspaceId)
-            // Guard: a stale response for a previous workspace must not
-            // replace the current workspace's notes or flip hasLoaded. The
-            // current workspace's own fetch manages isLoading.
+            // Ignore stale responses for a previous workspace.
             guard self.workspaceId == workspaceId else { return }
-            // A fetch cancelled while its request was in flight must not
-            // publish the late response either.
+            // A cancelled fetch must not publish its late response.
             try Task.checkCancellation()
-            // Only publish a changed list: an identical refetch (e.g. the
-            // deferred refresh after swiping back to the workspace) must not
-            // invalidate observers and rebuild the note list.
+            // Avoid invalidating observers for an identical refetch.
             let merged = mergeSlimRows(items.compactMap { Note.parseNote($0) })
             if merged != notes {
                 notes = merged
@@ -161,22 +121,18 @@ import Observation
             if !hasLoaded {
                 hasLoaded = true
             }
-            // The spec is the one structural exception (its content links task
-            // notes for the progress ring), so hydrate it full when its slim
-            // row is stale. Fail-soft: a miss keeps the slim row as-is.
+            // Hydrate a stale spec because its content links task notes.
             if let specId = notes.first(where: { $0.isDefault && $0.isContentStale })?.id {
                 _ = await fetchNote(noteId: specId, workspaceId: workspaceId)
             }
         } catch is CancellationError {
-            // Cancelled refresh: nothing to publish, nothing to log.
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch notes: \(error)")
         }
         if isLoading {
             isLoading = false
         }
-        // Note: live-state subscription is owned by onConnected() lifecycle.
-        // Direct fetchNotes() calls (e.g., user pull-to-refresh) do NOT auto-subscribe.
+        // Live-state subscription is owned by onConnected().
     }
 
     /// `note.list` with the slim projection (PROTOCOL §5.2 `projection:
@@ -193,9 +149,11 @@ import Observation
                 "note.list",
                 params: ["workspaceId": workspaceId, "projection": "slim"]
             )
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             AppLog.notes.warning(
-                "[NoteStore] note.list rejected projection param, retrying full: \(error)")
+                "[NoteStore] note.list rejected projection param, retrying full: \(error)"
+            )
             result = try await connectionManager.request(
                 "note.list",
                 params: ["workspaceId": workspaceId]
@@ -214,7 +172,7 @@ import Observation
     /// possibly-outdated body.
     private func mergeSlimRows(_ incoming: [Note]) -> [Note] {
         guard !notes.isEmpty else { return incoming }
-        let existingById = Dictionary(notes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let existingById = Dictionary(notes.map { ($0.id, $0) }) { existing, _ in existing }
         return incoming.map { row in
             guard row.isContentStale,
                   let existing = existingById[row.id],
@@ -268,22 +226,14 @@ import Observation
                 "note.get",
                 params: ["noteId": noteId, "workspaceId": workspaceId]
             )
-            // A fetch cancelled while note.get was in flight (e.g. the
-            // deferred swipe-back refresh hydrating the spec after the view
-            // disappeared) must not publish the late body.
+            // A cancelled fetch must not publish a late note body.
             try Task.checkCancellation()
             if let dict = result as? [String: Any],
                let noteDict = dict["note"] as? [String: Any],
                let note = Note.parseNote(noteDict) {
                 if note.isArchived { return .notFound }
-                // Upsert the full body over a cached slim list row (§5.2) so
-                // content surfaces and optimistic content edits work off the
-                // cache. Replace-only: never grows the list, only for the
-                // workspace the cache belongs to (note ids like "spec" repeat
-                // across workspaces), and never over a newer cached row — a
-                // delta/re-list may have advanced it while this note.get was
-                // in flight, and a late older body must not clobber it or
-                // clear its stale marker.
+                // Replace a matching cached slim row, but never a newer row or
+                // one from another workspace.
                 if self.workspaceId == workspaceId,
                    let idx = notes.firstIndex(where: { $0.id == note.id }),
                    !Self.isCachedRowNewer(notes[idx], thanFetched: note) {
@@ -293,28 +243,29 @@ import Observation
             }
             return .transientError
         } catch is CancellationError {
-            // Cancelled fetch: nothing to publish, nothing to log.
             return .transientError
         } catch let error as NSError where error.isEntityNotFound {
-            // A not-found that races the caller's cancellation (the response
-            // resumed the request before the transport's cancellation cleanup
-            // ran) must not navigate a dismissed screen away.
+            // Ignore not-found when it races the caller's cancellation.
             return Task.isCancelled ? .transientError : .notFound
-        } catch let error as NSError where error.domain == "WebSocket" && error.code == -32602 {
+        } catch let error as NSError
+            where error.domain == "WebSocket" && error.code == Self.invalidParametersErrorCode {
             // -32602 without data.code == "not-found" (invalid-params or absent
             // data, PROTOCOL §3.3/§9) — log loudly and treat as transient so a
             // client params bug doesn't silently masquerade as deletion.
             AppLog.notes.error(
                 "[NoteStore] UNEXPECTED -32602 without data.code == \"not-found\" for "
                     + "note \(noteId) (data.code: \(error.intentErrorDataCode ?? "absent")) — "
-                    + "NOT treating as deletion: \(error.localizedDescription)")
+                    + "NOT treating as deletion: \(error.localizedDescription)"
+            )
             return .transientError
         } catch {
             AppLog.notes.error("[NoteStore] Failed to fetch note: \(error)")
             return .transientError
         }
     }
+}
 
+extension NoteStore {
     // MARK: - Task status writes
 
     /// Restore one note's pre-request snapshot after a failed optimistic
@@ -337,7 +288,10 @@ import Observation
         var original: Note?
         if let idx = notes.firstIndex(where: { $0.id == noteId }),
            let rewritten = NoteContentSegmenter.replacingCheckboxMarker(
-               in: notes[idx].content, line: line, status: status) {
+               in: notes[idx].content,
+               line: line,
+               status: status
+           ) {
             original = notes[idx]
             notes[idx] = notes[idx].withContent(rewritten)
         }
@@ -346,7 +300,7 @@ import Observation
                 "workspaceId": workspaceId,
                 "noteId": noteId,
                 "line": line,
-                "status": status,
+                "status": status
             ])
             return true
         } catch {
@@ -370,7 +324,7 @@ import Observation
             _ = try await connectionManager.request("task.updateNoteStatus", params: [
                 "workspaceId": workspaceId,
                 "noteId": noteId,
-                "status": status,
+                "status": status
             ])
             return true
         } catch {
@@ -426,7 +380,7 @@ import Observation
     // MARK: - Event subscription
 
     func startObservingEvents(workspaceId: String? = nil) {
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             self.workspaceId = workspaceId
         }
 
@@ -451,34 +405,20 @@ import Observation
             return
         }
 
-        guard let dict = params as? [String: Any] else { return }
-
-        let event: [String: Any]
-        if let innerEvent = dict["event"] as? [String: Any] {
-            event = innerEvent
-        } else {
-            event = dict
-        }
-
+        guard let event = Self.event(from: params) else { return }
         guard let eventType = event["type"] as? String else { return }
 
         let eventWorkspaceId = event["workspaceId"] as? String
         guard eventWorkspaceId == workspaceId || eventWorkspaceId == nil else { return }
 
-        // The refetch below runs only in the non-live fallback (no
-        // `note.subscribe` snapshot yet, or after a subscription loss); while
-        // live, deltas arrive via the subscription push and a refetch here
-        // would double-apply.
         switch Self.classify(type: eventType, data: event["data"] as? [String: Any]) {
         case .refetch:
+            // Only refetch if not in live mode (avoid double-apply)
             if !noteLive {
-                guard let workspaceId = workspaceId else { return }
+                guard let workspaceId else { return }
                 Task { await fetchNotes(workspaceId: workspaceId) }
             }
-            // `noteChanges()` re-reads the note currently open in
-            // `NoteDetailView` (`refreshNote`, which also navigates away on a
-            // definitive not-found), so only an update or deletion is
-            // relevant — a newly created note can never be the open one.
+            onNoteChanged?()
             if eventType != "note:created" {
                 for continuation in noteChangeContinuations.values {
                     continuation.yield()
@@ -487,58 +427,6 @@ import Observation
         case .patchInPlace, .ignore, nil:
             break
         }
-    }
-
-    /// Note-change notifications for the detail view: one element per note
-    /// update/deletion event (`note:created` excluded, see `handleEvent`).
-    /// The consuming task owns the subscription — cancelling it (SwiftUI's
-    /// `.task` on disappearance) terminates the stream and drops the
-    /// continuation, so the store never holds a closure that captures the
-    /// view and no refresh runs after teardown. Events arriving while the
-    /// consumer is busy coalesce into a single pending element.
-    func noteChanges() -> AsyncStream<Void> {
-        let id = UUID()
-        let (stream, continuation) = AsyncStream.makeStream(
-            of: Void.self, bufferingPolicy: .bufferingNewest(1))
-        noteChangeContinuations[id] = continuation
-        continuation.onTermination = { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.noteChangeContinuations[id] = nil
-            }
-        }
-        return stream
-    }
-
-    // MARK: - Event classification
-
-    /// Bus channels this store consumes. Every catalog type on them must be in
-    /// exactly one table below (`IntentTests/EventCatalogCoverageTests.swift`).
-    nonisolated static let handledChannels = ["note:"]
-
-    /// Explicit allowlist (mirrors AgentStore / WorkspaceStore). intentd
-    /// emits exactly three note types — `note:created`, `note:updated`,
-    /// `note:deleted` — each with a `{ noteId, title, action }` payload that
-    /// does not distinguish a body edit from a title/metadata write, so any
-    /// of them can change a slim list row (title, updatedAt, contentPreview)
-    /// or list membership. Comment/thread activity is its own `comment:*`
-    /// family and never reaches this store; a `comment.add` that rewrites
-    /// the note markdown rides `note:updated` and legitimately refreshes
-    /// the row's preview/updatedAt.
-    nonisolated static let refetchEventTypes: Set<String> = [
-        "note:created", "note:updated", "note:deleted",
-    ]
-
-    /// No `note:` type is currently dropped. Any other `note:`-prefixed type
-    /// a newer daemon adds is unclassified (ignored at runtime) until it is
-    /// placed here or in `refetchEventTypes`.
-    nonisolated static let ignoredEventTypes: Set<String> = []
-
-    /// Pure classification of one event; `nil` means the tables above do not
-    /// name the type, which `handleEvent` treats as ignore.
-    nonisolated static func classify(type: String, data: [String: Any]?) -> EventClassification? {
-        if refetchEventTypes.contains(type) { return .refetch }
-        if ignoredEventTypes.contains(type) { return .ignore }
-        return nil
     }
 
     private func handleSubscriptionPush(_ push: SubscriptionPush) {
@@ -588,7 +476,7 @@ import Observation
             // Unregister handler before unsubscribing
             connectionManager.unregisterSubscriptionHandler(id: subId)
             do {
-                let _ = try await connectionManager.request("note.unsubscribe", params: [
+                _ = try await connectionManager.request("note.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -598,11 +486,10 @@ import Observation
 
         noteSubscriptionId = nil
 
-        if let workspaceId = workspaceId {
+        if let workspaceId {
             await subscribeLiveState(workspaceId: workspaceId)
             // Baseline refetch to bridge the gap during resnapshot
             await fetchNotes(workspaceId: workspaceId)
         }
     }
 }
-

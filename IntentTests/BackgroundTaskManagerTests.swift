@@ -1,6 +1,6 @@
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 @Suite("Background task manager")
 @MainActor
@@ -49,7 +49,6 @@ struct BackgroundTaskManagerTests {
     }
 }
 
-
 @MainActor
 private final class FakeBackgroundTaskApplication {
     let identifier = UIBackgroundTaskIdentifier(rawValue: 1)
@@ -62,7 +61,7 @@ private final class FakeBackgroundTaskApplication {
             beginTask: { [self] handler in
                 beginCount += 1
                 expirationHandler = handler
-                return self.identifier
+                return identifier
             },
             endTask: { [self] in endedIdentifiers.append($0) }
         )

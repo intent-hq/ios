@@ -3,7 +3,7 @@ import SwiftUI
 struct WorkspaceDetailView: View {
     let workspaceId: String
     @Environment(AppCoordinator.self) var coordinator
-    @State var agentStore: AgentStore
+    @State private var agentStore: AgentStore
     @State private var viewModel = AgentListViewModel()
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
@@ -13,21 +13,21 @@ struct WorkspaceDetailView: View {
     @State private var showArchiveConfirmation = false
     @State private var showSpecialistPicker = false
     @State private var selectedTab = 0  // 0 = Agents, 1 = Context
-    @State private var progressWidth: CGFloat = 0
-    @State private var deferredRefreshTask: Task<Void, Never>?
-    @State var noteStore: NoteStore
+    @State private var noteStore: NoteStore
     @Environment(BackendSession.self) private var session
-
-    /// Delay before refreshing the stores when the view re-appears for a
-    /// workspace it has already loaded (e.g. underneath the interactive
-    /// swipe-back from a conversation), so the fetch and any resulting list
-    /// update land after the transition has settled rather than during it.
-    private static let reappearRefreshDelay: Duration = .milliseconds(500)
 
     init(workspaceId: String, session: BackendSession) {
         self.workspaceId = workspaceId
         _agentStore = State(initialValue: AgentStore(connectionManager: session.connection))
         _noteStore = State(initialValue: NoteStore(connectionManager: session.connection))
+    }
+
+    var agentStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(agentStore.connectionManager)
+    }
+
+    var noteStoreConnectionID: ObjectIdentifier {
+        ObjectIdentifier(noteStore.connectionManager)
     }
 
     private var workspaceStore: WorkspaceStore { session.workspaceStore }
@@ -44,188 +44,48 @@ struct WorkspaceDetailView: View {
         return title
     }
 
-    var body: some View {
+    private var lifecycleContent: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                // Repo name
-                if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
-                    Text("\(owner)/\(repo)")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(
-                            for: colorScheme, contrast: colorSchemeContrast))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                        .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
-                }
-
-                // Agent-set status screenshot (PROTOCOL §5.1 statusImageAssetId):
-                // tap opens the lightbox. Mounted only when set, so an unset
-                // workspace leaves no gap.
-                if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
-                    WorkspaceStatusImageView(
-                        workspaceId: workspaceId, assetId: statusImageAssetId, style: .detail)
-                        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                        .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
-                }
-
-                // Task progress bar
-                if let total = workspace?.taskStatsTotal,
-                   let progress = WorkspaceTaskProgressLayout(
-                       total: total,
-                       completed: workspace?.taskStatsCompleted ?? 0,
-                       inProgress: workspace?.taskStatsInProgress ?? 0
-                   ) {
-                    let progressSummary = "\(progress.completed) of \(progress.total) tasks complete"
-                        + (progress.inProgress > 0
-                            ? ", \(progress.inProgress) in progress"
-                            : "")
-
-                    VStack(alignment: .leading,
-                           spacing: Constants.WorkspaceDetail.progressSectionSpacing) {
-                        Text(progressSummary)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Theme.foreground(for: colorScheme))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: Constants.WorkspaceDetail.progressSpacing) {
-                            if progress.completed > 0 {
-                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .fill(Color.green)
-                                    .frame(width: progressWidth > 0
-                                        ? progress.segmentWidth(
-                                            for: progress.completed,
-                                            in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
-                                        : 0)
-                            }
-                            if progress.inProgress > 0 {
-                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .fill(Color.blue)
-                                    .frame(width: progressWidth > 0
-                                        ? progress.segmentWidth(
-                                            for: progress.inProgress,
-                                            in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
-                                        : 0)
-                            }
-                            if progress.remaining > 0 {
-                                RoundedRectangle(cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .fill(Theme.mutedForeground(
-                                        for: colorScheme, contrast: colorSchemeContrast).opacity(
-                                            colorSchemeContrast == .increased
-                                                ? 0.55
-                                                : Constants.WorkspaceDetail.remainingProgressOpacity))
-                                    .frame(width: progressWidth > 0
-                                        ? progress.segmentWidth(
-                                            for: progress.remaining,
-                                            in: progressWidth,
-                                            spacing: Constants.WorkspaceDetail.progressSpacing)
-                                        : 0)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .frame(height: Constants.WorkspaceDetail.progressHeight)
-                        .clipShape(RoundedRectangle(
-                            cornerRadius: Constants.WorkspaceDetail.progressCornerRadius))
-                        .onGeometryChange(for: CGFloat.self) { proxy in
-                            proxy.size.width
-                        } action: { width in
-                            progressWidth = width
-                        }
-                        .overlay {
-                            if colorSchemeContrast == .increased {
-                                RoundedRectangle(
-                                    cornerRadius: Constants.WorkspaceDetail.progressCornerRadius)
-                                    .strokeBorder(Theme.border(
-                                        for: colorScheme, contrast: colorSchemeContrast),
-                                        lineWidth: 1.5)
-                            }
-                        }
-                        .accessibilityHidden(true)
-                    }
-                    .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                    .padding(.bottom, Constants.WorkspaceDetail.progressBottomPadding)
-                }
-
-                #if !os(visionOS)
-                Picker("Workspace Content", selection: $selectedTab) {
-                    Text("Agents").tag(0)
-                    Text("Context").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
-                .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
-                    hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0))
-                .padding(.bottom, Constants.WorkspaceDetail.tabVerticalPadding)
-                #endif
-
-                // Tab content
-                if selectedTab == 0 {
-                    // Agent list
-                    if (agentStore.isLoading || !agentStore.hasLoaded) && viewModel.agents.isEmpty {
-                        Spacer()
-                        ProgressView("Loading agents...")
-                            .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        Spacer()
-                    } else if viewModel.agents.isEmpty {
-                        ContentUnavailableView(
-                            "No Agents",
-                            systemImage: "person.2",
-                            description: Text("Agents will appear here when active.")
-                        )
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        agentListContent
-                    }
-                } else {
-                    // Notes list
-                    NoteListView(workspaceId: workspaceId, noteStore: noteStore)
-                }
-
-            }
+            detailContent
         }
         .onAppear {
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceOpened(
-                    workspaceId: workspaceId, connectionId: connectionId)
+                    workspaceId: workspaceId,
+                    connectionId: connectionId
+                )
             }
             // Don't clear viewModel.agents here — AgentStore handles that when workspaceId changes.
             // Clearing here causes an empty list flash when swiping back from conversation.
-            if agentStore.hasLoaded {
-                // Re-appearing for a workspace this view already loaded: the
-                // event handlers are still registered and the saved tab is
-                // already applied. Stay idle during the pop transition and
-                // only refresh once it has settled.
-                scheduleDeferredRefresh()
-            } else {
-                agentStore.startObservingEvents()
-                noteStore.startObservingEvents()
-                Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
-                Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
-                if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
-                    selectedTab = savedTab
-                }
+            agentStore.startObservingEvents()
+            noteStore.startObservingEvents()
+            Task { await agentStore.fetchAgents(workspaceId: workspaceId) }
+            Task { await noteStore.fetchNotes(workspaceId: workspaceId) }
+            if let savedTab = PersistenceManager.shared.loadWorkspaceTab(workspaceId: workspaceId) {
+                selectedTab = savedTab
             }
         }
         .onDisappear {
-            cancelDeferredRefresh()
             // Keyed by (workspace, connection): removing this pair never
             // clobbers another window's visibility.
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
-                    workspaceId: workspaceId, connectionId: connectionId)
+                    workspaceId: workspaceId,
+                    connectionId: connectionId
+                )
             }
         }
         .onChange(of: workspaceId) { oldId, newId in
-            cancelDeferredRefresh()
             if let connectionId = session.backendID?.connectionID {
                 NotificationManager.shared.workspaceClosed(
-                    workspaceId: oldId, connectionId: connectionId)
+                    workspaceId: oldId,
+                    connectionId: connectionId
+                )
                 NotificationManager.shared.workspaceOpened(
-                    workspaceId: newId, connectionId: connectionId)
+                    workspaceId: newId,
+                    connectionId: connectionId
+                )
             }
             viewModel.agents = []
             agentStore.prepareForWorkspaceChange(to: newId)
@@ -245,27 +105,27 @@ struct WorkspaceDetailView: View {
             viewModel.agents = newAgents
         }
         .onChange(of: agentStore.hasLoaded) { _, hasLoaded in
-            // The agent list just became authoritative for this workspace:
-            // let the coordinator continue into a sole top-level agent. The
-            // sync keeps the decision independent of onChange ordering.
             guard hasLoaded else { return }
             viewModel.agents = agentStore.agents
-            // The saved tab restores synchronously before the fetch lands, so
-            // a workspace showing its Context tab stays there: consume the arm
-            // instead of forwarding.
             guard selectedTab == 0 else {
                 coordinator.cancelPendingAutoOpen(workspaceId: workspaceId)
                 return
             }
             coordinator.autoOpenSoleAgentIfArmed(
-                workspaceId: workspaceId, foregroundAgents: viewModel.foregroundAgents)
+                workspaceId: workspaceId,
+                foregroundAgents: viewModel.foregroundAgents
+            )
         }
         .onChange(of: workspaceStore.workspaces) { _, newWorkspaces in
             // After workspaces load, if ours is missing it was deleted/archived externally
-            if workspaceStore.lastUpdated != nil && !newWorkspaces.contains(where: { $0.id == workspaceId }) {
+            if workspaceStore.lastUpdated != nil, !newWorkspaces.contains(where: { $0.id == workspaceId }) {
                 coordinator.handleMissingWorkspace(workspaceId: workspaceId)
             }
         }
+    }
+
+    var body: some View {
+        lifecycleContent
         #if os(visionOS)
         // Deliberate confirmation sheets (HIG): destructive/irreversible
         // workspace actions get a focused sheet with one primary action.
@@ -303,7 +163,8 @@ struct WorkspaceDetailView: View {
         #endif
         .sheet(isPresented: $showSpecialistPicker) {
             SpecialistPickerView(
-                workspaceId: workspaceId, agentStore: agentStore,
+                workspaceId: workspaceId,
+                agentStore: agentStore,
                 optionsStore: session.creationOptionsStore
             )
                 .environment(coordinator)
@@ -346,93 +207,157 @@ struct WorkspaceDetailView: View {
             }
         }
     }
+}
+
+private extension WorkspaceDetailView {
+    var detailContent: some View {
+        VStack(spacing: 0) {
+            repositoryName
+            statusImage
+            taskProgress
+            workspacePicker
+            tabContent
+        }
+    }
 
     @ViewBuilder
-    private var agentListContent: some View {
+    var statusImage: some View {
+        if let statusImageAssetId = WorkspaceStatusImageLayout.assetId(for: workspace) {
+            WorkspaceStatusImageView(
+                workspaceId: workspaceId,
+                assetId: statusImageAssetId,
+                style: .detail
+            )
+            .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+            .padding(.bottom, Constants.WorkspaceDetail.statusImageBottomPadding)
+        }
+    }
+
+    @ViewBuilder
+    var repositoryName: some View {
+        if let owner = workspace?.repositoryOwner, let repo = workspace?.repositoryName {
+            Text("\(owner)/\(repo)")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(
+                    for: colorScheme,
+                    contrast: colorSchemeContrast
+                ))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+                .padding(.bottom, Constants.WorkspaceDetail.titleBottomPadding)
+        }
+    }
+    @ViewBuilder
+    var taskProgress: some View {
+        if let total = workspace?.taskStatsTotal,
+           let progress = WorkspaceTaskProgressLayout(
+               total: total,
+               completed: workspace?.taskStatsCompleted ?? 0,
+               inProgress: workspace?.taskStatsInProgress ?? 0
+           ) {
+            WorkspaceTaskProgressView(progress: progress)
+        }
+    }
+    @ViewBuilder
+    var workspacePicker: some View {
+        #if !os(visionOS)
+        Picker("Workspace Content", selection: $selectedTab) {
+            Text("Agents").tag(0)
+            Text("Context").tag(1)
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
+        .padding(.top, WorkspaceDetailHeaderLayout.tabTopPadding(
+            hasTaskProgress: (workspace?.taskStatsTotal ?? 0) > 0
+        ))
+        .padding(.bottom, Constants.WorkspaceDetail.tabVerticalPadding)
+        #endif
+    }
+
+    @ViewBuilder
+    var tabContent: some View {
+        if selectedTab == 0 {
+            if agentStore.isLoading || !agentStore.hasLoaded, viewModel.agents.isEmpty {
+                Spacer()
+                ProgressView("Loading agents...")
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                Spacer()
+            } else if viewModel.agents.isEmpty {
+                ContentUnavailableView(
+                    "No Agents",
+                    systemImage: "person.2",
+                    description: Text("Agents will appear here when active.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                agentListContent
+            }
+        } else {
+            NoteListView(workspaceId: workspaceId, noteStore: noteStore)
+        }
+    }
+
+    var agentListContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                // Foreground agents
-                ForEach(viewModel.foregroundAgents) { agent in
-                    Button {
-                        coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-                    } label: {
-                        AgentRowView(agent: agent, colorScheme: colorScheme)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Rectangle())
-                    .visionListRowHitTarget()
-
-                    let delegates = viewModel.delegatedAgents(for: agent.id)
-                    if !delegates.isEmpty {
-                        DelegatedAgentsRow(
-                            agents: delegates,
-                            isExpanded: expandedDelegates.contains(agent.id),
-                            colorScheme: colorScheme,
-                            onToggle: { toggleDelegates(agent.id) }
-                        )
-                        if expandedDelegates.contains(agent.id) {
-                            ForEach(delegates) { delegate in
-                                Button {
-                                    coordinator.onSelectAgent(delegate.id, workspaceId: workspaceId, agentName: delegate.name)
-                                } label: {
-                                    AgentRowView(agent: delegate, colorScheme: colorScheme, indented: true)
-                                }
-                                .buttonStyle(.plain)
-                                .contentShape(Rectangle())
-                                .visionListRowHitTarget()
-                            }
-                        }
-                    }
-                }
-
-                // Standalone background agents
-                if !viewModel.standaloneBackgroundAgents.isEmpty {
-                    BackgroundAgentsHeader(
-                        agents: viewModel.standaloneBackgroundAgents,
-                        isExpanded: showBackgroundAgents,
-                        colorScheme: colorScheme,
-                        onToggle: { showBackgroundAgents.toggle() }
-                    )
-                    if showBackgroundAgents {
-                        ForEach(viewModel.standaloneBackgroundAgents) { agent in
-                            Button {
-                                coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
-                            } label: {
-                                AgentRowView(agent: agent, colorScheme: colorScheme)
-                            }
-                            .buttonStyle(.plain)
-                            .contentShape(Rectangle())
-                            .visionListRowHitTarget()
-                        }
-                    }
-                }
+                foregroundAgents
+                backgroundAgents
             }
             .padding(.horizontal, Constants.WorkspaceDetail.horizontalPadding)
         }
-        .refreshable {
-            await agentStore.fetchAgents(workspaceId: workspaceId)
+        .refreshable { await agentStore.fetchAgents(workspaceId: workspaceId) }
+    }
+
+    var foregroundAgents: some View {
+        ForEach(viewModel.foregroundAgents) { agent in
+            foregroundAgent(agent)
         }
     }
 
-    private func scheduleDeferredRefresh() {
-        deferredRefreshTask?.cancel()
-        let workspaceId = workspaceId
-        deferredRefreshTask = Task {
-            try? await Task.sleep(for: Self.reappearRefreshDelay)
-            guard !Task.isCancelled else { return }
-            // Run both refreshes concurrently (as the first-appearance path
-            // does) so a slow agent.list cannot hold up the notes refresh.
-            // Structured children: cancelling the deferred task still cancels
-            // both fetches.
-            async let agents: Void = agentStore.fetchAgents(workspaceId: workspaceId)
-            async let notes: Void = noteStore.fetchNotes(workspaceId: workspaceId)
-            _ = await (agents, notes)
+    @ViewBuilder
+    func foregroundAgent(_ agent: AgentSession) -> some View {
+        agentButton(agent)
+        let delegates = viewModel.delegatedAgents(for: agent.id)
+        if !delegates.isEmpty {
+            DelegatedAgentsRow(
+                agents: delegates,
+                isExpanded: expandedDelegates.contains(agent.id),
+                colorScheme: colorScheme
+            ) { toggleDelegates(agent.id) }
+            if expandedDelegates.contains(agent.id) {
+                ForEach(delegates) { delegate in
+                    agentButton(delegate, indented: true)
+                }
+            }
         }
     }
 
-    private func cancelDeferredRefresh() {
-        deferredRefreshTask?.cancel()
-        deferredRefreshTask = nil
+    @ViewBuilder
+    var backgroundAgents: some View {
+        if !viewModel.standaloneBackgroundAgents.isEmpty {
+            BackgroundAgentsHeader(
+                agents: viewModel.standaloneBackgroundAgents,
+                isExpanded: showBackgroundAgents,
+                colorScheme: colorScheme
+            ) { showBackgroundAgents.toggle() }
+            if showBackgroundAgents {
+                ForEach(viewModel.standaloneBackgroundAgents) { agent in
+                    agentButton(agent)
+                }
+            }
+        }
+    }
+
+    func agentButton(_ agent: AgentSession, indented: Bool = false) -> some View {
+        Button {
+            coordinator.onSelectAgent(agent.id, workspaceId: workspaceId, agentName: agent.name)
+        } label: {
+            AgentRowView(agent: agent, colorScheme: colorScheme, indented: indented)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .visionListRowHitTarget()
     }
 
     private func toggleDelegates(_ agentId: String) {
@@ -446,8 +371,10 @@ struct WorkspaceDetailView: View {
     private func deleteWorkspace() {
         Task {
             do {
-                let _ = try await session.connection.request(
-                    "workspace.delete", params: ["workspaceId": workspaceId])
+                _ = try await session.connection.request(
+                    "workspace.delete",
+                    params: ["workspaceId": workspaceId]
+                )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
@@ -459,8 +386,10 @@ struct WorkspaceDetailView: View {
     private func archiveWorkspace() {
         Task {
             do {
-                let _ = try await session.connection.request(
-                    "workspace.archive", params: ["workspaceId": workspaceId])
+                _ = try await session.connection.request(
+                    "workspace.archive",
+                    params: ["workspaceId": workspaceId]
+                )
                 coordinator.onBackToWorkspaceList()
                 await workspaceStore.fetchAll()
             } catch {
@@ -512,39 +441,3 @@ struct WorkspaceActionConfirmationSheet: View {
     }
 }
 #endif
-
-struct WorkspaceTaskProgressLayout: Equatable {
-    let total: Int
-    let completed: Int
-    let inProgress: Int
-    let remaining: Int
-
-    init?(total: Int, completed: Int, inProgress: Int) {
-        guard total > 0 else { return nil }
-        self.total = total
-        self.completed = min(max(0, completed), total)
-        self.inProgress = min(max(0, inProgress), total - self.completed)
-        self.remaining = total - self.completed - self.inProgress
-    }
-
-    var visibleSegmentCount: Int {
-        [completed, inProgress, remaining].count(where: { $0 > 0 })
-    }
-
-    func segmentWidth(
-        for count: Int,
-        in measuredWidth: CGFloat,
-        spacing: CGFloat
-    ) -> CGFloat {
-        let totalSpacing = spacing * CGFloat(max(0, visibleSegmentCount - 1))
-        let distributableWidth = max(0, measuredWidth - totalSpacing)
-        return distributableWidth * CGFloat(count) / CGFloat(total)
-    }
-}
-
-enum WorkspaceDetailHeaderLayout {
-    static func tabTopPadding(hasTaskProgress: Bool) -> CGFloat {
-        hasTaskProgress ? 0 : Constants.WorkspaceDetail.tabVerticalPadding
-    }
-}
-

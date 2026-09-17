@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct NoteContentSegmentsTests {
     // MARK: - segments(for:)
@@ -40,10 +40,10 @@ struct NoteContentSegmentsTests {
         let content = "- [ ] A\n\n- [ ] B"
         let segments = NoteContentSegmenter.segments(for: content)
         #expect(segments.count == 2)
-        guard case .taskLine(let b) = segments[1] else {
+        guard case .taskLine(let secondTask) = segments[1] else {
             Issue.record("expected task line"); return
         }
-        #expect(b.lineNumber == 3)
+        #expect(secondTask.lineNumber == 3)
     }
 
     @Test func nestedIndentedCheckboxes() {

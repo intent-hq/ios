@@ -1,15 +1,26 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 @MainActor
 struct BackgroundHookStoreTests {
+    private struct HookStateExpectation {
+        let rawValue: String
+        let state: BackgroundHook.State
+        let isActive: Bool
+    }
+
+    private enum PerpetualFixtureState {
+        case oneShot
+        case perpetual
+        case unreported
+    }
 
     private func makeHookDict(
         hookId: String = "hook-1",
         state: String = "scheduled",
         nextRunAt: String? = "2026-07-31T10:06:00Z",
-        perpetual: Bool? = nil
+        perpetual: PerpetualFixtureState = .unreported
     ) -> [String: Any] {
         var dict: [String: Any] = [
             "hookId": hookId,
@@ -17,14 +28,18 @@ struct BackgroundHookStoreTests {
             "agentId": "agent-1",
             "name": "ci-watch",
             "code": "const s = await ws.pr.status();",
-            "delayMs": 60000,
+            "delayMs": 60_000,
             "state": state,
             "createdAt": "2026-07-31T10:00:00Z",
             "expiresAt": "2026-07-31T11:00:00Z",
             "runCount": 6
         ]
         if let nextRunAt { dict["nextRunAt"] = nextRunAt }
-        if let perpetual { dict["perpetual"] = perpetual }
+        switch perpetual {
+        case .oneShot: dict["perpetual"] = false
+        case .perpetual: dict["perpetual"] = true
+        case .unreported: break
+        }
         return dict
     }
 
@@ -37,7 +52,7 @@ struct BackgroundHookStoreTests {
         #expect(hook.agentId == "agent-1")
         #expect(hook.name == "ci-watch")
         #expect(hook.code == "const s = await ws.pr.status();")
-        #expect(hook.delayMs == 60000)
+        #expect(hook.delayMs == 60_000)
         #expect(hook.state == .scheduled)
         #expect(hook.createdAt == "2026-07-31T10:00:00Z")
         #expect(hook.expiresAt == "2026-07-31T11:00:00Z")
@@ -48,25 +63,25 @@ struct BackgroundHookStoreTests {
     }
 
     @Test func parsesPerpetualFlag() throws {
-        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: true)))
+        let perpetual = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .perpetual)))
         #expect(perpetual.perpetual == true)
-        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: false)))
+        let oneShot = try #require(BackgroundHook.parseHook(makeHookDict(perpetual: .oneShot)))
         #expect(oneShot.perpetual == false)
     }
 
     @Test func parsesAllStatesAndIsActive() throws {
-        let expectations: [(String, BackgroundHook.State, Bool)] = [
-            ("scheduled", .scheduled, true),
-            ("running", .running, true),
-            ("dispatched", .dispatched, false),
-            ("evicted", .evicted, false),
-            ("cancelled", .cancelled, false),
-            ("expired", .expired, false)
+        let expectations = [
+            HookStateExpectation(rawValue: "scheduled", state: .scheduled, isActive: true),
+            HookStateExpectation(rawValue: "running", state: .running, isActive: true),
+            HookStateExpectation(rawValue: "dispatched", state: .dispatched, isActive: false),
+            HookStateExpectation(rawValue: "evicted", state: .evicted, isActive: false),
+            HookStateExpectation(rawValue: "cancelled", state: .cancelled, isActive: false),
+            HookStateExpectation(rawValue: "expired", state: .expired, isActive: false)
         ]
-        for (raw, expected, active) in expectations {
-            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: raw)))
-            #expect(hook.state == expected)
-            #expect(hook.isActive == active)
+        for expectation in expectations {
+            let hook = try #require(BackgroundHook.parseHook(makeHookDict(state: expectation.rawValue)))
+            #expect(hook.state == expectation.state)
+            #expect(hook.isActive == expectation.isActive)
         }
     }
 
@@ -106,10 +121,10 @@ struct BackgroundHookStoreTests {
         #expect(DurationFormat.compact(59.6) == "1m")
         #expect(DurationFormat.compact(12 * 60) == "12m")
         #expect(DurationFormat.compact(12 * 60 + 30) == "12m 30s")
-        #expect(DurationFormat.compact(3_600) == "1h")
-        #expect(DurationFormat.compact(3_600 + 5 * 60 + 30) == "1h 5m")
-        #expect(DurationFormat.compact(3_600 + 30) == "1h")
-        #expect(DurationFormat.compact(2 * 86_400 + 3 * 3_600) == "2d 3h")
+        #expect(DurationFormat.compact(3600) == "1h")
+        #expect(DurationFormat.compact(3600 + 5 * 60 + 30) == "1h 5m")
+        #expect(DurationFormat.compact(3600 + 30) == "1h")
+        #expect(DurationFormat.compact(2 * 86_400 + 3 * 3600) == "2d 3h")
         #expect(DurationFormat.compact(86_400 + 30 * 60) == "1d")
     }
 
@@ -167,7 +182,7 @@ struct BackgroundHookStoreTests {
         }
     }
 
-    @Test func foldUnknownHookRequestsRefetch() throws {
+    @Test func foldUnknownHookRequestsRefetch() {
         let result = BackgroundHookStore.foldHookEvent(
             hooks: [],
             eventType: "hook:scheduled",
@@ -186,7 +201,9 @@ struct BackgroundHookStoreTests {
         )
         #expect(result.hooks[0].code == "const s = await ws.pr.status();")
     }
+}
 
+extension BackgroundHookStoreTests {
     // MARK: - Store integration (subscribe / events / RPC / reconnect)
 
     private func makeSubscribedStore(
@@ -223,8 +240,13 @@ struct BackgroundHookStoreTests {
             "event": [
                 "type": "hook:run-started",
                 "workspaceId": "ws-1",
-                "data": ["workspaceId": "ws-1", "agentId": "agent-1",
-                         "hookId": "hook-1", "name": "ci-watch", "state": "running"]
+                "data": [
+                    "workspaceId": "ws-1",
+                    "agentId": "agent-1",
+                    "hookId": "hook-1",
+                    "name": "ci-watch",
+                    "state": "running"
+                ]
             ]
         ] as [String: Any])
         try await Task.sleep(nanoseconds: 50_000_000)

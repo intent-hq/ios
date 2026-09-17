@@ -8,6 +8,7 @@ import TailcatKit
 /// 127.0.0.1:`localPort` to the daemon's WSS port over the tunnel.
 nonisolated protocol TunnelSession: Sendable {
     var localPort: Int { get }
+
     func close() async
 }
 
@@ -26,10 +27,11 @@ nonisolated protocol TunnelDialing: Sendable {
 nonisolated struct UnavailableTunnelDialer: TunnelDialing {
     static let unavailableMessage = "Tailcat tunnels are not supported on this platform"
 
-    func open(tcAddress: String, remotePort: Int) async throws -> any TunnelSession {
+    func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
         throw WebSocketTransportError.failed(
             host: ConnectionManager.tunnelCandidateLabel,
-            message: Self.unavailableMessage)
+            message: Self.unavailableMessage
+        )
     }
 }
 
@@ -107,6 +109,7 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
     /// slow-path candidate and only needs to finish, not finish fast —
     /// reachable direct hosts win the race long before this.
     static let establishTimeoutMs = 20_000
+    private static let millisecondsPerSecond: CFTimeInterval = 1000
 
     /// Bridges task cancellation to the blocking gomobile dial: `cancel()`
     /// records the cancellation and closes the in-flight client so a blocked
@@ -175,9 +178,68 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
                 let inFlight = client
                 lock.unlock()
                 try? inFlight?.close()
-                let closeMs = Int((CFAbsoluteTimeGetCurrent() - cancelTime) * 1000)
+                let closeMs = Int(
+                    (CFAbsoluteTimeGetCurrent() - cancelTime) * TailcatTunnelDialer.millisecondsPerSecond
+                )
                 AppLog.connection.debug("[TailcatTunnel] Dial cancelled: client.close() returned \(closeMs)ms after cancel")
             }
+        }
+    }
+
+    private static func logFinished(
+        _ outcome: String,
+        dialStart: CFAbsoluteTime,
+        handle: DialHandle
+    ) {
+        let now = CFAbsoluteTimeGetCurrent()
+        var detail = "\(outcome) in \(Int((now - dialStart) * millisecondsPerSecond))ms"
+        if let cancelledAt = handle.cancelledAt {
+            detail += " (cancelled at +\(Int((cancelledAt - dialStart) * millisecondsPerSecond))ms, cancel→teardown \(Int((now - cancelledAt) * millisecondsPerSecond))ms)"
+        }
+        AppLog.connection.debug("[TailcatTunnel] Dial \(detail)")
+    }
+
+    private static func completeOpen(
+        tcAddress: String,
+        remotePort: Int,
+        handle: DialHandle,
+        dialStart: CFAbsoluteTime,
+        continuation: CheckedContinuation<any TunnelSession, Error>
+    ) {
+        guard let client = TailcatkitNewClient(tcAddress) else {
+            logFinished("failed: client init", dialStart: dialStart, handle: handle)
+            continuation.resume(throwing: WebSocketTransportError.failed(
+                host: ConnectionManager.tunnelCandidateLabel,
+                message: "TailcatKit client init failed"
+            ))
+            return
+        }
+        guard handle.register(client) else {
+            try? client.close()
+            logFinished("cancelled before start", dialStart: dialStart, handle: handle)
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        do {
+            let pingStart = CFAbsoluteTimeGetCurrent()
+            let pingResult = Result { try client.ping(establishTimeoutMs) }
+            let pingMs = Int((CFAbsoluteTimeGetCurrent() - pingStart) * millisecondsPerSecond)
+            if let cancelledAt = handle.cancelledAt {
+                let latencyMs = Int((CFAbsoluteTimeGetCurrent() - cancelledAt) * millisecondsPerSecond)
+                AppLog.connection.debug("[TailcatTunnel] Dial cancelled before ping returned: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
+                try? client.close()
+                logFinished("cancelled before ping returned", dialStart: dialStart, handle: handle)
+                continuation.resume(throwing: CancellationError())
+                return
+            }
+            try pingResult.get()
+            let forwarder = try client.forward(remotePort)
+            logFinished("established (ping \(pingMs)ms)", dialStart: dialStart, handle: handle)
+            continuation.resume(returning: TailcatTunnelSession(client: client, forwarder: forwarder))
+        } catch {
+            try? client.close()
+            logFinished("failed: \(error.localizedDescription)", dialStart: dialStart, handle: handle)
+            continuation.resume(throwing: error)
         }
     }
 
@@ -186,61 +248,14 @@ nonisolated struct TailcatTunnelDialer: TunnelDialing {
         let dialStart = CFAbsoluteTimeGetCurrent()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                // The gomobile calls block; keep them off the cooperative pool.
                 DispatchQueue.global(qos: .userInitiated).async {
-                    func logFinished(_ outcome: String) {
-                        let now = CFAbsoluteTimeGetCurrent()
-                        var detail = "\(outcome) in \(Int((now - dialStart) * 1000))ms"
-                        if let cancelledAt = handle.cancelledAt {
-                            detail += " (cancelled at +\(Int((cancelledAt - dialStart) * 1000))ms, cancel→teardown \(Int((now - cancelledAt) * 1000))ms)"
-                        }
-                        AppLog.connection.debug("[TailcatTunnel] Dial \(detail)")
-                    }
-                    guard let client = TailcatkitNewClient(tcAddress) else {
-                        logFinished("failed: client init")
-                        continuation.resume(throwing: WebSocketTransportError.failed(
-                            host: ConnectionManager.tunnelCandidateLabel,
-                            message: "TailcatKit client init failed"))
-                        return
-                    }
-                    guard handle.register(client) else {
-                        try? client.close()
-                        logFinished("cancelled before start")
-                        continuation.resume(throwing: CancellationError())
-                        return
-                    }
-                    do {
-                        // Warm the tunnel with a relay round-trip BEFORE exposing
-                        // the loopback forwarder: the local TCP connect succeeds
-                        // instantly, so without this the WebSocket handshake
-                        // deadline would tick against tunnel establishment.
-                        let pingStart = CFAbsoluteTimeGetCurrent()
-                        let pingResult = Result { try client.ping(Self.establishTimeoutMs) }
-                        let pingMs = Int((CFAbsoluteTimeGetCurrent() - pingStart) * 1000)
-                        if let cancelledAt = handle.cancelledAt {
-                            // Measures whether close() interrupted the ping: a
-                            // latency near zero means it did, a latency near the
-                            // ping's own timeout means the ping ran to completion.
-                            let latencyMs = Int((CFAbsoluteTimeGetCurrent() - cancelledAt) * 1000)
-                            AppLog.connection.debug("[TailcatTunnel] Dial cancelled before ping returned: ping returned \(latencyMs)ms after cancel (ping took \(pingMs)ms)")
-                            // The cancel's close may have been a no-op if the
-                            // client had not started yet; close again (idempotent
-                            // on the Go side) so the stack never lives on unowned.
-                            try? client.close()
-                            logFinished("cancelled before ping returned")
-                            continuation.resume(throwing: CancellationError())
-                            return
-                        }
-                        try pingResult.get()
-                        let forwarder = try client.forward(remotePort)
-                        logFinished("established (ping \(pingMs)ms)")
-                        continuation.resume(
-                            returning: TailcatTunnelSession(client: client, forwarder: forwarder))
-                    } catch {
-                        try? client.close()
-                        logFinished("failed: \(error.localizedDescription)")
-                        continuation.resume(throwing: error)
-                    }
+                    Self.completeOpen(
+                        tcAddress: tcAddress,
+                        remotePort: remotePort,
+                        handle: handle,
+                        dialStart: dialStart,
+                        continuation: continuation
+                    )
                 }
             }
         } onCancel: {

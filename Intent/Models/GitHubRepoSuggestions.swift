@@ -23,10 +23,11 @@ enum GitHubRepoSuggestions {
     /// "intent-hq/intentd"); an empty query keeps them all. Order is
     /// preserved.
     static func prefixFiltered(_ repos: [GitHubRepo], query: String) -> [GitHubRepo] {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !q.isEmpty else { return repos }
-        return repos.filter {
-            $0.fullName.lowercased().hasPrefix(q) || $0.name.lowercased().hasPrefix(q)
+        let queryPrefix = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !queryPrefix.isEmpty else { return repos }
+        return repos.filter { repo in
+            repo.fullName.lowercased().hasPrefix(queryPrefix)
+                || repo.name.lowercased().hasPrefix(queryPrefix)
         }
     }
 

@@ -16,11 +16,11 @@ struct GitHubRepo: Identifiable, Equatable {
     /// The canonical `owner/name` display form.
     var fullName: String { "\(owner)/\(name)" }
 
-    static func parseRepo(_ dict: [String: Any]) -> GitHubRepo? {
+    static func parseRepo(_ dict: [String: Any]) -> Self? {
         guard let owner = dict["owner"] as? String,
               let name = dict["name"] as? String,
               !owner.isEmpty, !name.isEmpty else { return nil }
-        return GitHubRepo(
+        return Self(
             owner: owner,
             name: name,
             htmlUrl: dict["htmlUrl"] as? String,
@@ -44,9 +44,9 @@ struct GitHubBranchListing: Equatable {
 /// outcome: the authoritative listing, the cached-first paint shown only
 /// until it lands, and the last cold-load error (cleared by a success).
 struct GitHubBranchLoadState: Equatable {
-    var listing: GitHubBranchListing? = nil
-    var paint: GitHubBranchListing? = nil
-    var error: String? = nil
+    var listing: GitHubBranchListing?
+    var paint: GitHubBranchListing?
+    var error: String?
 
     /// What the branch step renders: authoritative first, else the paint.
     var displayed: GitHubBranchListing? { listing ?? paint }

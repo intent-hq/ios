@@ -13,6 +13,7 @@ struct HookWakeAttributionView: View {
             Image(systemName: "bolt.fill")
                 .font(.caption2)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Text(attribution.displayName)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.foreground(for: colorScheme))

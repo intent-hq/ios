@@ -18,6 +18,11 @@ struct MonitoredPrsRow: View {
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.openURL) private var openURL
 
+    private static let pendingIndicatorOpacity = 0.8
+    private static let pendingIndicatorSide: CGFloat = 6
+    private static let chipVerticalPadding: CGFloat = 5
+    private static let chipBackgroundOpacity = 0.3
+
     init(viewModel: ConversationViewModel, monitoredPrStore: MonitoredPrStore) {
         self.viewModel = viewModel
         self.monitoredPrStore = monitoredPrStore
@@ -29,6 +34,7 @@ struct MonitoredPrsRow: View {
                 Image(systemName: "arrow.triangle.pull")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text("Monitored PRs")
                     .font(.caption)
                     .fontWeight(.medium)
@@ -61,7 +67,9 @@ struct MonitoredPrsRow: View {
             Button {
                 Task {
                     await monitoredPrStore.flush(
-                        monitorId: monitor.monitorId, check: true)
+                        monitorId: monitor.monitorId,
+                        mode: .refreshFirst
+                    )
                 }
             } label: {
                 Label("Check and flush", systemImage: "arrow.triangle.2.circlepath")
@@ -92,26 +100,28 @@ struct MonitoredPrsRow: View {
                 .lineLimit(1)
             if monitor.hasPendingChanges {
                 Circle()
-                    .fill(Color.orange.opacity(0.8))
-                    .frame(width: 6, height: 6)
+                    .fill(Color.orange.opacity(Self.pendingIndicatorOpacity))
+                    .frame(width: Self.pendingIndicatorSide, height: Self.pendingIndicatorSide)
             }
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.vertical, 5)
-        .background(Theme.muted(for: colorScheme).opacity(0.3))
+        .padding(.vertical, Self.chipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
         .overlay(
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme).opacity(Constants.Conversation.StatusStrip.chipBorderOpacity),
-                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth)
+                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth
+                )
         )
     }
 
     private var workspaceRepo: String? {
         guard let workspace = session.workspaceStore.workspaces.first(
-                where: { $0.id == viewModel.workspaceId }),
+                where: { $0.id == viewModel.workspaceId }
+        ),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"
@@ -174,10 +184,14 @@ struct MonitoredPrsRow: View {
         if let reason = snapshot.mergeBlockedReason, !reason.isEmpty {
             return "Merge blocked: \(reason)"
         }
-        if let mergeable = snapshot.mergeable {
-            return mergeable ? "Mergeable" : "Not mergeable"
+        switch snapshot.mergeability {
+        case .computing:
+            return nil
+        case .mergeable:
+            return "Mergeable"
+        case .notMergeable:
+            return "Not mergeable"
         }
-        return nil
     }
 
     /// Compact checks summary from the last snapshot, e.g. "3/4 passing".

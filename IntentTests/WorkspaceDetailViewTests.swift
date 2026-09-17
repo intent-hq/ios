@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct WorkspaceDetailViewTests {
     @Test func delegatedAgentCountUsesLegibleSingularAndPluralLabels() {
@@ -25,6 +25,14 @@ struct WorkspaceDetailViewTests {
         #expect(progress.completed == 4)
         #expect(progress.inProgress == 3)
         #expect(progress.remaining == 3)
+    }
+
+    @Test func progressSummaryIncludesOnlyActiveWork() throws {
+        let active = try #require(WorkspaceTaskProgressLayout(total: 10, completed: 4, inProgress: 3))
+        let inactive = try #require(WorkspaceTaskProgressLayout(total: 10, completed: 4, inProgress: 0))
+
+        #expect(active.summary == "4 of 10 tasks complete, 3 in progress")
+        #expect(inactive.summary == "4 of 10 tasks complete")
     }
 
     @Test func overflowingCountsAreClampedToTotal() throws {
@@ -58,11 +66,20 @@ struct WorkspaceDetailViewTests {
 
     @Test func visibleSegmentCountIncludesOnlyPositiveSegments() throws {
         let threeSegments = try #require(WorkspaceTaskProgressLayout(
-            total: 10, completed: 4, inProgress: 3))
+            total: 10,
+            completed: 4,
+            inProgress: 3
+        ))
         let twoSegments = try #require(WorkspaceTaskProgressLayout(
-            total: 10, completed: 4, inProgress: 6))
+            total: 10,
+            completed: 4,
+            inProgress: 6
+        ))
         let oneSegment = try #require(WorkspaceTaskProgressLayout(
-            total: 10, completed: 10, inProgress: 0))
+            total: 10,
+            completed: 10,
+            inProgress: 0
+        ))
 
         #expect(threeSegments.visibleSegmentCount == 3)
         #expect(twoSegments.visibleSegmentCount == 2)
@@ -76,7 +93,7 @@ struct WorkspaceDetailViewTests {
             (total: 10, completed: 4, inProgress: 3),
             (total: 10, completed: 4, inProgress: 6),
             (total: 10, completed: 0, inProgress: 3),
-            (total: 10, completed: 10, inProgress: 0),
+            (total: 10, completed: 10, inProgress: 0)
         ]
 
         for input in inputs {
@@ -91,7 +108,8 @@ struct WorkspaceDetailViewTests {
                 width + progress.segmentWidth(
                     for: count,
                     in: measuredWidth,
-                    spacing: spacing)
+                    spacing: spacing
+                )
             }
             let totalSpacing = spacing * CGFloat(progress.visibleSegmentCount - 1)
 
@@ -101,7 +119,10 @@ struct WorkspaceDetailViewTests {
 
     @Test func segmentWidthsAreZeroWhenSpacingExceedsMeasuredWidth() throws {
         let progress = try #require(WorkspaceTaskProgressLayout(
-            total: 10, completed: 4, inProgress: 3))
+            total: 10,
+            completed: 4,
+            inProgress: 3
+        ))
 
         for count in [progress.completed, progress.inProgress, progress.remaining] {
             #expect(progress.segmentWidth(for: count, in: 1, spacing: 4) == 0)
@@ -126,8 +147,11 @@ struct WorkspaceDetailViewTests {
             attachmentUploadService: AttachmentUploadService(connection: connection),
             workspaceFileImageLoader: fileLoader,
             attachmentImageLoader: AttachmentImageLoader(
-                connection: connection, fileLoader: fileLoader),
-            attentionCueCenter: WorkspaceAttentionCueCenter(playSound: {}))
+                connection: connection,
+                fileLoader: fileLoader
+            ),
+            attentionCueCenter: WorkspaceAttentionCueCenter {}
+        )
     }
 
     /// A pinned window's workspace detail must fetch/observe agents and
@@ -136,12 +160,14 @@ struct WorkspaceDetailViewTests {
     @Test func workspaceDetailStoresRouteOverTheSessionConnection() {
         let fake = FakeConnectionManager()
         let view = WorkspaceDetailView(
-            workspaceId: "ws-1", session: makePinnedSession(connection: fake))
+            workspaceId: "ws-1",
+            session: makePinnedSession(connection: fake)
+        )
 
-        #expect(view.agentStore.connectionManager === fake)
-        #expect(view.noteStore.connectionManager === fake)
-        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
-        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 
     /// Same contract for the note detail: its note/agent stores are bound
@@ -150,12 +176,15 @@ struct WorkspaceDetailViewTests {
     @Test func noteDetailStoresRouteOverTheSessionConnection() {
         let fake = FakeConnectionManager()
         let view = NoteDetailView(
-            noteId: "n-1", workspaceId: "ws-1", noteTitle: "Note",
-            session: makePinnedSession(connection: fake))
+            noteId: "n-1",
+            workspaceId: "ws-1",
+            noteTitle: "Note",
+            session: makePinnedSession(connection: fake)
+        )
 
-        #expect(view.noteStore.connectionManager === fake)
-        #expect(view.agentStore.connectionManager === fake)
-        #expect(view.noteStore.connectionManager !== ConnectionManager.shared)
-        #expect(view.agentStore.connectionManager !== ConnectionManager.shared)
+        #expect(view.noteStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.agentStoreConnectionID == ObjectIdentifier(fake))
+        #expect(view.noteStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
+        #expect(view.agentStoreConnectionID != ObjectIdentifier(ConnectionManager.shared))
     }
 }

@@ -1,0 +1,386 @@
+import Foundation
+@testable import Intent
+import Observation
+import Synchronization
+import Testing
+import UIKit
+
+extension ConversationViewModelTests {
+    private static let defaultMarkSeenDebounceMilliseconds = 20
+    private static let defaultMarkSeenDebounce: Duration = .milliseconds(defaultMarkSeenDebounceMilliseconds)
+    private static let defaultMarkSeenTimeoutMilliseconds = 2000.0
+    private static let millisecondsPerSecond = 1000.0
+    private static let markSeenPollDelayNanoseconds: UInt64 = 5_000_000
+
+    // MARK: - Image attachment state regression tests
+
+    @Test func regressionPendingImagesPopulatedBeforeClearing() async throws {
+        // Regression test: verify that pendingImages contains data while images
+        // are pending (buildImageBlocks captures from this before clearing)
+        let viewModel = makeVM()
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
+        viewModel.addImage(img1)
+        viewModel.addImage(img2)
+
+        // Images should be available before any clearing
+        #expect(viewModel.pendingImages.count == 2)
+        #expect(!viewModel.pendingImages.isEmpty)
+    }
+
+    @Test func regressionClearingPendingImagesRemovesAll() async throws {
+        // Regression test: after calling removeAll(), pendingImages should be empty
+        let viewModel = makeVM()
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
+        viewModel.addImage(img1)
+        viewModel.addImage(img2)
+        #expect(viewModel.pendingImages.count == 2)
+
+        viewModel.pendingImages.removeAll()
+        #expect(viewModel.pendingImages.isEmpty)
+        #expect(viewModel.pendingImages.isEmpty)
+    }
+
+    @Test func regressionCaptureImagesThenClearBeforeSend() async throws {
+        // Regression test: the send flow captures images into a local variable
+        // and clears pendingImages BEFORE the async network call. This ensures
+        // the UI immediately reflects the cleared state while the captured images
+        // are still available for the send operation.
+        // This mirrors the fix in MessageInputView.sendCurrentMessage().
+        let viewModel = makeVM()
+        let img1 = try #require(UIImage(systemName: "star"))
+        let img2 = try #require(UIImage(systemName: "circle"))
+        viewModel.addImage(img1)
+        viewModel.addImage(img2)
+        #expect(viewModel.pendingImages.count == 2)
+
+        // Simulate the fixed send flow: capture images, then clear pendingImages
+        let capturedImages = viewModel.pendingImages
+        viewModel.pendingImages.removeAll()
+
+        // pendingImages should be empty immediately (UI updates)
+        #expect(viewModel.pendingImages.isEmpty)
+
+        // But the captured images should still be available for the send call
+        #expect(capturedImages.count == 2)
+
+        // sendMessage with explicit images works even though pendingImages is
+        // empty. With no server, placement fails — and the FAIL-CLOSED restore
+        // path (surfacePlacementFailure) re-attaches the captured images so
+        // nothing is silently lost.
+        await viewModel.sendMessage("test with images", images: capturedImages)
+
+        #expect(viewModel.imagePlacementError != nil)
+        #expect(viewModel.pendingImages.count == 2, "captured images restored on failed placement")
+    }
+
+    // MARK: - Seen-marker triggers (agent.markSeen, PROTOCOL §5.5)
+
+    /// Fake-backed VM with a short markSeen debounce for trigger tests.
+    private func makeSeenVM(debounce: Duration = ConversationViewModelTests.defaultMarkSeenDebounce)
+        -> (viewModel: ConversationViewModel, fake: FakeConnectionManager) {
+        let viewModel = makeVM()
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.sendMessage"] = ["messageId": "srv-1"]
+        fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        viewModel.store = ConversationStore(connectionManager: fake)
+        viewModel.markSeenDebounceDuration = debounce
+        return (viewModel, fake)
+    }
+
+    /// Poll (yielding the main actor) until `agent.markSeen` has been called
+    /// `count` times or the timeout elapses.
+    private func waitForMarkSeen(
+        _ fake: FakeConnectionManager,
+        count: Int = 1,
+        timeoutMs: Double = ConversationViewModelTests.defaultMarkSeenTimeoutMilliseconds
+    ) async {
+        let deadline = Date().addingTimeInterval(timeoutMs / Self.millisecondsPerSecond)
+        while Date() < deadline {
+            if fake.paramsForMethod("agent.markSeen").count >= count { return }
+            try? await Task.sleep(nanoseconds: Self.markSeenPollDelayNanoseconds)
+        }
+    }
+
+    @Test func turnFinishFiresDebouncedMarkSeenOnceWithNewestPersistedId() async {
+        let (viewModel, fake) = makeSeenVM()
+        viewModel.conversationAppeared()
+        viewModel.store.messages = [
+            textMessage(role: .user, text: "hi", id: "m1"),
+            textMessage(role: .assistant, text: "done", id: "m2")
+        ]
+
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false
+
+        await waitForMarkSeen(fake)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1, "a single turn finish fires exactly once")
+        #expect(params.first?["messageId"] as? String == "m2")
+    }
+
+    @Test func turnFinishOffScreenDoesNotMarkSeen() async {
+        let (viewModel, fake) = makeSeenVM()
+        // No conversationAppeared() — the conversation is not on screen.
+        viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
+
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "turn finish is gated on the conversation being on screen"
+        )
+    }
+
+    @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async {
+        let (viewModel, fake) = makeSeenVM()
+        viewModel.conversationAppeared()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "old", id: "m1")]
+        viewModel.store.lastSeenMessageId = "m1"
+        viewModel.scenePhaseChanged(isActive: false)
+        // Let the backgrounding boundary fire settle (it dedupes against the
+        // current marker, so no RPC goes out for it).
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!fake.didCallMethod("agent.markSeen"))
+
+        // A turn finishing while backgrounded must not schedule the debounce
+        // — otherwise m2 (newer than the marker) would be sent below.
+        viewModel.store.messages.append(textMessage(role: .assistant, text: "new", id: "m2"))
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "turn finish is gated on the app being active"
+        )
+    }
+
+    @Test func plainEntryDoesNotMarkSeen() async {
+        let (viewModel, fake) = makeSeenVM()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "old", id: "m1")]
+
+        viewModel.conversationAppeared()
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "entry never marks seen — the divider anchor must survive"
+        )
+    }
+
+    @Test func replacingStoreDetachesPriorStreamingLifecycle() async {
+        let (viewModel, oldFake) = makeSeenVM()
+        let oldStore = viewModel.store
+        viewModel.conversationAppeared()
+        oldStore.isStreaming = true
+
+        let newFake = FakeConnectionManager()
+        newFake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        viewModel.store = ConversationStore(connectionManager: newFake)
+        oldStore.isStreaming = false
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(!oldFake.didCallMethod("agent.markSeen"))
+        #expect(!newFake.didCallMethod("agent.markSeen"))
+    }
+
+    @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
+        let (viewModel, fake) = makeSeenVM()
+        // No conversationAppeared() — composing is proof of looking.
+
+        await viewModel.sendMessage("hello")
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        let optimisticId = try #require(viewModel.messages.last?.id)
+        #expect(
+            params.first?["messageId"] as? String == optimisticId,
+            "the user's own (persisted-id) message is the marker target"
+        )
+    }
+
+    @Test func failedSendDoesNotScheduleMarkSeen() async {
+        // Regression (PR #112 review): a failed send delivered nothing, so
+        // the seen marker must not advance — markSeen is scheduled only on
+        // the sendMessage success path (desktop parity).
+        let (viewModel, fake) = makeSeenVM()
+        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
+        viewModel.store.messages = [textMessage(role: .assistant, text: "unseen", id: "m1")]
+
+        await viewModel.sendMessage("hello")
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "a failed send must not schedule the debounced markSeen"
+        )
+    }
+
+    @Test func leavingConversationFiresMarkSeenImmediately() async {
+        // Debounce far beyond the poll window: a call proves the immediate path.
+        let (viewModel, fake) = makeSeenVM(debounce: .seconds(10))
+        viewModel.conversationAppeared()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
+
+        viewModel.conversationDisappeared()
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+
+    @Test func leaveDuringDebounceWindowDropsPendingMarkSeen() async {
+        let (viewModel, fake) = makeSeenVM(debounce: .milliseconds(200))
+        viewModel.conversationAppeared()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
+        viewModel.store.isStreaming = true
+        viewModel.store.isStreaming = false // schedules the 200ms debounce
+
+        viewModel.conversationDisappeared() // immediate fire supersedes the debounce
+        await waitForMarkSeen(fake)
+        // A message lands after the boundary; the cancelled debounce must NOT
+        // fire a second call targeting it once its window elapses.
+        viewModel.store.messages.append(textMessage(role: .assistant, text: "late", id: "m2"))
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1, "the pending debounce was dropped, not just deduped")
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+
+    @Test func backgroundingFiresMarkSeenImmediately() async {
+        let (viewModel, fake) = makeSeenVM(debounce: .seconds(10))
+        viewModel.conversationAppeared()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
+
+        viewModel.scenePhaseChanged(isActive: false)
+
+        await waitForMarkSeen(fake)
+        let params = fake.paramsForMethod("agent.markSeen")
+        #expect(params.count == 1)
+        #expect(params.first?["messageId"] as? String == "m1")
+    }
+}
+
+extension ConversationViewModelTests {
+    @Test func boundaryDoesNotResendWhenMarkerAlreadyCurrent() async {
+        let (viewModel, fake) = makeSeenVM()
+        viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
+        viewModel.store.lastSeenMessageId = "m1"
+        viewModel.conversationAppeared()
+
+        viewModel.conversationDisappeared()
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        #expect(
+            !fake.didCallMethod("agent.markSeen"),
+            "all triggers funnel through the store's dedupe"
+        )
+    }
+
+    // MARK: - Pending files
+
+    /// Writes a real temp file so `addFiles` can resolve name/size via
+    /// `resourceValues`. Plain file URLs are not security-scoped, so
+    /// `startAccessingSecurityScopedResource()` returning false is exercised
+    /// implicitly (no balancing stop is owed).
+    private func makeTempFile(name: String, bytes: Int) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent(name)
+        try Data(repeating: 0, count: bytes).write(to: url)
+        return url
+    }
+
+    @Test func addFilesPopulatesDisplayNameAndSize() throws {
+        let viewModel = makeVM()
+        let url = try makeTempFile(name: "report.pdf", bytes: 1234)
+
+        viewModel.addFiles([url])
+
+        #expect(viewModel.pendingFiles.count == 1)
+        #expect(viewModel.pendingFiles[0].url == url)
+        #expect(viewModel.pendingFiles[0].displayName == "report.pdf")
+        #expect(viewModel.pendingFiles[0].size == 1234)
+        #expect(viewModel.pendingFiles[0].formattedSize?.isEmpty == false)
+    }
+
+    @Test func addFilesFallsBackToLastPathComponentForUnreadableURL() {
+        let viewModel = makeVM()
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-missing.bin")
+
+        viewModel.addFiles([missing])
+
+        #expect(viewModel.pendingFiles.count == 1)
+        #expect(viewModel.pendingFiles[0].displayName == missing.lastPathComponent)
+        #expect(viewModel.pendingFiles[0].size == nil)
+        #expect(viewModel.pendingFiles[0].formattedSize == nil)
+    }
+
+    @Test func addFilesSkipsAlreadyPendingURL() throws {
+        let viewModel = makeVM()
+        let url = try makeTempFile(name: "dup.txt", bytes: 10)
+
+        viewModel.addFiles([url])
+        viewModel.addFiles([url, url])
+
+        #expect(viewModel.pendingFiles.count == 1)
+    }
+
+    @Test func removePendingFileRemovesCorrectEntry() throws {
+        let viewModel = makeVM()
+        let first = try makeTempFile(name: "a.txt", bytes: 1)
+        let second = try makeTempFile(name: "b.txt", bytes: 2)
+        viewModel.addFiles([first, second])
+
+        viewModel.removePendingFile(at: 0)
+
+        #expect(viewModel.pendingFiles.map(\.displayName) == ["b.txt"])
+    }
+
+    @Test func removePendingFileIgnoresOutOfBoundsIndex() throws {
+        let viewModel = makeVM()
+        viewModel.addFiles([try makeTempFile(name: "a.txt", bytes: 1)])
+
+        viewModel.removePendingFile(at: 5)
+        viewModel.removePendingFile(at: -1)
+
+        #expect(viewModel.pendingFiles.count == 1)
+    }
+
+    @Test func clearPendingFilesEmptiesList() throws {
+        let viewModel = makeVM()
+        viewModel.addFiles([
+            try makeTempFile(name: "a.txt", bytes: 1),
+            try makeTempFile(name: "b.txt", bytes: 2)
+        ])
+
+        viewModel.clearPendingFiles()
+
+        #expect(viewModel.pendingFiles.isEmpty)
+    }
+
+    @Test func hasPendingAttachmentsCoversImagesAndFiles() throws {
+        let viewModel = makeVM()
+        #expect(!viewModel.hasPendingAttachments)
+
+        viewModel.addFiles([try makeTempFile(name: "a.txt", bytes: 1)])
+        #expect(viewModel.hasPendingAttachments)
+
+        viewModel.clearPendingFiles()
+        viewModel.pendingImages = [UIImage()]
+        #expect(viewModel.hasPendingAttachments)
+
+        viewModel.pendingImages = []
+        #expect(!viewModel.hasPendingAttachments)
+    }
+}

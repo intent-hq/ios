@@ -15,141 +15,163 @@ struct ConnectionFailureView: View {
     var body: some View {
         ZStack {
             Theme.background(for: colorScheme).ignoresSafeArea()
-
-            VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
-                Spacer()
-
-                // Error icon
-                ZStack {
-                    Circle()
-                        .fill(Theme.destructive(for: colorScheme).opacity(
-                            Constants.ConnectionFailure.destructiveBackgroundOpacity))
-                        .frame(width: Constants.ConnectionFailure.iconBackgroundSize,
-                               height: Constants.ConnectionFailure.iconBackgroundSize)
-                    Image(systemName: "wifi.exclamationmark")
-                        .font(.system(size: Constants.ConnectionFailure.iconSize))
-                        .foregroundStyle(Theme.destructive(for: colorScheme))
-                }
-
-                VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
-                    Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
-                        .font(.title2.bold())
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-
-                    Text(errorMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
-                }
-
-                VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
-                    // Every observed per-host cert mismatch: on the re-pair
-                    // path this lists all mismatching hosts (not just one);
-                    // during auto-retry it is the passive list while retries
-                    // continue on the remaining hosts.
-                    if !session.connection.certMismatches.isEmpty {
-                        CertMismatchListView(mismatches: session.connection.certMismatches)
-                    }
-
-                    // Auto-retry progress
-                    if isRetrying {
-                        HStack(spacing: Constants.ConnectionFailure.progressSpacing) {
-                            ProgressView()
-                            if attemptNumber > 1 {
-                                Text("Attempt \(attemptNumber)")
-                                    .font(.caption)
-                                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, Constants.ConnectionFailure.controlVerticalPadding)
-                        .background(Theme.muted(for: colorScheme).opacity(
-                            Constants.ConnectionFailure.controlBackgroundOpacity))
-                        .clipShape(RoundedRectangle(
-                            cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
-                    }
-
-                    if retryPolicy == .manualLogOff {
-                        Button {
-                            stopAutoRetry()
-                            coordinator.onLogOff()
-                        } label: {
-                            Label("Retry Log Off", systemImage: "rectangle.portrait.and.arrow.forward")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.primary(for: colorScheme))
-                    }
-
-                    // Re-pair button
-                    Button {
-                        stopAutoRetry()
-                        coordinator.onReconnect()
-                    } label: {
-                        Label(isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
-                              systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(Theme.primary(for: colorScheme))
-
-                    // Other saved connections — switch instead of re-pairing.
-                    // Scrollable with a bounded height so a long list never
-                    // pushes the controls or rows off a small viewport.
-                    if !savedConnections.isEmpty {
-                        VStack(alignment: .leading,
-                               spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
-                            Text("Saved Connections")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                            ScrollView {
-                                VStack(spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
-                                    ForEach(savedConnections) { connection in
-                                        savedConnectionRow(connection)
-                                    }
-                                }
-                            }
-                            .frame(maxHeight: Constants.ConnectionFailure.savedConnectionsMaximumHeight)
-                        }
-                        .padding(.top, Constants.ConnectionFailure.savedConnectionsSpacing)
-                    }
-                }
-                .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
-
-                Spacer()
-
-                // Help text
-                VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
-                    Text(retryPolicy == .manualLogOff ? "Connection Kept" : "Troubleshooting")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.foreground(for: colorScheme))
-                    Text(retryPolicy == .manualLogOff
-                         ? "Your saved connection and settings were kept so you can retry logging off."
-                         : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
-                        .font(.caption)
-                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-                        .multilineTextAlignment(.leading)
-                }
-                .padding(.horizontal, Constants.ConnectionFailure.helpHorizontalPadding)
-                .padding(.bottom, Constants.ConnectionFailure.helpBottomPadding)
-            }
+            failureContent
         }
         .onAppear {
-            savedConnections = ConnectionFailureView.alternativeConnections(
+            savedConnections = Self.alternativeConnections(
                 connections: PersistenceManager.shared.loadConnections(),
-                activeId: coordinator.backendID?.connectionID)
+                activeId: coordinator.backendID?.connectionID
+            )
             applyRetryPolicy()
         }
-        .onChange(of: retryPolicy) {
-            applyRetryPolicy()
-        }
-        .onChange(of: isCertMismatch) {
-            applyRetryPolicy()
-        }
+        .onChange(of: retryPolicy) { applyRetryPolicy() }
+        .onChange(of: isCertMismatch) { applyRetryPolicy() }
         .onDisappear {
             stopAutoRetry()
         }
+    }
+
+    private var failureContent: some View {
+        VStack(spacing: Constants.ConnectionFailure.contentSpacing) {
+            Spacer()
+            failureIcon
+            failureTitle
+            failureControls
+            Spacer()
+            helpText
+        }
+    }
+
+    private var failureIcon: some View {
+        ZStack {
+            Circle()
+                .fill(Theme.destructive(for: colorScheme).opacity(
+                    Constants.ConnectionFailure.destructiveBackgroundOpacity
+                ))
+                .frame(
+                    width: Constants.ConnectionFailure.iconBackgroundSize,
+                    height: Constants.ConnectionFailure.iconBackgroundSize
+                )
+            Image(systemName: "wifi.exclamationmark")
+                .font(.system(size: Constants.ConnectionFailure.iconSize))
+                .foregroundStyle(Theme.destructive(for: colorScheme))
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var failureTitle: some View {
+        VStack(spacing: Constants.ConnectionFailure.titleSpacing) {
+            Text(retryPolicy == .manualLogOff ? "Disconnected, but Not Forgotten" : "Can't Connect")
+                .font(.title2.bold())
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text(errorMessage)
+                .font(.subheadline)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, Constants.ConnectionFailure.messageHorizontalPadding)
+        }
+    }
+
+    private var failureControls: some View {
+        VStack(spacing: Constants.ConnectionFailure.controlSpacing) {
+            certificateMismatches
+            retryProgress
+            manualLogOffButton
+            reconnectButton
+            savedConnectionsSection
+        }
+        .padding(.horizontal, Constants.ConnectionFailure.controlsHorizontalPadding)
+    }
+
+    @ViewBuilder
+    private var certificateMismatches: some View {
+        if !session.connection.certMismatches.isEmpty {
+            CertMismatchListView(mismatches: session.connection.certMismatches)
+        }
+    }
+
+    @ViewBuilder
+    private var retryProgress: some View {
+        if isRetrying {
+            HStack(spacing: Constants.ConnectionFailure.progressSpacing) {
+                ProgressView()
+                if attemptNumber > 1 {
+                    Text("Attempt \(attemptNumber)")
+                        .font(.caption)
+                        .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Constants.ConnectionFailure.controlVerticalPadding)
+            .background(Theme.muted(for: colorScheme).opacity(
+                Constants.ConnectionFailure.controlBackgroundOpacity
+            ))
+            .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
+        }
+    }
+
+    @ViewBuilder
+    private var manualLogOffButton: some View {
+        if retryPolicy == .manualLogOff {
+            Button {
+                stopAutoRetry()
+                coordinator.onLogOff()
+            } label: {
+                Label("Retry Log Off", systemImage: "rectangle.portrait.and.arrow.forward")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.primary(for: colorScheme))
+        }
+    }
+
+    private var reconnectButton: some View {
+        Button {
+            stopAutoRetry()
+            coordinator.onReconnect()
+        } label: {
+            Label(
+                isCertMismatch ? "Re-pair Device" : "Connect to Different Server",
+                systemImage: isCertMismatch ? "arrow.triangle.2.circlepath" : "link.badge.plus"
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(Theme.primary(for: colorScheme))
+    }
+
+    @ViewBuilder
+    private var savedConnectionsSection: some View {
+        if !savedConnections.isEmpty {
+            VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
+                Text("Saved Connections")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                ScrollView {
+                    VStack(spacing: Constants.ConnectionFailure.savedConnectionsSpacing) {
+                        ForEach(savedConnections) { savedConnectionRow($0) }
+                    }
+                }
+                .frame(maxHeight: Constants.ConnectionFailure.savedConnectionsMaximumHeight)
+            }
+            .padding(.top, Constants.ConnectionFailure.savedConnectionsSpacing)
+        }
+    }
+
+    private var helpText: some View {
+        VStack(spacing: Constants.ConnectionFailure.helpSpacing) {
+            Text(retryPolicy == .manualLogOff ? "Connection Kept" : "Troubleshooting")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.foreground(for: colorScheme))
+            Text(retryPolicy == .manualLogOff
+                 ? "Your saved connection and settings were kept so you can retry logging off."
+                 : "• Make sure Intent is running on your Mac\n• Check that both devices are on the same network\n• Verify the WebSocket API is enabled in Settings")
+                .font(.caption)
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .multilineTextAlignment(.leading)
+        }
+        .padding(.horizontal, Constants.ConnectionFailure.helpHorizontalPadding)
+        .padding(.bottom, Constants.ConnectionFailure.helpBottomPadding)
     }
 
     /// True when a connection-failure message describes a certificate
@@ -170,7 +192,8 @@ struct ConnectionFailureView: View {
     /// unbound window, or the record was deleted mid-failure — means there
     /// is nothing to dial.
     static func autoRetryConnection(
-        connections: [StoredConnection], windowConnectionID: UUID?
+        connections: [StoredConnection],
+        windowConnectionID: UUID?
     ) -> StoredConnection? {
         guard let windowConnectionID else { return nil }
         return connections.first { $0.id == windowConnectionID }
@@ -179,7 +202,8 @@ struct ConnectionFailureView: View {
     /// Saved connections other than this window's currently failing bound
     /// one, most recently used first.
     static func alternativeConnections(
-        connections: [StoredConnection], activeId: UUID?
+        connections: [StoredConnection],
+        activeId: UUID?
     ) -> [StoredConnection] {
         connections
             .filter { $0.id != activeId }
@@ -195,6 +219,7 @@ struct ConnectionFailureView: View {
                 Image(systemName: "desktopcomputer")
                     .font(.body)
                     .foregroundStyle(Theme.primary(for: colorScheme))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Constants.ConnectionFailure.savedConnectionTextSpacing) {
                     Text(connection.displayName)
@@ -210,11 +235,13 @@ struct ConnectionFailureView: View {
                 Image(systemName: "chevron.right")
                     .font(.caption)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
             }
             .padding(.vertical, Constants.ConnectionFailure.savedConnectionVerticalPadding)
             .padding(.horizontal, Constants.ConnectionFailure.savedConnectionHorizontalPadding)
             .background(Theme.muted(for: colorScheme).opacity(
-                Constants.ConnectionFailure.controlBackgroundOpacity))
+                Constants.ConnectionFailure.controlBackgroundOpacity
+            ))
             .clipShape(RoundedRectangle(cornerRadius: Constants.ConnectionFailure.controlCornerRadius))
         }
         .buttonStyle(.plain)
@@ -226,7 +253,8 @@ struct ConnectionFailureView: View {
     /// action — "Retry Log Off" retries forgetting the record, it does not
     /// reconnect (ios#235). Certificate failures route to re-pairing.
     static func shouldAutoRetry(
-        retryPolicy: ConnectionFailureRetryPolicy, isCertMismatch: Bool
+        retryPolicy: ConnectionFailureRetryPolicy,
+        isCertMismatch: Bool
     ) -> Bool {
         retryPolicy == .automaticConnection && !isCertMismatch
     }
@@ -235,7 +263,8 @@ struct ConnectionFailureView: View {
     static func retryBackoff(attempt: Int) -> Duration {
         .seconds(min(
             Double(1 << min(attempt, Constants.ConnectionFailure.retryBackoffExponentCap)),
-            Constants.ConnectionFailure.retryBackoffMaximum))
+            Constants.ConnectionFailure.retryBackoffMaximum
+        ))
     }
 
     /// The auto-retry lifecycle behind the failure screen, independent of
@@ -270,8 +299,8 @@ struct ConnectionFailureView: View {
             // another backend's.
             guard let record = autoRetryConnection(
                 connections: loadConnections(),
-                windowConnectionID: coordinator.backendID?.connectionID)
-            else {
+                windowConnectionID: coordinator.backendID?.connectionID
+            ) else {
                 coordinator.onReconnect()
                 return
             }
@@ -300,8 +329,10 @@ struct ConnectionFailureView: View {
 
     private func applyRetryPolicy() {
         stopAutoRetry()
-        if ConnectionFailureView.shouldAutoRetry(
-            retryPolicy: retryPolicy, isCertMismatch: isCertMismatch) {
+        if Self.shouldAutoRetry(
+            retryPolicy: retryPolicy,
+            isCertMismatch: isCertMismatch
+        ) {
             startAutoRetry()
         }
     }
@@ -317,7 +348,7 @@ struct ConnectionFailureView: View {
         let retryPolicy = retryPolicy
         let isCertMismatch = isCertMismatch
         retryTask = Task {
-            await ConnectionFailureView.runAutoRetry(
+            await Self.runAutoRetry(
                 retryPolicy: retryPolicy,
                 isCertMismatch: isCertMismatch,
                 coordinator: coordinator,
@@ -326,7 +357,8 @@ struct ConnectionFailureView: View {
                 onAttempt: { attempt in
                     attemptNumber = attempt
                     isRetrying = true
-                })
+                }
+            )
         }
     }
 }
@@ -345,4 +377,3 @@ struct ConnectionFailureView: View {
         .environment(session.makeCoordinator())
         .preferredColorScheme(.dark)
 }
-

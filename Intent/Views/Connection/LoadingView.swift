@@ -32,14 +32,22 @@ struct LoadingView: View {
 
 /// The Intent burst mark, matching cloudlands-fe's Logo.svelte vector.
 nonisolated struct IntentLogo: Shape {
+    private enum Metrics {
+        static let viewBoxSize: CGFloat = 24
+        static let strokeWidth: CGFloat = 2.06
+    }
+
     func path(in rect: CGRect) -> Path {
         var path = Path()
 
         // Original viewBox: 0 0 24 24
-        let scaleX = rect.width / 24.0
-        let scaleY = rect.height / 24.0
+        let scaleX = rect.width / Metrics.viewBoxSize
+        let scaleY = rect.height / Metrics.viewBoxSize
         let transform = CGAffineTransform(scaleX: scaleX, y: scaleY)
 
+        // These coordinates are intrinsic data from the source artwork; keeping
+        // them literal preserves direct comparison with the original path.
+        // swiftlint:disable no_magic_numbers
         path.move(to: CGPoint(x: 12, y: 15.82))
         path.addLine(to: CGPoint(x: 12, y: 23.76))
 
@@ -78,9 +86,10 @@ nonisolated struct IntentLogo: Shape {
             control2: CGPoint(x: 13.84, y: 14.95)
         )
         path.addLine(to: CGPoint(x: 19.56, y: 21))
+        // swiftlint:enable no_magic_numbers
 
         return path
-            .strokedPath(StrokeStyle(lineWidth: 2.06, lineCap: .butt, lineJoin: .round))
+            .strokedPath(StrokeStyle(lineWidth: Metrics.strokeWidth, lineCap: .butt, lineJoin: .round))
             .applying(transform)
     }
 }

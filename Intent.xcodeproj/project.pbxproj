@@ -156,6 +156,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = EB655EED2F669E6C00176730 /* Build configuration list for PBXNativeTarget "Intent" */;
 			buildPhases = (
+				B0825EC4FC1B470EBF85C8D3 /* SwiftLint Diagnostics */,
 				EB655EC52F669E6B00176730 /* Sources */,
 				EB655EC62F669E6B00176730 /* Frameworks */,
 				EB655EC72F669E6B00176730 /* Resources */,
@@ -182,6 +183,7 @@
 				EB655ED62F669E6C00176730 /* Sources */,
 				EB655ED72F669E6C00176730 /* Frameworks */,
 				EB655ED82F669E6C00176730 /* Resources */,
+				B1000001BUNDLEINPUTS000001 /* Generate Test Source Inputs */,
 				AC000021AAAA000000000021 /* Copy Test Source Inputs */,
 			);
 			buildRules = (
@@ -293,6 +295,59 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		B0825EC4FC1B470EBF85C8D3 /* SwiftLint Diagnostics */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/scripts/swiftlint-xcode-inputs.xcfilelist",
+			);
+			inputPaths = (
+				"$(SRCROOT)/.swiftlint.yml",
+				"$(SRCROOT)/scripts/swiftlint-xcode.sh",
+				"$(SRCROOT)/Intent",
+				"$(SRCROOT)/IntentTests",
+				"$(SRCROOT)/IntentUITests",
+			);
+			name = "SwiftLint Diagnostics";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/scripts/swiftlint-xcode.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		B1000001BUNDLEINPUTS000001 /* Generate Test Source Inputs */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"$(SRCROOT)/scripts/test-source-inputs.xcfilelist",
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/generate-test-inputs.sh",
+				"$(SRCROOT)/Intent/Info.plist",
+				"$(SRCROOT)/Info-visionOS.plist",
+			);
+			name = "Generate Test Source Inputs";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SourceInputs/",
+				"$(TARGET_TEMP_DIR)/TestSourceInputsScratch/",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/scripts/generate-test-inputs.sh\" \"$SRCROOT\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/SourceInputs\" \"$TARGET_TEMP_DIR/TestSourceInputsScratch\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		EB655EC52F669E6B00176730 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -350,10 +405,11 @@
 				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
 				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -397,10 +453,11 @@
 				"INFOPLIST_FILE[sdk=xros*]" = "Info-visionOS.plist";
 				"INFOPLIST_FILE[sdk=xrsimulator*]" = "Info-visionOS.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Intent;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Intent needs camera access to scan QR codes for pairing with the desktop app.";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Intent needs local network access to connect to the desktop app on your network.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Intent saves images from your conversations to your photo library when you choose Save Image.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

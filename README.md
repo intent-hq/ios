@@ -105,6 +105,12 @@ Managed via Swift Package Manager (integrated in Xcode):
 ## Development
 
 ```bash
+# Lint (requires SwiftLint 0.65.1; the wrapper enforces the version)
+scripts/swiftlint.sh
+
+# Smoke-test the lint wrapper
+scripts/test-swiftlint.sh
+
 # Build in Xcode (Cmd+B) or via xcodebuild
 xcodebuild -project Intent.xcodeproj -scheme Intent -destination 'platform=iOS Simulator,name=iPhone 16' build
 

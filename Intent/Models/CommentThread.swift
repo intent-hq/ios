@@ -14,10 +14,10 @@ struct CommentThread: Identifiable, Equatable {
     let latestCommentAuthorType: String
     let latestCommentAt: String
     let commentCount: Int
-    
+
     var id: String { threadId }
-    
-    static func parseThread(_ dict: [String: Any]) -> CommentThread? {
+
+    static func parseThread(_ dict: [String: Any]) -> Self? {
         guard let threadId = dict["threadId"] as? String,
               let noteId = dict["noteId"] as? String,
               let status = dict["status"] as? String,
@@ -29,8 +29,8 @@ struct CommentThread: Identifiable, Equatable {
               let commentCount = dict["commentCount"] as? Int else {
             return nil
         }
-        
-        return CommentThread(
+
+        return Self(
             threadId: threadId,
             noteId: noteId,
             targetedText: dict["targetedText"] as? String,

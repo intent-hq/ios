@@ -71,7 +71,7 @@ struct GitHubRepoPickerView: View {
 
     private var repoList: some View {
         Group {
-            if (store.isLoading || pendingSearchQuery != nil) && suggestions.isEmpty {
+            if store.isLoading || pendingSearchQuery != nil, suggestions.isEmpty {
                 ProgressView("Loading repositories...")
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             } else if suggestions.isEmpty {
@@ -190,7 +190,7 @@ struct GitHubRepoPickerView: View {
             // task is still the latest — an out-of-order older response can't
             // overwrite a newer one's results.
             guard !Task.isCancelled, pendingSearchQuery == query else { return }
-            if let results {
+            if case let .results(results) = results {
                 searchResults = results
                 completedSearchQuery = query
             }

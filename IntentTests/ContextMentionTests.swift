@@ -1,6 +1,6 @@
 import Foundation
-import Testing
 @testable import Intent
+import Testing
 
 struct ContextMentionTests {
     private func base64(_ json: String) -> String {
@@ -14,51 +14,65 @@ struct ContextMentionTests {
             #"{"provider":"linear","identifier":"AU-123","title":"Fix crash","url":"https://linear.app/i/AU-123"}"#
         )
         let segments = ContextMention.segments(from: "@context[\(token)]")
-        #expect(segments == [.mention(ContextMention(
-            provider: "linear", identifier: "AU-123", title: "Fix crash",
-            url: "https://linear.app/i/AU-123"
-        ))])
+        #expect(segments == [
+            .mention(ContextMention(
+                provider: "linear",
+                identifier: "AU-123",
+                title: "Fix crash",
+                url: "https://linear.app/i/AU-123"
+            ))
+        ])
     }
 
     @Test func base64JSONTokenWithoutUrl() {
         let token = base64(##"{"provider":"github","identifier":"#42","title":"Bug","url":""}"##)
         let segments = ContextMention.segments(from: "@context[\(token)]")
-        #expect(segments == [.mention(ContextMention(
-            provider: "github", identifier: "#42", title: "Bug", url: nil
-        ))])
+        #expect(segments == [
+            .mention(ContextMention(
+                provider: "github",
+                identifier: "#42",
+                title: "Bug",
+                url: nil
+            ))
+        ])
     }
 
     @Test func base64JSONTitleFallsBackToIdentifierThenSharedContext() {
         let noTitle = base64(#"{"provider":"linear","identifier":"AU-9","title":""}"#)
-        guard case .mention(let m1) = ContextMention.segments(from: "@context[\(noTitle)]")[0] else {
+        guard case .mention(let identifiedMention) = ContextMention.segments(from: "@context[\(noTitle)]")[0] else {
             Issue.record("expected mention"); return
         }
-        #expect(m1.title == "AU-9")
+        #expect(identifiedMention.title == "AU-9")
 
         let empty = base64(#"{"provider":"","identifier":"","title":""}"#)
-        guard case .mention(let m2) = ContextMention.segments(from: "@context[\(empty)]")[0] else {
+        guard case .mention(let sharedMention) = ContextMention.segments(from: "@context[\(empty)]")[0] else {
             Issue.record("expected mention"); return
         }
-        #expect(m2.title == "Shared context")
-        #expect(m2.provider == "browser")
+        #expect(sharedMention.title == "Shared context")
+        #expect(sharedMention.provider == "browser")
     }
 
     // MARK: - Pipe-separated payloads
 
     @Test func pipeSeparatedToken() {
         let segments = ContextMention.segments(from: "@context[linear|AU-123|Fix crash]")
-        #expect(segments == [.mention(ContextMention(
-            provider: "linear", identifier: "AU-123", title: "Fix crash", url: nil
-        ))])
+        #expect(segments == [
+            .mention(ContextMention(
+                provider: "linear",
+                identifier: "AU-123",
+                title: "Fix crash",
+                url: nil
+            ))
+        ])
     }
 
     @Test func pipeSeparatedTitleFallsBackToIdentifier() {
-        guard case .mention(let m) = ContextMention.segments(from: "@context[github|#7]")[0] else {
+        guard case .mention(let mention) = ContextMention.segments(from: "@context[github|#7]")[0] else {
             Issue.record("expected mention"); return
         }
-        #expect(m.provider == "github")
-        #expect(m.identifier == "#7")
-        #expect(m.title == "#7")
+        #expect(mention.provider == "github")
+        #expect(mention.identifier == "#7")
+        #expect(mention.title == "#7")
     }
 
     // MARK: - Malformed base64/JSON fallback
@@ -66,18 +80,23 @@ struct ContextMentionTests {
     @Test func malformedBase64FallsBackToPipeParsing() {
         // Starts with eyJ but is not valid base64.
         let segments = ContextMention.segments(from: "@context[eyJ%%%not-base64]")
-        #expect(segments == [.mention(ContextMention(
-            provider: "eyJ%%%not-base64", identifier: "", title: "", url: nil
-        ))])
+        #expect(segments == [
+            .mention(ContextMention(
+                provider: "eyJ%%%not-base64",
+                identifier: "",
+                title: "",
+                url: nil
+            ))
+        ])
     }
 
     @Test func base64OfInvalidJSONFallsBackToPipeParsing() {
         let token = base64(#"{"broken"#) // valid base64, starts with eyJ, invalid JSON
-        guard case .mention(let m) = ContextMention.segments(from: "@context[\(token)]")[0] else {
+        guard case .mention(let mention) = ContextMention.segments(from: "@context[\(token)]")[0] else {
             Issue.record("expected mention"); return
         }
-        #expect(m.provider == token)
-        #expect(m.identifier == "")
+        #expect(mention.provider == token)
+        #expect(mention.identifier.isEmpty)
     }
 
     // MARK: - Interleaving
@@ -87,7 +106,10 @@ struct ContextMentionTests {
         #expect(segments.count == 3)
         #expect(segments[0] == .text("look at "))
         #expect(segments[1] == .mention(ContextMention(
-            provider: "linear", identifier: "AU-1", title: "One", url: nil
+            provider: "linear",
+            identifier: "AU-1",
+            title: "One",
+            url: nil
         )))
         #expect(segments[2] == .text(" please"))
     }
@@ -98,7 +120,7 @@ struct ContextMentionTests {
     }
 
     @Test func emptyTextYieldsNoSegments() {
-        #expect(ContextMention.segments(from: "") == [])
+        #expect(ContextMention.segments(from: "").isEmpty)
     }
 
     @Test func multipleTokens() {
@@ -107,11 +129,17 @@ struct ContextMentionTests {
         )
         #expect(segments.count == 3)
         #expect(segments[0] == .mention(ContextMention(
-            provider: "linear", identifier: "AU-1", title: "One", url: nil
+            provider: "linear",
+            identifier: "AU-1",
+            title: "One",
+            url: nil
         )))
         #expect(segments[1] == .text(" and "))
         #expect(segments[2] == .mention(ContextMention(
-            provider: "github", identifier: "#2", title: "Two", url: nil
+            provider: "github",
+            identifier: "#2",
+            title: "Two",
+            url: nil
         )))
     }
 
@@ -146,7 +174,7 @@ struct ContextMentionTests {
         #expect(rows == [
             .text("look at"),
             .chips([ContextMention(provider: "linear", identifier: "AU-1", title: "One", url: nil)]),
-            .text("please"),
+            .text("please")
         ])
     }
 
@@ -157,9 +185,9 @@ struct ContextMentionTests {
         #expect(rows == [
             .chips([
                 ContextMention(provider: "linear", identifier: "AU-1", title: "One", url: nil),
-                ContextMention(provider: "github", identifier: "#2", title: "Two", url: nil),
+                ContextMention(provider: "github", identifier: "#2", title: "Two", url: nil)
             ]),
-            .text("intro text"),
+            .text("intro text")
         ])
     }
 

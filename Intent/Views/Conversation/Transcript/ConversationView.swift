@@ -5,7 +5,9 @@ struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
 
     init(
-        agentId: String, workspaceId: String, agentName: String,
+        agentId: String,
+        workspaceId: String,
+        agentName: String,
         session: BackendSession
     ) {
         _viewModel = State(initialValue: ConversationViewModel(
@@ -78,7 +80,9 @@ private struct ConversationViewContent: View {
             .onAppear {
                 if let connectionId = session.backendID?.connectionID {
                     NotificationManager.shared.conversationOpened(
-                        agentId: viewModel.agentId, connectionId: connectionId)
+                        agentId: viewModel.agentId,
+                        connectionId: connectionId
+                    )
                 }
                 // Entry itself never marks seen (the divider anchor must survive
                 // until the user leaves or the turn finishes).
@@ -87,7 +91,9 @@ private struct ConversationViewContent: View {
             .onDisappear {
                 if let connectionId = session.backendID?.connectionID {
                     NotificationManager.shared.conversationClosed(
-                        agentId: viewModel.agentId, connectionId: connectionId)
+                        agentId: viewModel.agentId,
+                        connectionId: connectionId
+                    )
                 }
                 Task { await viewModel.teardownLiveStores() }
                 // Stop-looking boundary — fires markSeen immediately.
@@ -169,7 +175,9 @@ private struct ConversationViewContent: View {
             .navigationTitle(viewModel.agentName)
             .toolbarTitleDisplayMode(.inline)
             .workspaceNavigationSubtitle(
-                title: viewModel.agentName, workspaceId: viewModel.workspaceId)
+                title: viewModel.agentName,
+                workspaceId: viewModel.workspaceId
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     agentMenu
@@ -192,7 +200,8 @@ private struct ConversationViewContent: View {
     private var dismissQuestionsErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.dismissQuestionsError != nil },
-            set: { if !$0 { viewModel.dismissQuestionsError = nil } })
+            set: { if !$0 { viewModel.dismissQuestionsError = nil } }
+        )
     }
 
     /// Presented-or-not binding for the image-placement-failure alert, hoisted
@@ -200,7 +209,8 @@ private struct ConversationViewContent: View {
     private var imagePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.imagePlacementError != nil },
-            set: { if !$0 { viewModel.imagePlacementError = nil } })
+            set: { if !$0 { viewModel.imagePlacementError = nil } }
+        )
     }
 
     /// Presented-or-not binding for the file-placement-failure alert, hoisted
@@ -208,7 +218,8 @@ private struct ConversationViewContent: View {
     private var filePlacementErrorPresented: Binding<Bool> {
         Binding(
             get: { viewModel.filePlacementError != nil },
-            set: { if !$0 { viewModel.filePlacementError = nil } })
+            set: { if !$0 { viewModel.filePlacementError = nil } }
+        )
     }
 
     /// Ellipsis toolbar menu (model info, rename, delete).
@@ -268,7 +279,7 @@ private struct ConversationViewContent: View {
         selfInitiatedDelete = true
         Task {
             do {
-                let _ = try await session.connection.request(
+                _ = try await session.connection.request(
                     "agent.delete",
                     params: [
                         "agentId": viewModel.agentId,
@@ -278,7 +289,7 @@ private struct ConversationViewContent: View {
                 dismiss()
             } catch {
                 selfInitiatedDelete = false
-                AppLog.ui.error("[ConversationView] Failed to delete agent: \(error)")
+                AppLog.userInterface.error("[ConversationView] Failed to delete agent: \(error)")
             }
         }
     }
@@ -291,7 +302,7 @@ private struct ConversationViewContent: View {
             do {
                 try await viewModel.renameAgent(newName)
             } catch {
-                AppLog.ui.error("[ConversationView] Failed to rename agent: \(error)")
+                AppLog.userInterface.error("[ConversationView] Failed to rename agent: \(error)")
             }
         }
     }
@@ -315,7 +326,9 @@ private struct ConversationViewContent: View {
     private func navigateToAgent(agentId: String, workspaceId: String, name: String) {
         UIApplication.shared.sendAction(
             #selector(UIResponder.resignFirstResponder),
-            to: nil, from: nil, for: nil
+            to: nil,
+            from: nil,
+            for: nil
         )
         childAgent = AgentDestination(
             agentId: agentId,

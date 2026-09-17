@@ -12,8 +12,14 @@ struct PairedServer: Codable, Equatable {
     /// existed and on daemons without a running tunnel.
     let tcAddress: String?
 
-    init(hosts: [String], port: Int, name: String, pairedAt: Date,
-         certFingerprint: String? = nil, tcAddress: String? = nil) {
+    init(
+        hosts: [String],
+        port: Int,
+        name: String,
+        pairedAt: Date,
+        certFingerprint: String? = nil,
+        tcAddress: String? = nil
+    ) {
         self.hosts = hosts
         self.port = port
         self.name = name
@@ -38,7 +44,7 @@ struct StoredConnection: Codable, Identifiable, Equatable {
     var syncUpdatedAt: Double?
 
     init(
-        id: UUID = UUID(),
+        id: UUID,
         server: PairedServer,
         token: String,
         displayName: String? = nil,
@@ -48,9 +54,26 @@ struct StoredConnection: Codable, Identifiable, Equatable {
         self.id = id
         self.server = server
         self.token = token
-        self.displayName = displayName ?? StoredConnection.fallbackDisplayName(for: server)
+        self.displayName = displayName ?? Self.fallbackDisplayName(for: server)
         self.lastConnectedAt = lastConnectedAt
         self.syncUpdatedAt = syncUpdatedAt
+    }
+
+    init(
+        server: PairedServer,
+        token: String,
+        displayName: String? = nil,
+        lastConnectedAt: Date? = nil,
+        syncUpdatedAt: Double? = nil
+    ) {
+        self.init(
+            id: UUID(),
+            server: server,
+            token: token,
+            displayName: displayName,
+            lastConnectedAt: lastConnectedAt,
+            syncUpdatedAt: syncUpdatedAt
+        )
     }
 
     static func fallbackDisplayName(for server: PairedServer) -> String {
@@ -85,8 +108,14 @@ struct WorkspacePullRequest: Codable, Identifiable, Equatable {
 
     var id: Int { number }
 
-    init(number: Int, status: String, title: String? = nil, url: String? = nil,
-         createdAt: String? = nil, updatedAt: String? = nil) {
+    init(
+        number: Int,
+        status: String,
+        title: String? = nil,
+        url: String? = nil,
+        createdAt: String? = nil,
+        updatedAt: String? = nil
+    ) {
         self.number = number
         self.status = status
         self.title = title
@@ -133,27 +162,73 @@ struct Workspace: Codable, Identifiable, Equatable {
     let taskStatsCompleted: Int?     // from taskStats.completed
     let taskStatsInProgress: Int?    // from taskStats.inProgress
     let agentSummaryCount: Int?
-    let agentSummaryAgents: [WorkspaceAgentInfo]?
-    let pullRequests: [WorkspacePullRequest]?  // detected-PR pool (§5.1); nil on older daemons
+    let agentSummaryAgents: [WorkspaceAgentInfo]
+    let pullRequests: [WorkspacePullRequest]  // detected-PR pool (§5.1)
+    let agentSummaryWasReported: Bool
+    let pullRequestsWereReported: Bool
     let activePullRequest: WorkspacePullRequest?  // single active PR (§5.1); nil when absent
-    let statusImageAssetId: String?  // agent-set status screenshot asset (§5.1); omitted until set
+    let statusImageAssetId: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case activePullRequest
+        case activity
+        case agentSummaryAgents
+        case agentSummaryCount
+        case attention
+        case baseRef
+        case branch
+        case createdAt
+        case diffSummaryTotalFiles
+        case displayStatus
+        case id
+        case lastActivity
+        case prNumber
+        case prStatus
+        case pullRequests
+        case repositoryName
+        case repositoryOwner
+        case status
+        case statusImageAssetId
+        case taskStatsCompleted
+        case taskStatsInProgress
+        case taskStatsTotal
+        case title
+        case updatedAt
+        case waiting
+    }
 
     /// Explicit initializer so `attention` / `waiting` / `createdAt` /
-    /// `pullRequests` / `activePullRequest` / `statusImageAssetId` can
-    /// default — existing call sites (and test fixtures) that predate the
-    /// fields stay valid.
-    init(id: String, title: String, branch: String?, baseRef: String?, status: String?,
-         activity: String?, displayStatus: String?, attention: String? = nil,
-         waiting: Bool = false,
-         lastActivity: String?, createdAt: String? = nil, updatedAt: String?,
-         repositoryOwner: String?,
-         repositoryName: String?, prStatus: String?, prNumber: Int?,
-         diffSummaryTotalFiles: Int?, taskStatsTotal: Int?, taskStatsCompleted: Int?,
-         taskStatsInProgress: Int?, agentSummaryCount: Int?,
-         agentSummaryAgents: [WorkspaceAgentInfo]?,
-         pullRequests: [WorkspacePullRequest]? = nil,
-         activePullRequest: WorkspacePullRequest? = nil,
-         statusImageAssetId: String? = nil) {
+    /// `pullRequests` / `activePullRequest` can default — existing call sites
+    /// (and test fixtures) that predate the fields stay valid.
+    init(
+        id: String,
+        title: String,
+        branch: String?,
+        baseRef: String?,
+        status: String?,
+        activity: String?,
+        displayStatus: String?,
+        attention: String? = nil,
+        waiting: Bool = false,
+        lastActivity: String? = nil,
+        createdAt: String? = nil,
+        updatedAt: String? = nil,
+        repositoryOwner: String? = nil,
+        repositoryName: String? = nil,
+        prStatus: String? = nil,
+        prNumber: Int? = nil,
+        diffSummaryTotalFiles: Int? = nil,
+        taskStatsTotal: Int? = nil,
+        taskStatsCompleted: Int? = nil,
+        taskStatsInProgress: Int? = nil,
+        agentSummaryCount: Int? = nil,
+        agentSummaryAgents: [WorkspaceAgentInfo] = [],
+        pullRequests: [WorkspacePullRequest] = [],
+        agentSummaryWasReported: Bool = false,
+        pullRequestsWereReported: Bool = false,
+        activePullRequest: WorkspacePullRequest? = nil,
+        statusImageAssetId: String? = nil
+    ) {
         self.id = id
         self.title = title
         self.branch = branch
@@ -177,41 +252,85 @@ struct Workspace: Codable, Identifiable, Equatable {
         self.agentSummaryCount = agentSummaryCount
         self.agentSummaryAgents = agentSummaryAgents
         self.pullRequests = pullRequests
+        self.agentSummaryWasReported = agentSummaryWasReported || !agentSummaryAgents.isEmpty
+        self.pullRequestsWereReported = pullRequestsWereReported || !pullRequests.isEmpty
         self.activePullRequest = activePullRequest
-        self.statusImageAssetId = statusImageAssetId
+        self.statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(statusImageAssetId)
     }
 
     /// Custom decode so `waiting` honors the wire contract (PROTOCOL §5.1:
     /// omitted when false) — the synthesized decoder would throw keyNotFound
     /// on the common not-waiting shape if a JSONDecoder path is ever added.
     init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(String.self, forKey: .id)
-        title = try c.decode(String.self, forKey: .title)
-        branch = try c.decodeIfPresent(String.self, forKey: .branch)
-        baseRef = try c.decodeIfPresent(String.self, forKey: .baseRef)
-        status = try c.decodeIfPresent(String.self, forKey: .status)
-        activity = try c.decodeIfPresent(String.self, forKey: .activity)
-        displayStatus = try c.decodeIfPresent(String.self, forKey: .displayStatus)
-        attention = try c.decodeIfPresent(String.self, forKey: .attention)
-        waiting = try c.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
-        lastActivity = try c.decodeIfPresent(String.self, forKey: .lastActivity)
-        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
-        updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
-        repositoryOwner = try c.decodeIfPresent(String.self, forKey: .repositoryOwner)
-        repositoryName = try c.decodeIfPresent(String.self, forKey: .repositoryName)
-        prStatus = try c.decodeIfPresent(String.self, forKey: .prStatus)
-        prNumber = try c.decodeIfPresent(Int.self, forKey: .prNumber)
-        diffSummaryTotalFiles = try c.decodeIfPresent(Int.self, forKey: .diffSummaryTotalFiles)
-        taskStatsTotal = try c.decodeIfPresent(Int.self, forKey: .taskStatsTotal)
-        taskStatsCompleted = try c.decodeIfPresent(Int.self, forKey: .taskStatsCompleted)
-        taskStatsInProgress = try c.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
-        agentSummaryCount = try c.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
-        agentSummaryAgents = try c.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents)
-        pullRequests = try c.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests)
-        activePullRequest = try c.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        branch = try container.decodeIfPresent(String.self, forKey: .branch)
+        baseRef = try container.decodeIfPresent(String.self, forKey: .baseRef)
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        activity = try container.decodeIfPresent(String.self, forKey: .activity)
+        displayStatus = try container.decodeIfPresent(String.self, forKey: .displayStatus)
+        attention = try container.decodeIfPresent(String.self, forKey: .attention)
+        waiting = try container.decodeIfPresent(Bool.self, forKey: .waiting) ?? false
+        lastActivity = try container.decodeIfPresent(String.self, forKey: .lastActivity)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+        repositoryOwner = try container.decodeIfPresent(String.self, forKey: .repositoryOwner)
+        repositoryName = try container.decodeIfPresent(String.self, forKey: .repositoryName)
+        prStatus = try container.decodeIfPresent(String.self, forKey: .prStatus)
+        prNumber = try container.decodeIfPresent(Int.self, forKey: .prNumber)
+        diffSummaryTotalFiles = try container.decodeIfPresent(Int.self, forKey: .diffSummaryTotalFiles)
+        taskStatsTotal = try container.decodeIfPresent(Int.self, forKey: .taskStatsTotal)
+        taskStatsCompleted = try container.decodeIfPresent(Int.self, forKey: .taskStatsCompleted)
+        taskStatsInProgress = try container.decodeIfPresent(Int.self, forKey: .taskStatsInProgress)
+        agentSummaryCount = try container.decodeIfPresent(Int.self, forKey: .agentSummaryCount)
+        if let decodedAgents = try container.decodeIfPresent([WorkspaceAgentInfo].self, forKey: .agentSummaryAgents) {
+            agentSummaryAgents = decodedAgents
+            agentSummaryWasReported = true
+        } else {
+            agentSummaryAgents = []
+            agentSummaryWasReported = false
+        }
+        if let decodedPullRequests = try container.decodeIfPresent([WorkspacePullRequest].self, forKey: .pullRequests) {
+            pullRequests = decodedPullRequests
+            pullRequestsWereReported = true
+        } else {
+            pullRequests = []
+            pullRequestsWereReported = false
+        }
+        activePullRequest = try container.decodeIfPresent(WorkspacePullRequest.self, forKey: .activePullRequest)
         statusImageAssetId = WorkspaceStatusImageLayout.normalizedAssetId(
-            try c.decodeIfPresent(String.self, forKey: .statusImageAssetId))
+            try container.decodeIfPresent(String.self, forKey: .statusImageAssetId)
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(branch, forKey: .branch)
+        try container.encodeIfPresent(baseRef, forKey: .baseRef)
+        try container.encodeIfPresent(status, forKey: .status)
+        try container.encodeIfPresent(activity, forKey: .activity)
+        try container.encodeIfPresent(displayStatus, forKey: .displayStatus)
+        try container.encodeIfPresent(attention, forKey: .attention)
+        if waiting { try container.encode(true, forKey: .waiting) }
+        try container.encodeIfPresent(lastActivity, forKey: .lastActivity)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+        try container.encodeIfPresent(repositoryOwner, forKey: .repositoryOwner)
+        try container.encodeIfPresent(repositoryName, forKey: .repositoryName)
+        try container.encodeIfPresent(prStatus, forKey: .prStatus)
+        try container.encodeIfPresent(prNumber, forKey: .prNumber)
+        try container.encodeIfPresent(diffSummaryTotalFiles, forKey: .diffSummaryTotalFiles)
+        try container.encodeIfPresent(taskStatsTotal, forKey: .taskStatsTotal)
+        try container.encodeIfPresent(taskStatsCompleted, forKey: .taskStatsCompleted)
+        try container.encodeIfPresent(taskStatsInProgress, forKey: .taskStatsInProgress)
+        try container.encodeIfPresent(agentSummaryCount, forKey: .agentSummaryCount)
+        if agentSummaryWasReported { try container.encode(agentSummaryAgents, forKey: .agentSummaryAgents) }
+        if pullRequestsWereReported { try container.encode(pullRequests, forKey: .pullRequests) }
+        try container.encodeIfPresent(activePullRequest, forKey: .activePullRequest)
+        try container.encodeIfPresent(statusImageAssetId, forKey: .statusImageAssetId)
     }
 }
 
@@ -223,17 +342,30 @@ struct ModelInfo: Identifiable, Equatable {
     var isDefault: Bool = false // provider-reported default model (models.list)
 }
 
+enum ProviderAuthentication: Equatable, ExpressibleByBooleanLiteral {
+    case signedIn
+    case signedOut
+    case unknown
+
+    init(booleanLiteral value: Bool) { self = value ? .signedIn : .signedOut }
+}
+
 /// An agent provider from `host.providerAuthStatus` (PROTOCOL §5.14).
 struct ProviderInfo: Identifiable, Equatable {
     let id: String
     /// Tri-state: true (signed in), false (signed out), nil (unknown — probe failed or not installed).
-    let authenticated: Bool?
+    let authenticated: ProviderAuthentication
+
+    init(id: String, authenticated: ProviderAuthentication = .unknown) {
+        self.id = id
+        self.authenticated = authenticated
+    }
 
     /// Providers with `authenticated == false` are not selectable;
     /// `nil` (unknown) stays selectable since probes can fail transiently.
-    var isSelectable: Bool { authenticated != false }
+    var isSelectable: Bool { authenticated != .signedOut }
 
-    var displayName: String { ProviderInfo.displayName(for: id) }
+    var displayName: String { Self.displayName(for: id) }
 
     static func displayName(for id: String) -> String {
         switch id {
@@ -254,7 +386,6 @@ extension Array where Element == ProviderInfo {
     /// signed out). The pickers show desktop-setup guidance instead of an
     /// empty-value menu in that state (monorepo#985).
     var noneSelectable: Bool {
-        !isEmpty && !contains(where: { $0.isSelectable })
+        !isEmpty && !contains { $0.isSelectable }
     }
 }
-

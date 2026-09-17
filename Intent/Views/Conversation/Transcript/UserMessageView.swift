@@ -1,6 +1,24 @@
 import SwiftUI
 
 struct UserMessageView: View {
+    private enum Layout {
+        static let contentSpacing: CGFloat = 4
+        static let attachmentGridSpacing: CGFloat = 6
+        static let attachmentSectionTopPadding: CGFloat = 4
+        static let fileAttachmentListSpacing: CGFloat = 4
+        static let containerPadding: CGFloat = 12
+        static let backgroundOpacity: Double = 0.4
+        static let cornerRadius: CGFloat = 8
+        static let textRowSpacing: CGFloat = 6
+        static let mentionChipSpacing: CGFloat = 6
+        static let textOpacity: Double = 0.85
+        static let fileChipSpacing: CGFloat = 6
+        static let fileChipHorizontalPadding: CGFloat = 8
+        static let fileChipVerticalPadding: CGFloat = 5
+        static let fileChipBackgroundOpacity: Double = 0.6
+        static let fileChipCornerRadius: CGFloat = 8
+    }
+
     let message: ConversationMessage
     let workspaceId: String
     var onNavigateToAgent: ((_ agentId: String, _ workspaceId: String, _ agentName: String) -> Void)?
@@ -14,7 +32,7 @@ struct UserMessageView: View {
     private let hookWake: HookWakeAttribution?
     private let prWake: PrMonitorWakeAttribution?
     private let agentMessage: AgentMessageAttribution?
-    private let partitioned: (text: [ContentBlock], images: [ContentBlock], files: [ContentBlock])
+    private let partitioned: UserBlockPartition
     private let agentMessagePreview: String
     private let copyText: String
 
@@ -28,7 +46,7 @@ struct UserMessageView: View {
         self.workspaceId = workspaceId
         self.onNavigateToAgent = onNavigateToAgent
         self._isAgentMessageExpanded = isAgentMessageExpanded
-        let blocks = message.contentBlocks ?? []
+        let blocks = message.contentBlocks
         let hookWake = message.hookWakeAttribution
         let prWake = hookWake == nil ? message.prMonitorWakeAttribution : nil
         self.hookWake = hookWake
@@ -37,69 +55,95 @@ struct UserMessageView: View {
         self.partitioned = MessageBlockPartitioning.partitionUserBlocks(blocks)
         self.agentMessagePreview = MessageBlockPartitioning.agentMessagePreview(from: blocks)
         self.copyText = MessageBlockPartitioning.userCopyText(
-            from: blocks, hookWake: hookWake, prWake: prWake)
+            from: blocks,
+            hookWake: hookWake,
+            prWake: prWake
+        )
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let hookWake {
-                HookWakeAttributionView(attribution: hookWake)
-            } else if let prWake {
-                PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
-            } else if let agentMessage {
-                AgentMessageAttributionView(
-                    attribution: agentMessage,
-                    preview: agentMessagePreview,
-                    isExpanded: $isAgentMessageExpanded,
-                    onOpenAgent: onNavigateToAgent.map { navigate in
-                        { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
-                    }
-                )
-            } else {
-                Text("You")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Theme.mutedForeground(for: colorScheme))
-            }
-
+        VStack(alignment: .leading, spacing: Layout.contentSpacing) {
+            attributionHeader
             if agentMessage == nil || isAgentMessageExpanded {
-                ForEach(partitioned.text) { block in
-                    if let text = block.resolvedText {
-                        userTextBlock(text, hookWake: hookWake, prWake: prWake)
-                    }
-                }
-
-                if !partitioned.images.isEmpty {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: ImageAttachmentThumbnail.side, maximum: ImageAttachmentThumbnail.side), spacing: 6)],
-                        alignment: .leading,
-                        spacing: 6
-                    ) {
-                        ForEach(partitioned.images) { block in
-                            ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
-                        }
-                    }
-                    .padding(.top, 4)
-                }
-
-                if !partitioned.files.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(partitioned.files) { block in
-                            fileAttachmentChip(block)
-                        }
-                    }
-                    .padding(.top, 4)
-                }
+                messageContents
             }
         }
-        .padding(12)
+        .padding(Layout.containerPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.muted(for: colorScheme).opacity(0.4))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Theme.muted(for: colorScheme).opacity(Layout.backgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.cornerRadius))
         .modifier(MessageCopyContextMenu(
             text: copyText,
             userStyled: true,
             isStreaming: false
         ))
+    }
+
+    @ViewBuilder
+    private var attributionHeader: some View {
+        if let hookWake {
+            HookWakeAttributionView(attribution: hookWake)
+        } else if let prWake {
+            PrMonitorWakeAttributionView(attribution: prWake, workspaceRepo: workspaceRepo)
+        } else if let agentMessage {
+            AgentMessageAttributionView(
+                attribution: agentMessage,
+                preview: agentMessagePreview,
+                isExpanded: $isAgentMessageExpanded,
+                onOpenAgent: onNavigateToAgent.map { navigate in
+                    { navigate(agentMessage.fromAgentId, workspaceId, agentMessage.rawName) }
+                }
+            )
+        } else {
+            Text("You")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+        }
+    }
+
+    @ViewBuilder
+    private var messageContents: some View {
+        ForEach(partitioned.text) { block in
+            if let text = block.resolvedText {
+                userTextBlock(text, hookWake: hookWake, prWake: prWake)
+            }
+        }
+        if !partitioned.images.isEmpty {
+            imageAttachments(partitioned.images)
+        }
+        if !partitioned.files.isEmpty {
+            fileAttachments(partitioned.files)
+        }
+    }
+
+    private func imageAttachments(_ images: [ContentBlock]) -> some View {
+        LazyVGrid(
+            columns: [
+                GridItem(
+                    .adaptive(
+                        minimum: ImageAttachmentThumbnail.side,
+                        maximum: ImageAttachmentThumbnail.side
+                    ),
+                    spacing: Layout.attachmentGridSpacing
+                )
+            ],
+            alignment: .leading,
+            spacing: Layout.attachmentGridSpacing
+        ) {
+            ForEach(images) { block in
+                ImageAttachmentThumbnail(block: block, workspaceId: workspaceId)
+            }
+        }
+        .padding(.top, Layout.attachmentSectionTopPadding)
+    }
+
+    private func fileAttachments(_ files: [ContentBlock]) -> some View {
+        VStack(alignment: .leading, spacing: Layout.fileAttachmentListSpacing) {
+            ForEach(files) { block in
+                fileAttachmentChip(block)
+            }
+        }
+        .padding(.top, Layout.attachmentSectionTopPadding)
     }
 
     @ViewBuilder
@@ -111,24 +155,29 @@ struct UserMessageView: View {
         let display: String = {
             if let hookWake {
                 return MessageBlockPartitioning.stripSupervisorTags(
-                    HookWakeAttribution.displayText(text, attribution: hookWake))
+                    HookWakeAttribution.displayText(text, attribution: hookWake)
+                )
             }
             if prWake != nil {
                 return MessageBlockPartitioning.stripSupervisorTags(
-                    PrMonitorWakeAttribution.displayText(text))
+                    PrMonitorWakeAttribution.displayText(text)
+                )
             }
             return MessageBlockPartitioning.stripSupervisorTags(text)
         }()
         if (hookWake == nil && prWake == nil) || !display.isEmpty {
             let rows = MessageView.userTextRows(display)
-            if rows.contains(where: { if case .chips = $0 { return true } else { return false } }) {
-                VStack(alignment: .leading, spacing: 6) {
+            if rows.contains(where: { row in
+                if case .chips = row { return true }
+                return false
+            }) {
+                VStack(alignment: .leading, spacing: Layout.textRowSpacing) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         switch row {
                         case .text(let run):
                             userText(run)
                         case .chips(let mentions):
-                            ChipFlowLayout(spacing: 6) {
+                            ChipFlowLayout(spacing: Layout.mentionChipSpacing) {
                                 ForEach(Array(mentions.enumerated()), id: \.offset) { _, mention in
                                     ContextMentionChipView(mention: mention)
                                 }
@@ -145,15 +194,16 @@ struct UserMessageView: View {
     private func userText(_ text: String) -> some View {
         Text(text)
             .font(.subheadline)
-            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(0.85))
+            .foregroundStyle(Theme.foreground(for: colorScheme).opacity(Layout.textOpacity))
             .textSelection(.enabled)
     }
 
     private func fileAttachmentChip(_ block: ContentBlock) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Layout.fileChipSpacing) {
             Image(systemName: "doc.fill")
                 .font(.caption)
                 .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                .accessibilityHidden(true)
             Text(block.fileName ?? "Attachment")
                 .font(.caption)
                 .lineLimit(1)
@@ -163,15 +213,16 @@ struct UserMessageView: View {
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Theme.muted(for: colorScheme).opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, Layout.fileChipHorizontalPadding)
+        .padding(.vertical, Layout.fileChipVerticalPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Layout.fileChipBackgroundOpacity))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.fileChipCornerRadius))
     }
 
     private var workspaceRepo: String? {
         guard let workspace = session.workspaceStore.workspaces.first(
-                where: { $0.id == workspaceId }),
+                where: { $0.id == workspaceId }
+        ),
               let owner = workspace.repositoryOwner,
               let name = workspace.repositoryName else { return nil }
         return "\(owner)/\(name)"

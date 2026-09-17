@@ -38,8 +38,8 @@ final class WindowSoundClaimRegistry {
 
 #if os(visionOS)
 import AVFAudio
-import SwiftUI
 import RealityKit
+import SwiftUI
 
 /// Invisible RealityKit anchor that plays a notification sound from within
 /// THIS window's scene, so visionOS spatial audio localizes the sound to
@@ -101,7 +101,9 @@ struct WindowFeedbackSoundEmitter: View {
         try? AVAudioSession.sharedInstance().setIntendedSpatialExperience(
             .headTracked(
                 soundStageSize: .automatic,
-                anchoringStrategy: .scene(identifier: sceneID)))
+                anchoringStrategy: .scene(identifier: sceneID)
+            )
+        )
     }
 }
 
@@ -110,13 +112,13 @@ struct WindowFeedbackSoundEmitter: View {
 private struct WindowSceneIdentifierReader: UIViewRepresentable {
     let onResolve: (String?) -> Void
 
-    func makeUIView(context: Context) -> ProbeView {
+    func makeUIView(context _: Context) -> ProbeView {
         let view = ProbeView()
         view.onResolve = onResolve
         return view
     }
 
-    func updateUIView(_ uiView: ProbeView, context: Context) {}
+    func updateUIView(_: ProbeView, context _: Context) {}
 
     final class ProbeView: UIView {
         var onResolve: ((String?) -> Void)?

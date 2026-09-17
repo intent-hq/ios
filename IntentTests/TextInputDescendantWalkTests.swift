@@ -1,6 +1,6 @@
+@testable import Intent
 import Testing
 import UIKit
-@testable import Intent
 
 /// The overlay's hit-test pass-through defers to a `UITextInput`-conforming
 /// descendant (Textual's text-interaction view) that claims the point, even

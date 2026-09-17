@@ -27,13 +27,23 @@ struct Note: Identifiable, Equatable {
     let contentLength: Int?
 
     init(
-        id: String, title: String, content: String, tags: [String],
-        isDefault: Bool, isArchived: Bool, taskStatus: String?,
-        parentId: String?, createdAt: String, updatedAt: String,
-        assignedAgentIds: [String] = [], dependsOn: [String] = [],
-        conflictsWith: [String] = [], unmetDependsOn: [String] = [],
+        id: String,
+        title: String,
+        content: String,
+        tags: [String],
+        isDefault: Bool,
+        isArchived: Bool,
+        taskStatus: String?,
+        parentId: String?,
+        createdAt: String,
+        updatedAt: String,
+        assignedAgentIds: [String] = [],
+        dependsOn: [String] = [],
+        conflictsWith: [String] = [],
+        unmetDependsOn: [String] = [],
         estimatedEffort: String? = nil,
-        contentPreview: String? = nil, contentLength: Int? = nil
+        contentPreview: String? = nil,
+        contentLength: Int? = nil
     ) {
         self.id = id
         self.title = title
@@ -72,28 +82,48 @@ struct Note: Identifiable, Equatable {
     }
 
     /// Copy with different content (optimistic local updates).
-    func withContent(_ newContent: String) -> Note {
-        Note(
-            id: id, title: title, content: newContent, tags: tags,
-            isDefault: isDefault, isArchived: isArchived, taskStatus: taskStatus,
-            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
-            assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
-            conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
+    func withContent(_ newContent: String) -> Self {
+        Self(
+            id: id,
+            title: title,
+            content: newContent,
+            tags: tags,
+            isDefault: isDefault,
+            isArchived: isArchived,
+            taskStatus: taskStatus,
+            parentId: parentId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            assignedAgentIds: assignedAgentIds,
+            dependsOn: dependsOn,
+            conflictsWith: conflictsWith,
+            unmetDependsOn: unmetDependsOn,
             estimatedEffort: estimatedEffort,
-            contentPreview: contentPreview, contentLength: contentLength
+            contentPreview: contentPreview,
+            contentLength: contentLength
         )
     }
 
     /// Copy with a different task-note status (optimistic local updates).
-    func withTaskStatus(_ newStatus: String) -> Note {
-        Note(
-            id: id, title: title, content: content, tags: tags,
-            isDefault: isDefault, isArchived: isArchived, taskStatus: newStatus,
-            parentId: parentId, createdAt: createdAt, updatedAt: updatedAt,
-            assignedAgentIds: assignedAgentIds, dependsOn: dependsOn,
-            conflictsWith: conflictsWith, unmetDependsOn: unmetDependsOn,
+    func withTaskStatus(_ newStatus: String) -> Self {
+        Self(
+            id: id,
+            title: title,
+            content: content,
+            tags: tags,
+            isDefault: isDefault,
+            isArchived: isArchived,
+            taskStatus: newStatus,
+            parentId: parentId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            assignedAgentIds: assignedAgentIds,
+            dependsOn: dependsOn,
+            conflictsWith: conflictsWith,
+            unmetDependsOn: unmetDependsOn,
             estimatedEffort: estimatedEffort,
-            contentPreview: contentPreview, contentLength: contentLength
+            contentPreview: contentPreview,
+            contentLength: contentLength
         )
     }
 
@@ -108,12 +138,14 @@ struct Note: Identifiable, Equatable {
             .replacingOccurrences(of: "- [/] ", with: "")
             .replacingOccurrences(of: "#", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let firstLine = stripped.components(separatedBy: .newlines).first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+        let firstLine = stripped.components(separatedBy: .newlines).first { line in
+            !line.trimmingCharacters(in: .whitespaces).isEmpty
+        }
         guard let line = firstLine else { return nil }
         return String(line.prefix(Constants.Note.previewCharacterLimit))
     }
 
-    static func parseNote(_ dict: [String: Any]) -> Note? {
+    static func parseNote(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let title = dict["title"] as? String else { return nil }
 
@@ -122,7 +154,7 @@ struct Note: Identifiable, Equatable {
 
         let now = ISO8601DateFormatter().string(from: Date())
 
-        return Note(
+        return Self(
             id: id,
             title: title,
             content: dict["content"] as? String ?? "",
@@ -143,4 +175,3 @@ struct Note: Identifiable, Equatable {
         )
     }
 }
-

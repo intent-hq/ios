@@ -1,11 +1,10 @@
-import Testing
 @testable import Intent
+import Testing
 
 /// Tests for the platform-filtered pairing options: QR scanning requires a
 /// camera, which visionOS does not expose to third-party apps, so it must be
 /// excluded there and offered on iOS.
 struct PairingOptionTests {
-
     @Test func excludesQRScanWithoutCameraScanning() {
         let options = PairingOption.available(
             showsSavedConnections: false,

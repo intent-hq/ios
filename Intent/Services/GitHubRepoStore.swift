@@ -2,6 +2,11 @@ import Combine
 import Foundation
 import Observation
 
+enum GitHubRepoSearchOutcome {
+    case failed
+    case results([GitHubRepo])
+}
+
 /// GitHub repo data layer for the repo picker (PROTOCOL §5.27).
 ///
 /// Reads via `repo.list`, `github.authStatus`, `github.repos.list`,
@@ -132,8 +137,8 @@ import Observation
         let generation = loadGeneration
         loadTask = Task { [weak self] in
             await self?.runLoad(silent: silent, generation: generation)
-            guard let self, self.loadGeneration == generation else { return }
-            self.loadTask = nil
+            guard let self, loadGeneration == generation else { return }
+            loadTask = nil
         }
     }
 
@@ -183,10 +188,13 @@ import Observation
     /// `isConfigured` untouched so a failed background refresh cannot turn a
     /// cached, connected picker into not-connected guidance.
     @discardableResult
+    // nil is a transport failure; false is a successful unconfigured result.
+    // swiftlint:disable:next discouraged_optional_boolean
     func fetchAuthStatus() async -> Bool? {
         await fetchAuthStatus(generation: loadGeneration)
     }
 
+    // swiftlint:disable:next discouraged_optional_boolean
     private func fetchAuthStatus(generation: Int) async -> Bool? {
         do {
             let result = try await connectionManager.request("github.authStatus")
@@ -262,9 +270,9 @@ import Observation
     /// together after its own cancellation check (out-of-order responses
     /// would otherwise let an older request overwrite a newer one's
     /// results). Returns nil on error.
-    func searchRepos(query: String) async -> [GitHubRepo]? {
+    func searchRepos(query: String) async -> GitHubRepoSearchOutcome {
         let rewritten = Self.rewriteSearchQuery(query)
-        guard !rewritten.isEmpty else { return [] }
+        guard !rewritten.isEmpty else { return .results([]) }
         isLoading = true
         lastError = nil
         defer { isLoading = false }
@@ -274,11 +282,11 @@ import Observation
                 "limit": Self.pageLimit
             ])
             let items = (result as? [String: Any])?["repos"] as? [[String: Any]] ?? []
-            return items.compactMap { GitHubRepo.parseRepo($0) }
+            return .results(items.compactMap { GitHubRepo.parseRepo($0) })
         } catch {
             AppLog.github.error("[GitHubRepoStore] github.repos.search failed: \(error)")
             lastError = error.localizedDescription
-            return nil
+            return .failed
         }
     }
 

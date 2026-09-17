@@ -1,6 +1,23 @@
-import Foundation
 import Combine
+import Foundation
 import Observation
+
+enum PrMonitorFlushMode {
+    case daemonDefault
+    case pendingOnly
+    case refreshFirst
+
+    func apply(to params: inout [String: Any]) {
+        switch self {
+        case .daemonDefault:
+            break
+        case .pendingOnly:
+            params["check"] = false
+        case .refreshFirst:
+            params["check"] = true
+        }
+    }
+}
 
 /// Live PR-monitor list for one workspace (PROTOCOL §5.42, §6.5).
 ///
@@ -12,6 +29,29 @@ import Observation
 /// `prMonitor:*` prefix filter.
 @MainActor
 @Observable class MonitoredPrStore {
+    private enum MonitorEventKind {
+        case cancelled
+        case changed
+        case completed
+        case emitted
+        case registered
+
+        init?(eventType: String) {
+            switch eventType {
+            case "prMonitor:cancelled": self = .cancelled
+            case "prMonitor:changed": self = .changed
+            case "prMonitor:completed": self = .completed
+            case "prMonitor:emitted": self = .emitted
+            case "prMonitor:registered": self = .registered
+            default: return nil
+            }
+        }
+
+        var needsRefetchWhenMissing: Bool {
+            self != .cancelled
+        }
+    }
+
     var monitors: [MonitoredPr] = []
     var isLoading = false
 
@@ -59,7 +99,7 @@ import Observation
         if let subscriptionId {
             let connectionManager = self.connectionManager
             Task { @MainActor in
-                let _ = try? await connectionManager.request("events.unsubscribe", params: [
+                _ = try? await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subscriptionId
                 ])
             }
@@ -69,7 +109,7 @@ import Observation
     private func onConnected() async {
         // Subscriptions are per-connection (§6.1) — replay and re-seed
         subscriptionId = nil
-        if let wsId = workspaceId, let agentId = agentId {
+        if let wsId = workspaceId, let agentId {
             await subscribe(workspaceId: wsId, agentId: agentId)
         }
     }
@@ -119,7 +159,7 @@ import Observation
         if let subId = subscriptionId {
             subscriptionId = nil
             do {
-                let _ = try await connectionManager.request("events.unsubscribe", params: [
+                _ = try await connectionManager.request("events.unsubscribe", params: [
                     "subscriptionId": subId
                 ])
             } catch {
@@ -136,18 +176,16 @@ import Observation
     /// wake now; ack only, the outcome arrives as `prMonitor:*` events.
     /// `check: true` makes the daemon re-poll the PR first and flush anything
     /// that changed vs. the emit baseline (additive param, default `false`);
-    /// nil omits the key entirely so older daemons see the pre-check request.
-    func flush(monitorId: String, check: Bool? = nil) async {
+    /// daemonDefault omits the key so older daemons see the pre-check request.
+    func flush(monitorId: String, mode: PrMonitorFlushMode = .daemonDefault) async {
         guard let wsId = workspaceId else { return }
         var params: [String: Any] = [
             "workspaceId": wsId,
             "monitorId": monitorId
         ]
-        if let check {
-            params["check"] = check
-        }
+        mode.apply(to: &params)
         do {
-            let _ = try await connectionManager.request("prMonitor.flush", params: params)
+            _ = try await connectionManager.request("prMonitor.flush", params: params)
         } catch {
             AppLog.prs.error("[MonitoredPrStore] prMonitor.flush failed: \(error)")
         }
@@ -158,7 +196,7 @@ import Observation
     func cancel(monitorId: String) async {
         guard let wsId = workspaceId else { return }
         do {
-            let _ = try await connectionManager.request("prMonitor.cancel", params: [
+            _ = try await connectionManager.request("prMonitor.cancel", params: [
                 "workspaceId": wsId,
                 "monitorId": monitorId
             ])
@@ -186,12 +224,13 @@ import Observation
         eventType: String,
         data: [String: Any]
     ) -> FoldResult {
-        guard let monitorId = data["monitorId"] as? String else {
+        guard let monitorId = data["monitorId"] as? String,
+              let eventKind = MonitorEventKind(eventType: eventType) else {
             return FoldResult(monitors: monitors, needsRefetch: false)
         }
 
         // Cancelled rows are excluded from `prMonitor.list` — drop them.
-        if eventType == "prMonitor:cancelled" {
+        if eventKind == .cancelled {
             return FoldResult(
                 monitors: monitors.filter { $0.monitorId != monitorId },
                 needsRefetch: false
@@ -199,20 +238,17 @@ import Observation
         }
 
         guard let index = monitors.firstIndex(where: { $0.monitorId == monitorId }) else {
-            switch eventType {
-            case "prMonitor:registered", "prMonitor:changed",
-                 "prMonitor:emitted", "prMonitor:completed":
-                return FoldResult(monitors: monitors, needsRefetch: true)
-            default:
-                return FoldResult(monitors: monitors, needsRefetch: false)
-            }
+            return FoldResult(
+                monitors: monitors,
+                needsRefetch: eventKind.needsRefetchWhenMissing
+            )
         }
 
         let payloadState = (data["state"] as? String).flatMap(MonitoredPr.State.init)
 
         var next = monitors
-        switch eventType {
-        case "prMonitor:registered":
+        switch eventKind {
+        case .registered:
             // Fires on registration and on an idempotent re-arm; a re-arm
             // refreshes the monitor's baseline server-side, so clear the
             // pre-re-arm pending state immediately and refetch to converge
@@ -222,26 +258,26 @@ import Observation
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
             return FoldResult(monitors: next, needsRefetch: true)
-        case "prMonitor:changed":
+        case .changed:
             next[index].state = payloadState ?? next[index].state
             if let changes = data["changes"] as? [String] {
                 next[index].pendingChanges = changes
                 next[index].hasPendingChanges = !changes.isEmpty
             }
-        case "prMonitor:emitted":
+        case .emitted:
             // The consolidated wake was delivered — pending changes cleared.
             next[index].state = payloadState ?? next[index].state
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
-        case "prMonitor:completed":
+        case .completed:
             // PR merged/closed — the row is retained (completed monitors
             // stay visible) with the immediate final wake delivered.
             next[index].state = payloadState ?? .completed
             next[index].pendingChanges = []
             next[index].hasPendingChanges = false
             next[index].pendingSince = nil
-        default:
+        case .cancelled:
             return FoldResult(monitors: monitors, needsRefetch: false)
         }
         return FoldResult(monitors: next, needsRefetch: false)
@@ -249,7 +285,7 @@ import Observation
 
     // MARK: - Event handling
 
-    func handleEvent(_ method: String, params: Any) {
+    func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
         // Events from the event bridge are wrapped:

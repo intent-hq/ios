@@ -18,6 +18,11 @@ struct BackgroundHooksRow: View {
     /// Max characters of a hook name shown on a chip (mirrors the FE's
     /// visual max-width truncation).
     private static let nameMaxLength = 24
+    private static let repeatIconFontSize: CGFloat = 8
+    private static let chipTopPadding: CGFloat = 4
+    private static let chipBottomPadding: CGFloat = 6
+    private static let chipBackgroundOpacity = 0.3
+    private static let timeBarInset: CGFloat = 3
 
     init(viewModel: ConversationViewModel, hookStore: BackgroundHookStore) {
         self.viewModel = viewModel
@@ -30,6 +35,7 @@ struct BackgroundHooksRow: View {
                 Image(systemName: "bolt.fill")
                     .font(.caption2)
                     .foregroundStyle(Theme.mutedForeground(for: colorScheme))
+                    .accessibilityHidden(true)
                 Text("Running hooks")
                     .font(.caption)
                     .fontWeight(.medium)
@@ -84,7 +90,8 @@ struct BackgroundHooksRow: View {
                 .lineLimit(1)
             if hook.perpetual {
                 Image(systemName: "repeat")
-                    .font(.system(size: 8))
+                    .font(.system(size: Self.repeatIconFontSize))
+                    .accessibilityLabel("Repeating hook")
             }
             if hook.state == .running {
                 ProgressView()
@@ -93,9 +100,9 @@ struct BackgroundHooksRow: View {
         }
         .foregroundStyle(Theme.mutedForeground(for: colorScheme))
         .padding(.horizontal, Constants.Conversation.StatusStrip.chipHorizontalPadding)
-        .padding(.top, 4)
-        .padding(.bottom, 6)
-        .background(Theme.muted(for: colorScheme).opacity(0.3))
+        .padding(.top, Self.chipTopPadding)
+        .padding(.bottom, Self.chipBottomPadding)
+        .background(Theme.muted(for: colorScheme).opacity(Self.chipBackgroundOpacity))
         .overlay(alignment: .bottom) {
             if hook.state == .scheduled, let nextRunAt = hook.nextRunAt {
                 HookTimeBar(
@@ -104,8 +111,8 @@ struct BackgroundHooksRow: View {
                     color: Theme.mutedForeground(for: colorScheme).opacity(0.5)
                 )
                 .id(nextRunAt)
-                .padding(.horizontal, 3)
-                .padding(.bottom, 3)
+                .padding(.horizontal, Self.timeBarInset)
+                .padding(.bottom, Self.timeBarInset)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius))
@@ -113,7 +120,8 @@ struct BackgroundHooksRow: View {
             RoundedRectangle(cornerRadius: Constants.Conversation.StatusStrip.chipCornerRadius)
                 .strokeBorder(
                     Theme.border(for: colorScheme).opacity(Constants.Conversation.StatusStrip.chipBorderOpacity),
-                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth)
+                    lineWidth: Constants.Conversation.StatusStrip.chipBorderWidth
+                )
         )
     }
 
@@ -159,6 +167,8 @@ private struct HookTimeBar: View {
 
     @State private var fraction: CGFloat = 1
 
+    private static let millisecondsPerSecond = 1000.0
+
     var body: some View {
         Rectangle()
             .fill(color)
@@ -173,7 +183,7 @@ private struct HookTimeBar: View {
             fraction = 0
             return
         }
-        let total = Double(delayMs) / 1000.0
+        let total = Double(delayMs) / Self.millisecondsPerSecond
         let remaining = max(0, min(total, next.timeIntervalSinceNow))
         var transaction = Transaction()
         transaction.disablesAnimations = true

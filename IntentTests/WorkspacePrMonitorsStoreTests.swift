@@ -1,14 +1,13 @@
 import Foundation
+@testable import Intent
 import Observation
 import Synchronization
 import Testing
-@testable import Intent
 
 /// Integration tests for the workspace-keyed monitor pool feeding the list
 /// rows (one global prMonitor:* subscription, per-workspace seed + fold).
 @MainActor
 struct WorkspacePrMonitorsStoreTests {
-
     private func makeMonitorDict(
         monitorId: String = "prm-1",
         workspaceId: String = "ws-abc",
@@ -32,10 +31,9 @@ struct WorkspacePrMonitorsStoreTests {
     private func makeEventData(
         monitorId: String = "prm-1",
         workspaceId: String = "ws-abc",
-        state: String = "active",
-        changes: [String]? = nil
+        state: String = "active"
     ) -> [String: Any] {
-        var data: [String: Any] = [
+        [
             "workspaceId": workspaceId,
             "agentId": "agent-1",
             "monitorId": monitorId,
@@ -43,8 +41,6 @@ struct WorkspacePrMonitorsStoreTests {
             "prNumber": 12,
             "state": state
         ]
-        if let changes { data["changes"] = changes }
-        return data
     }
 
     private func makeSeededStore(
@@ -73,7 +69,7 @@ struct WorkspacePrMonitorsStoreTests {
         #expect(store.monitors(for: "ws-other").isEmpty)
     }
 
-    @Test func repeatSeedIsNoOpAndSecondWorkspaceGetsOwnBucket() async throws {
+    @Test func repeatSeedIsNoOpAndSecondWorkspaceGetsOwnBucket() async {
         let fake = FakeConnectionManager()
         let store = await makeSeededStore(fake, monitors: [makeMonitorDict()])
         fake.clearRequestLog()
@@ -82,9 +78,11 @@ struct WorkspacePrMonitorsStoreTests {
         #expect(fake.paramsForMethod("prMonitor.list").isEmpty)
         #expect(fake.paramsForMethod("events.subscribe").isEmpty)
 
-        fake.responseMap["prMonitor.list"] = ["monitors": [
-            makeMonitorDict(monitorId: "prm-9", workspaceId: "ws-def", prNumber: 9)
-        ]]
+        fake.responseMap["prMonitor.list"] = [
+            "monitors": [
+                makeMonitorDict(monitorId: "prm-9", workspaceId: "ws-def", prNumber: 9)
+            ]
+        ]
         await store.seed(workspaceId: "ws-def")
         #expect(fake.paramsForMethod("prMonitor.list").first?["workspaceId"] as? String == "ws-def")
         // One global subscription serves both workspaces.
@@ -194,9 +192,11 @@ struct WorkspacePrMonitorsStoreTests {
         fake.responseMap["prMonitor.list"] = ["monitors": [] as [[String: Any]]]
         await store.seed(workspaceId: "ws-def")
         fake.clearRequestLog()
-        fake.responseMap["prMonitor.list"] = ["monitors": [
-            makeMonitorDict(monitorId: "prm-new", workspaceId: "ws-def")
-        ]]
+        fake.responseMap["prMonitor.list"] = [
+            "monitors": [
+                makeMonitorDict(monitorId: "prm-new", workspaceId: "ws-def")
+            ]
+        ]
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-rows",

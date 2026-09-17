@@ -13,7 +13,7 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
         TaskDisplayStatus(wire: status)
     }
 
-    static func parseTask(_ dict: [String: Any]) -> WorkspaceTask? {
+    static func parseTask(_ dict: [String: Any]) -> Self? {
         guard let id = dict["id"] as? String,
               let title = dict["title"] as? String,
               let status = dict["status"] as? String,
@@ -21,7 +21,7 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
             return nil
         }
 
-        return WorkspaceTask(
+        return Self(
             id: id,
             title: title,
             status: status,
@@ -38,15 +38,15 @@ struct WorkspaceTask: Identifiable, Codable, Equatable {
 /// attention-request states (`ws.agent.reportBlocker` / `requestDiscussion`)
 /// and get a distinct treatment rather than being lumped with unknown.
 enum TaskDisplayStatus: Equatable {
-    case notStarted
-    case waiting
-    case discussionNeeded
     case blocked
-    case inProgress
-    case reviewRequired
-    case complete
     case cancelled
+    case complete
+    case discussionNeeded
+    case inProgress
+    case notStarted
+    case reviewRequired
     case unknown
+    case waiting
 
     init(wire: String) {
         switch wire {

@@ -12,11 +12,11 @@ import Textual
 /// loader, which shares URLSession's ATS policy and fails the same way, so
 /// routing it here loses nothing.
 nonisolated enum MarkdownImageRoute: Equatable {
+    case fallback
     case intentFile(IntentFileLink)
     case remote
-    case fallback
 
-    static func route(for url: URL) -> MarkdownImageRoute {
+    static func route(for url: URL) -> Self {
         if let link = IntentFileLink.parse(url) {
             return .intentFile(link)
         }
@@ -48,8 +48,7 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     /// Fetches an intent-file image from the daemon; injectable so a window
     /// routes through its session's `WorkspaceFileImageLoader` instead of the
     /// shared (default-backend) loader.
-    var fileImage: @Sendable (_ workspaceId: String, _ path: String) async throws -> UIImage = {
-        workspaceId, path in
+    var fileImage: @Sendable (_ workspaceId: String, _ path: String) async throws -> UIImage = { workspaceId, path in
         try await WorkspaceFileImageLoader.shared.image(workspaceId: workspaceId, path: path)
     }
 
@@ -67,7 +66,8 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
         try await resolvedAttachment(for: url, text: text) {
             AnyAttachment(
                 try await fallback.attachment(for: url, text: text, environment: environment)
-                    as any Textual.Attachment)
+                    as any Textual.Attachment
+            )
         }
     }
 
@@ -81,18 +81,21 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     ) async throws -> AnyAttachment {
         switch MarkdownImageRoute.route(for: url) {
         case .intentFile(let link):
-            guard link.isImage, let ws = link.workspaceId ?? workspaceId else {
+            guard link.isImage, let resolvedWorkspaceId = link.workspaceId ?? workspaceId else {
                 return AnyAttachment(
-                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment
+                )
             }
             do {
-                let image = try await fileImage(ws, link.path)
+                let image = try await fileImage(resolvedWorkspaceId, link.path)
                 return AnyAttachment(
                     IntentFileImageAttachment(image: image, altText: text)
-                        as any Textual.Attachment)
+                        as any Textual.Attachment
+                )
             } catch {
                 return AnyAttachment(
-                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment)
+                    IntentFileFailureAttachment(altText: text) as any Textual.Attachment
+                )
             }
         case .remote:
             if let attachment = await remoteImageAttachment(for: url, text: text) {
@@ -110,7 +113,8 @@ struct IntentFileAttachmentLoader<Fallback: AttachmentLoader>: AttachmentLoader 
     func remoteImageAttachment(for url: URL, text: String) async -> AnyAttachment? {
         guard let image = try? await remoteImage(url) else { return nil }
         return AnyAttachment(
-            IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment)
+            IntentFileImageAttachment(image: image, altText: text) as any Textual.Attachment
+        )
     }
 }
 
@@ -124,7 +128,7 @@ struct IntentFileImageAttachment: Attachment {
     var description: String { altText }
 
     var body: some View {
-        IntentFileAttachmentImageView(image: image)
+        IntentFileAttachmentImageView(image: image, accessibilityLabel: altText)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, in _: TextEnvironmentValues) -> CGSize {
@@ -134,8 +138,10 @@ struct IntentFileImageAttachment: Attachment {
     /// Fixed square transcript thumbnail (FE parity), clamped to the
     /// proposed width so narrow layouts don't overflow.
     static func thumbnailSize(proposedWidth: CGFloat?) -> CGSize {
-        let side = min(SquareImageThumbnail.transcriptSide,
-                       proposedWidth ?? SquareImageThumbnail.transcriptSide)
+        let side = min(
+            SquareImageThumbnail.transcriptSide,
+            proposedWidth ?? SquareImageThumbnail.transcriptSide
+        )
         return CGSize(width: side, height: side)
     }
 
@@ -149,27 +155,31 @@ struct IntentFileImageAttachment: Attachment {
 struct IntentFileFailureAttachment: Attachment {
     let altText: String
 
+    private static let iconLabelSpacing: CGFloat = 4
+
     var description: String { altText }
 
     var body: some View {
         ImageDecodeFailureView()
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
+    func sizeThatFits(_: ProposedViewSize, in environment: TextEnvironmentValues) -> CGSize {
         // Match ImageDecodeFailureView's intrinsic size (SF Symbol + caption
         // label in a 4pt-spaced HStack) at the current Dynamic Type size.
         let traits = UITraitCollection(
-            preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize))
+            preferredContentSizeCategory: UIContentSizeCategory(environment.dynamicTypeSize)
+        )
         let font = UIFont.preferredFont(forTextStyle: .caption1, compatibleWith: traits)
-        let label = ("Image" as NSString).size(withAttributes: [.font: font])
+        let label = "Image".size(withAttributes: [.font: font])
         return CGSize(
-            width: (label.width + font.lineHeight + 4).rounded(.up),
-            height: font.lineHeight.rounded(.up))
+            width: (label.width + font.lineHeight + Self.iconLabelSpacing).rounded(.up),
+            height: font.lineHeight.rounded(.up)
+        )
     }
 }
 
-extension UIContentSizeCategory {
-    fileprivate nonisolated init(_ size: DynamicTypeSize) {
+private extension UIContentSizeCategory {
+    nonisolated init(_ size: DynamicTypeSize) {
         switch size {
         case .xSmall: self = .extraSmall
         case .small: self = .small
@@ -178,12 +188,22 @@ extension UIContentSizeCategory {
         case .xLarge: self = .extraLarge
         case .xxLarge: self = .extraExtraLarge
         case .xxxLarge: self = .extraExtraExtraLarge
-        case .accessibility1: self = .accessibilityMedium
-        case .accessibility2: self = .accessibilityLarge
-        case .accessibility3: self = .accessibilityExtraLarge
-        case .accessibility4: self = .accessibilityExtraExtraLarge
-        case .accessibility5: self = .accessibilityExtraExtraExtraLarge
+        case .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5:
+            self = Self.accessibilityCategory(for: size)
         @unknown default: self = .large
+        }
+    }
+
+    nonisolated private static func accessibilityCategory(
+        for size: DynamicTypeSize
+    ) -> UIContentSizeCategory {
+        switch size {
+        case .accessibility1: return .accessibilityMedium
+        case .accessibility2: return .accessibilityLarge
+        case .accessibility3: return .accessibilityExtraLarge
+        case .accessibility4: return .accessibilityExtraExtraLarge
+        case .accessibility5: return .accessibilityExtraExtraExtraLarge
+        default: return .large
         }
     }
 }
@@ -193,6 +213,7 @@ extension UIContentSizeCategory {
 /// `MarkdownTextView` via the Textual attachment tap action.
 private struct IntentFileAttachmentImageView: View {
     let image: UIImage
+    let accessibilityLabel: String
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -201,13 +222,15 @@ private struct IntentFileAttachmentImageView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .accessibilityLabel(accessibilityLabel)
             )
             .clipShape(RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius))
             .overlay(
                 RoundedRectangle(cornerRadius: Constants.Conversation.ImageThumbnail.cornerRadius)
                     .strokeBorder(
                         Theme.border(for: colorScheme),
-                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth)
+                        lineWidth: Constants.Conversation.ImageThumbnail.borderWidth
+                    )
             )
             .contextMenu {
                 ImageActionMenuItems(image: image)

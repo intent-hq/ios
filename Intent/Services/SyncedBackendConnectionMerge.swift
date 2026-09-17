@@ -14,6 +14,8 @@ import Network
 /// sync are never removed just because the registry doesn't list them (they
 /// get pushed to the registry by the write-back path instead).
 enum SyncedBackendConnectionMerge {
+    // Date.timeIntervalSince1970 is expressed in seconds.
+    private static let millisecondsPerSecond: TimeInterval = 1000
 
     /// Outcome of one merge pass over a saved-connections list.
     struct Result: Equatable {
@@ -48,7 +50,7 @@ enum SyncedBackendConnectionMerge {
                 // delete the fresh pairing.
                 let localClock =
                     existing.syncUpdatedAt
-                    ?? existing.server.pairedAt.timeIntervalSince1970 * 1000
+                    ?? existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond
                 if localClock > record.updatedAt { continue }
                 result.removedIds.append(existing.id)
                 result.connections.remove(at: index)
@@ -63,8 +65,7 @@ enum SyncedBackendConnectionMerge {
                 if let applied = existing.syncUpdatedAt {
                     if record.updatedAt <= applied { continue }
                 } else if record.updatedAt
-                    < existing.server.pairedAt.timeIntervalSince1970 * 1000
-                {
+                    < existing.server.pairedAt.timeIntervalSince1970 * Self.millisecondsPerSecond {
                     continue
                 }
                 result.connections[index] = apply(record, to: existing)
@@ -94,22 +95,22 @@ enum SyncedBackendConnectionMerge {
     /// DIFFERENT fingerprint at the same address is never matched — that is
     /// another machine reusing the IP.
     static func matchIndex(
-        for record: SyncedBackendRecord, in connections: [StoredConnection]
+        for record: SyncedBackendRecord,
+        in connections: [StoredConnection]
     ) -> Int? {
         let fingerprint = normalizeFingerprint(record.fingerprint)
         if !fingerprint.isEmpty,
-            let index = connections.firstIndex(where: {
-                normalizeFingerprint($0.server.certFingerprint) == fingerprint
-            })
-        {
+            let index = connections.firstIndex(where: { connection in
+                normalizeFingerprint(connection.server.certFingerprint) == fingerprint
+            }) {
             return index
         }
         let hosts = Set(candidateHosts(of: record).map(normalizeHost))
-        return connections.firstIndex(where: { connection in
+        return connections.firstIndex { connection in
             normalizeFingerprint(connection.server.certFingerprint).isEmpty
                 && connection.server.port == record.port
                 && !hosts.isDisjoint(with: connection.server.hosts.map(normalizeHost))
-        })
+        }
     }
 
     /// Same fingerprint normalization as `SyncedBackendRecord.registryKey`.
@@ -128,8 +129,10 @@ enum SyncedBackendConnectionMerge {
     /// so a malformed host must never survive the merge.
     static func candidateHosts(of record: SyncedBackendRecord) -> [String] {
         PersistenceManager.mergeHostLists(
-            existing: [record.host], incoming: record.hosts
-        ).compactMap(usableHost)
+            existing: [record.host],
+            incoming: record.hosts
+        )
+        .compactMap(usableHost)
     }
 
     /// The URL-embeddable form of the host string, or nil when it has no
@@ -177,29 +180,33 @@ enum SyncedBackendConnectionMerge {
     /// record identity, pairing date and connection history. Remote hosts
     /// come first (primary route); locally learned extra routes are kept.
     private static func apply(
-        _ record: SyncedBackendRecord, to existing: StoredConnection
+        _ record: SyncedBackendRecord,
+        to existing: StoredConnection
     ) -> StoredConnection {
         StoredConnection(
             id: existing.id,
             server: PairedServer(
                 hosts: PersistenceManager.mergeHostLists(
-                    existing: candidateHosts(of: record), incoming: existing.server.hosts),
+                    existing: candidateHosts(of: record),
+                    incoming: existing.server.hosts
+                ),
                 port: record.port,
                 name: existing.server.name,
                 pairedAt: existing.server.pairedAt,
                 certFingerprint: fingerprintOrNil(record) ?? existing.server.certFingerprint,
                 // Registry records don't carry the tunnel address; keep the
                 // locally learned one.
-                tcAddress: existing.server.tcAddress),
+                tcAddress: existing.server.tcAddress
+            ),
             token: record.token,
             displayName: displayName(for: record),
             lastConnectedAt: existing.lastConnectedAt,
-            syncUpdatedAt: record.updatedAt)
+            syncUpdatedAt: record.updatedAt
+        )
     }
 
     private static func makeConnection(from record: SyncedBackendRecord, now: Date)
-        -> StoredConnection
-    {
+        -> StoredConnection {
         let name = displayName(for: record)
         return StoredConnection(
             server: PairedServer(
@@ -207,10 +214,12 @@ enum SyncedBackendConnectionMerge {
                 port: record.port,
                 name: name,
                 pairedAt: now,
-                certFingerprint: fingerprintOrNil(record)),
+                certFingerprint: fingerprintOrNil(record)
+            ),
             token: record.token,
             displayName: name,
-            syncUpdatedAt: record.updatedAt)
+            syncUpdatedAt: record.updatedAt
+        )
     }
 
     private static func fingerprintOrNil(_ record: SyncedBackendRecord) -> String? {

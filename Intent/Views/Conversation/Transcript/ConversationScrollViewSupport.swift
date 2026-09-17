@@ -57,7 +57,7 @@ class ScrollViewMomentumProxy {
             return .deferred(nil)
         case .rePin(let offsetY):
             guard geometry == confirming else { return .deferred(geometry) }
-            AppLog.ui.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
+            AppLog.userInterface.debug("[SCROLL] Re-pinning past-end viewport from \(geometry.contentOffsetY) to \(offsetY)")
             scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
             return .rePinned
         }
@@ -102,20 +102,20 @@ class ScrollViewMomentumProxy {
     @discardableResult
     func pageTo(offsetY: CGFloat) -> Bool {
         guard let scrollView else { return false }
-        AppLog.ui.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
+        AppLog.userInterface.debug("[SCROLL] Paging blank viewport from \(scrollView.contentOffset.y) to \(offsetY)")
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: offsetY), animated: false)
         return true
     }
 
     /// Kills any ongoing deceleration by setting contentOffset to its current value.
     func stopMomentum() {
-        AppLog.ui.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
+        AppLog.userInterface.debug("[SCROLL] stopMomentum called, scrollView=\(scrollView != nil)")
         guard let scrollView else {
-            AppLog.ui.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
+            AppLog.userInterface.warning("[SCROLL] WARNING: scrollView is nil, cannot stop momentum")
             return
         }
         scrollView.setContentOffset(scrollView.contentOffset, animated: false)
-        AppLog.ui.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
+        AppLog.userInterface.debug("[SCROLL] Momentum stopped at offset \(scrollView.contentOffset)")
     }
 }
 
@@ -130,7 +130,7 @@ class ScrollViewMomentumProxy {
 struct ScrollViewFinder: UIViewRepresentable {
     let proxy: ScrollViewMomentumProxy
 
-    func makeUIView(context: Context) -> FinderView {
+    func makeUIView(context _: Context) -> FinderView {
         let view = FinderView()
         view.isUserInteractionEnabled = false
         view.frame = .zero
@@ -138,7 +138,7 @@ struct ScrollViewFinder: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: FinderView, context: Context) {
+    func updateUIView(_ uiView: FinderView, context _: Context) {
         uiView.proxy = proxy
     }
 
@@ -161,12 +161,12 @@ struct ScrollViewFinder: UIViewRepresentable {
         private func resolveScrollView() {
             guard let proxy else { return }
             guard let scrollView = ScrollViewFinder.firstScrollViewAncestor(of: self) else {
-                AppLog.ui.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
+                AppLog.userInterface.warning("[SCROLL] WARNING: Could not find UIScrollView in hierarchy")
                 return
             }
             if proxy.scrollView !== scrollView {
                 proxy.scrollView = scrollView
-                AppLog.ui.debug("[SCROLL] Found UIScrollView: \(scrollView)")
+                AppLog.userInterface.debug("[SCROLL] Found UIScrollView: \(scrollView)")
             }
             ScrollViewFinder.installKeyboardDismissTap(on: scrollView)
         }
@@ -185,13 +185,15 @@ struct ScrollViewFinder: UIViewRepresentable {
         @objc private func handleTap() {
             UIApplication.shared.sendAction(
                 #selector(UIResponder.resignFirstResponder),
-                to: nil, from: nil, for: nil
+                to: nil,
+                from: nil,
+                for: nil
             )
         }
 
         func gestureRecognizer(
-            _ gestureRecognizer: UIGestureRecognizer,
-            shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer
+            _: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer
         ) -> Bool {
             true
         }

@@ -21,8 +21,8 @@ struct PrMonitorWakeAttribution: Equatable {
     /// Extracts PR-monitor wake attribution from an opaque metadata
     /// dictionary. Returns nil unless `metadata.type == "pr_monitor_wake"`
     /// with a usable `repo` + `prNumber` (both are required to build the PR link).
-    static func from(_ metadata: [String: AnyCodable]?) -> PrMonitorWakeAttribution? {
-        guard let metadata, metadata["type"]?.stringValue == "pr_monitor_wake" else { return nil }
+    static func from(_ metadata: [String: AnyCodable]) -> Self? {
+        guard metadata["type"]?.stringValue == "pr_monitor_wake" else { return nil }
         let repo = (metadata["repo"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !repo.isEmpty,
@@ -31,11 +31,12 @@ struct PrMonitorWakeAttribution: Equatable {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let rawUrl = (metadata["url"]?.stringValue ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return PrMonitorWakeAttribution(
+        return Self(
             monitorId: monitorId,
             repo: repo,
             prNumber: prNumber,
-            url: rawUrl.isEmpty ? nil : rawUrl)
+            url: rawUrl.isEmpty ? nil : rawUrl
+        )
     }
 
     /// The PR HTML URL to open: metadata `url` when the daemon provided it,
@@ -64,7 +65,8 @@ struct PrMonitorWakeAttribution: Equatable {
         text.replacingOccurrences(
             of: "^\\[PR monitor [^\\]]*\\]\\s*",
             with: "",
-            options: .regularExpression)
+            options: .regularExpression
+        )
     }
 
     /// Display text for a PR-monitor wake body: prefix stripped.
@@ -80,7 +82,7 @@ extension ConversationMessage {
     /// (FE parity: ChatMessage.svelte).
     var prMonitorWakeAttribution: PrMonitorWakeAttribution? {
         if let attribution = PrMonitorWakeAttribution.from(metadata) { return attribution }
-        for block in contentBlocks ?? [] where block.type == .text {
+        for block in contentBlocks where block.type == .text {
             if let attribution = PrMonitorWakeAttribution.from(block.messageMetadata) {
                 return attribution
             }

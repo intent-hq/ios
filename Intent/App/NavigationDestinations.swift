@@ -13,7 +13,7 @@ struct NoteDestination: Hashable {
         self.noteTitle = noteTitle
     }
 
-    static func == (lhs: NoteDestination, rhs: NoteDestination) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
     }
 
@@ -35,7 +35,7 @@ struct AgentDestination: Hashable, Identifiable {
         self.agentName = agentName
     }
 
-    static func == (lhs: AgentDestination, rhs: AgentDestination) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.id == rhs.id
     }
 

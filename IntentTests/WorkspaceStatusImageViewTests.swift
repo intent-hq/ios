@@ -1,8 +1,8 @@
 import Foundation
+@testable import Intent
 import SwiftUI
 import Testing
 import UIKit
-@testable import Intent
 
 /// Pure mapping behind the workspace status image (intent-hq/intent#3868):
 /// which workspaces render one, how the fetch is keyed so replacements and
@@ -13,12 +13,27 @@ struct WorkspaceStatusImageViewTests {
 
     private func workspace(statusImageAssetId: String?) -> Workspace {
         Workspace(
-            id: "ws-1", title: "W", branch: nil, baseRef: nil, status: nil, activity: nil,
-            displayStatus: nil, lastActivity: nil, updatedAt: nil, repositoryOwner: nil,
-            repositoryName: nil, prStatus: nil, prNumber: nil, diffSummaryTotalFiles: nil,
-            taskStatsTotal: nil, taskStatsCompleted: nil, taskStatsInProgress: nil,
-            agentSummaryCount: nil, agentSummaryAgents: nil,
-            statusImageAssetId: statusImageAssetId)
+            id: "ws-1",
+            title: "W",
+            branch: nil,
+            baseRef: nil,
+            status: nil,
+            activity: nil,
+            displayStatus: nil,
+            lastActivity: nil,
+            updatedAt: nil,
+            repositoryOwner: nil,
+            repositoryName: nil,
+            prStatus: nil,
+            prNumber: nil,
+            diffSummaryTotalFiles: nil,
+            taskStatsTotal: nil,
+            taskStatsCompleted: nil,
+            taskStatsInProgress: nil,
+            agentSummaryCount: nil,
+            agentSummaryAgents: [],
+            statusImageAssetId: statusImageAssetId
+        )
     }
 
     @Test func normalizedAssetIdDropsBlankAndMissingValues() {
@@ -71,11 +86,17 @@ struct WorkspaceStatusImageViewTests {
     /// (cancelled) awaiter still receives A's image. It must not commit it:
     /// the header would show the stale screenshot until B landed — or for
     /// good, if B had already landed.
-    @Test(.enabled(
-        Comment(rawValue:
-            "SwiftUI publishes its accessibility tree only when accessibility is enabled "
-                + "for the process (scripts/xcodebuild.sh enables it on the simulator)"),
-        { await SyntheticBadgeHost.publishesAccessibilityTree() }))
+    @Test(
+        .enabled(
+            Comment(
+                rawValue:
+                    "SwiftUI publishes its accessibility tree only when accessibility is enabled "
+                    + "for the process (scripts/xcodebuild.sh enables it on the simulator)"
+            )
+        ) {
+            await SyntheticBadgeHost.publishesAccessibilityTree()
+        }
+    )
     func supersededLoadDoesNotOverwriteReplacement() async throws {
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("note.readAsset")
@@ -93,15 +114,21 @@ struct WorkspaceStatusImageViewTests {
 
         // A resolves after it was superseded (oldest pending request first).
         let png = Self.pngBase64()
-        fake.resolvePending("note.readAsset", with: [
-            "assetId": "asset-A.png", "mimeType": "image/png", "data": png, "sizeKb": 1,
-        ])
+        fake.resolvePending(
+            "note.readAsset",
+            with: [
+                "assetId": "asset-A.png", "mimeType": "image/png", "data": png, "sizeKb": 1
+            ]
+        )
         try await Task.sleep(nanoseconds: 300_000_000)
         #expect(!host.showsImage, "the superseded A fetch populated the view")
 
-        fake.resolvePending("note.readAsset", with: [
-            "assetId": "asset-B.png", "mimeType": "image/png", "data": png, "sizeKb": 1,
-        ])
+        fake.resolvePending(
+            "note.readAsset",
+            with: [
+                "assetId": "asset-B.png", "mimeType": "image/png", "data": png, "sizeKb": 1
+            ]
+        )
         try await Self.waitUntil("B rendered") { host.showsImage }
     }
 
@@ -113,14 +140,16 @@ struct WorkspaceStatusImageViewTests {
 
     private static func pngBase64() -> String {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
-        return renderer.pngData { ctx in
+        return renderer.pngData { context in
             UIColor.systemBlue.setFill()
-            ctx.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
-        }.base64EncodedString()
+            context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
+        .base64EncodedString()
     }
 
     private static func waitUntil(
-        _ what: String, timeout: TimeInterval = 5,
+        _ what: String,
+        timeout: TimeInterval = 5,
         _ condition: @MainActor () -> Bool
     ) async throws {
         let deadline = Date().addingTimeInterval(timeout)
@@ -158,16 +187,21 @@ struct WorkspaceStatusImageViewTests {
         func show(assetId: String) {
             controller?.rootView = AnyView(
                 WorkspaceStatusImageView(
-                    workspaceId: "ws-1", assetId: assetId, style: .detail, loader: loader)
-                    .frame(width: 390, height: 300, alignment: .topLeading))
+                    workspaceId: "ws-1",
+                    assetId: assetId,
+                    style: .detail,
+                    loader: loader
+                )
+                .frame(width: 390, height: 300, alignment: .topLeading)
+            )
             controller?.view.layoutIfNeeded()
         }
 
         var showsImage: Bool {
             guard let view = controller?.view else { return false }
             view.layoutIfNeeded()
-            return SyntheticBadgeHost.accessibilityElements(in: view).contains {
-                SyntheticBadgeHost.accessibilityIdentifier(of: $0)
+            return SyntheticBadgeHost.accessibilityElements(in: view).contains { element in
+                SyntheticBadgeHost.accessibilityIdentifier(of: element)
                     == WorkspaceStatusImageLayout.accessibilityIdentifier(for: .detail)
             }
         }
