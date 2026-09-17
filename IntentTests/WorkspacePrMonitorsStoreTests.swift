@@ -257,10 +257,11 @@ struct WorkspacePrMonitorsStoreTests {
         }
 
         // Resolve the in-flight request with the STALE payload — it still
-        // lists the cancelled monitor. The discarded response queues one
-        // follow-up fetch, which stays suspended.
+        // lists the cancelled monitor. The discarded response queues exactly
+        // one follow-up fetch, which stays suspended.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
         try await fake.waitForRequests("prMonitor.list", count: 2)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
 
         #expect(store.monitors(for: "ws-abc").isEmpty)
 

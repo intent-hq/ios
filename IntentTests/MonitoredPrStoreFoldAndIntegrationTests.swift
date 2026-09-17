@@ -317,8 +317,9 @@ extension MonitoredPrStoreTests {
         // so a wrongly applied stale response cannot be masked by
         // convergence.
         fake.resolvePending("prMonitor.list", with: ["monitors": [makeMonitorDict()]])
-        // The discarded response queues one follow-up fetch to converge.
+        // The discarded response queues exactly one follow-up fetch to converge.
         try await fake.waitForRequests("prMonitor.list", count: 2)
+        #expect(fake.paramsForMethod("prMonitor.list").count == 2)
 
         // The stale response must not restore the cancelled monitor.
         #expect(store.monitors.isEmpty)

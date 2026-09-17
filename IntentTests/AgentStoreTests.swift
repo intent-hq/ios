@@ -353,9 +353,11 @@ struct AgentStoreTests {
 
         #expect(store.hasLoaded == false)
     }
+}
 
-    // MARK: - Event allowlist (streaming firehose must not refetch the list)
+// MARK: - Event allowlist (streaming firehose must not refetch the list)
 
+extension AgentStoreTests {
     private func deliverAgentEvent(_ fake: FakeConnectionManager, type: String) {
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-agents",
