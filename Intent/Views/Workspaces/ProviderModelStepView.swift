@@ -80,7 +80,7 @@ struct ProviderModelStepView: View {
     private var providerPicker: some View {
         Picker("Provider", selection: Binding(
             get: { selectedProvider?.id ?? "" },
-            set: selectProvider
+            set: { newId in selectProvider(newId) }
         )) {
             ForEach(providers) { provider in
                 Text(provider.authenticated == false
