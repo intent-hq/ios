@@ -65,7 +65,26 @@ nonisolated enum ImageDataRepresentation: Equatable {
 /// Supports multiple content types (text, code, tool_use, tool_result, thinking, image, file, resource)
 /// with backward-compatible field aliases.
 nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
-    /// Auto-generated if not present in JSON
+    /// Identity for a block served without a wire `id` (ios#257). A block
+    /// decoded as part of a message takes the daemon's own synthetic
+    /// `{messageId}:{index}` (PROTOCOL §7.1), so an id-less row keys exactly
+    /// like a stamped one; a block decoded on its own is keyed by a
+    /// deterministic fingerprint of its content, scoped to its message when
+    /// known. Never a fresh UUID: re-decoding the same payload always yields
+    /// the same id, so SwiftUI rows survive re-decodes.
+    enum FallbackIdentity {
+        case indexed(messageId: String, index: Int)
+        case fingerprint(messageId: String?)
+        case fixed(String)
+    }
+
+    /// `JSONDecoder.userInfo` key carrying a `FallbackIdentity` for standalone
+    /// block decodes; absent means `.fingerprint(messageId: nil)`.
+    static let fallbackIdentityUserInfoKey = CodingUserInfoKey(
+        rawValue: "ContentBlock.fallbackIdentity"
+    )! // swiftlint:disable:this force_unwrapping
+
+    /// Wire `id`, or the `FallbackIdentity`-derived id when absent.
     let id: String
     let type: ContentBlockType
 
@@ -152,10 +171,17 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
     }
 
     init(from decoder: Decoder) throws {
+        let identity = decoder.userInfo[Self.fallbackIdentityUserInfoKey] as? FallbackIdentity
+        try self.init(from: decoder, fallbackIdentity: identity ?? .fingerprint(messageId: nil))
+    }
+
+    /// The one block decoder: every decode path (message rows, delta
+    /// entities, `agent.getMessageBlock` hydration, `JSONDecoder`) ends here,
+    /// differing only in the identity an id-less block falls back to.
+    init(from decoder: Decoder, fallbackIdentity: FallbackIdentity) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Auto-generate ID if missing
-        id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        let wireId = try? container.decode(String.self, forKey: .id)
         type = (try? container.decode(ContentBlockType.self, forKey: .type)) ?? .text
 
         // Text with fallback to content
@@ -212,11 +238,60 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         dataRepresentation = (try? container.decode(Bool.self, forKey: .dataIsThumbnail))
             .map(ImageDataRepresentation.init(reportedThumbnail:)) ?? .unreported
         dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
+
+        if let wireId {
+            id = wireId
+        } else {
+            switch fallbackIdentity {
+            case .indexed(let messageId, let index):
+                id = "\(messageId):\(index)"
+            case .fixed(let fixedId):
+                id = fixedId
+            case .fingerprint(let messageId):
+                let fingerprint = Self.contentFingerprint([
+                    type.rawValue, text, content, language, name, toolName, toolCallId, toolUseId, tool_use_id,
+                    data, mimeType, fileName, attachmentId, size.map { String($0) },
+                    resource?.uri, resource?.mimeType, resource?.text
+                ])
+                id = "\(messageId ?? "block"):\(fingerprint)"
+            }
+        }
     }
 
-    static func decode(_ dictionary: [String: Any]) -> Self? {
+    static func decode(
+        _ dictionary: [String: Any],
+        fallbackIdentity: FallbackIdentity = .fingerprint(messageId: nil)
+    ) -> Self? {
         guard let data = try? JSONSerialization.data(withJSONObject: dictionary) else { return nil }
-        return try? JSONDecoder().decode(Self.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.userInfo[fallbackIdentityUserInfoKey] = fallbackIdentity
+        return try? decoder.decode(Self.self, from: data)
+    }
+
+    private static let fnvOffsetBasis: UInt64 = 0xcbf2_9ce4_8422_2325
+    private static let fnvPrime: UInt64 = 0x0000_0100_0000_01b3
+    private static let fingerprintPresentTag: UInt8 = 0x01
+    private static let fingerprintAbsentTag: UInt8 = 0x00
+    private static let fingerprintFieldSeparator: UInt8 = 0x1f
+
+    /// FNV-1a over the block's identifying fields (nil kept distinct from
+    /// empty); process-independent, unlike `Hasher`.
+    private static func contentFingerprint(_ parts: [String?]) -> String {
+        var hash = fnvOffsetBasis
+        func mix(_ byte: UInt8) {
+            hash ^= UInt64(byte)
+            hash = hash &* fnvPrime
+        }
+        for part in parts {
+            if let part {
+                mix(fingerprintPresentTag)
+                for byte in part.utf8 { mix(byte) }
+            } else {
+                mix(fingerprintAbsentTag)
+            }
+            mix(fingerprintFieldSeparator)
+        }
+        return String(hash, radix: 16)
     }
 
     /// Resolved text content, falling back to legacy `content` field.

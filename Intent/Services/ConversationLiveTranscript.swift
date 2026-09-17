@@ -94,7 +94,7 @@ extension ConversationLiveTranscript {
                         "blockId": blockId
                     ]
                 )
-                return await Self.decodeMessageBlock(InboundJSONValue(value: result))
+                return await Self.decodeMessageBlock(InboundJSONValue(value: result), blockId: blockId)
             }
             guard let decoded else { return }
             guard let block = decoded else {

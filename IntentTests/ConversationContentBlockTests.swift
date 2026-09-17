@@ -8,7 +8,7 @@ struct ContentBlockTests {
         let block = try JSONDecoder().decode(ContentBlock.self, from: Data(json.utf8))
         #expect(block.type == .text)
         #expect(block.resolvedText == "Hello world")
-        #expect(!block.id.isEmpty) // auto-generated
+        #expect(!block.id.isEmpty) // deterministic fallback identity (ios#257)
     }
 
     @Test func decodeToolUseBlock() throws {

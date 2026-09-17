@@ -58,7 +58,10 @@ nonisolated struct SubscriptionPush: @unchecked Sendable {
         init?(entity: [String: Any]) {
             guard let messageId = entity["messageId"] as? String,
                   let blockDictionary = entity["block"] as? [String: Any],
-                  let block = ContentBlock.decode(blockDictionary)
+                  let block = ContentBlock.decode(
+                      blockDictionary,
+                      fallbackIdentity: .fingerprint(messageId: messageId)
+                  )
             else {
                 return nil
             }
