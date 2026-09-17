@@ -10,8 +10,7 @@ import XCTest
 nonisolated final class WorkspaceStatusImageUITests: XCTestCase {
     private enum Fixture {
         /// `DemoFixtures.statusImageWorkspaceId`'s title: a workspace with no
-        /// agents, so tapping its row lands on the detail header rather than
-        /// auto-opening a conversation.
+        /// agents, so its detail header is the only surface to check.
         static let workspaceTitle = "Dark mode for settings screens"
         static let cardIdentifier = "workspaceRow.statusImage"
         static let detailIdentifier = "workspaceDetail.statusImage"

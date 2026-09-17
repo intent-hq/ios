@@ -5,6 +5,9 @@ import XCTest
 
 enum Fixture {
     static let workspaceTitle = "Deflake payment integration tests"
+    // DemoFixtures.longConversationAgents' top-level agent name: the row
+    // tapped on the workspace overview to reach the transcript.
+    static let agentName = "Test Stabilizer"
     // Distinctive substrings of DemoFixtures.longConversationFirstSentence
     // / longConversationLastSentence (the UI test target cannot import
     // the app module, so match on text the way AppStoreScreenshotTests does).
@@ -152,8 +155,10 @@ func launchDemoApp(
     return app
 }
 
-/// Taps the long-conversation workspace row and waits for its transcript,
-/// Go to End button handle and scroll view. A missing last message is
+/// Taps the long-conversation workspace row, then its agent row on the
+/// workspace overview (a workspace tap never auto-opens an agent, ios#349),
+/// and waits for the transcript, Go to End button handle and scroll view.
+/// A missing last message is
 /// reported with the resting state (a viewport past the end may leave the
 /// last row unrealized and off the accessibility hierarchy).
 @MainActor
@@ -179,6 +184,13 @@ func enterLongConversation(in app: XCUIApplication, context: String) -> OpenConv
         XCTAssertTrue(workspaceRow.waitForExistence(timeout: Fixture.settleTimeout))
     }
     workspaceRow.tap()
+
+    let agentRow = app.staticTexts[Fixture.agentName].firstMatch
+    XCTAssertTrue(
+        agentRow.waitForExistence(timeout: Fixture.settleTimeout),
+        "\(context): agent row not found on the workspace overview"
+    )
+    agentRow.tap()
 
     let lastMessage = message(in: app, containing: Fixture.lastMessageFragment)
     let goToEnd = app.buttons[Fixture.goToEndIdentifier].firstMatch
