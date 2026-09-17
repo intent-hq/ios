@@ -157,6 +157,26 @@ struct ConnectionPersistenceTests {
         #expect(loaded.first?.lastConnectedAt == original.lastConnectedAt)
     }
 
+    @Test func upsertMatchesCaseVariantHostOnSamePortInsteadOfInsertingDuplicate() {
+        resetConnectionState()
+        defer { resetConnectionState() }
+
+        // ios#341: DNS names are case-insensitive, so a same-port re-pair of
+        // HOST.local as host.local is the same machine — merge into the
+        // stored record (keeping its spelling) rather than adding a second.
+        let original = StoredConnection(server: makeServer(hosts: ["HOST.local"]), token: "tok-old")
+        persistenceManager.upsertConnection(original)
+        let stored = persistenceManager.upsertConnection(
+            StoredConnection(server: makeServer(hosts: ["host.local", "10.0.0.2"]), token: "tok-new")
+        )
+
+        let loaded = persistenceManager.loadConnections()
+        #expect(loaded.count == 1)
+        #expect(stored.id == original.id)
+        #expect(loaded.first?.server.hosts == ["HOST.local", "10.0.0.2"])
+        #expect(loaded.first?.token == "tok-new")
+    }
+
     @Test func upsertDifferentPortCreatesSeparateEntry() {
         resetConnectionState()
         defer { resetConnectionState() }
