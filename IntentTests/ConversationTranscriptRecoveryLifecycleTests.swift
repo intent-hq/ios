@@ -1549,7 +1549,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// end, the viewport is re-pinned by the growth path; yielded under the
     /// finger, the edge is the gesture it is — scrolled away, nothing
     /// scrolls the user back, and the outcome reports as
-    /// `endRecovery=yieldToUser`; yielded to a follow that claimed the
+    /// `endRecovery=yieldedToUser`; yielded to a follow that claimed the
     /// viewport, the landing is the follow's and the replay re-pins nothing
     /// over it; recovered at the bottom, the edge does nothing.
     @Test func aCorrectionSuppressesTheGrowthRePinUntilItsDrainReplaysTheEdge() {
@@ -1648,7 +1648,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
             .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
         ])
-        #expect(h.summaries == ["endRecovery=yieldToUser corrections=1"])
+        #expect(h.summaries == ["endRecovery=yieldedToUser corrections=1 episodes=1 endRealized=false"])
         #expect(h.state.owner == .follow(f2, forced: false))
         #expect(h.state.armedRecovery == nil)
         #expect(h.state.currentRecovery == nil)
@@ -1671,7 +1671,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// that is not there. Scrolled away, growth re-pins nothing over the
     /// button; the tap follows through the verified path and its executed
     /// drain re-arms the recovery from the level. The outcome reports as
-    /// `endRecovery=giveUp` with the corrections spent.
+    /// `endRecovery=gaveUp` with the corrections spent.
     @Test func aGiveUpShowsGoToEndInsteadOfRePinningBlind() {
         var h = harness()
         #expect(h.send(.endDerealized) == [.startRecoveryTask(r1)])
