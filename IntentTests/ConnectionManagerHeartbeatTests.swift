@@ -229,8 +229,9 @@ extension ConnectionManagerTests {
             }
         }
         clock.advance(by: ConnectionManager.heartbeatInterval - .seconds(1))
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(server.pingsReceived == 2)
+        try await expectNever("ping before the heartbeat interval has elapsed") {
+            server.pingsReceived != 2
+        }
         clock.advance(by: .seconds(1))
         try await Self.settle { server.pingsReceived == 3 }
         #expect(disconnects.count == .zero)

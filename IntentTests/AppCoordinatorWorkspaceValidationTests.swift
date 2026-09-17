@@ -241,15 +241,34 @@ extension AppCoordinatorTests {
         )
     }
 
-    /// Let main-queue-hopping sinks and spawned validation tasks run.
-    static func drainMainQueue() async {
-        let drainDelayNanoseconds: UInt64 = 200_000_000
-        try? await Task.sleep(nanoseconds: drainDelayNanoseconds)
+    // MARK: - Screen predicates for bounded waits
+
+    /// `waitUntil` / `expectNever` conditions need a `Bool`; these name the
+    /// screen a main-queue-hopping sink or spawned validation task lands on
+    /// (or must not leave) instead of sleeping a guessed drain delay.
+    static func isWorkspaceList(_ screen: AppScreen) -> Bool {
+        if case .workspaceList = screen { return true }
+        return false
+    }
+
+    static func isWorkspaceDetail(_ screen: AppScreen, for workspaceId: String) -> Bool {
+        if case let .workspaceDetail(wId) = screen { return wId == workspaceId }
+        return false
+    }
+
+    static func isConversation(_ screen: AppScreen, agentId: String, workspaceId: String) -> Bool {
+        if case let .agentConversation(aId, wId, _) = screen { return aId == agentId && wId == workspaceId }
+        return false
+    }
+
+    static func isNoteDetail(_ screen: AppScreen, noteId: String, workspaceId: String) -> Bool {
+        if case let .noteDetail(nId, wId, _) = screen { return nId == noteId && wId == workspaceId }
+        return false
     }
 
     // MARK: - workspace.markSeen on open
 
-    @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async {
+    @Test @MainActor func onSelectWorkspace_callsMarkSeenAndClearsUnreadLocally() async throws {
         let wsId = "test-coord-markseen-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -260,9 +279,8 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
         #expect(
             store.workspaces.first?.attention == "none",
@@ -270,7 +288,7 @@ extension AppCoordinatorTests {
         )
     }
 
-    @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async {
+    @Test @MainActor func onConnectionSuccess_restoreIntoWorkspaceMarksSeen() async throws {
         let wsId = "test-coord-restore-markseen-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -300,9 +318,8 @@ extension AppCoordinatorTests {
         )
 
         coordinator.onConnectionSuccess()
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        #expect(fake.didCallMethod("workspace.markSeen"))
         #expect(fake.paramsForMethod("workspace.markSeen").first?["workspaceId"] as? String == wsId)
         #expect(
             store.workspaces.first?.attention == "none",
@@ -315,7 +332,7 @@ extension AppCoordinatorTests {
         }
     }
 
-    @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async {
+    @Test @MainActor func onSelectWorkspace_markSeenFailureIsIgnored() async throws {
         let wsId = "test-coord-markseen-fail-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -331,16 +348,14 @@ extension AppCoordinatorTests {
         let coordinator = AppCoordinator(workspaceStore: store, connection: fake, persistence: persistence)
 
         coordinator.onSelectWorkspace(wsId)
-        await Self.drainMainQueue()
+        try await fake.waitForRequests("workspace.markSeen")
 
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("markSeen failure must not affect navigation, got \(coordinator.currentScreen)")
+        try await expectNever("navigation change after a failed markSeen") {
+            !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
     }
 
-    @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async {
+    @Test @MainActor func firstFetch_missingWorkspace_bootsToWorkspaceList() async throws {
         let wsId = "test-coord-firstfetch-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -358,13 +373,10 @@ extension AppCoordinatorTests {
         // An empty first response must still invalidate Observation through the
         // fetch marker even though the workspace array remains empty.
         store.publishFetchedWorkspaces([])
-        await Self.drainMainQueue()
-
-        if case .workspaceList = coordinator.currentScreen {
-            // pass
-        } else {
-            Issue.record("Expected .workspaceList after first fetch without the workspace, got \(coordinator.currentScreen)")
+        try await waitUntil(".workspaceList after first fetch without the workspace") {
+            Self.isWorkspaceList(coordinator.currentScreen)
         }
+
         #expect(
             persistence.loadLastScreen(for: Self.windowBackend.connectionID) == nil,
             "Last screen should be cleared"
@@ -373,7 +385,7 @@ extension AppCoordinatorTests {
 }
 
 extension AppCoordinatorTests {
-    @Test @MainActor func preFetchEmptyPublish_doesNotBootUserOut() async {
+    @Test @MainActor func preFetchEmptyPublish_doesNotBootUserOut() async throws {
         let wsId = "test-coord-prefetch-\(UUID().uuidString)"
         defer { cleanupLastScreen() }
 
@@ -383,12 +395,8 @@ extension AppCoordinatorTests {
 
         // A publish before any successful fetch (lastUpdated still nil) must be ignored.
         store.workspaces = []
-        await Self.drainMainQueue()
-
-        if case let .workspaceDetail(wId) = coordinator.currentScreen {
-            #expect(wId == wsId)
-        } else {
-            Issue.record("An empty pre-fetch publish must not navigate away, got \(coordinator.currentScreen)")
+        try await expectNever("navigation away on an empty pre-fetch publish") {
+            !Self.isWorkspaceDetail(coordinator.currentScreen, for: wsId)
         }
     }
 }

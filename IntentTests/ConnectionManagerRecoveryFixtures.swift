@@ -3,6 +3,7 @@ import Foundation
 @testable import Intent
 import Network
 import os
+import Testing
 
 nonisolated final class RecoveryWebSocketServer: @unchecked Sendable {
         private static let scriptedFailureCode = -32_000
@@ -247,7 +248,6 @@ extension ConnectionManagerTests {
     // Test polling bounds intentionally use short wall-clock durations.
     // swiftlint:disable no_magic_numbers
     private static let defaultSettleTimeout: Duration = .seconds(3)
-    private static let settlePollInterval: Duration = .milliseconds(10)
     // swiftlint:enable no_magic_numbers
 
     @MainActor final class DisconnectCounter {
@@ -276,13 +276,18 @@ extension ConnectionManagerTests {
         return false
     }
 
+    /// Bounded wait for the manager to reach `condition`; throws
+    /// `ConditionWaitFailure` naming the call site on timeout so the test
+    /// fails at the wait instead of at whichever assertion follows.
     @MainActor static func settle(
         timeout: Duration = Self.defaultSettleTimeout,
+        sourceLocation: SourceLocation = #_sourceLocation,
         until condition: @MainActor () -> Bool
     ) async throws {
-        let deadline = ContinuousClock.now + timeout
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: Self.settlePollInterval)
-        }
+        try await waitUntil(
+            "connection manager to settle",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) { condition() }
     }
 }

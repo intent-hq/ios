@@ -414,13 +414,15 @@ extension ConnectionManagerTests {
 
     /// When a direct host wins the race, the LOSING tunnel candidate's session
     /// must be closed by `raceCandidates` loser cleanup (no leaked tunnel).
+    /// The tunnel candidate holds its lane until the win cancels it, so it
+    /// always completes as a late success.
     @Test func losingTunnelCandidateSessionClosedWhenDirectHostWins() async {
         let tunnel = FakeTunnelSession(localPort: 1)
         let outcome = await ConnectionManager.raceCandidates(
             ["direct.host", ConnectionManager.tunnelCandidateLabel]
         ) { host -> FakeTunnelRaceConnection in
             if host == ConnectionManager.tunnelCandidateLabel {
-                try? await Task.sleep(for: .milliseconds(50))
+                await suspendUntilCancelled()
                 return FakeTunnelRaceConnection(host: host, tunnel: tunnel)
             }
             return FakeTunnelRaceConnection(host: host, tunnel: nil)
@@ -435,29 +437,33 @@ extension ConnectionManagerTests {
     /// waiting for every loser to finish. A loser that ignores cancellation
     /// (a tunnel dial whose Go side does not abort promptly) must not delay
     /// the connect, and must still be disconnected by the background drain.
-    @Test func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
+    /// The loser is released only after the race has returned, so a race that
+    /// waited on it would hit the time limit instead of racing a stopwatch;
+    /// the time limit's cancellation of the test opens the gate so that
+    /// regression fails instead of hanging.
+    @Test(.timeLimit(.minutes(1)))
+    func raceSettlesOnWinnerWithoutWaitingForUncancellableLoser() async {
         let loserTunnel = FakeTunnelSession(localPort: 1)
-        let start = ContinuousClock.now
-        let outcome = await ConnectionManager.raceCandidates(
-            ["direct.host", ConnectionManager.tunnelCandidateLabel]
-        ) { host -> FakeTunnelRaceConnection in
-            if host == ConnectionManager.tunnelCandidateLabel {
-                // Sleeping in a detached task and awaiting its value is not
-                // interrupted by the candidate task's cancellation.
-                _ = await Task.detached {
-                    try? await Task.sleep(for: .seconds(2))
-                }.value
-                return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+        let loserRelease = TestGate()
+        let outcome = await loserRelease.opening {
+            await ConnectionManager.raceCandidates(
+                ["direct.host", ConnectionManager.tunnelCandidateLabel]
+            ) { host -> FakeTunnelRaceConnection in
+                if host == ConnectionManager.tunnelCandidateLabel {
+                    // `TestGate.wait()` is not interrupted by the candidate
+                    // task's cancellation.
+                    await loserRelease.wait()
+                    return FakeTunnelRaceConnection(host: host, tunnel: loserTunnel)
+                }
+                return FakeTunnelRaceConnection(host: host, tunnel: nil)
             }
-            return FakeTunnelRaceConnection(host: host, tunnel: nil)
         }
-        let elapsed = ContinuousClock.now - start
 
         #expect(outcome.winner?.host == "direct.host")
         #expect(outcome.failure == nil)
-        #expect(elapsed < .seconds(1), "race waited on the loser: \(elapsed)")
         // The loser is still in flight; cleanup happens off the critical path.
         #expect(!loserTunnel.isClosed)
+        loserRelease.open()
         _ = await outcome.drain?.value
         #expect(loserTunnel.isClosed)
     }

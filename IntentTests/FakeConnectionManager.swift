@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 /// Thrown by `waitUntil` / `expectNever` so a missed or forbidden state
@@ -60,6 +61,63 @@ func expectNever(
         throw ConditionWaitFailure(
             description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
         )
+    }
+}
+
+/// One-shot latch for scripting the order of racing fakes: `wait()` suspends
+/// until `open()` (returning immediately once open) and ignores cancellation,
+/// so a fake that must outlive its cancellation holds its lane until the test
+/// releases it — instead of guessing a `Task.sleep` long enough for the other
+/// candidate to win (ios#261).
+nonisolated final class TestGate: Sendable {
+    private struct State {
+        var isOpen = false
+        var waiters: [CheckedContinuation<Void, Never>] = []
+    }
+
+    private let state = Mutex(State())
+
+    func open() {
+        let waiters = state.withLock { state in
+            state.isOpen = true
+            let waiters = state.waiters
+            state.waiters = []
+            return waiters
+        }
+        for waiter in waiters { waiter.resume() }
+    }
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let alreadyOpen = state.withLock { state in
+                if state.isOpen { return true }
+                state.waiters.append(continuation)
+                return false
+            }
+            if alreadyOpen { continuation.resume() }
+        }
+    }
+
+    /// Runs `body`, opening the gate if the CALLING task is cancelled — the
+    /// test-level escape hatch for a `.timeLimit` test whose system under test
+    /// regressed into awaiting the gated fake: Swift Testing only cancels the
+    /// test cooperatively, and `wait()` ignores cancellation, so without this
+    /// such a regression would hang the runner instead of failing. Cancelling
+    /// a candidate task that is merely awaiting `wait()` does not open the gate.
+    func opening<T>(onCancellationOf body: () async throws -> T) async rethrows -> T {
+        try await withTaskCancellationHandler(operation: body, onCancel: { open() })
+    }
+}
+
+/// Suspends until the current task is cancelled. Replaces a long `Task.sleep`
+/// whose only job was to be cut short by cancellation (a raced loser that is
+/// released once the winner settles).
+nonisolated func suspendUntilCancelled() async {
+    let gate = TestGate()
+    await withTaskCancellationHandler {
+        await gate.wait()
+    } onCancel: {
+        gate.open()
     }
 }
 

@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 @testable import Intent
+import Synchronization
 import Testing
 
 @MainActor
@@ -233,5 +234,32 @@ struct FakeConnectionManagerTests {
         fake.resolvePending("agent.get", with: ["ok": true] as [String: Any])
         #expect(try await request.value)
         #expect(fake.pendingRequestCount("agent.get") == 0)
+    }
+
+    /// The escape hatch the time-limited race tests rely on: a candidate
+    /// cancelled while awaiting the gate stays parked (the race's loser
+    /// cancellation must not release it), while cancelling the test-level
+    /// task wrapped in `opening(onCancellationOf:)` opens the gate so a
+    /// system under test that regressed into awaiting the loser fails the
+    /// time limit instead of hanging the runner.
+    @Test func testGateOpensOnTestTaskCancellationButNotOnCandidateCancellation() async throws {
+        let gate = TestGate()
+        let candidateFinished = Mutex(false)
+        let candidate = Task {
+            await gate.wait()
+            candidateFinished.withLock { $0 = true }
+        }
+        candidate.cancel()
+        try await expectNever("gate released by the candidate's own cancellation") {
+            candidateFinished.withLock { $0 }
+        }
+
+        let testLevel = Task {
+            await gate.opening { await gate.wait() }
+        }
+        testLevel.cancel()
+        await testLevel.value
+        await candidate.value
+        #expect(candidateFinished.withLock { $0 })
     }
 }

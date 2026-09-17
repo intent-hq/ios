@@ -145,10 +145,11 @@ extension ConnectionManagerTests {
         let disconnects = DisconnectCounter(manager)
         monitor.report(Self.wifiPath)
         monitor.report(Self.wifiPath)
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(manager.connectionState == .connected)
-        #expect(disconnects.count == .zero)
-        #expect(monitor.cancelCount == 0)
+        try await expectNever("reconnect on a repeated identical path report") {
+            manager.connectionState != .connected
+                || disconnects.count != .zero
+                || monitor.cancelCount != 0
+        }
         #expect(try await manager.request("system.status") is [String: Any])
         manager.disconnect()
         #expect(monitor.cancelCount == 1)
@@ -230,10 +231,11 @@ extension ConnectionManagerTests {
         let disconnects = DisconnectCounter(manager)
         monitor.report(Self.cellularPath)
         monitor.report(Self.cellularPath)
-        try await Task.sleep(for: .milliseconds(100))
-        #expect(manager.connectionState == .connected)
-        #expect(disconnects.count == .zero)
-        #expect(monitor.cancelCount == 0)
-        #expect(monitors.monitors.count == 1)
+        try await expectNever("reconnect on a path report matching the socket's interface") {
+            manager.connectionState != .connected
+                || disconnects.count != .zero
+                || monitor.cancelCount != 0
+                || monitors.monitors.count != 1
+        }
     }
 }

@@ -173,10 +173,12 @@ extension ConnectionManagerTests {
             }
         }
 
-        try await Task.sleep(for: .milliseconds(200))
-        #expect(server.acceptedCount == 0)
-        #expect(manager.connectionState == stateBefore)
-        #expect(manager.token != "secret-token")
+        let noDialWindowMilliseconds = 200
+        try await expectNever("socket dial for a pin-less record", within: .milliseconds(noDialWindowMilliseconds)) {
+            server.acceptedCount != 0
+                || manager.connectionState != stateBefore
+                || manager.token == "secret-token"
+        }
     }
 
     /// Regression for monorepo#4185: a pairing attempt (QR / manual token /
@@ -291,17 +293,16 @@ extension ConnectionManagerTests {
         #expect(result is [String: Any])
     }
 
-    /// A tunnel dialer that reports a certificate mismatch only after a delay
-    /// the race's loser cancellation cannot cut short, so a direct candidate
-    /// wins first and the mismatch is reported by the background drain.
-    nonisolated private struct SlowMismatchTunnelDialer: TunnelDialing {
+    /// A tunnel dialer that reports a certificate mismatch only once the test
+    /// releases it — `TestGate.wait()` ignores the race's loser cancellation —
+    /// so a direct candidate wins first and the mismatch is reported by the
+    /// background drain.
+    nonisolated private struct GatedMismatchTunnelDialer: TunnelDialing {
         let fingerprint: String
+        let release: TestGate
 
         func open(tcAddress _: String, remotePort _: Int) async throws -> any TunnelSession {
-            let mismatchDelayMilliseconds = 300
-            _ = await Task.detached {
-                try? await Task.sleep(for: .milliseconds(mismatchDelayMilliseconds))
-            }.value
+            await release.wait()
             throw WebSocketTransportError.certificateMismatch(
                 host: ConnectionManager.tunnelCandidateLabel,
                 fingerprint: fingerprint
@@ -312,8 +313,11 @@ extension ConnectionManagerTests {
     /// A preserving connect() retires the old connection — advancing the
     /// connection generation — only AFTER its race is won. A slower losing
     /// candidate's certificate mismatch, reported by the background drain,
-    /// must still reach `certMismatches`: the race was not superseded.
-    @Test @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
+    /// must still reach `certMismatches`: the race was not superseded. The
+    /// time limit turns a connect() that waits on the gated loser into a
+    /// failure instead of a hang: its cancellation of the test opens the gate.
+    @Test(.timeLimit(.minutes(1)))
+    @MainActor func successfulPairingOverLiveConnectionKeepsLateLoserMismatch() async throws {
         let previous = Self.enablePlaintextLoopback()
         defer { Self.restorePlaintextLoopback(previous) }
         let manager = ConnectionManager.shared
@@ -334,28 +338,33 @@ extension ConnectionManagerTests {
         )
         #expect(manager.connectionState == .connected)
 
-        manager.tunnelDialer = SlowMismatchTunnelDialer(fingerprint: "cc:dd")
-        try await manager.connect(
-            hosts: ["127.0.0.1"],
-            port: serverB.port,
-            token: "token-b",
-            tcAddress: "tc-slow"
-        )
+        let loserRelease = TestGate()
+        manager.tunnelDialer = GatedMismatchTunnelDialer(fingerprint: "cc:dd", release: loserRelease)
+        try await loserRelease.opening {
+            try await manager.connect(
+                hosts: ["127.0.0.1"],
+                port: serverB.port,
+                token: "token-b",
+                tcAddress: "tc-slow"
+            )
+        }
         #expect(manager.connectionState == .connected)
         #expect(manager.port == serverB.port)
         #expect(manager.token == "token-b")
 
+        // The direct candidate has won and connect() returned; only now does
+        // the losing tunnel candidate report its mismatch.
+        loserRelease.open()
         let expected = [
             HostCertMismatch(
                 host: ConnectionManager.tunnelCandidateLabel,
                 fingerprint: "cc:dd"
             )
         ]
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline, manager.certMismatches != expected {
-            try await Task.sleep(for: .milliseconds(20))
+        let lateMismatchTimeoutSeconds = 3
+        try await waitUntil("late loser mismatch recorded", timeout: .seconds(lateMismatchTimeoutSeconds)) {
+            manager.certMismatches == expected
         }
-        #expect(manager.certMismatches == expected)
     }
 
     /// Two overlapping pairing attempts over a live connection: the OLDER
@@ -385,7 +394,8 @@ extension ConnectionManagerTests {
         )
         #expect(manager.connectionState == .connected)
 
-        // Both attempts hang in their WS handshake until their server opens.
+        // Both attempts hang in their WS handshake until their server opens;
+        // a gated server counts the socket as accepted while holding it back.
         let older = Task {
             try await manager.connect(
                 hosts: ["127.0.0.1"],
@@ -393,7 +403,9 @@ extension ConnectionManagerTests {
                 token: "token-old"
             )
         }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil("older attempt to reach its gated handshake") {
+            olderTarget.acceptedCount == 1
+        }
         let newer = Task {
             try await manager.connect(
                 hosts: ["127.0.0.1"],
@@ -401,7 +413,9 @@ extension ConnectionManagerTests {
                 token: "token-new"
             )
         }
-        try await Task.sleep(for: .milliseconds(100))
+        try await waitUntil("newer attempt to reach its gated handshake") {
+            newerTarget.acceptedCount == 1
+        }
 
         // The older attempt completes its handshake FIRST — it must be
         // superseded rather than install token-old and kill the newer one.
@@ -442,15 +456,11 @@ extension ConnectionManagerTests {
 
         // Kill the live socket so the manager enters its reconnect loop.
         server.stop()
-        let deadline = Date().addingTimeInterval(5)
-        while Date() < deadline {
-            if case .reconnecting = manager.connectionState { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        guard case .reconnecting = manager.connectionState else {
-            Issue.record("manager never entered .reconnecting after socket loss")
-            return
-        }
+        let reconnectingTimeoutSeconds = 5
+        try await waitUntil(
+            "manager entering .reconnecting after socket loss",
+            timeout: .seconds(reconnectingTimeoutSeconds)
+        ) { Self.isReconnecting(manager.connectionState) }
 
         let deadPort = try await Self.unusedLoopbackPort()
         await #expect(throws: (any Error).self) {
