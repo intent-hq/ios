@@ -224,12 +224,85 @@ enum DemoFixtures {
         delayPrefix: String,
         defaultDelay: Duration
     ) -> ResponseGate {
-        let path = arguments
-            .filter { $0.hasPrefix(triggerFilePrefix) }
-            .map { String($0.dropFirst(triggerFilePrefix.count)) }
-            .last { !$0.isEmpty }
-        if let path { return .triggerFile(URL(fileURLWithPath: path)) }
+        if let url = triggerFile(from: arguments, prefix: triggerFilePrefix) { return .triggerFile(url) }
         return .delay(delay(from: arguments, prefix: delayPrefix, defaultDelay: defaultDelay))
+    }
+
+    private static func triggerFile(from arguments: [String], prefix: String) -> URL? {
+        arguments
+            .filter { $0.hasPrefix(prefix) }
+            .map { String($0.dropFirst(prefix.count)) }
+            .last { !$0.isEmpty }
+            .map { URL(fileURLWithPath: $0) }
+    }
+
+    // MARK: - Controlled end derealization (intent-hq/ios#338)
+
+    /// Trigger file that, once created, withdraws the transcript's end row
+    /// (the `scroll-bottom` marker) from the lazy stack so the row's real
+    /// `onDisappear` arms the unrealized-end recovery at a moment the UI
+    /// test chooses (`ConversationTranscriptView`), instead of waiting for
+    /// the organic hooks-row re-measure. Nil — nothing changes — without
+    /// `--demo-end-derealization-trigger-file=<path>`; the last non-empty
+    /// one wins. Trigger-file gated like the fixture gates above, since a
+    /// clock cannot be made robust against a loaded CI simulator.
+    static let configuredEndDerealizationTriggerFile = endDerealizationTriggerFile(
+        from: ProcessInfo.processInfo.arguments
+    )
+
+    /// `--demo-end-derealization-mode=<release|hold>`, `release` by default.
+    static let configuredEndDerealizationMode = endDerealizationMode(from: ProcessInfo.processInfo.arguments)
+
+    static let endDerealizationTriggerFileArgumentPrefix = "--demo-end-derealization-trigger-file="
+
+    static let endDerealizationModeArgumentPrefix = "--demo-end-derealization-mode="
+
+    /// What the withdrawn end row waits on before it is put back.
+    enum EndDerealizationMode: String, Equatable {
+        /// Kept withdrawn so the recovery spends its whole budget and the
+        /// give-up path (Go to End) runs.
+        case hold
+        /// Restored once the live scroll view is measurably paged up — the
+        /// recovery's correction — so its follow back re-verifies through
+        /// the row's real `onAppear` and the episode resolves.
+        case release
+    }
+
+    static func endDerealizationTriggerFile(from arguments: [String]) -> URL? {
+        triggerFile(from: arguments, prefix: endDerealizationTriggerFileArgumentPrefix)
+    }
+
+    /// `.release` unless the arguments carry a well-formed
+    /// `--demo-end-derealization-mode=<release|hold>`; the last one wins.
+    static func endDerealizationMode(from arguments: [String]) -> EndDerealizationMode {
+        let prefix = endDerealizationModeArgumentPrefix
+        return arguments
+            .filter { $0.hasPrefix(prefix) }
+            .compactMap { EndDerealizationMode(rawValue: String($0.dropFirst(prefix.count))) }
+            .last ?? .release
+    }
+
+    /// Whether the withdrawn end row is put back for a live scroll view now
+    /// resting at `contentOffsetY`, withdrawn at `withdrawnOffsetY`. The
+    /// restore is evidence-driven, never timed and never issued by the
+    /// recovery itself: in `.release` the viewport must have moved up by at
+    /// least half a container — the recovery's page up, not a re-measure
+    /// jitter — and in either mode a user gesture that moves the viewport
+    /// takes the row back, since the recovery yields to it. Otherwise the
+    /// row stays withdrawn.
+    static func shouldRestoreDerealizedEnd(
+        mode: EndDerealizationMode,
+        withdrawnOffsetY: CGFloat,
+        contentOffsetY: CGFloat,
+        containerHeight: CGFloat,
+        isInteracting: Bool
+    ) -> Bool {
+        let movedUpBy = withdrawnOffsetY - contentOffsetY
+        if isInteracting { return abs(movedUpBy) >= 1 }
+        switch mode {
+        case .release: return movedUpBy >= containerHeight / 2
+        case .hold: return false
+        }
     }
 
     private static func delay(from arguments: [String], prefix: String, defaultDelay: Duration) -> Duration {
