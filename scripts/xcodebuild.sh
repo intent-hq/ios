@@ -53,12 +53,13 @@
 #                         the run it reads the result bundle (xcrun xcresulttool
 #                         get test-results tests) and prints one table row per
 #                         selector — requested, resolved, executed, skipped,
-#                         failed — to stdout; a selector whose tests neither
-#                         executed nor were skipped exits 82 even when
+#                         failed, unknown — to stdout; a selector whose tests
+#                         neither executed nor were skipped exits 82 even when
 #                         xcodebuild exited 0, an all-skipped selector is a
-#                         notice, and an unreadable bundle on a green run exits
-#                         83 (see the exit codes below). Unset/empty skips all
-#                         of this and leaves the command line untouched.
+#                         notice, and an unreadable bundle or an unrecognised
+#                         result on a green run exits 83 (see the exit codes
+#                         below). Unset/empty skips all of this and leaves the
+#                         command line untouched.
 #   GITHUB_STEP_SUMMARY   When set (GitHub Actions does), the per-selector table
 #                         of a filtered run is also appended there as Markdown.
 #   TAILCATKIT_AUTOBUILD  Set to 0 to never run TailcatKit/build_xcframework.sh
@@ -110,7 +111,10 @@
 #       (XCTSkip, .disabled) is reported as a notice and keeps exit 0.
 #   83  the ONLY_TESTING selection could not be verified: test enumeration
 #       failed or produced no parsable catalog, or the result bundle of a run
-#       that exited 0 is missing or unreadable. Never passed through silently.
+#       that exited 0 is missing, unreadable, or records a test result other
+#       than Passed / Failed / Skipped / Expected Failure (counted in the
+#       table's "unknown" column, never as executed). Never passed through
+#       silently.
 #   Precedence: 80 and xcodebuild's own nonzero status win over 82/83, which
 #   only ever upgrade a 0 (the table and a warning are still printed).
 set -euo pipefail
@@ -737,11 +741,12 @@ Exiting $EXIT_SELECTION_UNVERIFIED (test selection unverified), not $status." >&
 # recursively (xcrun xcresulttool get test-results tests, Xcode 16+): a "Test
 # Case" node is identified as <enclosing test bundle name>/<nodeIdentifier>
 # and attributed to every selector it matches; executed = Passed + Failed +
-# Expected Failure, Skipped is counted apart. Prints the table on stdout and
+# Expected Failure, Skipped is counted apart, and any other result string is
+# "unknown" (the bundle cannot be trusted). Prints the table on stdout and
 # appends it as Markdown to the step summary when given. Exit 0, or 1 when a
 # selector has executed + skipped = 0 (named on stderr; an all-skipped
 # selector is only a notice), or 2 when the JSON is unreadable or not the
-# expected shape.
+# expected shape or a selector has an unknown result (2 wins over 1).
 ONLY_TESTING_SUMMARY_PY='
 import json, os
 results_path, summary_path, bundle = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -780,21 +785,26 @@ def walk(node, bundle_name):
         return
     walk(node.get("children", []), bundle_name)
 walk(document["testNodes"], "")
-rows, failing, notices = [], [], []
+EXECUTED_RESULTS = ("Passed", "Failed", "Expected Failure")
+rows, failing, notices, unknowns = [], [], [], []
 for selector in selectors:
     parts = selector.split("/")
     hits = [result for ident, result in cases if matches(parts, ident)]
     skipped = sum(1 for r in hits if r == "Skipped")
     failed = sum(1 for r in hits if r == "Failed")
-    executed = len(hits) - skipped
-    rows.append((selector, resolved.get(selector, "?"), str(executed), str(skipped), str(failed)))
-    if executed == 0 and skipped == 0:
+    executed = sum(1 for r in hits if r in EXECUTED_RESULTS)
+    unknown = sorted(set(r for r in hits if r != "Skipped" and r not in EXECUTED_RESULTS))
+    unknown_count = len(hits) - executed - skipped
+    rows.append((selector, resolved.get(selector, "?"), str(executed), str(skipped), str(failed), str(unknown_count)))
+    if unknown_count:
+        unknowns.append((selector, unknown_count, unknown))
+    elif executed == 0 and skipped == 0:
         failing.append(selector)
     elif executed == 0:
         notices.append((selector, skipped))
-header = ("requested", "resolved", "executed", "skipped", "failed")
+header = ("requested", "resolved", "executed", "skipped", "failed", "unknown")
 width = max(len(row[0]) for row in rows + [header])
-fmt = "  %-" + str(width) + "s  %8s  %8s  %7s  %6s\n"
+fmt = "  %-" + str(width) + "s  %8s  %8s  %7s  %6s  %7s\n"
 sys.stdout.write("ONLY_TESTING summary (%d test case(s) in %s):\n" % (len(cases), bundle))
 for row in [header] + rows:
     sys.stdout.write(fmt % row)
@@ -802,11 +812,13 @@ sys.stdout.flush()
 if summary_path:
     try:
         with open(summary_path, "a") as f:
-            f.write("### ONLY_TESTING selectors\n\n| Requested | Resolved | Executed | Skipped | Failed |\n|---|---:|---:|---:|---:|\n")
+            f.write("### ONLY_TESTING selectors\n\n| Requested | Resolved | Executed | Skipped | Failed | Unknown |\n|---|---:|---:|---:|---:|---:|\n")
             for row in rows:
-                f.write("| `%s` | %s | %s | %s | %s |\n" % row)
+                f.write("| `%s` | %s | %s | %s | %s | %s |\n" % row)
             for selector in failing:
                 f.write("\n:x: `%s` executed nothing (exit 82).\n" % selector)
+            for selector, count, unknown in unknowns:
+                f.write("\n:warning: `%s`: %d test(s) with an unrecognised result (%s); selection unverified (exit 83).\n" % (selector, count, ", ".join(repr(u) for u in unknown)))
             for selector, skipped in notices:
                 f.write("\n:information_source: `%s`: all %d tests skipped at runtime.\n" % (selector, skipped))
             f.write("\n")
@@ -820,6 +832,10 @@ for selector in failing:
         sys.stderr.write("error: %s\n" % excluded_message(selector, excluded[0]))
     else:
         sys.stderr.write("error: ONLY_TESTING selector %r resolved to %s test(s) but the result bundle records none executed or skipped for it.\n" % (selector, resolved.get(selector, "?")))
+for selector, count, unknown in unknowns:
+    sys.stderr.write("error: could not verify the ONLY_TESTING selection: %d test case(s) matching %r have a result the wrapper does not recognise (%s; expected Passed / Failed / Skipped / Expected Failure — xcresulttool output changed?).\n" % (count, selector, ", ".join(repr(u) for u in unknown)))
+if unknowns:
+    sys.exit(2)
 if failing:
     sys.exit(1)
 '
@@ -830,7 +846,8 @@ if failing:
 # -skip-testing: flags. Returns the status to exit with: a nonzero $1 is kept
 # (with a warning when the bundle disagrees or is unreadable); a 0 becomes
 # EXIT_SELECTOR_UNMATCHED when a resolved selector executed and skipped
-# nothing, or EXIT_SELECTION_UNVERIFIED when the bundle cannot be read.
+# nothing, or EXIT_SELECTION_UNVERIFIED when the bundle cannot be read or
+# records a result the classifier does not recognise.
 summarize_only_testing() {
   local status=$1 bundle=$2 results outcome=0
   shift 2

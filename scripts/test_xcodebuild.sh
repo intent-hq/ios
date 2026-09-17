@@ -727,6 +727,28 @@ assert_eq "unreadable bundle on a failed run keeps 65" "$status" 65
 assert_contains "unreadable bundle on a failed run warns" "$(cat "$work/failunread.out")" "keeping exit 65 from the test run"
 rm -rf -- "$work"/xcodebuild-result.*
 
+echo "# an unrecognised result string is unverifiable: 83 on a green run, 65 kept on a failed one"
+make_results "$work/unknownresult.json" "IntentTests/DemoFixturesTests/testFoo()=Passed" "IntentTests/DemoFixturesTests/testBar()=Mysterious"
+status=$(run_filtered unknownresult "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/unknownresult.json")
+out=$(cat "$work/unknownresult.out")
+assert_eq "unknown result on a green run exits 83" "$status" 83
+assert_contains "unknown result is counted in the unknown column, not as executed" "$out" \
+  "  IntentTests/DemoFixturesTests         2         1        0       0        1"
+assert_contains "unknown result is reported with its string" "$out" \
+  "could not verify the ONLY_TESTING selection: 1 test case(s) matching 'IntentTests/DemoFixturesTests' have a result the wrapper does not recognise ('Mysterious'"
+assert_lacks "unknown result is not reported as executing nothing" "$out" "records none executed"
+assert_contains "unknown result exit 83 is explained" "$out" "Exiting 83 (a run that exited 0 could not be verified from its result bundle)"
+assert_contains "unknown result keeps the bundle" "$out" "Result bundle kept at:"
+assert_lock_free "lock released after an unknown result"
+rm -rf -- "$work"/xcodebuild-result.*
+status=$(run_filtered unknownfail "IntentTests/DemoFixturesTests" test-without-building STUB_RESULTS="$work/unknownresult.json" STUB_MODE=fail)
+out=$(cat "$work/unknownfail.out")
+assert_eq "unknown result on a failed run keeps 65" "$status" 65
+assert_contains "unknown result on a failed run warns" "$out" \
+  "warning: the ONLY_TESTING selection could not be verified from the result bundle; keeping exit 65 from the test run"
+assert_lacks "unknown result on a failed run is not upgraded to 83" "$out" "Exiting 83"
+rm -rf -- "$work"/xcodebuild-result.*
+
 echo "# RESULT_BUNDLE set: the given bundle is used, read, and left in place"
 status=$(run_filtered ownbundle "IntentTests/DemoFixturesTests" test-without-building RESULT_BUNDLE="$work/own.xcresult")
 assert_eq "RESULT_BUNDLE with a selector exits 0" "$status" 0
@@ -742,9 +764,9 @@ status=$(run_filtered summary "IntentTests IntentTests/DemoFixturesTests" test-w
 summary_md=$(cat "$work/step-summary.md")
 assert_eq "run with GITHUB_STEP_SUMMARY exits 0" "$status" 0
 assert_contains "step summary has a heading" "$summary_md" "### ONLY_TESTING selectors"
-assert_contains "step summary has the table header" "$summary_md" "| Requested | Resolved | Executed | Skipped | Failed |"
-assert_contains "step summary has the target-wide row" "$summary_md" '| `IntentTests` | 5 | 5 | 0 | 0 |'
-assert_contains "step summary has the nested selector's row" "$summary_md" '| `IntentTests/DemoFixturesTests` | 2 | 2 | 0 | 0 |'
+assert_contains "step summary has the table header" "$summary_md" "| Requested | Resolved | Executed | Skipped | Failed | Unknown |"
+assert_contains "step summary has the target-wide row" "$summary_md" '| `IntentTests` | 5 | 5 | 0 | 0 | 0 |'
+assert_contains "step summary has the nested selector's row" "$summary_md" '| `IntentTests/DemoFixturesTests` | 2 | 2 | 0 | 0 | 0 |'
 assert_lacks "step summary flags nothing on a clean run" "$summary_md" ":x:"
 : > "$work/step-summary2.md"
 status=$(run_filtered summary82 "IntentTests/ConversationTranscriptScrollPolicyTests" test-without-building \
