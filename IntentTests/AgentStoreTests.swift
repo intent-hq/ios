@@ -369,8 +369,9 @@ extension AgentStoreTests {
         ] as [String: Any])
     }
 
-    /// Delivers `type` to a loaded, observing store and waits for the one
-    /// debounced `agent.list` refetch it must issue.
+    /// Delivers `type` to a loaded, observing store, waits for the one
+    /// debounced `agent.list` refetch it must issue, and holds that no
+    /// second one follows across another debounce window.
     private func expectRefetch(
         after type: String,
         sourceLocation: SourceLocation = #_sourceLocation
@@ -381,8 +382,13 @@ extension AgentStoreTests {
 
         deliverAgentEvent(fake, type: type)
         try await fake.waitForRequests("agent.list", sourceLocation: sourceLocation)
-
-        #expect(fake.paramsForMethod("agent.list").count == 1, sourceLocation: sourceLocation)
+        try await expectNever(
+            "second agent.list refetch after \(type)",
+            within: Constants.AgentStore.fetchDebounce + .milliseconds(200),
+            sourceLocation: sourceLocation
+        ) {
+            fake.paramsForMethod("agent.list").count > 1
+        }
     }
 
     /// Delivers `type` to a loaded, observing store and holds that no
