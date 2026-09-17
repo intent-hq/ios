@@ -248,6 +248,31 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
+    /// SwiftUI publishes a freshly hosted view's accessibility nodes
+    /// asynchronously (the first hosting in a test process may take a few
+    /// run-loop turns), so the lookup observes the run loop, bounded, until
+    /// the element appears — the same observation the rendered badge tests
+    /// perform, not a sleep.
+    private static let accessibilityObservationDeadline: TimeInterval = 3
+    private static let accessibilityObservationInterval: TimeInterval = 0.02
+
+    private static func labelledElement(
+        containing fragment: String,
+        under hostView: UIView
+    ) -> (element: NSObject?, seen: [String]) {
+        var visited: Set<ObjectIdentifier> = []
+        let elements = allAccessibilityElements(under: hostView, visited: &visited)
+        let match = elements.first { element in
+            element.accessibilityLabel?.contains(fragment) == true
+                || element.accessibilityValue?.contains(fragment) == true
+        }
+        let seen = elements.compactMap { element -> String? in
+            let text = element.accessibilityLabel ?? element.accessibilityValue
+            return text.map { "\(type(of: element))(\($0.prefix(60)))" }
+        }
+        return (match, seen)
+    }
+
     /// Frame of the first accessibility element whose label (or value, for
     /// UIKit-backed text views) contains `fragment`, in window coordinates.
     private static func frame(
@@ -255,18 +280,22 @@ struct AssistantMessageToolRowHitTestTests {
         in hostView: UIView,
         window: UIWindow
     ) throws -> CGRect {
-        var visited: Set<ObjectIdentifier> = []
-        let elements = allAccessibilityElements(under: hostView, visited: &visited)
-        let seen = elements.compactMap { element -> String? in
-            let text = element.accessibilityLabel ?? element.accessibilityValue
-            return text.map { "\(type(of: element))(\($0.prefix(60)))" }
-        }.joined(separator: ", ")
+        let deadline = Date(timeIntervalSinceNow: accessibilityObservationDeadline)
+        var found = labelledElement(containing: fragment, under: hostView)
+        while found.element == nil, Date() < deadline {
+            _ = RunLoop.current.run(
+                mode: .default,
+                before: Date(timeIntervalSinceNow: accessibilityObservationInterval)
+            )
+            hostView.layoutIfNeeded()
+            found = labelledElement(containing: fragment, under: hostView)
+        }
         let element = try #require(
-            elements.first { element in
-                element.accessibilityLabel?.contains(fragment) == true
-                    || element.accessibilityValue?.contains(fragment) == true
-            },
-            Comment(rawValue: "no accessibility element labelled with \(fragment); saw: [\(seen)]")
+            found.element,
+            Comment(
+                rawValue: "no accessibility element labelled with \(fragment) within "
+                    + "\(accessibilityObservationDeadline)s; saw: [\(found.seen.joined(separator: ", "))]"
+            )
         )
         let frame = window.convert(element.accessibilityFrame, from: nil)
         try #require(!frame.isEmpty, "\(fragment) has an empty accessibility frame")
@@ -378,16 +407,30 @@ struct AssistantMessageToolRowHitTestTests {
         }
     }
 
+    /// Minimum height of the text band above the tool row for the probe point
+    /// to be unambiguously inside the text block rather than on its edge.
+    private static let minimumTextBandHeight: CGFloat = 12
+
     @Test(.enabled(Self.accessibilityGate) { await SyntheticBadgeHost.publishesAccessibilityTree() })
     func textRegionKeepsCopyMenuInTextBearingMessage() throws {
+        let subject = try toolSubject
         try hitTest(includeText: true) { hostView, window in
             let overlay = try Self.copyOverlay(in: hostView, window: window)
             #expect(
                 overlay.view.interactions.contains { $0 is UIContextMenuInteraction },
                 "copy interaction is not attached to a settled text-bearing message"
             )
-            let textFrame = try Self.frame(ofElementContaining: Self.bodyText, in: hostView, window: window)
-            let point = CGPoint(x: textFrame.midX, y: textFrame.midY)
+            // Textual's text is not published as a labelled accessibility
+            // element, so locate the text block geometrically: the row lays
+            // the text block out above the tool row, so the band between the
+            // overlay's top edge and the header's top edge is text.
+            let headerFrame = try Self.frame(ofElementContaining: subject, in: hostView, window: window)
+            let textBandHeight = headerFrame.minY - overlay.frame.minY
+            try #require(
+                textBandHeight >= Self.minimumTextBandHeight,
+                "no text band above the tool header (overlay \(overlay.frame), header \(headerFrame))"
+            )
+            let point = CGPoint(x: headerFrame.midX, y: overlay.frame.minY + textBandHeight / 2)
             #expect(overlay.frame.contains(point), "overlay \(overlay.frame) does not cover the text at \(point)")
             // The overlay either claims the text touch itself or defers to
             // Textual's UITextInput-conforming text view beneath it (which
