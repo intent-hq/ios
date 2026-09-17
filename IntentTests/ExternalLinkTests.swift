@@ -4,12 +4,10 @@ import Testing
 
 /// Backend-supplied strings opened via `openURL` (context-mention chips,
 /// PR-monitor chips) must go through the shared `ExternalLink` http/https
-/// allowlist rather than a bare `URL(string:)` (ios#262).
+/// allowlist rather than a bare `URL(string:)` (ios#262). The call-site scan
+/// reads the copies packaged into the test bundle (see TestBundleInputs),
+/// never the checkout via `#filePath` (ios#320, ios#373).
 struct ExternalLinkTests {
-    private static let repoRoot = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent() // IntentTests/
-        .deletingLastPathComponent() // repo root
-
     /// Every view that hands a daemon-supplied string to `openURL`.
     private static let externalLinkCallSites = [
         "Intent/Views/Conversation/Content/ContextMentionChipView.swift",
@@ -81,8 +79,9 @@ struct ExternalLinkTests {
     // MARK: - Call sites route through the shared helper
 
     @Test func externalLinkCallSitesUseTheSharedAllowlist() throws {
+        let inputs = try TestBundleInputs.current()
         for relativePath in Self.externalLinkCallSites {
-            let url = Self.repoRoot.appendingPathComponent(relativePath)
+            let url = try inputs.url(for: relativePath)
             let contents = try String(contentsOf: url, encoding: .utf8)
             #expect(
                 contents.range(of: #"URL\s*\(\s*string\s*:"#, options: .regularExpression) == nil,
