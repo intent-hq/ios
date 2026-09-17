@@ -4,7 +4,7 @@ import Testing
 import UIKit
 
 // Geometry regression values intentionally mirror the observed scroll offsets.
-// swiftlint:disable function_body_length no_magic_numbers number_separator trailing_newline
+// swiftlint:disable no_magic_numbers number_separator trailing_newline
 
 extension ConversationTranscriptScrollPolicyTests {
     typealias RecoveryStep = ConversationTranscriptScrollPolicy.UnrealizedEndRecoveryStep
@@ -158,7 +158,7 @@ extension ConversationTranscriptScrollPolicyTests {
             recovery(geometry(offsetY: 2_270, contentHeight: 3_000)),
             recovery(geometry(offsetY: 300)),
             recovery(geometry(offsetY: 300), isEndRealized: true),
-            recovery(geometry(offsetY: 300), correctionsLeft: 0),
+            recovery(geometry(offsetY: 300), correctionsLeft: 0)
         ]
         var terminals: [RecoveryTerminal] = []
         var continuations = 0
@@ -302,4 +302,4 @@ extension ConversationTranscriptScrollPolicyTests {
         #expect(scrollView.contentOffset.y == 1_600)
     }
 }
-// swiftlint:enable function_body_length no_magic_numbers number_separator trailing_newline
+// swiftlint:enable no_magic_numbers number_separator trailing_newline

@@ -93,7 +93,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         }
         // Realization gate (invariant 4).
         if case .endRealized(true) = event {
-            #expect(effects.contains(.replayLiveEdge(isInteracting: nil)), sourceLocation: sourceLocation)
+            #expect(effects.contains(.replayLiveEdge(.live)), sourceLocation: sourceLocation)
         }
         // A terminal for the transferred follow discharges it, with the
         // effect of that terminal: Go to End once if it did not execute over
@@ -113,7 +113,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 // A replacing follow inherits the transfer; an ignored request
                 // (automatic under forced) leaves it with the same owner.
                 if let owner = followOwner(of: after) {
-                    #expect(after.fallback == .transferred(to: owner), "follow request did not carry the transfer to the owner", sourceLocation: sourceLocation)
+                    #expect(after.fallback == .transferred(follow: owner), "follow request did not carry the transfer to the owner", sourceLocation: sourceLocation)
                 } else {
                     Issue.record("follow request over a transfer left no follow owning", sourceLocation: sourceLocation)
                 }
@@ -284,7 +284,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(s.isEndRealized)
         #expect(s.armedRecovery == .polling(r1))
         s.isEndRealized = false
-        #expect(step(&s, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(.live)])
         #expect(s.isEndRealized)
         #expect(s.armedRecovery == .polling(r1))
     }
@@ -318,13 +318,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func replacingFollowInheritsTheTransferredGiveUp() {
-        var s = state(owner: .follow(f1, forced: false), fallback: .transferred(to: f1))
+        var s = state(owner: .follow(f1, forced: false), fallback: .transferred(follow: f1))
         let replacement = FollowToken(id: 3)
         step(&s, .followRequested(forced: true))
-        #expect(s.fallback == .transferred(to: replacement))
+        #expect(s.fallback == .transferred(follow: replacement))
         // The replaced follow's terminal is stale and cannot discharge it.
         #expect(step(&s, .followFinished(f1, .dropped)).isEmpty)
-        #expect(s.fallback == .transferred(to: replacement))
+        #expect(s.fallback == .transferred(follow: replacement))
         // The replacement's does, exactly once.
         #expect(step(&s, .followFinished(replacement, .yielded)).contains(.showGoToEnd))
         #expect(s.fallback == .none)
@@ -377,7 +377,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func yieldedForcedFollowReplaysTheLiveEdgeAsTheGestureSample() {
         var s = state(owner: .follow(f1, forced: true))
         let effects = step(&s, .followDue(f1, execute: false))
-        #expect(nonLog(effects) == [.replayLiveEdge(isInteracting: true)])
+        #expect(nonLog(effects) == [.replayLiveEdge(.sampled(isInteracting: true))])
         #expect(logs(effects) == ["[SCROLL] Forced follow yielded to the user's gesture"])
         #expect(s.owner == .follow(f1, forced: true))
     }
@@ -386,7 +386,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
     @Test func executedAutomaticFollowReplaysTheEdgeItSwallowed() {
         var s = state(owner: .follow(f1, forced: false), realized: true)
-        #expect(step(&s, .followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .followFinished(f1, .executed(nil))) == [.replayLiveEdge(.live)])
         #expect(s.owner == .idle)
         #expect(!s.isFollowing)
     }
@@ -406,14 +406,14 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
     @Test func executedFollowDoesNotDoubleArmARecoveryAlreadyPolling() {
         var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), realized: false)
-        #expect(step(&s, .followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .followFinished(f1, .executed(nil))) == [.replayLiveEdge(.live)])
         #expect(s.armedRecovery == .polling(r2))
         #expect(s.nextTokenId == 3)
     }
 
     @Test func executedFollowOverAnUnrealizedEndRestoresADemotedRecoveryInsteadOfReArming() {
         var s = state(owner: .follow(f1, forced: false), armed: .demoted(r2), realized: false)
-        #expect(step(&s, .followFinished(f1, .executed(.giveUp))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .followFinished(f1, .executed(.giveUp))) == [.replayLiveEdge(.live)])
         #expect(s.owner == .recovery(r2))
         #expect(s.armedRecovery == nil)
         #expect(s.nextTokenId == 3)
@@ -437,7 +437,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(step(&s, .followDue(f2, execute: false)).isEmpty)
         // The drain replays the swallowed edge with the recovery owning
         // again: `isFollowing` still reads true for that replay, no re-arm.
-        #expect(step(&s, .followFinished(f2, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .followFinished(f2, .dropped)) == [.replayLiveEdge(.live)])
         #expect(s.owner == .recovery(r1))
         #expect(s.armedRecovery == nil)
         #expect(s.isFollowing)
@@ -446,7 +446,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(step(&s, .recoveryPagedUp(r1, mayFollowBack: true)) == [.scrollToEnd])
         #expect(s.owner == .recovery(r1))
         #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 1)) == [
-            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(.live),
         ])
         #expect(s.owner == .idle)
         #expect(!s.isFollowing)
@@ -464,10 +464,10 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(step(&corrected, .followFinished(f2, .yielded)).isEmpty)
         #expect(corrected.owner == .recovery(r1))
         #expect(corrected.isFollowing)
-        #expect(step(&corrected, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&corrected, .endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(.live)])
         #expect(corrected.isFollowing)
         #expect(step(&corrected, .recoveryFinished(r1, .notNeeded, corrections: 1)) == [
-            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.notNeeded, corrections: 1), .replayLiveEdge(.live),
         ])
         #expect(!corrected.isFollowing)
 
@@ -482,7 +482,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func executedFollowDischargesATransferWithNoGoToEndAndReArms() {
-        var s = state(owner: .follow(f1, forced: true), fallback: .transferred(to: f1), realized: false)
+        var s = state(owner: .follow(f1, forced: true), fallback: .transferred(follow: f1), realized: false)
         let effects = step(&s, .followFinished(f1, .executed(.landed)))
         #expect(effects == [.startRecoveryTask(RecoveryToken(id: 3))])
         #expect(s.fallback == .none)
@@ -494,7 +494,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         terminal: ConversationTranscriptScrollPolicy.FollowTerminal
     ) {
         for forced in [false, true] {
-            var s = state(owner: .follow(f1, forced: forced), fallback: .transferred(to: f1), realized: false)
+            var s = state(owner: .follow(f1, forced: forced), fallback: .transferred(follow: f1), realized: false)
             let effects = step(&s, .followFinished(f1, terminal))
             #expect(nonLog(effects) == [.showGoToEnd])
             #expect(logs(effects) == [
@@ -507,17 +507,17 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func unexecutedFollowWithATransferOverARealizedEndClearsItSilently() {
-        var auto = state(owner: .follow(f1, forced: false), fallback: .transferred(to: f1), realized: true)
-        #expect(step(&auto, .followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        var auto = state(owner: .follow(f1, forced: false), fallback: .transferred(follow: f1), realized: true)
+        #expect(step(&auto, .followFinished(f1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(auto.fallback == .none)
-        var forced = state(owner: .follow(f1, forced: true), fallback: .transferred(to: f1), realized: true)
+        var forced = state(owner: .follow(f1, forced: true), fallback: .transferred(follow: f1), realized: true)
         #expect(step(&forced, .followFinished(f1, .yielded)).isEmpty)
         #expect(forced.fallback == .none)
     }
 
     @Test func droppedAutomaticFollowWithoutATransferReplaysTheLiveEdge() {
         var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), realized: false)
-        #expect(step(&s, .followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .followFinished(f1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(s.armedRecovery == .polling(r2))
         #expect(s.owner == .idle)
     }
@@ -530,7 +530,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func aTransferIsDischargedExactlyOnce() {
-        var s = state(owner: .follow(f1, forced: false), fallback: .transferred(to: f1), realized: false)
+        var s = state(owner: .follow(f1, forced: false), fallback: .transferred(follow: f1), realized: false)
         #expect(step(&s, .followFinished(f1, .dropped)).contains(.showGoToEnd))
         let after = s
         #expect(step(&s, .followFinished(f1, .dropped)).isEmpty)
@@ -580,7 +580,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func gestureDischargesATransferOverAnUnrealizedEndAsGoToEnd() {
-        var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), fallback: .transferred(to: f1), realized: false)
+        var s = state(owner: .follow(f1, forced: false), armed: .polling(r2), fallback: .transferred(follow: f1), realized: false)
         let effects = step(&s, .followCancelledByGesture)
         #expect(nonLog(effects) == [.cancelFollowTask(f1), .cancelRecoveryTask(r2), .showGoToEnd])
         #expect(s.fallback == .none)
@@ -588,7 +588,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     }
 
     @Test func gestureDischargesATransferOverARealizedEndSilently() {
-        var s = state(owner: .follow(f1, forced: true), fallback: .transferred(to: f1), realized: true)
+        var s = state(owner: .follow(f1, forced: true), fallback: .transferred(follow: f1), realized: true)
         #expect(nonLog(step(&s, .followCancelledByGesture)) == [.cancelFollowTask(f1)])
         #expect(s.fallback == .none)
     }
@@ -597,10 +597,10 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
     @Test(arguments: [ConversationTranscriptRecoveryLifecycle.Event.explicitClaim, .viewDisappeared])
     func claimCancelsTheRecoveryOnly(event: ConversationTranscriptRecoveryLifecycle.Event) {
-        var armedUnderFollow = state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(to: f1))
+        var armedUnderFollow = state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(follow: f1))
         #expect(step(&armedUnderFollow, event) == [.cancelRecoveryTask(r2)])
         #expect(armedUnderFollow.owner == .follow(f1, forced: true))
-        #expect(armedUnderFollow.fallback == .transferred(to: f1))
+        #expect(armedUnderFollow.fallback == .transferred(follow: f1))
         #expect(armedUnderFollow.armedRecovery == nil)
 
         // A demoted recovery is cancelled too: the follow's drain restores
@@ -609,7 +609,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(step(&demotedUnderFollow, event) == [.cancelRecoveryTask(r2)])
         #expect(demotedUnderFollow.owner == .follow(f1, forced: false))
         #expect(demotedUnderFollow.armedRecovery == nil)
-        #expect(step(&demotedUnderFollow, .followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&demotedUnderFollow, .followFinished(f1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(demotedUnderFollow.owner == .idle)
 
         var owning = state(owner: .recovery(r1))
@@ -714,8 +714,8 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     ]) func giveUpUnderAFollowTransfersToThatFollow(armed: ConversationTranscriptRecoveryLifecycle.ArmedRecovery) {
         var s = state(owner: .follow(f1, forced: false), armed: armed, realized: false)
         let effects = step(&s, .recoveryFinished(r2, .giveUp, corrections: 3))
-        #expect(effects == [.recordRecoveryOutcome(.giveUp, corrections: 3), .replayLiveEdge(isInteracting: nil)])
-        #expect(s.fallback == .transferred(to: f1))
+        #expect(effects == [.recordRecoveryOutcome(.giveUp, corrections: 3), .replayLiveEdge(.live)])
+        #expect(s.fallback == .transferred(follow: f1))
         #expect(s.owner == .follow(f1, forced: false))
         #expect(s.armedRecovery == nil)
     }
@@ -727,13 +727,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     ) {
         var owning = state(owner: .recovery(r1))
         #expect(step(&owning, .recoveryFinished(r1, terminal, corrections: 1)) == [
-            .recordRecoveryOutcome(terminal, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(terminal, corrections: 1), .replayLiveEdge(.live),
         ])
         #expect(owning.owner == .idle)
         for armed in [Lifecycle.ArmedRecovery.polling(r2), .demoted(r2)] {
             var underFollow = state(owner: .follow(f1, forced: true), armed: armed)
             #expect(step(&underFollow, .recoveryFinished(r2, terminal, corrections: 0)) == [
-                .recordRecoveryOutcome(terminal, corrections: 0), .replayLiveEdge(isInteracting: nil),
+                .recordRecoveryOutcome(terminal, corrections: 0), .replayLiveEdge(.live),
             ])
             #expect(underFollow.owner == .follow(f1, forced: true))
             #expect(underFollow.armedRecovery == nil)
@@ -746,7 +746,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func aRecoveryThatCorrectedNothingStillRecordsItsOutcome() {
         var s = state(armed: .polling(r1), realized: true)
         #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 0)) == [
-            .recordRecoveryOutcome(.notNeeded, corrections: 0), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.notNeeded, corrections: 0), .replayLiveEdge(.live),
         ])
         #expect(s.armedRecovery == nil)
     }
@@ -756,7 +756,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     @Test func staleTokensChangeNothing() {
         let states = [
             State(),
-            state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(to: f1)),
+            state(owner: .follow(f1, forced: true), armed: .polling(r2), fallback: .transferred(follow: f1)),
             state(owner: .follow(f1, forced: false), armed: .demoted(r2)),
             state(owner: .recovery(r1)),
         ]
@@ -822,7 +822,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
             for armed in [nil, Lifecycle.ArmedRecovery.polling(r2)] {
                 states.append(state(owner: .idle, armed: armed, realized: realized))
                 for forced in [false, true] {
-                    for fallback in [Lifecycle.GiveUpFallback.none, .transferred(to: f1)] {
+                    for fallback in [Lifecycle.GiveUpFallback.none, .transferred(follow: f1)] {
                         states.append(state(owner: .follow(f1, forced: forced), armed: armed, fallback: fallback, realized: realized))
                     }
                 }
@@ -856,13 +856,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                         switch terminal {
                         case .giveUp:
                             if let follow = followOwner(of: expected) {
-                                expected.fallback = .transferred(to: follow)
-                                expectedEffects.append(.replayLiveEdge(isInteracting: nil))
+                                expected.fallback = .transferred(follow: follow)
+                                expectedEffects.append(.replayLiveEdge(.live))
                             } else {
                                 expectedEffects.append(.showGoToEnd)
                             }
                         case .notNeeded, .yieldToUser:
-                            expectedEffects.append(.replayLiveEdge(isInteracting: nil))
+                            expectedEffects.append(.replayLiveEdge(.live))
                         }
                         #expect(s == expected, "\(original) \(terminal) \(corrections)")
                         #expect(effects == expectedEffects, "\(original) \(terminal) \(corrections)")
@@ -898,11 +898,11 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                         expected.owner = .recovery(recovery)
                         expected.armedRecovery = nil
                     }
-                    let transferred = original.fallback == .transferred(to: token)
+                    let transferred = original.fallback == .transferred(follow: token)
                     expected.fallback = .none
                     switch terminal {
                     case .executed:
-                        if !forced { expectedEffects.append(.replayLiveEdge(isInteracting: nil)) }
+                        if !forced { expectedEffects.append(.replayLiveEdge(.live)) }
                         if !original.isEndRealized, original.armedRecovery == nil {
                             let armed = RecoveryToken(id: original.nextTokenId)
                             expected.armedRecovery = .polling(armed)
@@ -913,7 +913,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                         if transferred, !original.isEndRealized {
                             expectedEffects.append(.showGoToEnd)
                         } else if !forced {
-                            expectedEffects.append(.replayLiveEdge(isInteracting: nil))
+                            expectedEffects.append(.replayLiveEdge(.live))
                         }
                     }
                     #expect(s == expected, "\(original) \(terminal)")
@@ -1002,7 +1002,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 case .cancelRecoveryTask(let token): liveRecoveries.remove(token)
                 case .scrollToEnd: scrolls += 1
                 case .pageUp(let offsetY): pageUps.append(offsetY)
-                case .replayLiveEdge(let sample): applyEdge(isInteracting: sample ?? isInteracting)
+                case .replayLiveEdge(let sample): applyEdge(isInteracting: sample.isInteracting(live: isInteracting))
                 case .showGoToEnd:
                     userIsScrolledAway = true
                     goToEndShown += 1
@@ -1188,9 +1188,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.poll(geometry(offsetY: 260), correctionsSpent: 1, timedOut: true) == .finish(.giveUp))
         h.distanceToBottom = 40
         #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 1)) == [
-            .recordRecoveryOutcome(.giveUp, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.giveUp, corrections: 1), .replayLiveEdge(.live),
         ])
-        #expect(h.state.fallback == .transferred(to: f2))
+        #expect(h.state.fallback == .transferred(follow: f2))
         #expect(h.state.armedRecovery == nil)
         #expect(h.state.owner == .follow(f2, forced: false))
         #expect(!h.isLive(r1))
@@ -1224,9 +1224,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.send(.recoveryStep(r1, .settling)).isEmpty)
         #expect(h.poll(geometry(offsetY: 300), timedOut: true) == .finish(.giveUp))
         #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 0)) == [
-            .recordRecoveryOutcome(.giveUp, corrections: 0), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.giveUp, corrections: 0), .replayLiveEdge(.live),
         ])
-        #expect(h.state.fallback == .transferred(to: f2))
+        #expect(h.state.fallback == .transferred(follow: f2))
         #expect(h.state.armedRecovery == nil)
         #expect(h.outcomes == [.recordRecoveryOutcome(.giveUp, corrections: 0)])
         #expect(!h.userIsScrolledAway)
@@ -1244,7 +1244,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(automatic.execute())
         #expect(automatic.send(.followDue(f2, execute: true)) == [.scrollToEnd])
         #expect(automatic.send(.followFinished(f2, .executed(nil))) == [
-            .replayLiveEdge(isInteracting: nil), .startRecoveryTask(r3),
+            .replayLiveEdge(.live), .startRecoveryTask(r3),
         ])
         #expect(automatic.state.fallback == .none)
         #expect(automatic.state.owner == .idle)
@@ -1269,7 +1269,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         plain.distanceToBottom = 120
         #expect(!plain.execute())
         #expect(plain.send(.followDue(f1, execute: false)).isEmpty)
-        #expect(plain.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(plain.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(plain.state.fallback == .none)
         #expect(plain.goToEndShown == 0)
         #expect(!plain.userIsScrolledAway)
@@ -1288,7 +1288,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var yielded = transferredGiveUp(forced: true)
         yielded.isInteracting = true
         #expect(!yielded.execute())
-        #expect(yielded.send(.followDue(f2, execute: false)) == [Log.forcedYielded, .replayLiveEdge(isInteracting: true)])
+        #expect(yielded.send(.followDue(f2, execute: false)) == [Log.forcedYielded, .replayLiveEdge(.sampled(isInteracting: true))])
         #expect(!yielded.userIsScrolledAway)
         #expect(yielded.send(.followFinished(f2, .yielded)) == [Log.deferredGaveUp, .showGoToEnd])
         #expect(yielded.state.fallback == .none)
@@ -1315,11 +1315,11 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(replaced.send(.followRequested(forced: true)) == [
             .cancelFollowTask(f2), .startFollowTask(f3, forced: true),
         ])
-        #expect(replaced.state.fallback == .transferred(to: f3))
+        #expect(replaced.state.fallback == .transferred(follow: f3))
         #expect(!replaced.isLive(f2))
         #expect(replaced.isLive(f3))
         #expect(replaced.send(.followFinished(f2, .replaced)).isEmpty)
-        #expect(replaced.state.fallback == .transferred(to: f3))
+        #expect(replaced.state.fallback == .transferred(follow: f3))
         #expect(replaced.goToEndShown == 0)
         var replacementYielded = replaced
         #expect(replaced.execute())
@@ -1332,7 +1332,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         replacementYielded.isInteracting = true
         #expect(!replacementYielded.execute())
         #expect(replacementYielded.send(.followDue(f3, execute: false)) == [
-            Log.forcedYielded, .replayLiveEdge(isInteracting: true),
+            Log.forcedYielded, .replayLiveEdge(.sampled(isInteracting: true)),
         ])
         #expect(replacementYielded.send(.followFinished(f3, .yielded)) == [Log.deferredGaveUp, .showGoToEnd])
         #expect(replacementYielded.state.fallback == .none)
@@ -1349,7 +1349,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         h.distanceToBottom = 120
         #expect(!h.execute())
         #expect(h.send(.followDue(f2, execute: false)).isEmpty)
-        #expect(h.send(.followFinished(f2, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(h.send(.followFinished(f2, .dropped)) == [.replayLiveEdge(.live)])
         #expect(h.state.fallback == .none)
         #expect(h.goToEndShown == 0)
         #expect(!h.userIsScrolledAway)
@@ -1392,7 +1392,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
         yielded.isInteracting = true
         #expect(!yielded.execute())
-        #expect(yielded.send(.followDue(f1, execute: false)) == [Log.forcedYielded, .replayLiveEdge(isInteracting: true)])
+        #expect(yielded.send(.followDue(f1, execute: false)) == [Log.forcedYielded, .replayLiveEdge(.sampled(isInteracting: true))])
         #expect(yielded.send(.followFinished(f1, .yielded)).isEmpty)
         #expect(yielded.state.owner == .idle)
         #expect(yielded.state.currentRecovery == nil)
@@ -1406,7 +1406,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(automatic.execute())
         #expect(automatic.send(.followDue(f1, execute: true)) == [.scrollToEnd])
         #expect(automatic.send(.followFinished(f1, .executed(nil))) == [
-            .replayLiveEdge(isInteracting: nil), .startRecoveryTask(r2),
+            .replayLiveEdge(.live), .startRecoveryTask(r2),
         ])
         #expect(automatic.state.armedRecovery == .polling(r2))
         #expect(automatic.isLive(r2))
@@ -1414,13 +1414,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
         #expect(realizedAutomatic.send(.endRealized(userIsScrolledAway: false)).isEmpty)
         #expect(realizedAutomatic.send(.followDue(f1, execute: true)) == [.scrollToEnd])
-        #expect(realizedAutomatic.send(.followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(realizedAutomatic.send(.followFinished(f1, .executed(nil))) == [.replayLiveEdge(.live)])
         #expect(realizedAutomatic.state.currentRecovery == nil)
 
         dropped.distanceToBottom = 120
         #expect(!dropped.execute())
         #expect(dropped.send(.followDue(f1, execute: false)).isEmpty)
-        #expect(dropped.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(dropped.send(.followFinished(f1, .dropped)) == [.replayLiveEdge(.live)])
         #expect(dropped.state.currentRecovery == nil)
         #expect(dropped.goToEndShown == 0)
 
@@ -1429,7 +1429,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         yieldedRealized.isInteracting = true
         #expect(!yieldedRealized.execute())
         #expect(yieldedRealized.send(.followDue(f1, execute: false)) == [
-            Log.forcedYielded, .replayLiveEdge(isInteracting: true),
+            Log.forcedYielded, .replayLiveEdge(.sampled(isInteracting: true)),
         ])
         #expect(yieldedRealized.send(.followFinished(f1, .yielded)).isEmpty)
         #expect(yieldedRealized.state.currentRecovery == nil)
@@ -1489,7 +1489,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(pinned.userIsScrolledAway)
 
         h.distanceToBottom = 0
-        #expect(h.send(.endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(h.send(.endRealized(userIsScrolledAway: true)) == [.replayLiveEdge(.live)])
         #expect(h.state.isEndRealized)
         #expect(!h.userIsScrolledAway)
         #expect(h.rePins == 0)
@@ -1511,7 +1511,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var h = harness()
         #expect(h.send(.followRequested(forced: false)) == [.startFollowTask(f1, forced: false)])
         #expect(h.send(.followDue(f1, execute: true)) == [.scrollToEnd])
-        #expect(h.send(.followFinished(f1, .executed(nil))) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(h.send(.followFinished(f1, .executed(nil))) == [.replayLiveEdge(.live)])
         #expect(h.state.owner == .idle)
         #expect(!h.isLive(f1))
         #expect(h.send(.followRequested(forced: true)) == [.startFollowTask(f2, forced: true)])
@@ -1573,7 +1573,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         h.distanceToBottom = 120
         #expect(h.poll(geometry(offsetY: 180), correctionsSpent: 2) == .finish(.notNeeded))
         #expect(h.send(.recoveryFinished(r1, .notNeeded, corrections: 2)) == [
-            .recordRecoveryOutcome(.notNeeded, corrections: 2), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.notNeeded, corrections: 2), .replayLiveEdge(.live),
         ])
         #expect(h.state.owner == .idle)
         #expect(!h.state.isFollowing)
@@ -1583,7 +1583,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
 
         atBottom.distanceToBottom = 10
         #expect(atBottom.send(.recoveryFinished(r1, .notNeeded, corrections: 2)) == [
-            .recordRecoveryOutcome(.notNeeded, corrections: 2), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.notNeeded, corrections: 2), .replayLiveEdge(.live),
         ])
         #expect(!atBottom.userIsScrolledAway)
         #expect(atBottom.rePins == 0)
@@ -1597,7 +1597,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(!yielded.mayFollowBack())
         #expect(yielded.send(.recoveryPagedUp(r1, mayFollowBack: false)) == [Log.recoveryYielded])
         #expect(yielded.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
-            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(.live),
         ])
         #expect(yielded.summaries == ["endRecovery=yieldedToUser corrections=1 episodes=1 endRealized=false"])
         #expect(yielded.userIsScrolledAway)
@@ -1611,7 +1611,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(toFollow.send(.recoveryPagedUp(r1, mayFollowBack: false)) == [Log.recoveryYielded])
         toFollow.distanceToBottom = 120
         #expect(toFollow.send(.recoveryFinished(r1, .yieldToUser, corrections: 2)) == [
-            .recordRecoveryOutcome(.yieldToUser, corrections: 2), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.yieldToUser, corrections: 2), .replayLiveEdge(.live),
         ])
         #expect(toFollow.state.owner == .follow(f2, forced: false))
         #expect(toFollow.state.armedRecovery == nil)
@@ -1646,7 +1646,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.state.armedRecovery == .demoted(r1))
         #expect(h.scrolls == 0)
         #expect(h.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
-            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
+            .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(.live),
         ])
         #expect(h.summaries == ["endRecovery=yieldedToUser corrections=1 episodes=1 endRealized=false"])
         #expect(h.state.owner == .follow(f2, forced: false))
