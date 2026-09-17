@@ -154,13 +154,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
             return nil
         }
         if case .recoveryFinished(let token, let terminal, let corrections) = event, before.currentRecovery == token {
-            if corrections > 0 {
-                #expect(outcomes.count == 1, "outcome not recorded exactly once", sourceLocation: sourceLocation)
-                #expect(outcomes.first?.0 == terminal, "outcome recorded a different terminal", sourceLocation: sourceLocation)
-                #expect(outcomes.first?.1 == corrections, "outcome recorded a different count", sourceLocation: sourceLocation)
-            } else {
-                #expect(outcomes.isEmpty, "outcome recorded for a recovery that corrected nothing", sourceLocation: sourceLocation)
-            }
+            #expect(outcomes.count == 1, "outcome not recorded exactly once", sourceLocation: sourceLocation)
+            #expect(outcomes.first?.0 == terminal, "outcome recorded a different terminal", sourceLocation: sourceLocation)
+            #expect(outcomes.first?.1 == corrections, "outcome recorded a different count", sourceLocation: sourceLocation)
         } else {
             #expect(outcomes.isEmpty, "outcome recorded outside a current recovery terminal", sourceLocation: sourceLocation)
         }
@@ -736,15 +732,22 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(owning.owner == .idle)
         for armed in [Lifecycle.ArmedRecovery.polling(r2), .demoted(r2)] {
             var underFollow = state(owner: .follow(f1, forced: true), armed: armed)
-            #expect(step(&underFollow, .recoveryFinished(r2, terminal, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
+            #expect(step(&underFollow, .recoveryFinished(r2, terminal, corrections: 0)) == [
+                .recordRecoveryOutcome(terminal, corrections: 0), .replayLiveEdge(isInteracting: nil),
+            ])
             #expect(underFollow.owner == .follow(f1, forced: true))
             #expect(underFollow.armedRecovery == nil)
         }
     }
 
-    @Test func aRecoveryThatCorrectedNothingRecordsNoOutcome() {
+    /// The report tells a `noCorrectionNeeded` finish from an episode still
+    /// in flight only if the finish is recorded (see
+    /// `ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport`).
+    @Test func aRecoveryThatCorrectedNothingStillRecordsItsOutcome() {
         var s = state(armed: .polling(r1), realized: true)
-        #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(step(&s, .recoveryFinished(r1, .notNeeded, corrections: 0)) == [
+            .recordRecoveryOutcome(.notNeeded, corrections: 0), .replayLiveEdge(isInteracting: nil),
+        ])
         #expect(s.armedRecovery == nil)
     }
 
@@ -847,10 +850,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                             continue
                         }
                         var expected = original
-                        var expectedEffects: [Effect] = []
-                        if corrections > 0 {
-                            expectedEffects.append(.recordRecoveryOutcome(terminal, corrections: corrections))
-                        }
+                        var expectedEffects: [Effect] = [.recordRecoveryOutcome(terminal, corrections: corrections)]
                         expected.armedRecovery = nil
                         if expected.owner == .recovery(token) { expected.owner = .idle }
                         switch terminal {
@@ -950,7 +950,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// `scrolledAwayTransition` and `shouldRePinAfterContentGrowth` to the
     /// harness's `userIsScrolledAway`, counting growth re-pins; `showGoToEnd`
     /// raises the flag; a recorded outcome is rendered through
-    /// `unrealizedEndRecoverySummary` as the demo-data report does; the
+    /// `unrealizedEndRecoveryReport` as the demo-data report does; the
     /// recovery loop's polls go through `unrealizedEndRecoveryStep` against
     /// the live state. No clock: the sequence is the schedule. Every
     /// transition is checked against the contract's invariants.
@@ -967,8 +967,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var pageUps: [CGFloat] = []
         var rePins = 0
         var goToEndShown = 0
+        var episodes = 0
         var outcomes: [Effect] = []
-        var summaries: [String?] = []
+        var summaries: [String] = []
         let check: (State, Event, State, [Effect], SourceLocation) -> Void
 
         var followOwns: Bool {
@@ -995,7 +996,9 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                 switch effect {
                 case .startFollowTask(let token, _): liveFollows.insert(token)
                 case .cancelFollowTask(let token): liveFollows.remove(token)
-                case .startRecoveryTask(let token): liveRecoveries.insert(token)
+                case .startRecoveryTask(let token):
+                    liveRecoveries.insert(token)
+                    episodes += 1
                 case .cancelRecoveryTask(let token): liveRecoveries.remove(token)
                 case .scrollToEnd: scrolls += 1
                 case .pageUp(let offsetY): pageUps.append(offsetY)
@@ -1005,8 +1008,13 @@ struct ConversationTranscriptRecoveryLifecycleTests {
                     goToEndShown += 1
                 case .recordRecoveryOutcome(let terminal, let corrections):
                     outcomes.append(effect)
-                    summaries.append(ConversationTranscriptScrollPolicy.unrealizedEndRecoverySummary(
-                        outcome: terminal, corrections: corrections))
+                    summaries.append(ConversationTranscriptScrollPolicy.unrealizedEndRecoveryReport(
+                        outcome: terminal,
+                        corrections: corrections,
+                        episodes: episodes,
+                        endRealized: state.isEndRealized,
+                        cancelled: false
+                    ).summary)
                 case .log: break
                 }
             }
@@ -1215,10 +1223,12 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.poll(geometry(offsetY: 300)) == .continue(.settling))
         #expect(h.send(.recoveryStep(r1, .settling)).isEmpty)
         #expect(h.poll(geometry(offsetY: 300), timedOut: true) == .finish(.giveUp))
-        #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 0)) == [.replayLiveEdge(isInteracting: nil)])
+        #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 0)) == [
+            .recordRecoveryOutcome(.giveUp, corrections: 0), .replayLiveEdge(isInteracting: nil),
+        ])
         #expect(h.state.fallback == .transferred(to: f2))
         #expect(h.state.armedRecovery == nil)
-        #expect(h.outcomes.isEmpty)
+        #expect(h.outcomes == [.recordRecoveryOutcome(.giveUp, corrections: 0)])
         #expect(!h.userIsScrolledAway)
         return h
     }
@@ -1589,7 +1599,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(yielded.send(.recoveryFinished(r1, .yieldToUser, corrections: 1)) == [
             .recordRecoveryOutcome(.yieldToUser, corrections: 1), .replayLiveEdge(isInteracting: nil),
         ])
-        #expect(yielded.summaries == ["endRecovery=yieldToUser corrections=1"])
+        #expect(yielded.summaries == ["endRecovery=yieldedToUser corrections=1 episodes=1 endRealized=false"])
         #expect(yielded.userIsScrolledAway)
         #expect(yielded.rePins == 0)
         #expect(yielded.goToEndShown == 0)
@@ -1682,7 +1692,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         #expect(h.send(.recoveryFinished(r1, .giveUp, corrections: 2)) == [
             .recordRecoveryOutcome(.giveUp, corrections: 2), Log.gaveUp, .showGoToEnd,
         ])
-        #expect(h.summaries == ["endRecovery=giveUp corrections=2"])
+        #expect(h.summaries == ["endRecovery=gaveUp corrections=2 episodes=1 endRealized=false"])
         #expect(h.userIsScrolledAway)
         #expect(h.goToEndShown == 1)
         #expect(h.rePins == 0)

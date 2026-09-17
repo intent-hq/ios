@@ -133,6 +133,8 @@ enum ConversationTranscriptRecoveryLifecycle {
         case replayLiveEdge(isInteracting: Bool?)
         /// Flag the viewport scrolled away with no scroll issued over it.
         case showGoToEnd
+        /// Record how the recovery ended with the corrections it spent; every
+        /// terminal is recorded, a correction spent or not.
         case recordRecoveryOutcome(RecoveryTerminal, corrections: Int)
         case log(String)
     }
@@ -283,9 +285,7 @@ enum ConversationTranscriptRecoveryLifecycle {
 
         case .recoveryFinished(let token, let terminal, let corrections):
             guard state.currentRecovery == token else { return (state, []) }
-            if corrections > 0 {
-                effects.append(.recordRecoveryOutcome(terminal, corrections: corrections))
-            }
+            effects.append(.recordRecoveryOutcome(terminal, corrections: corrections))
             state.armedRecovery = nil
             if state.owner == .recovery(token) {
                 state.owner = .idle
