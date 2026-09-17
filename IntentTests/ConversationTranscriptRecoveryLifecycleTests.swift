@@ -1214,6 +1214,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
     /// dropped automatic follow's drain is the raw edge replay.
     @Test func aTransferredGiveUpIsClearedByAnyExecutedDrainWhichReArmsTheRecovery() {
         var automatic = transferredGiveUp(forced: false)
+        automatic.distanceToBottom = 30
         #expect(automatic.execute())
         #expect(automatic.send(.followDue(f2, execute: true)) == [.scrollToEnd])
         #expect(automatic.send(.followFinished(f2, .executed(nil))) == [
@@ -1374,6 +1375,7 @@ struct ConversationTranscriptRecoveryLifecycleTests {
         var automatic = harness(realized: false)
         #expect(automatic.send(.followRequested(forced: false)) == [.startFollowTask(f1, forced: false)])
         var dropped = automatic
+        automatic.distanceToBottom = 30
         var realizedAutomatic = automatic
         #expect(automatic.execute())
         #expect(automatic.send(.followDue(f1, execute: true)) == [.scrollToEnd])
