@@ -34,24 +34,14 @@ extension ConversationStoreLiveStateTests {
 
     @Test func initialFetchDoesNotClobberLiveSnapshot() async throws {
         let (store, fake) = makeStore()
-        fake.delayMap["agent.getConversation"] = 100_000_000
-        fake.responseMap["agent.getConversation"] = [
-            "messages": [
-                [
-                    "id": "msg-1",
-                    "role": "user",
-                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                    "timestamp": "2026-06-27T01:00:00.000Z"
-                ]
-            ]
-        ]
+        fake.pendingMethods.insert("agent.getConversation")
 
         // Start the initial fetch (messages is empty → pre-await initial load).
         let fetchTask = Task { await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1") }
 
         // While the fetch is in flight, the chat snapshot seeds the transcript
         // including an in-flight assistant message the server page lacks.
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         store.handleStreamEvent("subscription.push", params: snapshotParams(messages: [
             [
                 "id": "msg-1",
@@ -68,6 +58,17 @@ extension ConversationStoreLiveStateTests {
             ]
         ]))
 
+        // The server page lands after the snapshot and lacks msg-2.
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-06-27T01:00:00.000Z"
+                ]
+            ]
+        ] as [String: Any])
         await fetchTask.value
 
         // The completed fetch must merge, not wholesale-replace the live snapshot.
@@ -184,12 +185,10 @@ extension ConversationStoreLiveStateTests {
             )
         ]))
 
-        // Give any (wrongly) spawned resnapshot task a chance to run
-        try await Task.sleep(nanoseconds: 50_000_000)
-
+        try await expectNever("resnapshot for a stale entity") {
+            fake.didCallMethod("chat.unsubscribe") || fake.didCallMethod("chat.subscribe")
+        }
         #expect(store.messages.count == 1) // stale entity not applied
-        #expect(!fake.didCallMethod("chat.unsubscribe"))
-        #expect(!fake.didCallMethod("chat.subscribe"))
 
         // The live sequence continues normally after the stale frame
         store.handleStreamEvent("subscription.push", params: deltaParams(seq: 2, updated: [
@@ -223,10 +222,11 @@ extension ConversationStoreLiveStateTests {
             )
         ]))
 
-        try await Task.sleep(nanoseconds: 50_000_000)
-
+        try await fake.waitForRequests("chat.unsubscribe")
+        try await expectNever("second resnapshot while one is in flight") {
+            fake.paramsForMethod("chat.unsubscribe").count > 1
+        }
         #expect(store.messages.isEmpty) // gapped deltas not applied
-        #expect(fake.paramsForMethod("chat.unsubscribe").count == 1)
     }
 }
 
@@ -256,9 +256,10 @@ extension ConversationStoreLiveStateTests {
                 block: ["type": "text", "id": "msg-2:0", "text": "Working more"]
             )
         ]))
-        try await Task.sleep(nanoseconds: 50_000_000)
         #expect(store.messages[0].contentBlocks.first?.resolvedText == "Working more")
-        #expect(!fake.didCallMethod("chat.unsubscribe"))
+        try await expectNever("resnapshot for an in-sequence delta") {
+            fake.didCallMethod("chat.unsubscribe")
+        }
     }
 
     // MARK: - Mid-turn tool title classification (STAB: generic spanner fallback)

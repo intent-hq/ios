@@ -1,6 +1,67 @@
 import Combine
 import Foundation
 @testable import Intent
+import Testing
+
+/// Thrown by `waitUntil` / `expectNever` so a missed or forbidden state
+/// transition aborts the test instead of letting it continue against a fake
+/// that never reached the awaited state (e.g. `resolvePending` on nothing).
+struct ConditionWaitFailure: Error, CustomStringConvertible {
+    let description: String
+}
+
+/// Poll cadence shared by the bounded condition waits below.
+private let kConditionPollIntervalMilliseconds = 5
+private let kConditionPollInterval: Duration = .milliseconds(kConditionPollIntervalMilliseconds)
+
+/// Bounded poll until `condition` holds. Throws `ConditionWaitFailure` naming
+/// the call site on timeout. Use this instead of a fixed `Task.sleep` after
+/// spawning store work (ios#261).
+@MainActor
+func waitUntil(
+    _ description: String,
+    timeout: Duration = .seconds(2),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ condition: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try await Task.sleep(for: kConditionPollInterval)
+    }
+    if condition() { return }
+    throw ConditionWaitFailure(
+        description: "Timed out waiting for \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+    )
+}
+
+/// Bounded negative observation window: polls `forbidden` for `window` and
+/// throws `ConditionWaitFailure` the first time it holds. For assertions that
+/// work must NOT have been spawned — positive ones must use `waitUntil`. The
+/// window is the same order as the sleeps it replaces, but a transient
+/// occurrence inside it now fails instead of slipping past a single check.
+@MainActor
+func expectNever(
+    _ description: String,
+    within window: Duration = .milliseconds(100),
+    sourceLocation: SourceLocation = #_sourceLocation,
+    _ forbidden: () -> Bool
+) async throws {
+    let deadline = ContinuousClock.now + window
+    repeat {
+        if forbidden() {
+            throw ConditionWaitFailure(
+                description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+            )
+        }
+        try await Task.sleep(for: kConditionPollInterval)
+    } while ContinuousClock.now < deadline
+    if forbidden() {
+        throw ConditionWaitFailure(
+            description: "Unexpected \(description) (\(sourceLocation.fileName):\(sourceLocation.line))"
+        )
+    }
+}
 
 /// FakeConnectionManager is a plain class (not a subclass of ConnectionManager) that conforms
 /// to SessionConnectionManaging for testing purposes. It provides full control over connection
@@ -292,6 +353,44 @@ class FakeConnectionManager: SessionConnectionManaging {
     /// Get all parameters for calls to a specific method.
     func paramsForMethod(_ method: String) -> [[String: Any]] {
         requestLog.filter { $0.method == method }.map { $0.params }
+    }
+
+    /// Number of requests for `method` currently suspended by `pendingMethods`.
+    func pendingRequestCount(_ method: String) -> Int {
+        pendingContinuations[method]?.count ?? 0
+    }
+
+    /// Bounded poll until at least `count` requests for `method` are suspended
+    /// by `pendingMethods` — i.e. resolvable via `resolvePending` / `failPending`.
+    func waitForPendingRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) suspended request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            pendingRequestCount(method) >= count
+        }
+    }
+
+    /// Bounded poll until `method` has been requested at least `count` times.
+    func waitForRequests(
+        _ method: String,
+        count: Int = 1,
+        timeout: Duration = .seconds(2),
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        try await waitUntil(
+            "\(count) request(s) to \(method)",
+            timeout: timeout,
+            sourceLocation: sourceLocation
+        ) {
+            paramsForMethod(method).count >= count
+        }
     }
 
     /// Check if a handler is registered for a given subscriptionId.

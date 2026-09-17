@@ -103,7 +103,7 @@ extension ConversationViewModelTests {
         }
     }
 
-    @Test func turnFinishFiresDebouncedMarkSeenOnceWithNewestPersistedId() async {
+    @Test func turnFinishFiresDebouncedMarkSeenOnceWithNewestPersistedId() async throws {
         let (viewModel, fake) = makeSeenVM()
         viewModel.conversationAppeared()
         viewModel.store.messages = [
@@ -115,13 +115,15 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = false
 
         await waitForMarkSeen(fake)
-        try? await Task.sleep(nanoseconds: 100_000_000)
+        #expect(viewModel.markSeenDebounceTask == nil, "the fired debounce leaves nothing scheduled")
+        try await expectNever("second agent.markSeen for a single turn finish") {
+            fake.paramsForMethod("agent.markSeen").count > 1
+        }
         let params = fake.paramsForMethod("agent.markSeen")
-        #expect(params.count == 1, "a single turn finish fires exactly once")
         #expect(params.first?["messageId"] as? String == "m2")
     }
 
-    @Test func turnFinishOffScreenDoesNotMarkSeen() async {
+    @Test func turnFinishOffScreenDoesNotMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM()
         // No conversationAppeared() — the conversation is not on screen.
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
@@ -129,14 +131,12 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(
-            !fake.didCallMethod("agent.markSeen"),
-            "turn finish is gated on the conversation being on screen"
-        )
+        #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled off screen")
+        // Turn finish is gated on the conversation being on screen.
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
-    @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async {
+    @Test func turnFinishWhileAppInactiveDoesNotMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM()
         viewModel.conversationAppeared()
         viewModel.store.messages = [textMessage(role: .assistant, text: "old", id: "m1")]
@@ -144,8 +144,7 @@ extension ConversationViewModelTests {
         viewModel.scenePhaseChanged(isActive: false)
         // Let the backgrounding boundary fire settle (it dedupes against the
         // current marker, so no RPC goes out for it).
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        #expect(!fake.didCallMethod("agent.markSeen"))
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
 
         // A turn finishing while backgrounded must not schedule the debounce
         // — otherwise m2 (newer than the marker) would be sent below.
@@ -153,27 +152,23 @@ extension ConversationViewModelTests {
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(
-            !fake.didCallMethod("agent.markSeen"),
-            "turn finish is gated on the app being active"
-        )
+        #expect(viewModel.markSeenDebounceTask == nil, "no debounce is scheduled while inactive")
+        // Turn finish is gated on the app being active.
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
-    @Test func plainEntryDoesNotMarkSeen() async {
+    @Test func plainEntryDoesNotMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM()
         viewModel.store.messages = [textMessage(role: .assistant, text: "old", id: "m1")]
 
         viewModel.conversationAppeared()
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(
-            !fake.didCallMethod("agent.markSeen"),
-            "entry never marks seen — the divider anchor must survive"
-        )
+        #expect(viewModel.markSeenDebounceTask == nil, "entry schedules no debounce")
+        // Entry never marks seen — the divider anchor must survive.
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
-    @Test func replacingStoreDetachesPriorStreamingLifecycle() async {
+    @Test func replacingStoreDetachesPriorStreamingLifecycle() async throws {
         let (viewModel, oldFake) = makeSeenVM()
         let oldStore = viewModel.store
         viewModel.conversationAppeared()
@@ -184,9 +179,10 @@ extension ConversationViewModelTests {
         viewModel.store = ConversationStore(connectionManager: newFake)
         oldStore.isStreaming = false
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(!oldFake.didCallMethod("agent.markSeen"))
-        #expect(!newFake.didCallMethod("agent.markSeen"))
+        #expect(viewModel.markSeenDebounceTask == nil, "the detached store schedules no debounce")
+        try await expectNever("agent.markSeen on either store") {
+            oldFake.didCallMethod("agent.markSeen") || newFake.didCallMethod("agent.markSeen")
+        }
     }
 
     @Test func sendMessageSchedulesDebouncedMarkSeenWithoutFocusGate() async throws {
@@ -205,7 +201,7 @@ extension ConversationViewModelTests {
         )
     }
 
-    @Test func failedSendDoesNotScheduleMarkSeen() async {
+    @Test func failedSendDoesNotScheduleMarkSeen() async throws {
         // Regression (PR #112 review): a failed send delivered nothing, so
         // the seen marker must not advance — markSeen is scheduled only on
         // the sendMessage success path (desktop parity).
@@ -215,11 +211,9 @@ extension ConversationViewModelTests {
 
         await viewModel.sendMessage("hello")
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(
-            !fake.didCallMethod("agent.markSeen"),
-            "a failed send must not schedule the debounced markSeen"
-        )
+        #expect(viewModel.markSeenDebounceTask == nil, "a failed send schedules no debounce")
+        // A failed send must not schedule the debounced markSeen.
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
     @Test func leavingConversationFiresMarkSeenImmediately() async {
@@ -236,22 +230,27 @@ extension ConversationViewModelTests {
         #expect(params.first?["messageId"] as? String == "m1")
     }
 
-    @Test func leaveDuringDebounceWindowDropsPendingMarkSeen() async {
+    @Test func leaveDuringDebounceWindowDropsPendingMarkSeen() async throws {
         let (viewModel, fake) = makeSeenVM(debounce: .milliseconds(200))
         viewModel.conversationAppeared()
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
         viewModel.store.isStreaming = true
         viewModel.store.isStreaming = false // schedules the 200ms debounce
+        let pendingDebounce = viewModel.markSeenDebounceTask
+        #expect(pendingDebounce != nil)
 
         viewModel.conversationDisappeared() // immediate fire supersedes the debounce
+        #expect(viewModel.markSeenDebounceTask == nil, "the debounce is dropped, not left to fire")
         await waitForMarkSeen(fake)
         // A message lands after the boundary; the cancelled debounce must NOT
-        // fire a second call targeting it once its window elapses.
+        // fire a second call targeting it once it unwinds.
         viewModel.store.messages.append(textMessage(role: .assistant, text: "late", id: "m2"))
 
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        await pendingDebounce?.value
+        try await expectNever("second agent.markSeen from the dropped debounce") {
+            fake.paramsForMethod("agent.markSeen").count > 1
+        }
         let params = fake.paramsForMethod("agent.markSeen")
-        #expect(params.count == 1, "the pending debounce was dropped, not just deduped")
         #expect(params.first?["messageId"] as? String == "m1")
     }
 
@@ -270,7 +269,7 @@ extension ConversationViewModelTests {
 }
 
 extension ConversationViewModelTests {
-    @Test func boundaryDoesNotResendWhenMarkerAlreadyCurrent() async {
+    @Test func boundaryDoesNotResendWhenMarkerAlreadyCurrent() async throws {
         let (viewModel, fake) = makeSeenVM()
         viewModel.store.messages = [textMessage(role: .assistant, text: "done", id: "m1")]
         viewModel.store.lastSeenMessageId = "m1"
@@ -278,11 +277,8 @@ extension ConversationViewModelTests {
 
         viewModel.conversationDisappeared()
 
-        try? await Task.sleep(nanoseconds: 150_000_000)
-        #expect(
-            !fake.didCallMethod("agent.markSeen"),
-            "all triggers funnel through the store's dedupe"
-        )
+        // All triggers funnel through the store's dedupe.
+        try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
     }
 
     // MARK: - Pending files

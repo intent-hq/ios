@@ -198,4 +198,40 @@ struct FakeConnectionManagerTests {
         #expect(receivedA.count == 1)
         #expect(receivedB.count == 1)
     }
+
+    // MARK: - Bounded condition waits (ios#261)
+
+    private static let shortTimeoutMilliseconds = 20
+
+    @Test func waitUntilThrowsOnTimeoutInsteadOfContinuing() async {
+        await #expect(throws: ConditionWaitFailure.self) {
+            try await waitUntil(
+                "a condition that never holds",
+                timeout: .milliseconds(Self.shortTimeoutMilliseconds)
+            ) { false }
+        }
+    }
+
+    @Test func expectNeverThrowsWhenTheForbiddenConditionAppearsInsideTheWindow() async {
+        let fake = FakeConnectionManager()
+        fake.responseMap["agent.markSeen"] = ["success": true] as [String: Any]
+        Task { _ = try? await fake.request("agent.markSeen") }
+
+        await #expect(throws: ConditionWaitFailure.self) {
+            try await expectNever("agent.markSeen RPC") { fake.didCallMethod("agent.markSeen") }
+        }
+    }
+
+    @Test func waitForPendingRequestsObservesTheParkedContinuation() async throws {
+        let fake = FakeConnectionManager()
+        fake.pendingMethods.insert("agent.get")
+        let request = Task { try await fake.request("agent.get") is [String: Any] }
+
+        try await fake.waitForPendingRequests("agent.get")
+        #expect(fake.pendingRequestCount("agent.get") == 1)
+
+        fake.resolvePending("agent.get", with: ["ok": true] as [String: Any])
+        #expect(try await request.value)
+        #expect(fake.pendingRequestCount("agent.get") == 0)
+    }
 }

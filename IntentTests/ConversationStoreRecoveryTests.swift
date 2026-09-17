@@ -46,7 +46,7 @@ extension ConversationStoreTests {
             store.pendingQuestionRecovery?.status == .loading,
             "fails closed while the seek is in flight"
         )
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("the seek to settle") { store.pendingQuestionRecovery?.status != .loading }
 
         let seeks = seekRequests(fake)
         #expect(seeks.count == 1, "exactly one seek per marker id")
@@ -61,8 +61,7 @@ extension ConversationStoreTests {
 
         // A later reconcile for the same marker never re-seeks.
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(seekRequests(fake).count == 1)
+        try await expectNever("re-seek for the same marker") { seekRequests(fake).count > 1 }
     }
 
     @Test func markerNamingResidentRowIssuesNoSeek() async throws {
@@ -72,9 +71,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(seekRequests(fake).isEmpty, "a resident row is never seeked")
+        try await expectNever("seek for a resident row") { !seekRequests(fake).isEmpty }
         #expect(store.pendingQuestionRecovery == nil)
     }
 
@@ -85,7 +82,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("the seek to settle") { store.pendingQuestionRecovery?.status != .loading }
 
         #expect(store.pendingQuestionRecovery?.status == .notFound)
         #expect(store.pendingQuestionRecovery?.message == nil)
@@ -103,11 +100,13 @@ extension ConversationStoreTests {
             code: -32_602,
             userInfo: [NSLocalizedDescriptionKey: "unknown message id: q1"]
         )
+        // Shorter than the observation window below, so a retry wrongly scheduled
+        // after the terminal error would fire inside it (default delay is 250 ms).
+        store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 500_000_000)
-
-        #expect(seekRequests(fake).count == 1, "-32602 is terminal — no retry")
+        try await waitUntil("the seek to settle") { store.pendingQuestionRecovery?.status != .loading }
+        try await expectNever("retry after -32602 (terminal)") { seekRequests(fake).count > 1 }
         #expect(store.pendingQuestionRecovery?.status == .notFound)
         #expect(!store.agentNotFound, "an unknown message id is not a deleted agent")
     }
@@ -127,14 +126,14 @@ extension ConversationStoreTests {
         fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await fake.waitForRequests("agent.getConversation", count: 2)
         #expect(seekRequests(fake).count == 1)
         #expect(
             store.pendingQuestionRecovery?.status == .loading,
             "still loading while waiting for the 250 ms retry"
         )
 
-        try await Task.sleep(nanoseconds: 500_000_000)
+        try await waitUntil("the retried seek to settle") { store.pendingQuestionRecovery?.status != .loading }
         #expect(seekRequests(fake).count == 2, "one retry after the transport error")
         #expect(store.pendingQuestionRecovery?.status == .found)
         #expect(store.pendingQuestionRecovery?.message?.id == "q1")
@@ -153,7 +152,7 @@ extension ConversationStoreTests {
         store.markedQuestionRetryDelays = [.milliseconds(10), .milliseconds(10)]
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 200_000_000)
+        try await waitUntil("the retries to exhaust") { store.pendingQuestionRecovery?.status != .loading }
 
         #expect(seekRequests(fake).count == 3, "initial attempt + two retries")
         #expect(store.pendingQuestionRecovery?.status == .error)
@@ -167,7 +166,7 @@ extension ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(seekRequests(fake).count == 1)
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
@@ -178,11 +177,9 @@ extension ConversationStoreTests {
             "agent.getConversation",
             with: ["messages": [questionRow(id: "q1")]] as [String: Any]
         )
-        try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(
-            store.pendingQuestionRecovery == nil,
-            "a late reply for the cancelled seek never settles state"
-        )
+        try await expectNever("late reply for the cancelled seek settling state") {
+            store.pendingQuestionRecovery != nil
+        }
     }
 
     @Test func markerReplacedMidFlightRestartsSeekForTheNewId() async throws {
@@ -193,9 +190,9 @@ extension ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForRequests("agent.getConversation", count: 2)
         pushMarker(store, "q2")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForRequests("agent.getConversation", count: 3)
 
         let seeks = seekRequests(fake)
         #expect(seeks.map { $0["aroundMessageId"] as? String } == ["q1", "q2"])
@@ -212,7 +209,7 @@ extension ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         store.handleStreamEvent("subscription.push", params: [
@@ -245,7 +242,7 @@ extension ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -279,7 +276,7 @@ extension ConversationStoreTests {
         fake.pendingMethods.insert("agent.getConversation")
 
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.pendingQuestionRecovery?.status == .loading)
 
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -314,7 +311,7 @@ extension ConversationStoreTests {
         let store = ConversationStore(connectionManager: fake)
 
         let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.isLoading)
 
         pushMarker(store, "q1")
@@ -324,7 +321,7 @@ extension ConversationStoreTests {
         fake.responseMap["agent.getConversation"] = ["messages": [questionRow(id: "q1")]]
         fake.resolvePending("agent.getConversation", with: ["messages": []] as [String: Any])
         await fetch.value
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("the deferred seek to settle") { store.pendingQuestionRecovery?.status == .found }
 
         #expect(seekRequests(fake).count == 1)
         #expect(store.pendingQuestionRecovery?.status == .found)
@@ -337,7 +334,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         fake.pendingMethods.insert("agent.getConversation")
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.pendingQuestionRecovery != nil)
 
         store.reset()
@@ -352,7 +349,7 @@ extension ConversationStoreTests {
         await store.fetchConversation(agentId: "a", workspaceId: "w")
         fake.pendingMethods.insert("agent.getConversation")
         pushMarker(store, "q1")
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.pendingQuestionRecovery != nil)
 
         store.handleStreamEvent("events.event", params: [
