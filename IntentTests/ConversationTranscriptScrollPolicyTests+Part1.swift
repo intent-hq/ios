@@ -79,23 +79,42 @@ extension ConversationTranscriptScrollPolicyTests {
 
     /// A 36 pt hooks row landing during the bounce back leaves the settled
     /// viewport 36 pt short of the bottom: under the threshold, so no Go to
-    /// End and no further edge to close the gap — the settle re-check does.
-    /// Still interacting it waits again, as it does while another settle
-    /// source's follow is in flight (#346) rather than cancelling and
-    /// re-issuing the same scroll; a viewport that already rests at the
-    /// bottom, or that the fling carried past the threshold (its edge
-    /// applied on the way), is left where it is.
+    /// End and no further edge to close the gap — the settle re-check does,
+    /// through the ordinary follow. Still interacting it waits again, as it
+    /// does while another settle source's follow is in flight (#346) rather
+    /// than cancelling and re-issuing the same scroll; a viewport that
+    /// already rests at the bottom, or past the end (the #271 clamp's), is
+    /// left where it is, as is one not following.
     @Test func deferredContainerRePinFollowsOnSettleWithinBottomBand() {
-        #expect(deferredContainerRePin(distanceToBottom: 36) == .rePin)
+        #expect(deferredContainerRePin(distanceToBottom: 36) == .follow)
         #expect(deferredContainerRePin(distanceToBottom: 36, isInteracting: true) == .deferred)
         #expect(deferredContainerRePin(distanceToBottom: 36, isFollowing: true) == .deferred)
         #expect(deferredContainerRePin(distanceToBottom: 36, isFollowing: true, userIsScrolledAway: true) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 0) == .none)
         #expect(deferredContainerRePin(distanceToBottom: -80) == .none)
-        #expect(deferredContainerRePin(distanceToBottom: 400) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 36, userIsScrolledAway: true) == .none)
         #expect(deferredContainerRePin(distanceToBottom: 36, hasInitiallyScrolled: false) == .none)
         #expect(deferredContainerRePin(distanceToBottom: nil) == .none)
+    }
+
+    /// Regression (#276): the keyboard shrinking the transcript over an
+    /// animated resize re-pins on every frame against a lazy stack still
+    /// re-estimating its rows, and could leave the settled viewport at the
+    /// very top with no gesture and `userIsScrolledAway` still false (only a
+    /// gesture may set it; the per-frame re-pins consumed the away edge).
+    /// The settle re-check pins such a viewport straight back. A fling that
+    /// carried the user past the threshold is still interacting until its
+    /// phase ends, and that ending sets the flag — both leave it alone. A
+    /// follow already in flight (#346) still defers however far away the
+    /// viewport settled, rather than restarting its landing.
+    @Test func deferredContainerRePinPinsBackAViewportTheResizeDisplaced() {
+        #expect(deferredContainerRePin(distanceToBottom: 400) == .rePin)
+        #expect(deferredContainerRePin(distanceToBottom: 12_000) == .rePin)
+        #expect(deferredContainerRePin(distanceToBottom: kTestAtBottomThreshold) == .follow)
+        #expect(deferredContainerRePin(distanceToBottom: 400, isInteracting: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 400, isFollowing: true) == .deferred)
+        #expect(deferredContainerRePin(distanceToBottom: 400, userIsScrolledAway: true) == .none)
+        #expect(deferredContainerRePin(distanceToBottom: 400, hasInitiallyScrolled: false) == .none)
     }
 
     /// Scrolled away, the container resizes at its bottom edge and the content

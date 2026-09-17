@@ -119,6 +119,14 @@ enum Fixture {
     static let evidenceAttachmentPrefix = "transcript-recovery-evidence"
     // Cadence of every poll.
     static let pollInterval: TimeInterval = 0.25
+    // SubmittableTextView's UITextView; tapping it raises the software
+    // keyboard, whose avoidance shrinks the transcript from below (#276).
+    static let composerIdentifier = "composer.textView"
+    static let keyboardTimeout: TimeInterval = 5
+    // The transcript must lose at least this much height for the keyboard
+    // to count as raised: a simulator with a hardware keyboard attached
+    // raises none and would pass without exercising the inset.
+    static let keyboardMinimumShrink: CGFloat = 100
     static let workspaceTimeout: TimeInterval = 30
     static let elementTimeout: TimeInterval = 5
     static let backNavigationAttempts = 2
