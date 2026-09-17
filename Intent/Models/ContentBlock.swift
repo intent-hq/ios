@@ -239,11 +239,23 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
             .map(ImageDataRepresentation.init(reportedThumbnail:)) ?? .unreported
         dataBytes = try? container.decode(Int.self, forKey: .dataBytes)
 
-        id = wireId ?? Self.syntheticId(fallbackIdentity, fingerprint: Self.contentFingerprint([
-            type.rawValue, text, content, language, name, toolName, toolCallId, toolUseId, tool_use_id,
-            data, mimeType, fileName, attachmentId, size.map { String($0) },
-            resource?.uri, resource?.mimeType, resource?.text
-        ]))
+        if let wireId {
+            id = wireId
+        } else {
+            switch fallbackIdentity {
+            case .indexed(let messageId, let index):
+                id = "\(messageId):\(index)"
+            case .fixed(let fixedId):
+                id = fixedId
+            case .fingerprint(let messageId):
+                let fingerprint = Self.contentFingerprint([
+                    type.rawValue, text, content, language, name, toolName, toolCallId, toolUseId, tool_use_id,
+                    data, mimeType, fileName, attachmentId, size.map { String($0) },
+                    resource?.uri, resource?.mimeType, resource?.text
+                ])
+                id = "\(messageId ?? "block"):\(fingerprint)"
+            }
+        }
     }
 
     static func decode(
@@ -254,17 +266,6 @@ nonisolated struct ContentBlock: Identifiable, Codable, Equatable {
         let decoder = JSONDecoder()
         decoder.userInfo[fallbackIdentityUserInfoKey] = fallbackIdentity
         return try? decoder.decode(Self.self, from: data)
-    }
-
-    private static func syntheticId(_ identity: FallbackIdentity, fingerprint: @autoclosure () -> String) -> String {
-        switch identity {
-        case .indexed(let messageId, let index):
-            return "\(messageId):\(index)"
-        case .fixed(let id):
-            return id
-        case .fingerprint(let messageId):
-            return "\(messageId ?? "block"):\(fingerprint())"
-        }
     }
 
     private static let fnvOffsetBasis: UInt64 = 0xcbf2_9ce4_8422_2325
