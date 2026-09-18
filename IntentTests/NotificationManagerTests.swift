@@ -74,7 +74,8 @@ struct NotificationManagerTests {
         isProcessing: Bool = false,
         isResponding: Bool = false,
         isWaitingForOtherAgents: Bool = false,
-        waitingForAgentIds: [String] = []
+        waitingForAgentIds: [String] = [],
+        notificationsMuted: Bool = false
     ) -> AgentSession {
         AgentSession(
             id: id,
@@ -97,7 +98,8 @@ struct NotificationManagerTests {
             createdByAgentId: nil,
             attentionRequestKind: nil,
             attentionRequestReason: nil,
-            attentionRequestTimestamp: nil
+            attentionRequestTimestamp: nil,
+            notificationsMuted: notificationsMuted
         )
     }
 
@@ -151,6 +153,17 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "bg", agents: agents) == true)
     }
 
+    @Test func mutedIdleAgentSuppresses() {
+        let agents = [makeAgent(id: "muted", notificationsMuted: true), makeAgent(id: "other")]
+        #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "muted", agents: agents) == true)
+    }
+
+    @Test func mutedOtherAgentDoesNotSuppressIdleAgent() {
+        // Mute is per agent: another agent's mute never quiets this one.
+        let agents = [makeAgent(id: "idle"), makeAgent(id: "other", notificationsMuted: true)]
+        #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
+    }
+
     @Test func soleQuietAgentAlerts() {
         let agents = [makeAgent(id: "idle"), makeAgent(id: "other")]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
@@ -169,6 +182,14 @@ struct NotificationManagerTests {
 
     @Test func backgroundEventFlagSkips() {
         #expect(NotificationManager.shouldSkipIdleEventFastPath(["isBackground": true]) == true)
+    }
+
+    @Test func mutedEventFlagSkips() {
+        #expect(NotificationManager.shouldSkipIdleEventFastPath(["notificationsMuted": true]) == true)
+    }
+
+    @Test func explicitlyUnmutedEventFlagDoesNotSkip() {
+        #expect(NotificationManager.shouldSkipIdleEventFastPath(["notificationsMuted": false]) == false)
     }
 
     @Test func waitingEventFlagSkips() {

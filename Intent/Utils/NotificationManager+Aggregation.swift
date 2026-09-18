@@ -41,7 +41,8 @@ extension NotificationManager {
 
         // Fresh agent.list read (desktop parity): suppress when the idle agent
         // is still waiting on delegated sub-agents, another agent is active, or
-        // the idle agent is background per metadata. Fail-open on read failure.
+        // the idle agent is background per metadata or muted. Fail-open on
+        // read failure.
         Task { @MainActor [weak self] in
             guard let self else { return }
             let agents = await fetchWorkspaceAgents(
@@ -153,9 +154,12 @@ extension NotificationManager {
     }
 
     /// Emit-time fast path over the raw `agent:idle` payload: skip background
-    /// agents, and agents the daemon already marks as waiting on sub-agents.
+    /// agents, muted agents (`notificationsMuted: true` is stamped on the
+    /// event only when set — PROTOCOL §6.5), and agents the daemon already
+    /// marks as waiting on sub-agents.
     nonisolated static func shouldSkipIdleEventFastPath(_ data: [String: Any]) -> Bool {
         if data["isBackground"] as? Bool ?? false { return true }
+        if data["notificationsMuted"] as? Bool ?? false { return true }
         if data["isWaitingForOtherAgents"] as? Bool ?? false { return true }
         if let waitingIds = data["waitingForAgentIds"] as? [String], !waitingIds.isEmpty { return true }
         return false
@@ -180,7 +184,7 @@ extension NotificationManager {
     static func shouldSuppressIdleAlert(idleAgentId: String, agentList: AgentListFetchResult) -> Bool {
         guard case let .sessions(agents) = agentList else { return false }
         if let idleAgent = agents.first(where: { $0.id == idleAgentId }) {
-            if idleAgent.isBackground { return true }
+            if idleAgent.isBackground || idleAgent.notificationsMuted { return true }
             if idleAgent.isWaitingForOtherAgents || !idleAgent.waitingForAgentIds.isEmpty { return true }
         }
         return agents.contains { agent in
