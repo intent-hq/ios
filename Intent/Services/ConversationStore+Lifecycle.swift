@@ -41,12 +41,10 @@ extension ConversationStore {
     /// `turnInFlight`; `isStreaming`/`isResponding` may always be false).
     /// With `raiseOnly` the flag is only ever raised, never cleared — used as a
     /// backstop on view load so it cannot clobber snapshot/optimistic state.
-    /// The pending attention request is always taken from the server response
-    /// (raise or clear) — it is server-authoritative with no optimistic state.
     /// A reply (or error) that lands while the store is bound to a different
     /// agent than the one the request was issued for — or unbound by a
     /// `reset()` since the request was issued — is dropped entirely: it must
-    /// not touch the new conversation's streaming/attention state, nor mark
+    /// not touch the new conversation's streaming state, nor mark
     /// the new agent deleted on a not-found for the previous one. A request
     /// issued while still unbound (view load, before `fetchConversation`
     /// binds the same agent) stays valid.
@@ -66,7 +64,6 @@ extension ConversationStore {
                 } else {
                     isStreaming = state.isStreaming
                 }
-                attentionRequest = state.attentionRequest
                 guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId

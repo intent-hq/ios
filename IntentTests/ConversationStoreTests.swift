@@ -175,71 +175,6 @@ struct ConversationStoreTests {
         #expect(store.isStreaming)
     }
 
-    // MARK: - attention request raise/retire (PROTOCOL §5.5)
-
-    @Test func fetchAgentStreamingStateRaisesAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "name": "A",
-                "attentionRequestKind": "blocker",
-                "attentionRequestReason": "sandbox is broken",
-                "attentionRequestTimestamp": "2026-07-30T10:00:00Z"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-        #expect(store.attentionRequest?.reason == "sandbox is broken")
-        #expect(store.attentionRequest?.raisedAt == ISO8601DateFormatter().date(from: "2026-07-30T10:00:00Z"))
-    }
-
-    @Test func fetchAgentStreamingStateClearsWhenServerHasNone() async {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": ["id": "a", "name": "A"] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "stale")
-
-        // Attention state is server-authoritative even with raiseOnly (which
-        // only guards isStreaming).
-        await store.fetchAgentStreamingState(agentId: "a", raiseOnly: true)
-
-        #expect(store.attentionRequest == nil)
-    }
-
-    @Test func fetchAgentStreamingStateUpdatesAttentionOnPartialPayload() async {
-        // Attention state must raise/clear even when the payload lacks the
-        // name required by the full session parse.
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.get"] = [
-            "agent": [
-                "id": "a",
-                "attentionRequestKind": "blocker"
-            ] as [String: Any]
-        ] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-
-        await store.fetchAgentStreamingState(agentId: "a")
-
-        #expect(store.attentionRequest?.kind == .blocker)
-    }
-
-    @Test func sendMessageRetiresAttentionRequest() async throws {
-        let fake = FakeConnectionManager()
-        fake.responseMap["agent.sendMessage"] = [:] as [String: Any]
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-
-        try await store.sendMessage(agentId: "a", content: "unblocking you", workspaceId: "w")
-
-        #expect(store.attentionRequest == nil, "sending a message retires the indicator immediately")
-    }
-
     // MARK: - sendMessage messageMetadata threading (intent-hq/monorepo#1789)
 }
 
@@ -274,26 +209,6 @@ extension ConversationStoreTests {
 
         let sent = try #require(fake.requestLog.last { $0.method == "agent.sendMessage" })
         #expect(sent.params["messageMetadata"] == nil, "plain sends stay untagged")
-    }
-
-    @Test func failedSendKeepsAttentionRequest() async {
-        let fake = FakeConnectionManager()
-        fake.errorMap["agent.sendMessage"] = NSError(domain: "WebSocket", code: -32_000)
-        let store = ConversationStore(connectionManager: fake)
-        store.attentionRequest = PendingAttentionRequest(kind: .discussion, reason: "input needed")
-
-        await #expect(throws: (any Error).self) {
-            try await store.sendMessage(agentId: "a", content: "hi", workspaceId: "w")
-        }
-
-        #expect(store.attentionRequest != nil, "a failed send must not retire the indicator")
-    }
-
-    @Test func resetClearsAttentionRequest() {
-        let store = ConversationStore()
-        store.attentionRequest = PendingAttentionRequest(kind: .blocker, reason: "why")
-        store.reset()
-        #expect(store.attentionRequest == nil)
     }
 
     // MARK: - agentNotFound (missing-agent fallback)

@@ -240,18 +240,6 @@ struct AgentSession: Identifiable, Equatable {
         }
         return nil
     }
-
-    /// Extracts the pending attention request straight from a raw agent dict,
-    /// without requiring the full session parse (which needs id/name), so
-    /// attention state can still raise/clear on a partial payload.
-    static func parsePendingAttentionRequest(_ dict: [String: Any]) -> PendingAttentionRequest? {
-        guard let surface = attentionRequestSurface(dict) else { return nil }
-        return PendingAttentionRequest(
-            kind: AgentAttentionKind(wire: surface.kind),
-            reason: oneLiner(surface.reason),
-            raisedAt: ISO8601DateFormatter.lenientDate(from: surface.timestamp)
-        )
-    }
 }
 
 /// A pending attention request ready for display (PROTOCOL §5.5).

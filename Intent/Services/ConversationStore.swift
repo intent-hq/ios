@@ -57,7 +57,6 @@ import SwiftUI
         get { liveTranscript.totalMessageCount }
         set { liveTranscript.totalMessageCount = newValue }
     }
-    var attentionRequest: PendingAttentionRequest?
     var agentNotFound = false
     var pendingQuestionsMessageId: String? {
         get { commands.pendingQuestionsMessageId }
