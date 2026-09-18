@@ -177,6 +177,9 @@ extension NotificationManager {
     ///
     /// The other-agents gate uses the canonical `AgentSession.isActive`
     /// predicate so status-only active agents suppress premature completion alerts.
+    /// Muted agents are excluded from that gate: mute is per agent, and a
+    /// muted agent's own idle is suppressed too, so letting its activity hold
+    /// back an unmuted agent's completion would leave the workspace silent.
     static func shouldSuppressIdleAlert(idleAgentId: String, agents: [AgentSession]) -> Bool {
         shouldSuppressIdleAlert(idleAgentId: idleAgentId, agentList: .sessions(agents))
     }
@@ -188,7 +191,7 @@ extension NotificationManager {
             if idleAgent.isWaitingForOtherAgents || !idleAgent.waitingForAgentIds.isEmpty { return true }
         }
         return agents.contains { agent in
-            agent.id != idleAgentId && agent.isActive
+            agent.id != idleAgentId && agent.isActive && !agent.notificationsMuted
         }
     }
 

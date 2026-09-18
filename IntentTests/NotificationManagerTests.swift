@@ -164,6 +164,25 @@ struct NotificationManagerTests {
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
     }
 
+    @Test func mutedActiveOtherAgentDoesNotSuppressIdleAgent() {
+        // A muted agent's own idle is suppressed, so its activity must not hold
+        // back an unmuted agent's completion or the workspace never notifies.
+        let agents = [
+            makeAgent(id: "idle"),
+            makeAgent(id: "muted-active", isStreaming: true, notificationsMuted: true)
+        ]
+        #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
+    }
+
+    @Test func unmutedActiveOtherAgentStillSuppressesIdleAgent() {
+        let agents = [
+            makeAgent(id: "idle"),
+            makeAgent(id: "muted-active", isStreaming: true, notificationsMuted: true),
+            makeAgent(id: "loud-active", isStreaming: true)
+        ]
+        #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == true)
+    }
+
     @Test func soleQuietAgentAlerts() {
         let agents = [makeAgent(id: "idle"), makeAgent(id: "other")]
         #expect(NotificationManager.shouldSuppressIdleAlert(idleAgentId: "idle", agents: agents) == false)
