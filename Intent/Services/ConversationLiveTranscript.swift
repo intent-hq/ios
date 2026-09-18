@@ -39,8 +39,9 @@ final class ConversationLiveTranscript {
     /// initial fetch only finishes the load when none is left in flight.
     @ObservationIgnored var inFlightInitialLoads = 0
     /// Advances for every live snapshot arrival, including a rejected empty
-    /// snapshot. Older fetches cannot replace a populated transcript, but may
-    /// still seed an empty one because the two sources share no revision.
+    /// snapshot, and whenever a delta changes transcript rows. Older fetches
+    /// cannot replace populated live state, but may still seed an empty
+    /// transcript because the two sources share no revision.
     @ObservationIgnored var chatSnapshotGeneration = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
@@ -287,6 +288,7 @@ extension ConversationLiveTranscript {
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
+        let messagesBeforeDelta = messages
         var sawTerminal = false
         var sawUpsert = false
         let entities = delta.chatBlocks
@@ -306,6 +308,9 @@ extension ConversationLiveTranscript {
             }
         }
         remergeHydratedBlocks()
+        if messages != messagesBeforeDelta {
+            chatSnapshotGeneration &+= 1
+        }
 
         if sawTerminal {
             isStreaming = false

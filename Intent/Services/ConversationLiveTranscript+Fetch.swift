@@ -70,13 +70,21 @@ extension ConversationLiveTranscript {
     ) {
         switch outcome {
         case .success(let page?):
-            // Preserve populated live state after any later snapshot arrival.
-            // An empty transcript deliberately admits the page despite a
-            // mismatch: without a shared revision, this is the recovery path
+            // An empty fetched page may complete an already-empty load, but
+            // cannot prune rows supplied by either live pushes or another fetch.
+            if page.messages.isEmpty, !messages.isEmpty {
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped empty fetch reply over populated transcript"
+                )
+                return
+            }
+            // Preserve populated live state after any later live generation.
+            // An empty transcript deliberately admits a non-empty page despite
+            // a mismatch: without a shared revision, this is the recovery path
             // for a delayed empty snapshot followed by a populated fetch.
             if snapshotGenerationAtIssue != chatSnapshotGeneration, !messages.isEmpty {
                 AppLog.conversation.debug(
-                    "[ConversationStore] Dropped fetch reply after a later chat snapshot preserved populated state"
+                    "[ConversationStore] Dropped fetch reply after later live chat changes preserved populated state"
                 )
                 return
             }
