@@ -122,15 +122,41 @@ struct CreationPickerControlsTests {
                 #expect(snapshot.model.value == nil)
                 #expect(snapshot.provider.hasFiniteNonemptyFrame)
                 #expect(snapshot.model.hasFiniteNonemptyFrame)
+                #expect(snapshot.provider.hasMinimumInteractiveSize)
+                #expect(snapshot.model.hasMinimumInteractiveSize)
                 #expect(snapshot.horizontallyContains(snapshot.provider.frame))
                 #expect(snapshot.horizontallyContains(snapshot.model.frame))
                 #expect(snapshot.hostFrame.intersects(snapshot.provider.frame))
                 #expect(snapshot.hostFrame.intersects(snapshot.model.frame))
-                #expect(snapshot.provider.frame.maxY <= snapshot.model.frame.minY)
+                #expect(snapshot.hasNoMeaningfulVerticalOverlap)
             }
-            #expect(accessibility.provider.frame.height >= normal.provider.frame.height)
-            #expect(accessibility.model.frame.height >= normal.model.frame.height)
         }
+    }
+
+    @Test func pickerGeometryContractRejectsMaterialOverlapAndInvalidFrames() {
+        let boundary: CGFloat = 100
+        let lowerFrame = CGRect(x: 0, y: boundary, width: 200, height: 44)
+
+        #expect(PickerLayoutSnapshot.hasNoMeaningfulVerticalOverlap(
+            upper: CGRect(x: 0, y: 0, width: 200, height: boundary.nextUp),
+            lower: lowerFrame
+        ))
+        #expect(!PickerLayoutSnapshot.hasNoMeaningfulVerticalOverlap(
+            upper: CGRect(x: 0, y: 0, width: 200, height: boundary + 8),
+            lower: lowerFrame
+        ))
+
+        let readable = PickerElementSnapshot(label: nil, value: nil, frame: lowerFrame, traits: [])
+        let undersized = PickerElementSnapshot(
+            label: nil,
+            value: nil,
+            frame: CGRect(x: 0, y: 0, width: 200, height: 43),
+            traits: []
+        )
+        let invalid = PickerElementSnapshot(label: nil, value: nil, frame: .zero, traits: [])
+        #expect(readable.hasMinimumInteractiveSize)
+        #expect(!undersized.hasMinimumInteractiveSize)
+        #expect(!invalid.hasFiniteNonemptyFrame)
     }
 
     @Test(
@@ -234,6 +260,9 @@ private enum PickerHostLayout: CaseIterable {
 }
 
 private struct PickerElementSnapshot {
+    // Apple's minimum tappable target is 44 points in each dimension.
+    private static let minimumInteractiveDimension: CGFloat = 44
+
     let label: String?
     let value: String?
     let frame: CGRect
@@ -243,6 +272,11 @@ private struct PickerElementSnapshot {
         let values = [frame.minX, frame.minY, frame.width, frame.height]
         return values.allSatisfy { $0.isFinite } && frame.width > 0 && frame.height > 0
     }
+
+    var hasMinimumInteractiveSize: Bool {
+        frame.width >= Self.minimumInteractiveDimension
+            && frame.height >= Self.minimumInteractiveDimension
+    }
 }
 
 private struct PickerLayoutSnapshot {
@@ -250,8 +284,18 @@ private struct PickerLayoutSnapshot {
     let provider: PickerElementSnapshot
     let model: PickerElementSnapshot
 
+    var hasNoMeaningfulVerticalOverlap: Bool {
+        Self.hasNoMeaningfulVerticalOverlap(upper: provider.frame, lower: model.frame)
+    }
+
     func horizontallyContains(_ frame: CGRect) -> Bool {
         frame.minX >= hostFrame.minX && frame.maxX <= hostFrame.maxX
+    }
+
+    static func hasNoMeaningfulVerticalOverlap(upper: CGRect, lower: CGRect) -> Bool {
+        // Coordinate arithmetic can round a shared boundary by one representable value.
+        let tolerance = max(upper.maxY.ulp, lower.minY.ulp)
+        return upper.maxY <= lower.minY + tolerance
     }
 }
 
