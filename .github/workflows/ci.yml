@@ -74,48 +74,31 @@ jobs:
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
-    # SwiftLint" step in build-and-test never sees a skipped job. Lint needs
-    # no Go, SPM or simulator work: just the checkout and the toolchain's
-    # SourceKit.
-    runs-on: macos-15
+    # SwiftLint" step in build-and-test never sees a skipped job. The official
+    # Linux release uses its in-process sourcekitd, so lint needs no macOS,
+    # Xcode, Go, SPM or simulator work.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Same Xcode selection logic as the iOS job below: SwiftLint uses
-      # SourceKit from the selected toolchain, so lint with the toolchain the
-      # build compiles with.
-      - name: Select Xcode
-        run: |
-          echo "Available Xcode bundles:"
-          ls -d /Applications/Xcode*.app 2>/dev/null || true
-          xcode=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -n "$xcode" ] && [ -d "$xcode" ]; then
-            echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-            echo "Selected $xcode"
-            DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
-          else
-            echo "No /Applications/Xcode*.app bundle found; using default: $(xcode-select -p)"
-            xcodebuild -version
-          fi
-
       # scripts/swiftlint.sh rejects any version but the pinned one, so
-      # install exactly that release asset rather than `brew install
-      # swiftlint` (the formula floats) or whatever the image preinstalls.
+      # install exactly the official Linux release asset rather than whatever
+      # the image preinstalls.
       # The sha256 is the release asset's; recompute it from a fresh download
       # when bumping the version.
       - name: Install SwiftLint 0.65.1
         env:
           SWIFTLINT_VERSION: 0.65.1
-          SWIFTLINT_SHA256: c1e429b0599cf1b516f369a2d9ec04eaf0e436f3c12b637df8851fa52ff694d0
+          SWIFTLINT_SHA256: caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d
         run: |
           cd "$RUNNER_TEMP"
-          curl -fsSL -o portable_swiftlint.zip \
-            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
-          echo "${SWIFTLINT_SHA256}  portable_swiftlint.zip" | shasum -a 256 -c
+          curl -fsSL -o swiftlint_linux_amd64.zip \
+            "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/swiftlint_linux_amd64.zip"
+          echo "${SWIFTLINT_SHA256}  swiftlint_linux_amd64.zip" | sha256sum -c -
           mkdir -p swiftlint
-          unzip -q portable_swiftlint.zip -d swiftlint
+          unzip -q swiftlint_linux_amd64.zip -d swiftlint
           echo "$RUNNER_TEMP/swiftlint" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/swiftlint/swiftlint" version
 
