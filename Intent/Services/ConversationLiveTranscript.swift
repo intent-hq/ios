@@ -48,12 +48,17 @@ final class ConversationLiveTranscript {
     private var chatChannelActive = false
     private var chatSeeded = false
     private var chatExpectedSeq = 0
-    private var resnapshotInProgress = false
+    @ObservationIgnored private(set) var resnapshotInProgress = false
+    /// One rejected empty snapshot gets a replacement subscription. If that
+    /// replacement also reports empty after recovery completes, accept it as
+    /// an authoritative deletion instead of resubscribing without a bound.
+    @ObservationIgnored var emptySnapshotRecoveryAttempts = 0
     private let timestampFormatter = ISO8601DateFormatter()
     @ObservationIgnored private var hydratedBlocks: [String: ContentBlock] = [:]
     @ObservationIgnored private var hydratedBlockOrder: [String] = []
 
     private static let maxHydratedBlocks = 30
+    private static let maxEmptySnapshotRecoveryAttempts = 1
 
     init(connectionManager: ConnectionManagerRouting) {
         self.connectionManager = connectionManager
@@ -256,15 +261,26 @@ extension ConversationLiveTranscript {
         guard let items = push.snapshot else { return }
         chatSnapshotGeneration &+= 1
         let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
-        guard !snapshotMessages.isEmpty || messages.isEmpty else {
-            AppLog.conversation.warning(
-                "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
-            )
-            if !resnapshotInProgress {
-                resnapshotInProgress = true
-                Task { await resnapshot() }
+        if snapshotMessages.isEmpty, !messages.isEmpty {
+            if emptySnapshotRecoveryAttempts >= Self.maxEmptySnapshotRecoveryAttempts,
+               !resnapshotInProgress {
+                AppLog.conversation.warning(
+                    "[ConversationStore] Accepting repeated empty chat snapshot after recovery"
+                )
+                emptySnapshotRecoveryAttempts = 0
+            } else {
+                AppLog.conversation.warning(
+                    "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
+                )
+                if !resnapshotInProgress {
+                    emptySnapshotRecoveryAttempts += 1
+                    resnapshotInProgress = true
+                    Task { await resnapshot() }
+                }
+                return
             }
-            return
+        } else if !snapshotMessages.isEmpty {
+            emptySnapshotRecoveryAttempts = 0
         }
         chatLive = true
         chatSeeded = true
@@ -288,7 +304,6 @@ extension ConversationLiveTranscript {
     }
 
     private func applyDelta(_ delta: SubscriptionPush.DeltaPayload) {
-        let messagesBeforeDelta = messages
         var sawTerminal = false
         var sawUpsert = false
         let entities = delta.chatBlocks
@@ -308,8 +323,9 @@ extension ConversationLiveTranscript {
             }
         }
         remergeHydratedBlocks()
-        if messages != messagesBeforeDelta {
+        if !entities.isEmpty || !delta.removedIds.isEmpty {
             chatSnapshotGeneration &+= 1
+            emptySnapshotRecoveryAttempts = 0
         }
 
         if sawTerminal {
@@ -432,6 +448,7 @@ extension ConversationLiveTranscript {
         chatChannelActive = false
         chatSeeded = false
         resnapshotInProgress = false
+        emptySnapshotRecoveryAttempts = 0
     }
 
     func reset() {
@@ -457,5 +474,6 @@ extension ConversationLiveTranscript {
         chatExpectedSeq = 0
         chatSnapshotGeneration = 0
         resnapshotInProgress = false
+        emptySnapshotRecoveryAttempts = 0
     }
 }

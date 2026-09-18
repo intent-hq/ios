@@ -189,7 +189,7 @@ extension ConversationStoreIntegrationTests {
         ]
     }
 
-    @Test func recoveryEmptyFetchBeforeReplacementSnapshotPreservesTranscript() async throws {
+    @Test func repeatedEmptySnapshotConfirmsDeletionAfterRecovery() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
@@ -202,8 +202,10 @@ extension ConversationStoreIntegrationTests {
             kind: .snapshot,
             seq: 0,
             snapshot: [conversationRow(id: "msg-1", text: "Hello")],
-            delta: nil
+            delta: nil,
+            snapshotMeta: ["truncated": true, "totalMessages": 50]
         ))
+        #expect(store.isTruncated && store.totalMessageCount == 50)
 
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-2"]
         fake.deliverSubscriptionPush(SubscriptionPush(
@@ -220,7 +222,10 @@ extension ConversationStoreIntegrationTests {
             "agent.getConversation",
             with: ["messages": [] as [[String: Any]]] as [String: Any]
         )
-        for _ in 0..<20 { await Task.yield() }
+        try await waitUntil("empty-snapshot recovery completion") {
+            !store.liveTranscript.resnapshotInProgress
+                && fake.paramsForMethod("chat.subscribe").count == 2
+        }
         #expect(store.messages.map(\.id) == ["msg-1"])
 
         fake.pendingMethods.remove("agent.getConversation")
@@ -230,9 +235,15 @@ extension ConversationStoreIntegrationTests {
             kind: .snapshot,
             seq: 0,
             snapshot: [],
-            delta: nil
+            delta: nil,
+            snapshotMeta: ["truncated": false, "totalMessages": 0]
         ))
-        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(store.messages.isEmpty)
+        #expect(!store.isTruncated)
+        #expect(store.totalMessageCount == 0)
+        try await expectNever("another empty-snapshot recovery") {
+            fake.paramsForMethod("chat.subscribe").count > 2
+        }
     }
 
     @Test func deltaSupersedesPendingFetch() async throws {

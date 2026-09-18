@@ -4,6 +4,7 @@ extension ConversationLiveTranscript {
     func bind(agentId newAgentId: String, workspaceId: String?) {
         if agentId != newAgentId {
             bindingGeneration &+= 1
+            emptySnapshotRecoveryAttempts = 0
         }
         agentId = newAgentId
         if let workspaceId {
