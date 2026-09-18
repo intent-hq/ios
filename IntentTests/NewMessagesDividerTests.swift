@@ -51,6 +51,7 @@ struct ConversationTranscriptScrollPolicyTests {
         state.initialScrollScheduled = true
         state.initialScrollAwaitingScrollView = true
         state.initialScrollPerformed = true
+        state.isScrollingToBottom = true
         let generation = state.initialScrollGeneration
 
         #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
@@ -64,6 +65,7 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(!state.initialScrollScheduled)
         #expect(!state.initialScrollAwaitingScrollView)
         #expect(!state.initialScrollPerformed)
+        #expect(!state.isScrollingToBottom)
         #expect(state.initialScrollGeneration == generation + 1)
         #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
             from: 0,

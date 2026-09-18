@@ -95,6 +95,7 @@ final class ConversationTranscriptScrollState {
         initialScrollAwaitingScrollView = false
         initialScrollPerformed = false
         forcedFollowTakenOverByGesture = false
+        isScrollingToBottom = false
         goToEndRequested = false
     }
 

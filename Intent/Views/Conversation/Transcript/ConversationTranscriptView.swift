@@ -165,6 +165,11 @@ private extension ConversationTranscriptView {
             cancelPastEndRePin()
             cancelDeferredContainerRePin()
             cancelBottomBandRePin()
+            // The lifecycle and its tasks live in the parent-owned scroll
+            // state, so they survive the empty view replacing this transcript.
+            // Reuse the all-owner cancellation before resetting the entry
+            // latches; the reset clears its gesture-specific fallback state.
+            cancelPendingFollowOnTakeover(proxy: proxy)
             scrollState.rearmAfterTranscriptEmptied()
             return
         case .rePinIfPastEnd:
