@@ -264,19 +264,22 @@ jobs:
       # (xcodebuild refuses an existing path). xcodebuild forwards its
       # TEST_RUNNER_-prefixed environment variables into the test process
       # (minus the prefix), carrying the tcecho token to the TailcatKit
-      # smoke test. A pull_request (or unfiltered dispatch) selects IntentTests
-      # so the separate iOS UI Tests job can run IntentUITests in
-      # parallel. A filtered workflow_dispatch keeps using the requested
-      # selector. The script resolves every selector against xcodebuild -enumerate-tests
-      # before testing and checks the result bundle afterwards: a selector that
-      # matches or executes nothing fails the step with exit 82, an unverifiable
-      # selection with 83, and the per-selector table is appended to the job
-      # summary (see the script header).
+      # smoke test. A pull_request (or unfiltered dispatch) uses the unit-only
+      # subcommand, which skips IntentUITests without selector enumeration. A
+      # filtered workflow_dispatch retains the regular verified-selector path:
+      # a selector that matches or executes nothing fails with exit 82, an
+      # unverifiable selection with 83, and the per-selector table is appended
+      # to the job summary (see the script header).
       - name: Run unit tests
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
-          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'IntentTests' }}
-        run: scripts/xcodebuild.sh test-without-building-unit
+          ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || '' }}
+        run: |
+          if [ -n "$ONLY_TESTING" ]; then
+            scripts/xcodebuild.sh test-without-building
+          else
+            scripts/xcodebuild.sh test-without-building-unit
+          fi
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
       # ObjCCallbackIsolationTests and ExternalLinkTests inspect repository

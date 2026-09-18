@@ -823,6 +823,11 @@ assert_contains "test-ios-unit summary row counts the selector's tests" "$(cat "
   "  IntentTests/DemoFixturesTests         2         2        0       0"
 
 echo "# test-without-building-unit: split CI path skips IntentUITests without rebuilding"
+status=$(run_filtered splitunitplain "" test-without-building-unit)
+assert_eq "unfiltered split unit path exits 0" "$status" 0
+assert_eq "unfiltered split unit path makes one call without enumeration" "$(argv_count splitunitplain)" 1
+assert_eq "unfiltered split unit path carries only the UI skip" "$(argv_line splitunitplain 1)" \
+  "argv: [test-without-building] [-project] [Intent.xcodeproj] [-scheme] [Intent] [-destination] [platform=iOS Simulator,id=$SIM_UDID] [-parallel-testing-enabled] [NO] [-skip-testing:IntentUITests]"
 status=$(run_filtered splitunitskip "IntentUITests/ConversationTranscriptScrollUITests" test-without-building-unit)
 out=$(cat "$work/splitunitskip.out")
 assert_eq "UI selector under test-without-building-unit exits 82" "$status" 82
