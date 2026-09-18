@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Combine
 import Foundation
 @testable import Intent
@@ -61,61 +62,62 @@ struct ConversationStoreIntegrationTests {
             subscriptionId: "sub-1",
             kind: .snapshot,
             seq: 0,
-            snapshot: [[
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-09-18T00:00:00Z"
-            ]],
+            snapshot: [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ],
             delta: nil
         ))
         #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(store.isLoading)
 
-        // The fetch was captured before the newer live snapshot and returns its
-        // older empty page after the snapshot has already populated the UI.
         fake.resolvePending(
             "agent.getConversation",
             with: ["messages": [] as [[String: Any]]] as [String: Any]
         )
         await fetch.value
 
-        // Bug demonstration: mergeFetchedMessages([]) removes every non-streaming
-        // row from the newer snapshot, then the initial load settles permanently.
-        #expect(store.messages.isEmpty)
+        #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(!store.isLoading)
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
         try await expectNever("an automatic conversation retry") {
             fake.paramsForMethod("agent.getConversation").count > 1
         }
 
-        // Re-entering with a fresh store does issue a fresh read and recovers,
-        // ruling out connection-level state as the reason the first store sticks.
         fake.pendingMethods.remove("agent.getConversation")
         fake.responseMap["agent.getConversation"] = [
-            "messages": [[
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-09-18T00:00:00Z"
-            ]]
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
         ]
         let reopenedStore = ConversationStore(connectionManager: fake)
         await reopenedStore.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
         #expect(reopenedStore.messages.map(\.id) == ["msg-1"])
     }
 
-    @Test func firstOpenDelayedEmptySnapshotClobbersFetchedConversation() async {
+    @Test func firstOpenDelayedEmptySnapshotClobbersFetchedConversation() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)
         fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.responseMap["chat.unsubscribe"] = [:] as [String: Any]
         fake.responseMap["agent.getConversation"] = [
-            "messages": [[
-                "id": "msg-1",
-                "role": "user",
-                "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
-                "timestamp": "2026-09-18T00:00:00Z"
-            ]]
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
         ]
 
         await store.subscribeLiveChat(agentId: "agent-1")
@@ -130,10 +132,10 @@ struct ConversationStoreIntegrationTests {
             delta: nil
         ))
 
-        // Bug demonstration: a delayed empty seq-0 snapshot is authoritative
-        // even though the first-open fetch already proved the transcript non-empty.
-        #expect(store.messages.isEmpty)
+        #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(!store.isLoading)
+        try await fake.waitForRequests("agent.getConversation", count: 2)
+        #expect(store.messages.map(\.id) == ["msg-1"])
         #expect(fake.hasSubscriptionHandler(id: "sub-1"))
     }
 

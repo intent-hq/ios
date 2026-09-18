@@ -38,6 +38,9 @@ final class ConversationLiveTranscript {
     /// Initial fetches (`isLoading = true`) still awaiting their page. A stale
     /// initial fetch only finishes the load when none is left in flight.
     @ObservationIgnored var inFlightInitialLoads = 0
+    /// Advances for every live snapshot arrival so a fetch issued before that
+    /// snapshot cannot overwrite newer channel state when its reply lands.
+    @ObservationIgnored var chatSnapshotGeneration = 0
     private var chatLive = false
     @ObservationIgnored private var chatSubscriptionId: String?
     private var chatChannelActive = false
@@ -249,12 +252,24 @@ extension ConversationLiveTranscript {
 
     private func applySnapshot(_ push: SubscriptionPush) {
         guard let items = push.snapshot else { return }
+        chatSnapshotGeneration &+= 1
+        let snapshotMessages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
+        guard !snapshotMessages.isEmpty || messages.isEmpty else {
+            AppLog.conversation.warning(
+                "[ConversationStore] Rejecting empty chat snapshot over populated transcript, resubscribing..."
+            )
+            if !resnapshotInProgress {
+                resnapshotInProgress = true
+                Task { await resnapshot() }
+            }
+            return
+        }
         chatLive = true
         chatSeeded = true
         chatExpectedSeq = push.seq + 1
         // `parse` pre-decodes off MainActor; the fallback covers pushes built
         // directly from raw dictionaries (tests).
-        messages = push.snapshotMessages ?? ConversationMessage.parseMessages(items)
+        messages = snapshotMessages
         remergeHydratedBlocks()
 
         isTruncated = push.snapshotMeta?["truncated"] as? Bool ?? false
@@ -434,6 +449,7 @@ extension ConversationLiveTranscript {
         chatChannelActive = false
         chatSeeded = false
         chatExpectedSeq = 0
+        chatSnapshotGeneration = 0
         resnapshotInProgress = false
     }
 }

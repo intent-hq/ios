@@ -32,6 +32,7 @@ extension ConversationLiveTranscript {
             isLoading = true
             inFlightInitialLoads += 1
         }
+        let snapshotGenerationAtIssue = chatSnapshotGeneration
 
         var params: [String: Any] = [
             "agentId": agentId,
@@ -59,13 +60,22 @@ extension ConversationLiveTranscript {
             }
         }
 
-        applyFetchOutcome(outcome)
+        applyFetchOutcome(outcome, snapshotGenerationAtIssue: snapshotGenerationAtIssue)
         finishInitialLoad(ifNeeded: isInitialLoad, outcomeWasCurrent: outcome != nil)
     }
 
-    private func applyFetchOutcome(_ outcome: Result<ConversationPage?, Error>?) {
+    private func applyFetchOutcome(
+        _ outcome: Result<ConversationPage?, Error>?,
+        snapshotGenerationAtIssue: Int
+    ) {
         switch outcome {
         case .success(let page?):
+            if snapshotGenerationAtIssue != chatSnapshotGeneration, !messages.isEmpty {
+                AppLog.conversation.debug(
+                    "[ConversationStore] Dropped fetch reply superseded by a newer chat snapshot"
+                )
+                return
+            }
             isTruncated = page.truncated
             totalMessageCount = page.totalMessages ?? page.messages.count
             mergeFetchedMessages(page.messages)
