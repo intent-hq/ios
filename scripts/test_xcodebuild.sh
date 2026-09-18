@@ -822,6 +822,21 @@ assert_contains "test-ios-unit real run carries the selector and the skip flag" 
 assert_contains "test-ios-unit summary row counts the selector's tests" "$(cat "$work/unitok.out")" \
   "  IntentTests/DemoFixturesTests         2         2        0       0"
 
+echo "# test-without-building-unit: split CI path skips IntentUITests without rebuilding"
+status=$(run_filtered splitunitskip "IntentUITests/ConversationTranscriptScrollUITests" test-without-building-unit)
+out=$(cat "$work/splitunitskip.out")
+assert_eq "UI selector under test-without-building-unit exits 82" "$status" 82
+assert_contains "split unit path names the UI exclusion" "$out" \
+  "ONLY_TESTING selector 'IntentUITests/ConversationTranscriptScrollUITests' is excluded by -skip-testing:IntentUITests on this subcommand"
+assert_eq "split unit path only enumerates before rejecting the UI selector" "$(argv_count splitunitskip)" 1
+assert_contains "split unit enumeration carries the UI skip" "$(argv_line splitunitskip 1)" \
+  "] [-skip-testing:IntentUITests]"
+status=$(run_filtered splitunitok "IntentTests/DemoFixturesTests" test-without-building-unit)
+assert_eq "unit selector under test-without-building-unit exits 0" "$status" 0
+assert_eq "split unit path enumerates and runs without building" "$(argv_count splitunitok)" 2
+assert_contains "split unit real run carries the selector and UI skip" "$(argv_line splitunitok 2)" \
+  "/Intent.xcresult] [-only-testing:IntentTests/DemoFixturesTests] [-skip-testing:IntentUITests]"
+
 echo "# (a) a green Swift Testing run whose XCTest side executed 0 tests passes"
 policy=()
 for n in $(seq 1 71); do policy+=("IntentTests/ConversationTranscriptScrollPolicyTests/case$n()=Passed"); done

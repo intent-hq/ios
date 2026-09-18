@@ -276,7 +276,7 @@ jobs:
         env:
           TEST_RUNNER_TAILCAT_SMOKE_TOKEN: ${{ env.TAILCAT_SMOKE_TOKEN }}
           ONLY_TESTING: ${{ github.event_name == 'workflow_dispatch' && inputs.only_testing || 'IntentTests' }}
-        run: scripts/xcodebuild.sh test-without-building
+        run: scripts/xcodebuild.sh test-without-building-unit
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
       # ObjCCallbackIsolationTests and ExternalLinkTests inspect repository
