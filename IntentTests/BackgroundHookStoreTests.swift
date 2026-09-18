@@ -249,9 +249,10 @@ extension BackgroundHookStoreTests {
                 ]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("hook:run-started fold") {
+            store.hooks.first?.state == .running
+        }
 
-        #expect(store.hooks[0].state == .running)
         #expect(store.hooks[0].code == "const s = await ws.pr.status();")
     }
 
@@ -275,9 +276,9 @@ extension BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-1"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        #expect(store.hooks.count == 1)
+        try await expectNever("fold of a foreign-workspace or foreign-subscription event") {
+            store.hooks.count != 1
+        }
     }
 
     @Test func unknownHookEventTriggersRefetch() async throws {
@@ -294,11 +295,11 @@ extension BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-new"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 100_000_000)
+        try await waitUntil("hook.list refetch for the unknown hook") {
+            store.hooks.map(\.hookId) == ["hook-new"]
+        }
 
         #expect(fake.paramsForMethod("hook.list").count == 1)
-        #expect(store.hooks.count == 1)
-        #expect(store.hooks[0].hookId == "hook-new")
     }
 
     @Test func runNowAndCancelSendExactParams() async throws {
@@ -325,14 +326,9 @@ extension BackgroundHookStoreTests {
 
         fake.simulateDisconnect()
         fake.simulateConnect()
-        await Task.yield()
-        for _ in 0..<40 {
-            try await Task.sleep(nanoseconds: 50_000_000)
-            if fake.didCallMethod("hook.list") { break }
-        }
+        try await fake.waitForRequests("hook.list")
 
         #expect(fake.didCallMethod("events.subscribe"))
-        #expect(fake.didCallMethod("hook.list"))
         #expect(store.hooks.count == 1)
     }
 
@@ -356,7 +352,7 @@ extension BackgroundHookStoreTests {
         // Suspend hook.list requests so a fold can land while one is in flight.
         fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("hook.list")
 
         fake.deliverEvent(method: "events.event", params: [
             "subscriptionId": "sub-hooks",
@@ -366,19 +362,18 @@ extension BackgroundHookStoreTests {
                 "data": ["workspaceId": "ws-1", "hookId": "hook-1"]
             ]
         ] as [String: Any])
-        try await Task.sleep(nanoseconds: 20_000_000)
-        #expect(store.hooks.isEmpty)
+        try await waitUntil("hook:cancelled fold") { store.hooks.isEmpty }
 
         // Resolve the in-flight request with the STALE payload — it still
         // lists the cancelled hook. The queued follow-up stays suspended, so
         // a wrongly applied stale response cannot be masked by convergence.
         fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
-        try await Task.sleep(nanoseconds: 20_000_000)
-
-        // The stale response must not restore the cancelled hook; the
-        // discarded response queues one follow-up fetch to converge.
-        #expect(store.hooks.isEmpty)
+        // The discarded response queues exactly one follow-up fetch to converge.
+        try await fake.waitForRequests("hook.list", count: 2)
         #expect(fake.paramsForMethod("hook.list").count == 2)
+
+        // The stale response must not restore the cancelled hook.
+        #expect(store.hooks.isEmpty)
 
         // Fresh server state (post-cancel) for the queued follow-up fetch.
         fake.resolvePending("hook.list", with: ["hooks": [] as [[String: Any]]])
@@ -391,13 +386,17 @@ extension BackgroundHookStoreTests {
         let store = await makeSubscribedStore(fake, hooks: [makeHookDict()])
         fake.clearRequestLog()
 
-        fake.delayMap["hook.list"] = 100_000_000
+        // Suspend hook.list so unsubscribe lands while the request is in flight.
+        fake.pendingMethods.insert("hook.list")
         let refetchTask = Task { await store.refetch() }
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await fake.waitForPendingRequests("hook.list")
 
         await store.unsubscribe()
         #expect(store.hooks.isEmpty)
 
+        // Resolve the in-flight request with the STALE payload — it still
+        // lists the hook that unsubscribe cleared.
+        fake.resolvePending("hook.list", with: ["hooks": [makeHookDict()]])
         await refetchTask.value
 
         // The stale response must not repopulate the cleared list, and the
@@ -415,11 +414,8 @@ extension BackgroundHookStoreTests {
         #expect(store != nil)
 
         store = nil
-        // deinit hops to the main actor to remove the handler; wait for that task
-        for _ in 0..<40 {
-            if fake.eventHandlerCount == 0 { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        try await waitUntil("deinit to remove the event handler") {
+            fake.eventHandlerCount == 0
         }
-        #expect(fake.eventHandlerCount == 0)
     }
 }

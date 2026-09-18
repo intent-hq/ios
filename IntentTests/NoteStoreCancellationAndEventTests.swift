@@ -14,13 +14,7 @@ extension NoteStoreIntegrationTests {
         fake.pendingMethods.insert("note.get")
 
         let fetch = Task { await store.fetchNote(noteId: "note-1", workspaceId: "ws-1") }
-        for _ in 0 ..< 40 {
-            if fake.didCallMethod("note.get") {
-                break
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
-        #expect(fake.didCallMethod("note.get"))
+        try await fake.waitForPendingRequests("note.get")
 
         // The consuming task is cancelled (screen dismissed) and the daemon's
         // not-found answer resumes the request in the same MainActor turn,
@@ -62,7 +56,7 @@ extension NoteStoreIntegrationTests {
         // note.get stays in flight.
         fake.pendingMethods.insert("note.get")
         let fetch = Task { await store.fetchNotes(workspaceId: "ws-1") }
-        try await Task.sleep(for: .milliseconds(100))
+        try await fake.waitForPendingRequests("note.get")
         #expect(store.note(byId: "spec")?.isContentStale == true)
         #expect(fake.paramsForMethod("note.get").count == 1)
 
@@ -131,10 +125,9 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:deleted", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(probe.fired == 1,
-                "note:deleted must fire noteChanges so the detail view can re-validate")
+        // note:deleted must fire noteChanges so the detail view can re-validate.
+        try await waitUntil("noteChanges element for note:deleted") { probe.fired == 1 }
         await probe.cancel()
     }
 
@@ -150,10 +143,9 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:updated", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(fake.didCallMethod("note.list"))
-        #expect(probe.fired == 1)
+        try await waitUntil("note.list refetch and noteChanges element for note:updated") {
+            fake.didCallMethod("note.list") && probe.fired == 1
+        }
         await probe.cancel()
     }
 
@@ -167,11 +159,11 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:created", "workspaceId": "ws-1", "noteId": "note-2"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(fake.didCallMethod("note.list"), "a new note changes list membership")
-        #expect(probe.fired == 0,
-                "a newly created note can never be the open note; refreshNote is not needed")
+        // A new note changes list membership, but can never be the open
+        // note, so refreshNote is not needed.
+        try await fake.waitForRequests("note.list")
+        try await expectNever("noteChanges element for note:created") { probe.fired != 0 }
         await probe.cancel()
     }
 
@@ -187,10 +179,9 @@ extension NoteStoreIntegrationTests {
                 "event": ["type": type, "workspaceId": "ws-1", "noteId": "note-1"]
             ])
         }
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        #expect(!fake.didCallMethod("note.list"))
-        #expect(probe.fired == 0)
+        try await expectNever("note.list refetch or noteChanges element for non-allowlisted events") {
+            fake.didCallMethod("note.list") || probe.fired != 0
+        }
         await probe.cancel()
     }
 
@@ -206,8 +197,7 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:updated", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(probe.fired == 1)
+        try await waitUntil("noteChanges element for note:updated") { probe.fired == 1 }
 
         await probe.cancel()
         #expect(probe.finished)
@@ -215,8 +205,7 @@ extension NoteStoreIntegrationTests {
         fake.deliverEvent(method: "events.event", params: [
             "event": ["type": "note:updated", "workspaceId": "ws-1", "noteId": "note-1"]
         ])
-        try await Task.sleep(nanoseconds: 100_000_000)
-        #expect(probe.fired == 1, "no element may be delivered after cancellation")
+        try await expectNever("noteChanges element after cancellation") { probe.fired != 1 }
     }
 
     @Test func storeDeallocatesAfterNoteChangesConsumerIsCancelled() async throws {
@@ -231,14 +220,10 @@ extension NoteStoreIntegrationTests {
         await probe.cancel()
 
         store = nil
-        for _ in 0 ..< 40 {
-            if weakStore == nil, fake.eventHandlerCount == 0 {
-                break
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
+        // A subscribed-then-cancelled stream must not keep the store alive.
+        try await waitUntil("store deallocation and event handler removal") {
+            weakStore == nil && fake.eventHandlerCount == 0
         }
-        #expect(weakStore == nil, "a subscribed-then-cancelled stream must not keep the store alive")
-        #expect(fake.eventHandlerCount == 0)
     }
 
     @Test func storeDeinitFinishesLiveNoteChangesStreams() async throws {
@@ -248,13 +233,7 @@ extension NoteStoreIntegrationTests {
 
         // The consumer's loop must end rather than await a store that is gone.
         store = nil
-        for _ in 0 ..< 40 {
-            if probe.finished {
-                break
-            }
-            try await Task.sleep(nanoseconds: 50_000_000)
-        }
-        #expect(probe.finished, "deinit must finish live noteChanges() streams")
+        try await waitUntil("deinit to finish live noteChanges() streams") { probe.finished }
         await probe.cancel()
     }
 
