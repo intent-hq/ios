@@ -104,6 +104,43 @@ struct ConversationStoreIntegrationTests {
         #expect(reopenedStore.messages.map(\.id) == ["msg-1"])
     }
 
+    @Test func populatedFetchRecoversAfterAcceptedEmptySnapshot() async throws {
+        let fake = FakeConnectionManager()
+        let store = ConversationStore(connectionManager: fake)
+        fake.responseMap["chat.subscribe"] = ["subscriptionId": "sub-1"]
+        fake.pendingMethods.insert("agent.getConversation")
+
+        await store.subscribeLiveChat(agentId: "agent-1")
+        let fetch = Task {
+            await store.fetchConversation(agentId: "agent-1", workspaceId: "ws-1")
+        }
+        try await fake.waitForPendingRequests("agent.getConversation")
+
+        fake.deliverSubscriptionPush(SubscriptionPush(
+            subscriptionId: "sub-1",
+            kind: .snapshot,
+            seq: 0,
+            snapshot: [],
+            delta: nil
+        ))
+        #expect(store.messages.isEmpty)
+
+        fake.resolvePending("agent.getConversation", with: [
+            "messages": [
+                [
+                    "id": "msg-1",
+                    "role": "user",
+                    "contentBlocks": [["type": "text", "id": "msg-1:0", "text": "Hello"]],
+                    "timestamp": "2026-09-18T00:00:00Z"
+                ]
+            ]
+        ] as [String: Any])
+        await fetch.value
+
+        #expect(store.messages.map(\.id) == ["msg-1"])
+        #expect(!store.isLoading)
+    }
+
     @Test func firstOpenDelayedEmptySnapshotClobbersFetchedConversation() async throws {
         let fake = FakeConnectionManager()
         let store = ConversationStore(connectionManager: fake)

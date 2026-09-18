@@ -1099,7 +1099,7 @@ private extension ConversationTranscriptView {
         case .perform:
             scrollState.initialScrollPerformed = true
             scrollState.initialScrollAwaitingScrollView = false
-            performInitialScroll(proxy: proxy)
+            performInitialScroll(proxy: proxy, generation: generation)
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
@@ -1111,7 +1111,7 @@ private extension ConversationTranscriptView {
 
     /// Without an unread divider the entry scroll is a forced follow, so its
     /// landing is verified from the live geometry like any other.
-    private func performInitialScroll(proxy: ScrollViewProxy) {
+    private func performInitialScroll(proxy: ScrollViewProxy, generation: Int) {
         guard viewModel.newMessagesDividerAnchorId != nil else {
             scrollToBottom(proxy: proxy, forced: true, animated: false)
             return
@@ -1120,11 +1120,10 @@ private extension ConversationTranscriptView {
         // Runs before `hasInitiallyScrolled` flips (probe < settle delay), so
         // no automatic follow can be queued ahead of this decision.
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.dividerProbeDelay) {
-            if NewMessagesDivider.followDisabledAfterEntryScroll(
-                distanceToBottom: scrollMomentumProxy.distanceToBottom
-            ) {
-                userIsScrolledAway = true
-            }
+            scrollState.applyDividerProbe(
+                distanceToBottom: scrollMomentumProxy.distanceToBottom,
+                generation: generation
+            )
         }
     }
 
@@ -1332,6 +1331,15 @@ private extension ConversationTranscriptView {
                 scrollState.lastForcedFollowOutcome = terminal
                 return
             }
+        }
+    }
+}
+
+extension ConversationTranscriptScrollState {
+    func applyDividerProbe(distanceToBottom: CGFloat?, generation: Int) {
+        guard generation == initialScrollGeneration else { return }
+        if NewMessagesDivider.followDisabledAfterEntryScroll(distanceToBottom: distanceToBottom) {
+            userIsScrolledAway = true
         }
     }
 }

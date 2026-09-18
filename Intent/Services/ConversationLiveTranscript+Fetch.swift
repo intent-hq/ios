@@ -70,9 +70,13 @@ extension ConversationLiveTranscript {
     ) {
         switch outcome {
         case .success(let page?):
+            // Preserve populated live state after any later snapshot arrival.
+            // An empty transcript deliberately admits the page despite a
+            // mismatch: without a shared revision, this is the recovery path
+            // for a delayed empty snapshot followed by a populated fetch.
             if snapshotGenerationAtIssue != chatSnapshotGeneration, !messages.isEmpty {
                 AppLog.conversation.debug(
-                    "[ConversationStore] Dropped fetch reply superseded by a newer chat snapshot"
+                    "[ConversationStore] Dropped fetch reply after a later chat snapshot preserved populated state"
                 )
                 return
             }
