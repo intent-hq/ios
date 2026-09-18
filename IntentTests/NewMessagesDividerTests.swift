@@ -82,6 +82,17 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(!state.userIsScrolledAway)
     }
 
+    @Test func matchingGenerationDividerProbeMarksScrolledAway() {
+        let state = ConversationTranscriptScrollState()
+
+        state.applyDividerProbe(
+            distanceToBottom: 100,
+            generation: state.initialScrollGeneration
+        )
+
+        #expect(state.userIsScrolledAway)
+    }
+
     /// Regression (#350): replacing a scrolled-away transcript with a shorter
     /// snapshot can strand UIKit's old offset beyond the new content end.
     @Test func shorterReplacementRechecksForPastEndRePin() {
