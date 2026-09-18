@@ -169,7 +169,6 @@ private extension ConversationTranscriptView {
             return
         case .rePinIfPastEnd:
             scheduleRePinIfRestingPastEnd(proxy: proxy)
-            return
         case .runEntryScroll:
             if !viewModel.isLoading {
                 runInitialScrollIfNeeded(proxy: proxy)
