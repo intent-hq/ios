@@ -72,6 +72,40 @@ struct AgentSessionTests {
         #expect(agent?.attentionRequestReason == nil)
         #expect(agent?.attentionRequestTimestamp == nil)
         #expect(agent?.hasPendingAttentionRequest == false)
+        #expect(agent?.notificationsMuted == false)
+    }
+
+    // MARK: - notificationsMuted (PROTOCOL §5.5)
+
+    @Test func parseNotificationsMutedTopLevel() {
+        // Served top-level on every AgentLite / AgentSession projection.
+        let dict: [String: Any] = ["id": "agent-m1", "name": "Muted", "notificationsMuted": true]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
+    }
+
+    @Test func parseNotificationsMutedFromMetadata() {
+        let dict: [String: Any] = [
+            "id": "agent-m2",
+            "name": "Muted",
+            "metadata": ["notificationsMuted": true] as [String: Any]
+        ]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == true)
+    }
+
+    @Test func parseNotificationsMutedExplicitFalse() {
+        let dict: [String: Any] = ["id": "agent-m3", "name": "Loud", "notificationsMuted": false]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == false)
+    }
+
+    @Test func parseNotificationsMutedIgnoresNonBoolean() {
+        let dict: [String: Any] = ["id": "agent-m4", "name": "Odd", "notificationsMuted": "true"]
+        #expect(AgentSession.parseAgent(dict)?.notificationsMuted == false)
+    }
+
+    @Test func applyingPreviewKeepsNotificationsMuted() {
+        let dict: [String: Any] = ["id": "agent-m5", "name": "Muted", "notificationsMuted": true]
+        let agent = AgentSession.parseAgent(dict)
+        #expect(agent?.applyingPreview(lastAgentResponse: "Hi", digest: nil).notificationsMuted == true)
     }
 
     // MARK: - attention-request fields (PROTOCOL §5.5)

@@ -357,6 +357,43 @@ struct AgentStoreTests {
 
         #expect(store.hasLoaded == false)
     }
+
+    // MARK: - Notification mute round-trip (agent.update)
+
+    @Test func setNotificationsMutedSendsUpdateAndAppliesResultRow() async throws {
+        let (fake, store) = await makeLoadedStore()
+        #expect(store.agents.first?.notificationsMuted == false)
+        fake.responseMap["agent.update"] = [
+            "success": true,
+            "agent": ["id": "agent-1", "name": "Agent 1", "notificationsMuted": true] as [String: Any]
+        ]
+
+        try await store.setNotificationsMuted(agentId: "agent-1", workspaceId: "ws-1", muted: true)
+
+        let params = fake.paramsForMethod("agent.update")
+        #expect(params.count == 1)
+        #expect(params.first?["agentId"] as? String == "agent-1")
+        #expect(params.first?["workspaceId"] as? String == "ws-1")
+        let changes = params.first?["changes"] as? [String: Any]
+        #expect(changes?.count == 1)
+        #expect(changes?["notificationsMuted"] as? Bool == true)
+        #expect(store.agents.map(\.id) == ["agent-1"])
+        #expect(store.agents.first?.notificationsMuted == true)
+    }
+
+    @Test func setNotificationsMutedFailurePropagatesAndLeavesRowUntouched() async {
+        let (fake, store) = await makeLoadedStore()
+        fake.errorMap["agent.update"] = NSError(
+            domain: "JSONRPC",
+            code: -1,
+            userInfo: [NSLocalizedDescriptionKey: "agent.update: `notificationsMuted` must be a boolean"]
+        )
+
+        await #expect(throws: (any Error).self) {
+            try await store.setNotificationsMuted(agentId: "agent-1", workspaceId: "ws-1", muted: true)
+        }
+        #expect(store.agents.first?.notificationsMuted == false)
+    }
 }
 
 // MARK: - Event allowlist (streaming firehose must not refetch the list)
