@@ -156,6 +156,28 @@ private extension ConversationTranscriptView {
     }
 
     private func handleMessageCountChange(from oldCount: Int, to newCount: Int, proxy: ScrollViewProxy) {
+        switch ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: oldCount,
+            to: newCount,
+            hasInitiallyScrolled: hasInitiallyScrolled
+        ) {
+        case .rearmEntryScroll:
+            cancelPastEndRePin()
+            cancelDeferredContainerRePin()
+            cancelBottomBandRePin()
+            scrollState.rearmAfterTranscriptEmptied()
+            return
+        case .rePinIfPastEnd:
+            scheduleRePinIfRestingPastEnd(proxy: proxy)
+            return
+        case .runEntryScroll:
+            if !viewModel.isLoading {
+                runInitialScrollIfNeeded(proxy: proxy)
+            }
+            return
+        case .none:
+            break
+        }
         let appendedUserMessage = newCount > oldCount
             && viewModel.filteredMessages.last?.role == .user
         if appendedUserMessage {
@@ -1013,8 +1035,13 @@ private extension ConversationTranscriptView {
     private func runInitialScrollIfNeeded(proxy: ScrollViewProxy) {
         guard !initialScrollScheduled else { return }
         initialScrollScheduled = true
+        let generation = scrollState.initialScrollGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
-            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+            performInitialScrollWhenReady(
+                proxy: proxy,
+                scrollViewWaitElapsed: false,
+                generation: generation
+            )
         }
     }
 
@@ -1023,6 +1050,7 @@ private extension ConversationTranscriptView {
     /// LazyVStack's first layout pass, so the resolved path gets the same
     /// `initialScrollDelay` the loading triggers get before it scrolls.
     private func handleScrollViewResolved(proxy: ScrollViewProxy) {
+        let generation = scrollState.initialScrollGeneration
         guard scrollState.initialScrollAwaitingScrollView else {
             // Defensive: onAppear / isLoading already schedule the entry
             // scroll, so this only matters if the edge ever precedes both.
@@ -1032,7 +1060,11 @@ private extension ConversationTranscriptView {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Constants.Conversation.Transcript.initialScrollDelay) {
-            performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: false)
+            performInitialScrollWhenReady(
+                proxy: proxy,
+                scrollViewWaitElapsed: false,
+                generation: generation
+            )
         }
     }
 
@@ -1041,7 +1073,12 @@ private extension ConversationTranscriptView {
     /// during the push transition) the scroll waits for the finder's edge —
     /// bounded by `initialScrollHostingTimeout` so a finder that never
     /// resolves still scrolls. Performs at most once across all paths.
-    private func performInitialScrollWhenReady(proxy: ScrollViewProxy, scrollViewWaitElapsed: Bool) {
+    private func performInitialScrollWhenReady(
+        proxy: ScrollViewProxy,
+        scrollViewWaitElapsed: Bool,
+        generation: Int
+    ) {
+        guard generation == scrollState.initialScrollGeneration else { return }
         switch ConversationTranscriptScrollPolicy.initialScrollStep(
             alreadyPerformed: scrollState.initialScrollPerformed,
             scrollViewResolved: scrollMomentumProxy.hasResolvedScrollView,
@@ -1054,7 +1091,11 @@ private extension ConversationTranscriptView {
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollHostingTimeout
             ) {
-                performInitialScrollWhenReady(proxy: proxy, scrollViewWaitElapsed: true)
+                performInitialScrollWhenReady(
+                    proxy: proxy,
+                    scrollViewWaitElapsed: true,
+                    generation: generation
+                )
             }
         case .perform:
             scrollState.initialScrollPerformed = true
@@ -1063,6 +1104,7 @@ private extension ConversationTranscriptView {
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Constants.Conversation.Transcript.initialScrollSettleDelay
             ) {
+                guard generation == scrollState.initialScrollGeneration else { return }
                 hasInitiallyScrolled = true
             }
         }

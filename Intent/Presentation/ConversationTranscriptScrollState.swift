@@ -45,6 +45,9 @@ final class ConversationTranscriptScrollState {
     /// True while the scheduled entry scroll waits for the finder to resolve.
     var initialScrollAwaitingScrollView = false
     var initialScrollPerformed = false
+    /// Invalidates delayed entry-scroll callbacks when an emptied transcript
+    /// re-arms entry scrolling for the next snapshot.
+    @ObservationIgnored private(set) var initialScrollGeneration = 0
     /// Mirrors a forced follow owning the viewport (`lifecycle.owner`): raised
     /// by the Go to End tap ahead of its request and by a forced follow
     /// starting, cleared when that follow drains or is cancelled.
@@ -83,6 +86,17 @@ final class ConversationTranscriptScrollState {
     /// Set once the trigger has fired so a re-run of the poll does not
     /// withdraw the row again.
     @ObservationIgnored var demoEndDerealizationTriggered = false
+
+    func rearmAfterTranscriptEmptied() {
+        initialScrollGeneration += 1
+        userIsScrolledAway = false
+        hasInitiallyScrolled = false
+        initialScrollScheduled = false
+        initialScrollAwaitingScrollView = false
+        initialScrollPerformed = false
+        forcedFollowTakenOverByGesture = false
+        goToEndRequested = false
+    }
 
     struct DemoEndDerealization: Equatable {
         let mode: DemoFixtures.EndDerealizationMode

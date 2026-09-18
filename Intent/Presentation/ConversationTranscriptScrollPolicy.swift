@@ -12,6 +12,29 @@ enum ConversationTranscriptScrollPolicy {
         case waitForScrollView
     }
 
+    enum MessageCountChangeDecision: Equatable {
+        case none
+        case rearmEntryScroll
+        case rePinIfPastEnd
+        case runEntryScroll
+    }
+
+    /// A wholesale transcript update needs different handling from an append.
+    /// Empty content clears the viewport state and re-arms entry scrolling; the
+    /// next non-empty snapshot runs that entry scroll. A shorter replacement can
+    /// leave UIKit's offset past its new end, so it enters the existing #350
+    /// resting past-end recovery path.
+    static func messageCountChangeDecision(
+        from oldCount: Int,
+        to newCount: Int,
+        hasInitiallyScrolled: Bool
+    ) -> MessageCountChangeDecision {
+        if newCount == 0 { return .rearmEntryScroll }
+        if newCount < oldCount { return .rePinIfPastEnd }
+        if oldCount == 0, !hasInitiallyScrolled { return .runEntryScroll }
+        return .none
+    }
+
     /// Sequencing of the entry scroll against the finder. A `scrollTo` issued
     /// before the transcript's UIScrollView is hosted is lost, so the scroll
     /// waits for the finder to resolve; once the bounded wait elapses it runs

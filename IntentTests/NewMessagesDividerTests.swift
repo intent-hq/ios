@@ -41,6 +41,47 @@ struct ConversationTranscriptScrollPolicyTests {
         #expect(initialStep(alreadyPerformed: true) == .skip)
     }
 
+    /// A live replacement can empty a transcript after its entry scroll and
+    /// while Go to End is showing. The empty state clears that flag and every
+    /// entry latch; its next non-empty snapshot enters through a fresh scroll.
+    @Test func emptyReplacementRearmsEntryScrollForTheNextSnapshot() {
+        let state = ConversationTranscriptScrollState()
+        state.userIsScrolledAway = true
+        state.hasInitiallyScrolled = true
+        state.initialScrollScheduled = true
+        state.initialScrollAwaitingScrollView = true
+        state.initialScrollPerformed = true
+        let generation = state.initialScrollGeneration
+
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 12,
+            to: 0,
+            hasInitiallyScrolled: true
+        ) == .rearmEntryScroll)
+        state.rearmAfterTranscriptEmptied()
+        #expect(!state.userIsScrolledAway)
+        #expect(!state.hasInitiallyScrolled)
+        #expect(!state.initialScrollScheduled)
+        #expect(!state.initialScrollAwaitingScrollView)
+        #expect(!state.initialScrollPerformed)
+        #expect(state.initialScrollGeneration == generation + 1)
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 0,
+            to: 8,
+            hasInitiallyScrolled: state.hasInitiallyScrolled
+        ) == .runEntryScroll)
+    }
+
+    /// Regression (#350): replacing a scrolled-away transcript with a shorter
+    /// snapshot can strand UIKit's old offset beyond the new content end.
+    @Test func shorterReplacementRechecksForPastEndRePin() {
+        #expect(ConversationTranscriptScrollPolicy.messageCountChangeDecision(
+            from: 40,
+            to: 10,
+            hasInitiallyScrolled: true
+        ) == .rePinIfPastEnd)
+    }
+
     /// The hosting wait must outlast the entry timer it replaces, and the
     /// divider probe must run before `hasInitiallyScrolled` flips so no
     /// automatic follow can be queued ahead of its decision.
