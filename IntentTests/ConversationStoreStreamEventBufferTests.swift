@@ -2,6 +2,10 @@ import Foundation
 @testable import Intent
 import Testing
 
+private let countBurstSize = 600
+private let largePayloadBytes = 1 << 20
+private let largePayloadBurstSize = 3
+
 private struct LoadingStore {
     let store: ConversationStore
     let fake: FakeConnectionManager
@@ -14,10 +18,6 @@ private struct LoadingStore {
 private protocol StreamEventBufferSuite {}
 
 extension StreamEventBufferSuite {
-    static var countBurstSize: Int { 600 }
-    static var largePayloadBytes: Int { 1 << 20 }
-    static var largePayloadBurstSize: Int { 3 }
-
     func makeLoadingStore(chatLive: Bool = false) async throws -> LoadingStore {
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.getConversation")
@@ -84,7 +84,7 @@ extension StreamEventBufferSuite {
     }
 
     func overflowBuffer(_ store: ConversationStore) {
-        for index in 1...Self.countBurstSize {
+        for index in 1...countBurstSize {
             pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
         }
         #expect(store.streamEventBufferOverflowed)
@@ -157,9 +157,9 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
         let store = loading.store
         let fake = loading.fake
         let fetch = loading.fetch
-        for index in 1...Self.countBurstSize { pushUserMessage(store, id: "m\(index)") }
+        for index in 1...countBurstSize { pushUserMessage(store, id: "m\(index)") }
         #expect(
-            store.streamEventBuffer.count < Self.countBurstSize,
+            store.streamEventBuffer.count < countBurstSize,
             "retention while loading must be bounded, not proportional to the burst"
         )
 
@@ -177,12 +177,12 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
         let store = loading.store
         let fake = loading.fake
         let fetch = loading.fetch
-        let payload = String(repeating: "x", count: Self.largePayloadBytes)
-        for index in 1...Self.largePayloadBurstSize {
+        let payload = String(repeating: "x", count: largePayloadBytes)
+        for index in 1...largePayloadBurstSize {
             pushUserMessage(store, id: "m\(index)", content: payload)
         }
         #expect(
-            store.streamEventBuffer.count < Self.largePayloadBurstSize,
+            store.streamEventBuffer.count < largePayloadBurstSize,
             "a few oversized events must trip the byte budget"
         )
 
@@ -240,7 +240,7 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
 /// streaming state is the final authoritative step, and work scheduled under
 /// a binding that `reset()` replaced never runs.
 @MainActor
-struct ConversationStoreStreamEventRecoveryTests: StreamEventBufferSuite {
+struct ConversationStoreStreamRecoveryTests: StreamEventBufferSuite {
     /// The recovery refetch lands on a populated transcript, where
     /// `mergeFetchedMessages` deletes rows absent from the page. A user message
     /// that arrives while that older page is pending must survive it.
