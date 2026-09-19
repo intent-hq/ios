@@ -12,9 +12,13 @@ struct ConversationStoreStreamEventBufferTests {
     private static let largePayloadBytes = 1 << 20
     private static let largePayloadBurstSize = 3
 
-    private func makeLoadingStore(
-        chatLive: Bool = false
-    ) async throws -> (ConversationStore, FakeConnectionManager, Task<Void, Never>) {
+    private struct LoadingStore {
+        let store: ConversationStore
+        let fake: FakeConnectionManager
+        let fetch: Task<Void, Never>
+    }
+
+    private func makeLoadingStore(chatLive: Bool = false) async throws -> LoadingStore {
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.getConversation")
         fake.responseMap["agent.get"] = ["agent": ["id": "a", "isStreaming": false] as [String: Any]]
@@ -23,7 +27,7 @@ struct ConversationStoreStreamEventBufferTests {
         let fetch = Task { await store.fetchConversation(agentId: "a", workspaceId: "w") }
         try await fake.waitForPendingRequests("agent.getConversation")
         #expect(store.isLoading)
-        return (store, fake, fetch)
+        return LoadingStore(store: store, fake: fake, fetch: fetch)
     }
 
     /// `chatLive` only flips once a seq-0 snapshot is applied (PROTOCOL §7.1);
@@ -78,7 +82,10 @@ struct ConversationStoreStreamEventBufferTests {
     // MARK: - Under budget
 
     @Test func burstUnderBudgetReplaysInOrder() async throws {
-        let (store, fake, fetch) = try await makeLoadingStore()
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        let fetch = loading.fetch
         let ids = (1...8).map { "m\($0)" }
         pushStreamEvent(store, type: "agent:stream:start", extra: ["streamId": "s1"])
         for id in ids { pushUserMessage(store, id: id) }
@@ -99,7 +106,10 @@ struct ConversationStoreStreamEventBufferTests {
     // MARK: - Over budget
 
     @Test func burstOverCountBudgetIsBoundedAndReconcilesFromTheDaemon() async throws {
-        let (store, fake, fetch) = try await makeLoadingStore()
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        let fetch = loading.fetch
         for index in 1...Self.countBurstSize { pushUserMessage(store, id: "m\(index)") }
         #expect(
             store.streamEventBuffer.count < Self.countBurstSize,
@@ -116,7 +126,10 @@ struct ConversationStoreStreamEventBufferTests {
     }
 
     @Test func burstOverByteBudgetIsBoundedAndReconcilesFromTheDaemon() async throws {
-        let (store, fake, fetch) = try await makeLoadingStore()
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        let fetch = loading.fetch
         let payload = String(repeating: "x", count: Self.largePayloadBytes)
         for index in 1...Self.largePayloadBurstSize {
             pushUserMessage(store, id: "m\(index)", content: payload)
@@ -134,8 +147,35 @@ struct ConversationStoreStreamEventBufferTests {
         try await waitUntil("the recovery refetch to land") { store.messages.map(\.id) == ["r1"] }
     }
 
+    @Test func overflowStateIsClearedByReset() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        let fetch = loading.fetch
+        store.streamEventBufferBudget = StreamEventBufferBudget(maxEvents: 2, maxBytes: .max)
+        pushUserMessage(store, id: "m1")
+        pushUserMessage(store, id: "m2")
+        #expect(store.streamEventBuffer.count == 2)
+        #expect(store.streamEventBufferBytes > 0)
+        #expect(!store.streamEventBufferOverflowed)
+
+        pushUserMessage(store, id: "m3")
+        #expect(store.streamEventBufferOverflowed, "the third event trips a two-event budget")
+        #expect(store.streamEventBuffer.isEmpty, "an overflowed buffer retains nothing")
+        #expect(store.streamEventBufferBytes == 0)
+
+        store.reset()
+        #expect(!store.streamEventBufferOverflowed)
+        #expect(store.streamEventBufferBytes == 0)
+        fake.failPending("agent.getConversation", with: CancellationError())
+        await fetch.value
+    }
+
     @Test func overflowWithLiveChatChannelReconcilesStateWithoutRefetch() async throws {
-        let (store, fake, fetch) = try await makeLoadingStore(chatLive: true)
+        let loading = try await makeLoadingStore(chatLive: true)
+        let store = loading.store
+        let fake = loading.fake
+        let fetch = loading.fetch
         for index in 1...Self.countBurstSize {
             pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
         }

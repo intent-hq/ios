@@ -11,6 +11,15 @@ import SwiftUI
         .milliseconds(initialMarkedRetryDelayMilliseconds),
         .milliseconds(finalMarkedRetryDelayMilliseconds)
     ]
+    private static let defaultStreamEventBufferMaxEvents = 512
+    private static let defaultStreamEventBufferMaxBytes = 2 * 1024 * 1024 // swiftlint:disable:this no_magic_numbers
+    /// Aggregate retention ceiling for `streamEventBuffer` while the initial
+    /// `agent.getConversation` is in flight (ios#380). Exceeding either bound
+    /// marks the buffered replay lossy — see `replayBufferedStreamEvents`.
+    static let defaultStreamEventBufferBudget = StreamEventBufferBudget(
+        maxEvents: defaultStreamEventBufferMaxEvents,
+        maxBytes: defaultStreamEventBufferMaxBytes
+    )
 
     var messages: [ConversationMessage] {
         get { liveTranscript.messages }
@@ -85,6 +94,12 @@ import SwiftUI
     var isSubscribing = false
     @ObservationIgnored var eventHandlerId: UUID?
     var streamEventBuffer: [(eventType: String, data: [String: Any])] = []
+    @ObservationIgnored var streamEventBufferBudget = ConversationStore.defaultStreamEventBufferBudget
+    @ObservationIgnored var streamEventBufferBytes = 0
+    /// Set when a burst exceeded `streamEventBufferBudget` during the load
+    /// window: the retained events are no longer a complete record, so the
+    /// replay reconciles from the daemon instead of applying them.
+    @ObservationIgnored var streamEventBufferOverflowed = false
     @ObservationIgnored var sessionMetadataGeneration = 0
     @ObservationIgnored var pendingQuestionRecoveryTask: Task<Void, Never>?
     @ObservationIgnored var markedQuestionRetryDelays: [Duration] =
@@ -121,6 +136,11 @@ import SwiftUI
             connectionManager.removeEventHandler(id: handlerId)
         }
     }
+}
+
+struct StreamEventBufferBudget: Equatable {
+    let maxEvents: Int
+    let maxBytes: Int
 }
 
 struct PendingQuestionRecovery {
