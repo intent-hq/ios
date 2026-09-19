@@ -22,11 +22,13 @@ struct PrivacyManifestDriftTests {
     /// line comment — leftmost match wins, so `//` inside a string stays a
     /// string and a quote inside a comment stays a comment.
     private static let commentOrStringLiteral = #""""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|/\*[\s\S]*?\*/|//[^\n]*"#
+    /// `\(` in an ordinary literal, `\#(` / `\##(` … in a raw one.
+    private static let interpolationStart = #"\\#*\("#
 
     /// `source` with every comment and string literal replaced by a space,
     /// leaving only the tokens the compiler treats as code. A string literal
-    /// containing `\(` is retained unchanged so a call made inside an
-    /// interpolation still counts.
+    /// containing an interpolation is retained unchanged so a call made
+    /// inside it still counts.
     private func codeOnly(_ source: String) throws -> String {
         let regex = try NSRegularExpression(pattern: Self.commentOrStringLiteral)
         var code = ""
@@ -35,7 +37,8 @@ struct PrivacyManifestDriftTests {
             let range = try #require(Range(match.range, in: source), "lexeme range does not map into the source")
             code += source[cursor..<range.lowerBound]
             let lexeme = source[range]
-            if lexeme.hasPrefix("\""), lexeme.contains("\\(") {
+            if lexeme.hasPrefix("\""),
+               lexeme.range(of: Self.interpolationStart, options: .regularExpression) != nil {
                 code += lexeme
             } else {
                 code += " "
@@ -152,7 +155,7 @@ struct PrivacyManifestDriftTests {
             try productionFilesContaining(Self.systemBootTimeAPI, under: fixture)
                 == [
                     "Intent/Nested/Uptime.swift", "Intent/Mach.swift", "Intent/StringThenCall.swift",
-                    "Intent/Interpolation.swift"
+                    "Intent/Interpolation.swift", "Intent/RawInterpolation.swift"
                 ]
         )
         #expect(
@@ -183,6 +186,11 @@ struct PrivacyManifestDriftTests {
         """,
         "Intent/StringThenCall.swift": "let label = \"systemUptime\" // note\nlet now = ProcessInfo.processInfo.systemUptime\n",
         "Intent/Interpolation.swift": "let label = \"uptime: \\(ProcessInfo.processInfo.systemUptime)\"\n",
+        "Intent/RawInterpolation.swift": """
+        let raw = #"uptime: \\#(ProcessInfo.processInfo.systemUptime)"#
+        let rawRaw = ##"uptime: \\##(ProcessInfo.processInfo.systemUptime)"##
+
+        """,
         "Intent/Notes.txt": "systemUptime\n",
         "IntentTests/UptimeTests.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
         manifestPath: """
