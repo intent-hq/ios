@@ -185,6 +185,25 @@ jobs:
       # invocation share one concrete device.
       - name: Pick simulator device
         run: echo "SIM_UDID=$(scripts/xcodebuild.sh pick-simulator)" >> "$GITHUB_ENV"
+      # SCRATCH (ios#385 evidence run, not for merge): force Simulator.app's
+      # "Connect Hardware Keyboard" ON for the picked device so no software
+      # keyboard is raised when the composer is focused.
+      - name: "[scratch ios#385] attach hardware keyboard"
+        run: |
+          pkill -x Simulator || true
+          sleep 2
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool true
+          defaults write com.apple.iphonesimulator DevicePreferences -dict-add "$SIM_UDID" \
+            '<dict><key>ConnectHardwareKeyboard</key><true/></dict>'
+          echo "--- com.apple.iphonesimulator defaults:"
+          defaults read com.apple.iphonesimulator || true
+          open -a Simulator --args -CurrentDeviceUDID "$SIM_UDID"
+          sleep 20
+          echo "--- Simulator.app pid: $(pgrep -x Simulator || echo none)"
+          xcrun simctl bootstatus "$SIM_UDID" -b || true
+          echo "--- device:"
+          xcrun simctl list devices | grep -F "$SIM_UDID" || true
+
 
       # Kick off the simulator boot early so it overlaps with package
       # resolution and compilation instead of delaying the test step.
