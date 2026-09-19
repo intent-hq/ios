@@ -291,6 +291,51 @@ struct ConversationStoreStreamEventBufferTests {
         #expect(!store.isLoading)
     }
 
+    /// A recovery refetch that fails (or is cancelled) without a reset must
+    /// still close the held window: `isLoading` lowers, the transcript keeps
+    /// its rows, and events buffered meanwhile are applied rather than lost.
+    @Test func recoveryRefetchFailureClosesTheHeldWindowAndReplays() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
+
+        fake.pendingMethods.insert("agent.getConversation")
+        store.streamEventBufferOverflowed = true
+        store.replayBufferedStreamEvents()
+        #expect(store.isLoading)
+        pushUserMessage(store, id: "m-gap")
+
+        try await fake.waitForPendingRequests("agent.getConversation")
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.failPending("agent.getConversation", with: CancellationError())
+
+        try await waitUntil("the failed recovery to close its window") { !store.isLoading }
+        #expect(store.liveTranscript.heldLoadWindows == 0)
+        #expect(store.messages.map(\.id) == ["r1", "m-gap"])
+        #expect(store.streamEventBuffer.isEmpty)
+        #expect(store.agentId == "a")
+    }
+
+    /// The page refetch runs as a child task that hops to the main actor on
+    /// its own; a reset landing between the recovery task's guard and that
+    /// hop must stop the child before it rebinds the old agent.
+    @Test func recoveryPageEntryDoesNotRebindAfterReset() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
+        let generation = store.liveTranscript.bindingGeneration
+
+        store.reset()
+        await store.fetchRecoveryPage(agentId: "a", generation: generation)
+
+        #expect(store.agentId == nil)
+        #expect(store.liveTranscript.agentId == nil)
+        #expect(fake.paramsForMethod("agent.getConversation").count == 1)
+        #expect(!store.isLoading)
+    }
+
     /// Overflow can drop the `agent:stream:end`; when the initial page still
     /// shows the turn in progress but the daemon reports idle and the recovery
     /// page is complete, recovery must settle `isStreaming` back to false.
