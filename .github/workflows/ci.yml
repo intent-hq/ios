@@ -71,6 +71,12 @@ jobs:
       - name: swiftlint.sh self-tests
         run: scripts/test-swiftlint.sh
 
+      # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
+      # against a fixture git repo (missing, stale, unsorted, pruned entries);
+      # pure bash + git.
+      - name: check-swiftlint-inputs.sh self-tests
+        run: scripts/test-check-swiftlint-inputs.sh
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
@@ -82,6 +88,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # The Xcode lint phase only warns and skips diagnostics when
+      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked Swift
+      # sources; this strict check keeps that drift merge-blocking (ios#384).
+      - name: Check SwiftLint Xcode input list
+        run: scripts/check-swiftlint-inputs.sh
 
       # Same Xcode selection logic as the iOS job below: SwiftLint uses
       # SourceKit from the selected toolchain, so lint with the toolchain the
