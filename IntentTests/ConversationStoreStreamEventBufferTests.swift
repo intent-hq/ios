@@ -354,6 +354,33 @@ struct ConversationStoreStreamEventBufferTests {
         try await expectNever("streaming to be raised again without a live event") { store.isStreaming }
     }
 
+    /// The recovery page and the daemon's state reply must not race: a page
+    /// whose last assistant row is still marked streaming cannot be allowed to
+    /// override the authoritative idle answer, so the state reconcile is the
+    /// final step of recovery.
+    @Test func recoveryStateSettlesAfterAStaleStreamingPage() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        await settleInitialFetch(fake, loading.fetch, page: [assistantRow(id: "as1", streaming: true)])
+        #expect(store.isStreaming)
+
+        fake.pendingMethods.insert("agent.getConversation")
+        store.streamEventBufferOverflowed = true
+        store.replayBufferedStreamEvents()
+        try await fake.waitForPendingRequests("agent.getConversation")
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.resolvePending(
+            "agent.getConversation",
+            with: ["messages": [assistantRow(id: "as1", streaming: true)]] as [String: Any]
+        )
+
+        try await waitUntil("the daemon's idle reply to settle streaming after the stale page") { !store.isStreaming }
+        try await waitUntil("recovery to close its window") { !store.isLoading }
+        #expect(fake.paramsForMethod("agent.get").count == 1)
+        try await expectNever("streaming to be raised again without a live event") { store.isStreaming }
+    }
+
     /// A stale `agent.get` reply must not undo what the authoritative live
     /// channel applied while it was in flight — in either direction.
     @Test func recoveryStateFetchYieldsToNewerLiveChannelActivity() async throws {
