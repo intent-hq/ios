@@ -68,16 +68,7 @@ extension ConversationStore {
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
                 guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
-                let liveStateMoved = liveStateVersion.map { $0 != liveTranscript.liveStateVersion } ?? false
-                if liveStateMoved {
-                    AppLog.conversation.debug(
-                        "[ConversationStore] Live channel advanced during agent.get; keeping its streaming state"
-                    )
-                } else if raiseOnly {
-                    if state.isStreaming { isStreaming = true }
-                } else {
-                    isStreaming = state.isStreaming
-                }
+                applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: liveStateVersion)
                 attentionRequest = state.attentionRequest
                 guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
@@ -94,6 +85,20 @@ extension ConversationStore {
                 raiseAgentNotFoundIfDefinitive(error)
             }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
+        }
+    }
+
+    private func applyFetchedStreamingState(_ streaming: Bool, raiseOnly: Bool, issuedAt liveStateVersion: Int?) {
+        if let liveStateVersion, liveStateVersion != liveTranscript.liveStateVersion {
+            AppLog.conversation.debug(
+                "[ConversationStore] Live channel advanced during agent.get; keeping its streaming state"
+            )
+            return
+        }
+        if raiseOnly {
+            if streaming { isStreaming = true }
+        } else {
+            isStreaming = streaming
         }
     }
 

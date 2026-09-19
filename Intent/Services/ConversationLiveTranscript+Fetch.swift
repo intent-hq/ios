@@ -84,31 +84,35 @@ extension ConversationLiveTranscript {
         }
     }
 
-    /// Keeps `isLoading` raised across `work` on a populated transcript so the
-    /// owner buffers events that arrive meanwhile and replays them on top of
-    /// the fetched page — otherwise an older page landing after a newer live
-    /// row would delete it in `mergeFetchedMessages`. An empty transcript
-    /// already opens that window through `fetchConversation`.
-    func holdingLoadWindow(_ work: () async -> Void) async {
-        guard !messages.isEmpty else {
-            await work()
-            return
-        }
+    /// Opens a load window synchronously and keeps `isLoading` raised until
+    /// `work` (run on a scheduled task) settles, so the owner buffers events
+    /// that arrive meanwhile and replays them on top of the fetched page —
+    /// otherwise an older page landing after a newer live row would delete it
+    /// in `mergeFetchedMessages`. Opening before the task is scheduled matters:
+    /// the caller runs from `onInitialLoadCompleted`, and a window opened only
+    /// once the task ran would leave a gap after that load lowers `isLoading`.
+    func holdingLoadWindow(_ work: @escaping @MainActor () async -> Void) {
         let generation = bindingGeneration
-        isLoading = true
+        heldLoadWindows += 1
         inFlightInitialLoads += 1
-        await work()
-        finishInitialLoad(ifNeeded: true, outcomeWasCurrent: generation == bindingGeneration)
+        isLoading = true
+        Task {
+            await work()
+            heldLoadWindows -= 1
+            finishInitialLoad(ifNeeded: true, outcomeWasCurrent: generation == bindingGeneration)
+        }
     }
 
     private func finishInitialLoad(ifNeeded isInitialLoad: Bool, outcomeWasCurrent: Bool) {
         guard isInitialLoad else { return }
         inFlightInitialLoads -= 1
         // A stale initial fetch must not finish the new binding's own load.
-        if outcomeWasCurrent || inFlightInitialLoads == 0 {
-            onInitialLoadCompleted?()
-            isLoading = false
-        }
+        guard outcomeWasCurrent || inFlightInitialLoads == 0 else { return }
+        // A held window finishes the load when it closes.
+        guard heldLoadWindows == 0 else { return }
+        onInitialLoadCompleted?()
+        // The replay may have opened a held window of its own.
+        if heldLoadWindows == 0 { isLoading = false }
     }
 
     private func reportFetchError(_ error: Error) {
