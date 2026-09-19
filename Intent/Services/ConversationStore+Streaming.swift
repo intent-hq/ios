@@ -46,10 +46,12 @@ extension ConversationStore {
     /// load window held from this call (not from when its task runs) so events
     /// arriving meanwhile are buffered and replayed on top of the page rather
     /// than deleted by it. The streaming-state reply is authoritative — a
-    /// dropped `agent:stream:end` must be able to settle a stale `true` — but
-    /// yields to anything the live channel applied while it was in flight, and
-    /// work scheduled under a binding that `reset()` or an agent switch has
-    /// since replaced never runs.
+    /// dropped `agent:stream:end` must be able to settle a stale `true` — so it
+    /// is fetched after the page has landed (a page whose last assistant row is
+    /// still marked streaming would otherwise re-raise the flag over an idle
+    /// answer that arrived first); it still yields to anything the live channel
+    /// applied while it was in flight, and work scheduled under a binding that
+    /// `reset()` or an agent switch has since replaced never runs.
     private func recoverFromLossyStreamEventBuffer() {
         guard let agentId else { return }
         AppLog.conversation.warning(
@@ -66,17 +68,16 @@ extension ConversationStore {
             return
         }
         liveTranscript.holdingLoadWindow { [self] in
+            await fetchRecoveryPage(agentId: agentId, generation: generation)
             guard generation == liveTranscript.bindingGeneration else { return }
-            async let state: Void = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
-            async let page: Void = fetchRecoveryPage(agentId: agentId, generation: generation)
-            _ = await (state, page)
+            await fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
         }
     }
 
-    /// Entry point of the recovery page child task. It hops to the main actor
-    /// on its own, so a `reset()` can land after the scheduling task's guard
-    /// and before this runs; re-checking here, in the same hop as the rebind
-    /// inside `fetchConversation`, keeps a replaced binding from coming back.
+    /// Entry point of the recovery page refetch: the generation is re-checked
+    /// in the same main-actor hop as the rebind inside `fetchConversation`, so
+    /// a `reset()` that landed after recovery was scheduled cannot bring the
+    /// replaced binding back.
     func fetchRecoveryPage(agentId: String, generation: Int) async {
         guard generation == liveTranscript.bindingGeneration else { return }
         await fetchConversation(agentId: agentId)
