@@ -60,6 +60,36 @@ struct ConversationStoreStreamEventBufferTests {
         ])
     }
 
+    /// Block-level chat delta (PROTOCOL §7.1) carrying one assistant block.
+    private func pushAssistantDelta(
+        _ store: ConversationStore,
+        seq: Int,
+        messageId: String,
+        text: String,
+        streamingComplete: Bool = false
+    ) {
+        var entity: [String: Any] = [
+            "agentId": "a",
+            "messageId": messageId,
+            "role": "assistant",
+            "block": ["type": "text", "id": "\(messageId):0", "text": text] as [String: Any]
+        ]
+        if streamingComplete { entity["streamingComplete"] = true }
+        store.handleStreamEvent("subscription.push", params: [
+            "subscriptionId": "sub-chat-123",
+            "kind": "delta",
+            "seq": seq,
+            "delta": ["added": [entity], "updated": [] as [[String: Any]], "removedIds": [] as [String]]
+        ] as [String: Any])
+    }
+
+    private func overflowBuffer(_ store: ConversationStore) {
+        for index in 1...Self.countBurstSize {
+            pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
+        }
+        #expect(store.streamEventBufferOverflowed)
+    }
+
     private func userRow(id: String) -> [String: Any] {
         [
             "id": id,
@@ -176,10 +206,8 @@ struct ConversationStoreStreamEventBufferTests {
         let store = loading.store
         let fake = loading.fake
         let fetch = loading.fetch
-        for index in 1...Self.countBurstSize {
-            pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
-        }
-        #expect(store.streamEventBuffer.count < Self.countBurstSize)
+        overflowBuffer(store)
+        #expect(store.streamEventBuffer.isEmpty)
 
         await settleInitialFetch(fake, fetch)
 
@@ -187,5 +215,100 @@ struct ConversationStoreStreamEventBufferTests {
         try await expectNever("a transcript refetch while the live channel is authoritative") {
             fake.paramsForMethod("agent.getConversation").count > 1
         }
+    }
+
+    // MARK: - Recovery window
+
+    /// The recovery refetch lands on a populated transcript, where
+    /// `mergeFetchedMessages` deletes rows absent from the page. A user message
+    /// that arrives while that older page is pending must survive it.
+    @Test func recoveryRefetchPreservesMessagesArrivingWhileItIsPending() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        overflowBuffer(store)
+
+        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
+        await loading.fetch.value
+        #expect(store.messages.map(\.id) == ["r1"])
+
+        try await fake.waitForPendingRequests("agent.getConversation")
+        #expect(fake.paramsForMethod("agent.getConversation").count == 2, "overflow scheduled the recovery")
+        #expect(store.isLoading, "the recovery refetch holds the load window open")
+
+        pushUserMessage(store, id: "m-new")
+        #expect(store.streamEventBuffer.count == 1, "events during recovery are buffered, not applied")
+        #expect(store.messages.map(\.id) == ["r1"])
+
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
+
+        try await waitUntil("the buffered message to replay on top of the recovery page") {
+            store.messages.map(\.id) == ["r1", "m-new"]
+        }
+        #expect(!store.isLoading)
+        #expect(store.streamEventBuffer.isEmpty)
+    }
+
+    /// A stale `agent.get` reply must not undo what the authoritative live
+    /// channel applied while it was in flight — in either direction.
+    @Test func recoveryStateFetchYieldsToNewerLiveChannelActivity() async throws {
+        let loading = try await makeLoadingStore(chatLive: true)
+        let store = loading.store
+        let fake = loading.fake
+        fake.pendingMethods.insert("agent.get")
+        overflowBuffer(store)
+        await settleInitialFetch(fake, loading.fetch)
+        try await fake.waitForPendingRequests("agent.get")
+
+        pushAssistantDelta(store, seq: 1, messageId: "as1", text: "Partial")
+        #expect(store.isStreaming)
+        pushAssistantDelta(store, seq: 2, messageId: "as1", text: "Partial + final.", streamingComplete: true)
+        #expect(!store.isStreaming)
+
+        fake.resolvePending("agent.get", with: [
+            "agent": ["id": "a", "isStreaming": true, "metadata": ["lastSeenMessageId": "seen-1"]] as [String: Any]
+        ] as [String: Any])
+        try await waitUntil("the stale state reply to be processed") { store.lastSeenMessageId == "seen-1" }
+        #expect(!store.isStreaming, "a stale streaming=true reply must not override the terminal delta")
+
+        // Inverse order: an idle reply landing after a newer delta raised streaming.
+        store.streamEventBufferOverflowed = true
+        store.replayBufferedStreamEvents()
+        try await fake.waitForPendingRequests("agent.get")
+        pushAssistantDelta(store, seq: 3, messageId: "as2", text: "Again")
+        #expect(store.isStreaming)
+        fake.resolvePending("agent.get", with: [
+            "agent": ["id": "a", "isStreaming": false, "metadata": ["lastSeenMessageId": "seen-2"]] as [String: Any]
+        ] as [String: Any])
+        try await waitUntil("the stale idle reply to be processed") { store.lastSeenMessageId == "seen-2" }
+        #expect(store.isStreaming, "a stale idle reply must not lower streaming the live channel raised")
+    }
+
+    /// Recovery scheduled by the replay must not run against a binding that
+    /// `reset()` replaced before it started: no requests for the old agent and
+    /// no rebind of the reset store.
+    @Test func resetBeforeScheduledRecoveryStartsInvalidatesIt() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        store.streamEventBufferBudget = StreamEventBufferBudget(maxEvents: 2, maxBytes: .max)
+        for index in 1...3 { pushUserMessage(store, id: "m\(index)") }
+        #expect(store.streamEventBufferOverflowed)
+
+        store.replayBufferedStreamEvents()
+        store.reset()
+        #expect(store.agentId == nil)
+
+        fake.failPending("agent.getConversation", with: CancellationError())
+        await loading.fetch.value
+
+        try await expectNever("recovery work for the reset binding") {
+            !fake.paramsForMethod("agent.get").isEmpty
+                || fake.paramsForMethod("agent.getConversation").count > 1
+                || store.agentId != nil
+                || store.liveTranscript.agentId != nil
+        }
+        #expect(!store.isLoading)
     }
 }
