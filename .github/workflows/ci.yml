@@ -307,11 +307,12 @@ jobs:
         run: scripts/xcodebuild.sh test-without-building
 
       # InfoPlistSyncTests, PlatformGuardAllowlistTests,
-      # ObjCCallbackIsolationTests and ExternalLinkTests inspect repository
-      # files at runtime. They must read the copies packaged into
-      # IntentTests.xctest, never the checkout the bundle was compiled in: that
-      # path does not exist on a physical device (intent-hq/ios#320,
-      # intent-hq/ios#364, intent-hq/ios#373). Re-run just
+      # ObjCCallbackIsolationTests, ExternalLinkTests and
+      # PrivacyManifestDriftTests inspect repository files at runtime. They
+      # must read the copies packaged into IntentTests.xctest, never the
+      # checkout the bundle was compiled in: that path does not exist on a
+      # physical device (intent-hq/ios#320, intent-hq/ios#364,
+      # intent-hq/ios#373, intent-hq/ios#381). Re-run just
       # those suites against the same build with the source tree moved aside,
       # so they can only pass by reading the bundled copies. Empty stand-in
       # directories keep the project's synchronized folders resolvable for
@@ -320,7 +321,7 @@ jobs:
       - name: Source-independence check (ios#320)
         env:
           RESULT_BUNDLE: TestResults-source-moved
-          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests
+          ONLY_TESTING: IntentTests/InfoPlistSyncTests IntentTests/PlatformGuardAllowlistTests IntentTests/ObjCCallbackIsolationTests IntentTests/ExternalLinkTests IntentTests/PrivacyManifestDriftTests
         run: |
           moved="$RUNNER_TEMP/source-moved"
           mkdir -p "$moved"
