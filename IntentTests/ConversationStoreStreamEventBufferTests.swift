@@ -99,6 +99,16 @@ struct ConversationStoreStreamEventBufferTests {
         ]
     }
 
+    private func assistantRow(id: String, streaming: Bool) -> [String: Any] {
+        [
+            "id": id,
+            "role": "assistant",
+            "timestamp": "2024-01-01T00:00:01Z",
+            "isStreaming": streaming,
+            "contentBlocks": [["type": "text", "id": "\(id):0", "text": "Working"]]
+        ]
+    }
+
     private func settleInitialFetch(
         _ fake: FakeConnectionManager,
         _ fetch: Task<Void, Never>,
@@ -248,6 +258,55 @@ struct ConversationStoreStreamEventBufferTests {
         }
         #expect(!store.isLoading)
         #expect(store.streamEventBuffer.isEmpty)
+    }
+
+    /// The replay runs while the initial load is still finishing; the recovery
+    /// window must already be open when that finish lowers `isLoading`, or an
+    /// event landing before the scheduled recovery task runs is applied and
+    /// then deleted by the older recovery page.
+    @Test func recoveryHoldsTheLoadWindowBeforeItsTaskStarts() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        await settleInitialFetch(fake, loading.fetch, page: [userRow(id: "r1")])
+        #expect(!store.isLoading)
+        #expect(store.messages.map(\.id) == ["r1"])
+
+        fake.pendingMethods.insert("agent.getConversation")
+        store.streamEventBufferOverflowed = true
+        store.replayBufferedStreamEvents()
+        #expect(store.isLoading, "the window opens synchronously, before the recovery task gets to run")
+
+        pushUserMessage(store, id: "m-gap")
+        #expect(store.streamEventBuffer.count == 1, "an event in the gap is buffered, not applied")
+        #expect(store.messages.map(\.id) == ["r1"])
+
+        try await fake.waitForPendingRequests("agent.getConversation")
+        fake.pendingMethods.remove("agent.getConversation")
+        fake.resolvePending("agent.getConversation", with: ["messages": [userRow(id: "r1")]] as [String: Any])
+
+        try await waitUntil("the gap message to replay on top of the recovery page") {
+            store.messages.map(\.id) == ["r1", "m-gap"]
+        }
+        #expect(!store.isLoading)
+    }
+
+    /// Overflow can drop the `agent:stream:end`; when the initial page still
+    /// shows the turn in progress but the daemon reports idle and the recovery
+    /// page is complete, recovery must settle `isStreaming` back to false.
+    @Test func recoveryClearsStaleStreamingWhenTheDaemonIsIdle() async throws {
+        let loading = try await makeLoadingStore()
+        let store = loading.store
+        let fake = loading.fake
+        overflowBuffer(store)
+
+        fake.responseMap["agent.getConversation"] = ["messages": [assistantRow(id: "as1", streaming: false)]]
+        await settleInitialFetch(fake, loading.fetch, page: [assistantRow(id: "as1", streaming: true)])
+
+        try await waitUntil("the daemon's idle reply to clear the stale streaming flag") { !store.isStreaming }
+        #expect(fake.paramsForMethod("agent.get").count == 1)
+        try await waitUntil("the recovery page to land") { fake.paramsForMethod("agent.getConversation").count == 2 }
+        try await expectNever("streaming to be raised again without a live event") { store.isStreaming }
     }
 
     /// A stale `agent.get` reply must not undo what the authoritative live
