@@ -99,6 +99,18 @@
 # holds the lock and polls once a second. CI runs one job per VM, so the lock
 # is never contended there.
 #
+# Software keyboard: IntentUITests' keyboard-resize test
+# (ConversationTranscriptScrollUITests/testKeyboardOpenKeepsTranscriptAtEnd)
+# needs the simulator to raise the software keyboard when the composer is
+# focused. Simulator.app's "Connect Hardware Keyboard" (I/O > Keyboard) is a
+# per-Mac user preference, not a device or xcodebuild setting, so this script
+# does not touch it; with it on, no software keyboard appears and the test
+# skips naming the setting (intent-hq/ios#385). To detach it without the
+# menu, quit Simulator.app and run
+#   defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+# (a per-device override lives under the DevicePreferences key of the same
+# domain). Hosted CI runners have it off.
+#
 # Exit codes: xcodebuild's own status is passed through (65 = build or test
 # failure) except for these wrapper-specific codes, chosen outside sysexits(3)
 # so they cannot be confused with xcodebuild's:

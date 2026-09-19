@@ -9,11 +9,16 @@ extension ConversationTranscriptScrollUITests {
     /// `Fixture.endRowGap` above the transcript's (moved) bottom edge with
     /// no Go to End, and holds over the quiet window (intent-hq/ios#276:
     /// the viewport intermittently landed at the very top of the long
-    /// transcript). The test first asserts the transcript actually shrank,
-    /// so a simulator with a hardware keyboard attached fails there instead
-    /// of passing without exercising the inset. It settles on the end row
-    /// itself: while the keyboard is up the transcript is shorter than the
-    /// last assistant paragraph plus the rows after it, so the paragraph
+    /// transcript). The test first checks the transcript actually shrank,
+    /// so a run without a software keyboard cannot pass without exercising
+    /// the inset. A simulator with a hardware keyboard attached (Simulator
+    /// > I/O > Keyboard > Connect Hardware Keyboard) raises no software
+    /// keyboard at all: that is the test's prerequisite, not its subject,
+    /// so it skips there — naming the setting — instead of failing the
+    /// suite (intent-hq/ios#385). A software keyboard that is up while the
+    /// transcript kept its height is still a failure. It settles on the end
+    /// row itself: while the keyboard is up the transcript is shorter than
+    /// the last assistant paragraph plus the rows after it, so the paragraph
     /// is clipped at the top while the transcript is at the end.
     ///
     /// Only the keyboard-open half is exercised. Dismissing the keyboard
@@ -23,7 +28,7 @@ extension ConversationTranscriptScrollUITests {
     /// text-interaction view becomes first responder and keeps the
     /// keyboard up.
     @MainActor
-    func testKeyboardOpenKeepsTranscriptAtEnd() {
+    func testKeyboardOpenKeepsTranscriptAtEnd() throws {
         let app = launchDemoApp(hooksRowTriggerFile: hooksRowTriggerFile)
         let opened = openLongConversation(in: app)
         let transcript = opened.transcript
@@ -44,15 +49,27 @@ extension ConversationTranscriptScrollUITests {
 
         composer.tap()
         var bottomWithKeyboard = transcript.frame.maxY
-        XCTAssertTrue(
-            waitUntil(timeout: Fixture.keyboardTimeout) {
-                bottomWithKeyboard = transcript.frame.maxY
-                return bottomWithKeyboard <= bottomBeforeKeyboard - Fixture.keyboardMinimumShrink
-            },
-            "the transcript did not shrink after the composer was focused "
-                + "(bottom edge \(bottomWithKeyboard) vs \(bottomBeforeKeyboard) before) — the software keyboard "
-                + "did not raise; is a hardware keyboard attached to the simulator?"
-        )
+        let shrank = waitUntil(timeout: Fixture.keyboardTimeout) {
+            bottomWithKeyboard = transcript.frame.maxY
+            return bottomWithKeyboard <= bottomBeforeKeyboard - Fixture.keyboardMinimumShrink
+        }
+        if !shrank {
+            let geometry = "(bottom edge \(bottomWithKeyboard) vs \(bottomBeforeKeyboard) before)"
+            try XCTSkipUnless(
+                app.keyboards.firstMatch.exists,
+                "prerequisite not met: no software keyboard appeared within \(Int(Fixture.keyboardTimeout)) s of "
+                    + "focusing the composer and the transcript did not shrink \(geometry). A hardware keyboard is "
+                    + "attached to the simulator: turn off Simulator > I/O > Keyboard > Connect Hardware Keyboard "
+                    + "(`defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false` while "
+                    + "Simulator.app is not running; see scripts/xcodebuild.sh) and re-run"
+            )
+            XCTFail(
+                "the software keyboard is up but the transcript did not shrink by "
+                    + "\(Int(Fixture.keyboardMinimumShrink)) pt within \(Int(Fixture.keyboardTimeout)) s \(geometry) — "
+                    + "keyboard avoidance did not resize the transcript"
+            )
+            return
+        }
         assertRestsAtBottom(
             lastRow: endRow.element,
             named: endRow.name,
