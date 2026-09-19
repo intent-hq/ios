@@ -23,7 +23,7 @@ struct PrivacyManifestDriftTests {
     /// string and a quote inside a comment stays a comment.
     private static let commentOrStringLiteral = #""""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|/\*[\s\S]*?\*/|//[^\n]*"#
     /// `\(` in an ordinary literal, `\#(` / `\##(` … in a raw one.
-    private static let interpolationStart = #"\\#*\("#
+    private static let interpolationStart = ##"\\#*\("##
 
     /// `source` with every comment and string literal replaced by a space,
     /// leaving only the tokens the compiler treats as code. A string literal
