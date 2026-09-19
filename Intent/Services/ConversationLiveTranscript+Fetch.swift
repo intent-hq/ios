@@ -84,6 +84,23 @@ extension ConversationLiveTranscript {
         }
     }
 
+    /// Keeps `isLoading` raised across `work` on a populated transcript so the
+    /// owner buffers events that arrive meanwhile and replays them on top of
+    /// the fetched page — otherwise an older page landing after a newer live
+    /// row would delete it in `mergeFetchedMessages`. An empty transcript
+    /// already opens that window through `fetchConversation`.
+    func holdingLoadWindow(_ work: () async -> Void) async {
+        guard !messages.isEmpty else {
+            await work()
+            return
+        }
+        let generation = bindingGeneration
+        isLoading = true
+        inFlightInitialLoads += 1
+        await work()
+        finishInitialLoad(ifNeeded: true, outcomeWasCurrent: generation == bindingGeneration)
+    }
+
     private func finishInitialLoad(ifNeeded isInitialLoad: Bool, outcomeWasCurrent: Bool) {
         guard isInitialLoad else { return }
         inFlightInitialLoads -= 1

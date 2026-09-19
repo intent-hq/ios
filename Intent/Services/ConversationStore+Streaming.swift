@@ -42,16 +42,40 @@ extension ConversationStore {
     /// The retained events stopped being a complete record of the load window,
     /// so nothing is replayed: the daemon's `agent.get` settles streaming state
     /// and, without a live chat channel to lean on, a full transcript refetch
-    /// recovers whatever the dropped events carried.
+    /// recovers whatever the dropped events carried. The refetch runs inside a
+    /// held load window so events arriving meanwhile are buffered and replayed
+    /// on top of the page rather than deleted by it; the streaming-state reply
+    /// yields to anything the live channel applied while it was in flight, and
+    /// work scheduled under a binding that `reset()` or an agent switch has
+    /// since replaced never runs.
     private func recoverFromLossyStreamEventBuffer() {
         guard let agentId else { return }
         AppLog.conversation.warning(
             "[ConversationStore] stream-event buffer overflowed during initial load "
                 + "for agent \(agentId) — reconciling from the daemon"
         )
-        Task { await fetchAgentStreamingState(agentId: agentId) }
-        if liveTranscript.shouldRefetchAfterLegacyStreamEnd {
-            Task { await fetchConversation(agentId: agentId) }
+        let generation = liveTranscript.bindingGeneration
+        let liveStateVersion = liveTranscript.liveStateVersion
+        let refetchTranscript = liveTranscript.shouldRefetchAfterLegacyStreamEnd
+        Task {
+            guard generation == liveTranscript.bindingGeneration else { return }
+            if refetchTranscript {
+                await liveTranscript.holdingLoadWindow {
+                    async let state: Void = fetchAgentStreamingState(
+                        agentId: agentId,
+                        raiseOnly: true,
+                        liveStateVersion: liveStateVersion
+                    )
+                    async let page: Void = fetchConversation(agentId: agentId)
+                    _ = await (state, page)
+                }
+            } else {
+                await fetchAgentStreamingState(
+                    agentId: agentId,
+                    raiseOnly: true,
+                    liveStateVersion: liveStateVersion
+                )
+            }
         }
     }
 
