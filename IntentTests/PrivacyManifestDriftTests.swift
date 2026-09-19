@@ -11,7 +11,8 @@ import Testing
 /// Intent/ packaged into the test bundle (see TestSourceInputs), not the
 /// checkout; IntentTests/ is not scanned because test code does not ship.
 /// Comments and string literals are blanked before matching so a mention of
-/// an API in prose cannot stand in for a call.
+/// an API in prose cannot stand in for a call; a literal that interpolates an
+/// expression is kept whole, because the expression is code.
 struct PrivacyManifestDriftTests {
     private static let manifestPath = "Intent/PrivacyInfo.xcprivacy"
     private static let systemBootTimeCategory = "NSPrivacyAccessedAPICategorySystemBootTime"
@@ -23,13 +24,26 @@ struct PrivacyManifestDriftTests {
     private static let commentOrStringLiteral = #""""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|/\*[\s\S]*?\*/|//[^\n]*"#
 
     /// `source` with every comment and string literal replaced by a space,
-    /// leaving only the tokens the compiler treats as code.
-    private func codeOnly(_ source: String) -> String {
-        source.replacingOccurrences(
-            of: Self.commentOrStringLiteral,
-            with: " ",
-            options: .regularExpression
-        )
+    /// leaving only the tokens the compiler treats as code. A string literal
+    /// containing `\(` is retained unchanged so a call made inside an
+    /// interpolation still counts.
+    private func codeOnly(_ source: String) throws -> String {
+        let regex = try NSRegularExpression(pattern: Self.commentOrStringLiteral)
+        var code = ""
+        var cursor = source.startIndex
+        for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+            let range = try #require(Range(match.range, in: source), "lexeme range does not map into the source")
+            code += source[cursor..<range.lowerBound]
+            let lexeme = source[range]
+            if lexeme.hasPrefix("\""), lexeme.contains("\\(") {
+                code += lexeme
+            } else {
+                code += " "
+            }
+            cursor = range.upperBound
+        }
+        code += source[cursor...]
+        return code
     }
 
     /// `NSPrivacyAccessedAPIType` → `NSPrivacyAccessedAPITypeReasons` for
@@ -143,6 +157,7 @@ struct PrivacyManifestDriftTests {
 
             """,
             "Intent/StringThenCall.swift": "let label = \"systemUptime\" // note\nlet now = ProcessInfo.processInfo.systemUptime\n",
+            "Intent/Interpolation.swift": "let label = \"uptime: \\(ProcessInfo.processInfo.systemUptime)\"\n",
             "Intent/Notes.txt": "systemUptime\n",
             "IntentTests/UptimeTests.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
             Self.manifestPath: """
@@ -168,7 +183,10 @@ struct PrivacyManifestDriftTests {
 
         #expect(
             try productionFilesContaining(Self.systemBootTimeAPI, under: fixture)
-                == ["Intent/Nested/Uptime.swift", "Intent/Mach.swift", "Intent/StringThenCall.swift"]
+                == [
+                    "Intent/Nested/Uptime.swift", "Intent/Mach.swift", "Intent/StringThenCall.swift",
+                    "Intent/Interpolation.swift"
+                ]
         )
         #expect(
             try accessedAPIReasons(in: fixture.appendingPathComponent(Self.manifestPath)) == [
