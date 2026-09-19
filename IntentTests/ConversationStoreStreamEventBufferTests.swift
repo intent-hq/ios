@@ -2,23 +2,23 @@ import Foundation
 @testable import Intent
 import Testing
 
-/// Retention bound on `streamEventBuffer` while the initial
-/// `agent.getConversation` is in flight (ios#380): a burst under budget
-/// replays in order; a burst over budget is not retained and the store
-/// reconciles from the daemon instead of replaying a lossy buffer.
+private struct LoadingStore {
+    let store: ConversationStore
+    let fake: FakeConnectionManager
+    let fetch: Task<Void, Never>
+}
+
+/// Shared fixture of the stream-event buffer suites below: a store parked in
+/// its initial `agent.getConversation`, plus event and page builders.
 @MainActor
-struct ConversationStoreStreamEventBufferTests {
-    private static let countBurstSize = 600
-    private static let largePayloadBytes = 1 << 20
-    private static let largePayloadBurstSize = 3
+private protocol StreamEventBufferSuite {}
 
-    private struct LoadingStore {
-        let store: ConversationStore
-        let fake: FakeConnectionManager
-        let fetch: Task<Void, Never>
-    }
+extension StreamEventBufferSuite {
+    static var countBurstSize: Int { 600 }
+    static var largePayloadBytes: Int { 1 << 20 }
+    static var largePayloadBurstSize: Int { 3 }
 
-    private func makeLoadingStore(chatLive: Bool = false) async throws -> LoadingStore {
+    func makeLoadingStore(chatLive: Bool = false) async throws -> LoadingStore {
         let fake = FakeConnectionManager()
         fake.pendingMethods.insert("agent.getConversation")
         fake.responseMap["agent.get"] = ["agent": ["id": "a", "isStreaming": false] as [String: Any]]
@@ -32,7 +32,7 @@ struct ConversationStoreStreamEventBufferTests {
 
     /// `chatLive` only flips once a seq-0 snapshot is applied (PROTOCOL §7.1);
     /// activating the channel alone leaves the store on the legacy path.
-    private func seedLiveChatChannel(_ store: ConversationStore) {
+    func seedLiveChatChannel(_ store: ConversationStore) {
         store.setTestChatChannel(subscriptionId: "sub-chat-123")
         store.handleStreamEvent("subscription.push", params: [
             "subscriptionId": "sub-chat-123",
@@ -43,7 +43,7 @@ struct ConversationStoreStreamEventBufferTests {
         #expect(!store.liveTranscript.shouldRefetchAfterLegacyStreamEnd)
     }
 
-    private func pushUserMessage(_ store: ConversationStore, id: String, content: String = "hi") {
+    func pushUserMessage(_ store: ConversationStore, id: String, content: String = "hi") {
         store.handleStreamEvent("events.event", params: [
             "event": [
                 "type": "agent:user-message:sent",
@@ -52,7 +52,7 @@ struct ConversationStoreStreamEventBufferTests {
         ])
     }
 
-    private func pushStreamEvent(_ store: ConversationStore, type: String, extra: [String: Any] = [:]) {
+    func pushStreamEvent(_ store: ConversationStore, type: String, extra: [String: Any] = [:]) {
         var data: [String: Any] = ["agentId": "a"]
         for (key, value) in extra { data[key] = value }
         store.handleStreamEvent("events.event", params: [
@@ -61,7 +61,7 @@ struct ConversationStoreStreamEventBufferTests {
     }
 
     /// Block-level chat delta (PROTOCOL §7.1) carrying one assistant block.
-    private func pushAssistantDelta(
+    func pushAssistantDelta(
         _ store: ConversationStore,
         seq: Int,
         messageId: String,
@@ -83,14 +83,14 @@ struct ConversationStoreStreamEventBufferTests {
         ] as [String: Any])
     }
 
-    private func overflowBuffer(_ store: ConversationStore) {
+    func overflowBuffer(_ store: ConversationStore) {
         for index in 1...Self.countBurstSize {
             pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
         }
         #expect(store.streamEventBufferOverflowed)
     }
 
-    private func userRow(id: String) -> [String: Any] {
+    func userRow(id: String) -> [String: Any] {
         [
             "id": id,
             "role": "user",
@@ -99,7 +99,7 @@ struct ConversationStoreStreamEventBufferTests {
         ]
     }
 
-    private func assistantRow(id: String, streaming: Bool) -> [String: Any] {
+    func assistantRow(id: String, streaming: Bool) -> [String: Any] {
         [
             "id": id,
             "role": "assistant",
@@ -109,7 +109,7 @@ struct ConversationStoreStreamEventBufferTests {
         ]
     }
 
-    private func settleInitialFetch(
+    func settleInitialFetch(
         _ fake: FakeConnectionManager,
         _ fetch: Task<Void, Never>,
         page: [[String: Any]] = []
@@ -118,7 +118,14 @@ struct ConversationStoreStreamEventBufferTests {
         fake.resolvePending("agent.getConversation", with: ["messages": page] as [String: Any])
         await fetch.value
     }
+}
 
+/// Retention bound on `streamEventBuffer` while the initial
+/// `agent.getConversation` is in flight (ios#380): a burst under budget
+/// replays in order; a burst over budget is not retained and the store
+/// reconciles from the daemon instead of replaying a lossy buffer.
+@MainActor
+struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
     // MARK: - Under budget
 
     @Test func burstUnderBudgetReplaysInOrder() async throws {
@@ -226,9 +233,14 @@ struct ConversationStoreStreamEventBufferTests {
             fake.paramsForMethod("agent.getConversation").count > 1
         }
     }
+}
 
-    // MARK: - Recovery window
-
+/// Lossy-buffer recovery (ios#380): the refetch runs inside a held load
+/// window so events arriving meanwhile survive the older page, the daemon's
+/// streaming state is the final authoritative step, and work scheduled under
+/// a binding that `reset()` replaced never runs.
+@MainActor
+struct ConversationStoreStreamEventRecoveryTests: StreamEventBufferSuite {
     /// The recovery refetch lands on a populated transcript, where
     /// `mergeFetchedMessages` deletes rows absent from the page. A user message
     /// that arrives while that older page is pending must survive it.
