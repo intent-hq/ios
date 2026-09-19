@@ -68,9 +68,18 @@ extension ConversationStore {
         liveTranscript.holdingLoadWindow { [self] in
             guard generation == liveTranscript.bindingGeneration else { return }
             async let state: Void = fetchAgentStreamingState(agentId: agentId, liveStateVersion: liveStateVersion)
-            async let page: Void = fetchConversation(agentId: agentId)
+            async let page: Void = fetchRecoveryPage(agentId: agentId, generation: generation)
             _ = await (state, page)
         }
+    }
+
+    /// Entry point of the recovery page child task. It hops to the main actor
+    /// on its own, so a `reset()` can land after the scheduling task's guard
+    /// and before this runs; re-checking here, in the same hop as the rebind
+    /// inside `fetchConversation`, keeps a replaced binding from coming back.
+    func fetchRecoveryPage(agentId: String, generation: Int) async {
+        guard generation == liveTranscript.bindingGeneration else { return }
+        await fetchConversation(agentId: agentId)
     }
 
     func clearStreamEventBuffer() {
