@@ -2,9 +2,9 @@ import Foundation
 @testable import Intent
 import Testing
 
-private let countBurstSize = 600
-private let largePayloadBytes = 1 << 20
-private let largePayloadBurstSize = 3
+private let kCountBurstSize = 600
+private let kLargePayloadBytes = 1 << 20
+private let kLargePayloadBurstSize = 3
 
 private struct LoadingStore {
     let store: ConversationStore
@@ -84,7 +84,7 @@ extension StreamEventBufferSuite {
     }
 
     func overflowBuffer(_ store: ConversationStore) {
-        for index in 1...countBurstSize {
+        for index in 1...kCountBurstSize {
             pushStreamEvent(store, type: "agent:queue:processing", extra: ["messageId": "q\(index)"])
         }
         #expect(store.streamEventBufferOverflowed)
@@ -157,9 +157,9 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
         let store = loading.store
         let fake = loading.fake
         let fetch = loading.fetch
-        for index in 1...countBurstSize { pushUserMessage(store, id: "m\(index)") }
+        for index in 1...kCountBurstSize { pushUserMessage(store, id: "m\(index)") }
         #expect(
-            store.streamEventBuffer.count < countBurstSize,
+            store.streamEventBuffer.count < kCountBurstSize,
             "retention while loading must be bounded, not proportional to the burst"
         )
 
@@ -177,12 +177,12 @@ struct ConversationStoreStreamEventBufferTests: StreamEventBufferSuite {
         let store = loading.store
         let fake = loading.fake
         let fetch = loading.fetch
-        let payload = String(repeating: "x", count: largePayloadBytes)
-        for index in 1...largePayloadBurstSize {
+        let payload = String(repeating: "x", count: kLargePayloadBytes)
+        for index in 1...kLargePayloadBurstSize {
             pushUserMessage(store, id: "m\(index)", content: payload)
         }
         #expect(
-            store.streamEventBuffer.count < largePayloadBurstSize,
+            store.streamEventBuffer.count < kLargePayloadBurstSize,
             "a few oversized events must trip the byte budget"
         )
 
