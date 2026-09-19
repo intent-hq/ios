@@ -410,7 +410,9 @@ $(SRCROOT)/IntentTests/WorkspaceSubtitleResolverTests.swift
 $(SRCROOT)/IntentTests/WorkspaceSyntheticBadgeHostTests.swift
 $(SRCROOT)/IntentUITests/AppStoreScreenshotTests.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollTestSupport.swift
+$(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Keyboard.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests+Recovery.swift
 $(SRCROOT)/IntentUITests/ConversationTranscriptScrollUITests.swift
 $(SRCROOT)/IntentUITests/SnapshotHelper.swift
+$(SRCROOT)/IntentUITests/WorkspaceEntryUITests.swift
 $(SRCROOT)/IntentUITests/WorkspaceStatusImageUITests.swift

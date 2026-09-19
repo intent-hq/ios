@@ -83,6 +83,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The Xcode lint phase only warns and skips diagnostics when
+      # scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked Swift
+      # sources; this strict check keeps that drift merge-blocking (ios#384).
+      - name: Check SwiftLint Xcode input list
+        run: scripts/check-swiftlint-inputs.sh
+
       # Same Xcode selection logic as the iOS job below: SwiftLint uses
       # SourceKit from the selected toolchain, so lint with the toolchain the
       # build compiles with.
