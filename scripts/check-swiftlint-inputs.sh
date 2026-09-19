@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Fails when scripts/swiftlint-xcode-inputs.xcfilelist drifts from the tracked
-# Swift sources under Intent/, IntentTests/ and IntentUITests/. The Xcode lint
-# phase (scripts/swiftlint-xcode.sh) only warns and skips diagnostics on
-# drift, so this strict check runs in CI to keep the list complete.
+# Swift sources under Intent/, IntentTests/ and IntentUITests/ (excluding the
+# same directories scripts/swiftlint-xcode.sh prunes). The Xcode lint phase
+# only warns and skips diagnostics on drift, so this strict check runs in CI to
+# keep the list complete.
 set -euo pipefail
 
 fail() {
@@ -21,7 +22,8 @@ input_file_list="$script_dir/swiftlint-xcode-inputs.xcfilelist"
 expected="$(mktemp "${TMPDIR:-/tmp}/swiftlint-inputs-expected.XXXXXX")"
 trap 'rm -f -- "$expected"' EXIT
 
-git -C "$repo_root" ls-files -z -- 'Intent/*.swift' 'IntentTests/*.swift' 'IntentUITests/*.swift' |
+git -C "$repo_root" ls-files -z -- 'Intent/*.swift' 'IntentTests/*.swift' 'IntentUITests/*.swift' \
+  ':(exclude)Intent/Resources' ':(exclude)Intent/Assets.xcassets' ':(exclude)IntentTests/Fixtures' |
   LC_ALL=C sort -z |
   while IFS= read -r -d '' relative; do
     printf '$(SRCROOT)/%s\n' "$relative"

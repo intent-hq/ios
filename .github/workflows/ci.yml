@@ -71,6 +71,12 @@ jobs:
       - name: swiftlint.sh self-tests
         run: scripts/test-swiftlint.sh
 
+      # Exercises the xcfilelist drift check in scripts/check-swiftlint-inputs.sh
+      # against a fixture git repo (missing, stale, unsorted, pruned entries);
+      # pure bash + git.
+      - name: check-swiftlint-inputs.sh self-tests
+        run: scripts/test-check-swiftlint-inputs.sh
+
   swiftlint:
     name: SwiftLint
     # Runs unconditionally on both triggers so the "Require Go unit tests and
