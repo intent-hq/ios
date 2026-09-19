@@ -58,8 +58,8 @@ extension ConversationTranscriptScrollUITests {
             try XCTSkipUnless(
                 app.keyboards.firstMatch.exists,
                 "prerequisite not met: no software keyboard appeared within \(Int(Fixture.keyboardTimeout)) s of "
-                    + "focusing the composer and the transcript did not shrink \(geometry). A hardware keyboard is "
-                    + "attached to the simulator: turn off Simulator > I/O > Keyboard > Connect Hardware Keyboard "
+                    + "focusing the composer and the transcript did not shrink \(geometry). A hardware keyboard may be "
+                    + "attached to the simulator: check Simulator > I/O > Keyboard > Connect Hardware Keyboard is off "
                     + "(`defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false` while "
                     + "Simulator.app is not running; see scripts/xcodebuild.sh) and re-run"
             )
