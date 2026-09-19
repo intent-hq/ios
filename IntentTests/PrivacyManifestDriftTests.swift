@@ -139,40 +139,7 @@ struct PrivacyManifestDriftTests {
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("PrivacyManifestDrift-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: fixture) }
-        let files = [
-            "Intent/Nested/Uptime.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
-            "Intent/Mach.swift": "let ticks = mach_absolute_time()\n",
-            "Intent/Clean.swift": "let now = ContinuousClock.now\nlet media = CACurrentMediaTime()\n",
-            "Intent/Prefix.swift": "let notTheAPI = systemUptimeSnapshot\n",
-            "Intent/Prose.swift": """
-            // systemUptime used to be read here (ios#381).
-            /* mach_absolute_time() is
-               the other boot-time API */
-            let label = "systemUptime"
-            let url = "https://example.com/systemUptime // not a comment"
-            let doc = \"\"\"
-                mach_absolute_time()
-                \"\"\"
-            let now = ContinuousClock.now
-
-            """,
-            "Intent/StringThenCall.swift": "let label = \"systemUptime\" // note\nlet now = ProcessInfo.processInfo.systemUptime\n",
-            "Intent/Interpolation.swift": "let label = \"uptime: \\(ProcessInfo.processInfo.systemUptime)\"\n",
-            "Intent/Notes.txt": "systemUptime\n",
-            "IntentTests/UptimeTests.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
-            Self.manifestPath: """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0"><dict>
-            <key>NSPrivacyAccessedAPITypes</key><array>
-            <dict><key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array></dict>
-            <dict><key>NSPrivacyAccessedAPIType</key><string>\(Self.systemBootTimeCategory)</string>
-            <key>NSPrivacyAccessedAPITypeReasons</key><array><string>35F9.1</string><string>8FFB.1</string></array></dict>
-            </array></dict></plist>
-            """
-        ]
-        for (path, contents) in files {
+        for (path, contents) in Self.fixtureFiles {
             let url = fixture.appendingPathComponent(path)
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(),
@@ -195,4 +162,39 @@ struct PrivacyManifestDriftTests {
             ]
         )
     }
+
+    /// Path → contents of the fixture tree the negative case writes and scans.
+    private static let fixtureFiles = [
+        "Intent/Nested/Uptime.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
+        "Intent/Mach.swift": "let ticks = mach_absolute_time()\n",
+        "Intent/Clean.swift": "let now = ContinuousClock.now\nlet media = CACurrentMediaTime()\n",
+        "Intent/Prefix.swift": "let notTheAPI = systemUptimeSnapshot\n",
+        "Intent/Prose.swift": """
+        // systemUptime used to be read here (ios#381).
+        /* mach_absolute_time() is
+           the other boot-time API */
+        let label = "systemUptime"
+        let url = "https://example.com/systemUptime // not a comment"
+        let doc = \"\"\"
+            mach_absolute_time()
+            \"\"\"
+        let now = ContinuousClock.now
+
+        """,
+        "Intent/StringThenCall.swift": "let label = \"systemUptime\" // note\nlet now = ProcessInfo.processInfo.systemUptime\n",
+        "Intent/Interpolation.swift": "let label = \"uptime: \\(ProcessInfo.processInfo.systemUptime)\"\n",
+        "Intent/Notes.txt": "systemUptime\n",
+        "IntentTests/UptimeTests.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
+        manifestPath: """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+        <key>NSPrivacyAccessedAPITypes</key><array>
+        <dict><key>NSPrivacyAccessedAPIType</key><string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key><array><string>CA92.1</string></array></dict>
+        <dict><key>NSPrivacyAccessedAPIType</key><string>\(systemBootTimeCategory)</string>
+        <key>NSPrivacyAccessedAPITypeReasons</key><array><string>35F9.1</string><string>8FFB.1</string></array></dict>
+        </array></dict></plist>
+        """
+    ]
 }
