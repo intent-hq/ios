@@ -10,11 +10,27 @@ import Testing
 /// remaining caller is stale and fails too. The scan reads the copy of
 /// Intent/ packaged into the test bundle (see TestSourceInputs), not the
 /// checkout; IntentTests/ is not scanned because test code does not ship.
+/// Comments and string literals are blanked before matching so a mention of
+/// an API in prose cannot stand in for a call.
 struct PrivacyManifestDriftTests {
     private static let manifestPath = "Intent/PrivacyInfo.xcprivacy"
     private static let systemBootTimeCategory = "NSPrivacyAccessedAPICategorySystemBootTime"
     private static let elapsedTimeReasons = ["35F9.1"]
     private static let systemBootTimeAPI = #"\b(systemUptime|mach_absolute_time)\b"#
+    /// Multi-line string literal, single-line string literal, block comment,
+    /// line comment — leftmost match wins, so `//` inside a string stays a
+    /// string and a quote inside a comment stays a comment.
+    private static let commentOrStringLiteral = #""""[\s\S]*?"""|"(?:\\.|[^"\\\n])*"|/\*[\s\S]*?\*/|//[^\n]*"#
+
+    /// `source` with every comment and string literal replaced by a space,
+    /// leaving only the tokens the compiler treats as code.
+    private func codeOnly(_ source: String) -> String {
+        source.replacingOccurrences(
+            of: Self.commentOrStringLiteral,
+            with: " ",
+            options: .regularExpression
+        )
+    }
 
     /// `NSPrivacyAccessedAPIType` → `NSPrivacyAccessedAPITypeReasons` for
     /// every entry of the manifest's `NSPrivacyAccessedAPITypes` array.
@@ -42,7 +58,7 @@ struct PrivacyManifestDriftTests {
     }
 
     /// Paths relative to `repoRoot` of .swift files under its Intent/ whose
-    /// contents match the regex `pattern`.
+    /// code (comments and string literals excluded) matches the regex `pattern`.
     private func productionFilesContaining(
         _ pattern: String, under repoRoot: URL = TestSourceInputs.root
     ) throws -> Set<String> {
@@ -64,8 +80,8 @@ struct PrivacyManifestDriftTests {
         var matches: Set<String> = []
         for case let url as URL in enumerator {
             guard url.pathExtension == "swift" else { continue }
-            let contents = try String(contentsOf: url, encoding: .utf8)
-            guard contents.range(of: pattern, options: .regularExpression) != nil else { continue }
+            let code = try codeOnly(String(contentsOf: url, encoding: .utf8))
+            guard code.range(of: pattern, options: .regularExpression) != nil else { continue }
             let absolute = url.standardizedFileURL.path
             try #require(absolute.hasPrefix(rootPrefix), "scanned file \(absolute) is not under \(rootPrefix)")
             matches.insert(String(absolute.dropFirst(rootPrefix.count)))
@@ -101,7 +117,8 @@ struct PrivacyManifestDriftTests {
 
     /// Negative case: the scan reports every production Swift caller of either
     /// system-boot-time API and nothing else (no test code, no non-Swift
-    /// files, no other clocks), and the manifest reader returns each declared
+    /// files, no other clocks, no mention in a comment or string literal), and
+    /// the manifest reader returns each declared
     /// category's reasons — so a match above is evidence of the tree's
     /// contents rather than of an empty scan or an unread manifest.
     @Test func scanAndManifestReaderReportFixtureContents() throws {
@@ -113,6 +130,19 @@ struct PrivacyManifestDriftTests {
             "Intent/Mach.swift": "let ticks = mach_absolute_time()\n",
             "Intent/Clean.swift": "let now = ContinuousClock.now\nlet media = CACurrentMediaTime()\n",
             "Intent/Prefix.swift": "let notTheAPI = systemUptimeSnapshot\n",
+            "Intent/Prose.swift": """
+            // systemUptime used to be read here (ios#381).
+            /* mach_absolute_time() is
+               the other boot-time API */
+            let label = "systemUptime"
+            let url = "https://example.com/systemUptime // not a comment"
+            let doc = \"\"\"
+                mach_absolute_time()
+                \"\"\"
+            let now = ContinuousClock.now
+
+            """,
+            "Intent/StringThenCall.swift": "let label = \"systemUptime\" // note\nlet now = ProcessInfo.processInfo.systemUptime\n",
             "Intent/Notes.txt": "systemUptime\n",
             "IntentTests/UptimeTests.swift": "let now = ProcessInfo.processInfo.systemUptime\n",
             Self.manifestPath: """
@@ -138,7 +168,7 @@ struct PrivacyManifestDriftTests {
 
         #expect(
             try productionFilesContaining(Self.systemBootTimeAPI, under: fixture)
-                == ["Intent/Nested/Uptime.swift", "Intent/Mach.swift"]
+                == ["Intent/Nested/Uptime.swift", "Intent/Mach.swift", "Intent/StringThenCall.swift"]
         )
         #expect(
             try accessedAPIReasons(in: fixture.appendingPathComponent(Self.manifestPath)) == [
