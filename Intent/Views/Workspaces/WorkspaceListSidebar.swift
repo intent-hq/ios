@@ -140,6 +140,11 @@ struct WorkspaceListSidebar: View {
         #if !os(visionOS)
         // SwiftUI marks scrollDismissesKeyboard @available(visionOS, unavailable).
         .scrollDismissesKeyboard(.immediately)
+        // With a hardware keyboard attached, iPadOS draws the focused row's
+        // selection as an accent-coloured halo once the row background is
+        // customised (ios#339). The grey listRowBackground already marks the
+        // selection, so suppress the default focus effect for the sidebar rows.
+        .focusEffectDisabled()
         #endif
         .contentMargins(.top, Constants.WorkspaceList.sidebarTopContentMargin)
     }

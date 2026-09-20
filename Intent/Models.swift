@@ -141,6 +141,12 @@ struct WorkspacePullRequest: Codable, Identifiable, Equatable {
 }
 
 struct Workspace: Codable, Identifiable, Equatable {
+    /// Id of the daemon's virtual Chief of Staff workspace. It is never shown
+    /// in the workspace list: `workspace.list` filters it server-side, but a
+    /// `workspace.subscribe` delta from an older daemon can still carry it, so
+    /// the client drops it at every ingress as well.
+    static let chiefWorkspaceId = "__chief__"
+
     let id: String
     let title: String
     let branch: String?

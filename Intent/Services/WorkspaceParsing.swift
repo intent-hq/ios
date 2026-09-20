@@ -23,8 +23,12 @@ extension WorkspaceStore {
         return items.compactMap { parseWorkspace($0) }
     }
 
+    /// Returns nil for rows missing `id`/`title` and for the virtual Chief of
+    /// Staff workspace (`Workspace.chiefWorkspaceId`), so both `workspace.list`
+    /// and the live reconciler's `normalize` drop it.
     static func parseWorkspace(_ dictionary: [String: Any]) -> Workspace? {
         guard let id = dictionary["id"] as? String,
+              id != Workspace.chiefWorkspaceId,
               let title = dictionary["title"] as? String else { return nil }
         let rawAgentSummary = dictionary["agentSummary"] as? [String: Any]
         let agentSummary = rawAgentSummary ?? [:]

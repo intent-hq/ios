@@ -330,6 +330,27 @@ extension SpecialistInfo {
         agents.removeAll { $0.id == agentId }
     }
 
+    /// Sets the daemon-owned per-agent notification mute via
+    /// `agent.update { changes: { notificationsMuted } }` (PROTOCOL §5.5).
+    /// The result's `AgentLite` echoes the new value and is applied to the
+    /// local row immediately; the daemon's `agent:updated` push then
+    /// converges every other client through the ordinary refetch.
+    func setNotificationsMuted(agentId: String, workspaceId: String, muted: Bool) async throws {
+        let result = try await connectionManager.request(
+            "agent.update",
+            params: [
+                "agentId": agentId,
+                "workspaceId": workspaceId,
+                "changes": ["notificationsMuted": muted]
+            ]
+        )
+        guard let dict = result as? [String: Any],
+              let agentDict = dict["agent"] as? [String: Any],
+              let updated = AgentSession.parseAgent(agentDict),
+              let index = agents.firstIndex(where: { $0.id == agentId }) else { return }
+        agents[index] = updated
+    }
+
     private func handleEvent(_: String, params: Any) {
         guard let dict = params as? [String: Any] else { return }
 
