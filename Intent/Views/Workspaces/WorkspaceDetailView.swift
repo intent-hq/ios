@@ -346,6 +346,23 @@ private extension WorkspaceDetailView {
         .buttonStyle(.plain)
         .contentShape(Rectangle())
         .visionListRowHitTarget()
+        .contextMenu {
+            AgentNotificationsMuteButton(agent: agent) { toggleNotificationsMuted(agent) }
+        }
+    }
+
+    private func toggleNotificationsMuted(_ agent: AgentSession) {
+        Task {
+            do {
+                try await agentStore.setNotificationsMuted(
+                    agentId: agent.id,
+                    workspaceId: workspaceId,
+                    muted: !agent.notificationsMuted
+                )
+            } catch {
+                AppLog.workspace.error("[WorkspaceDetail] Notification mute toggle failed: \(error)")
+            }
+        }
     }
 
     private func toggleDelegates(_ agentId: String) {

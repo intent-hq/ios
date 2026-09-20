@@ -53,17 +53,20 @@ extension ConversationStore {
     /// `reset`), while the request was in flight: the reply predates the
     /// change, so applying it would revert the newer marker or leak the
     /// previous agent's markers into the new conversation.
-    func fetchAgentStreamingState(agentId: String, raiseOnly: Bool = false) async {
+    /// With `liveStateVersion`, the streaming flag is also left alone when the
+    /// live chat channel advanced past that version while the request was in
+    /// flight: the channel is authoritative and the reply predates it.
+    func fetchAgentStreamingState(
+        agentId: String,
+        raiseOnly: Bool = false,
+        liveStateVersion: Int? = nil
+    ) async {
         let generation = sessionMetadataGeneration
         let boundAtIssue = self.agentId
         do {
             if let state = try await commands.fetchAgentState(agentId: agentId) {
                 guard isBound(to: agentId, boundAtIssue: boundAtIssue) else { return }
-                if raiseOnly {
-                    if state.isStreaming { isStreaming = true }
-                } else {
-                    isStreaming = state.isStreaming
-                }
+                applyFetchedStreamingState(state.isStreaming, raiseOnly: raiseOnly, issuedAt: liveStateVersion)
                 guard generation == sessionMetadataGeneration else { return }
                 if let pendingId = state.pendingQuestionsMessageId {
                     pendingQuestionsMessageId = pendingId
@@ -79,6 +82,20 @@ extension ConversationStore {
                 raiseAgentNotFoundIfDefinitive(error)
             }
             AppLog.conversation.error("[ConversationStore] Failed to fetch agent streaming state: \(error)")
+        }
+    }
+
+    private func applyFetchedStreamingState(_ streaming: Bool, raiseOnly: Bool, issuedAt liveStateVersion: Int?) {
+        if let liveStateVersion, liveStateVersion != liveTranscript.liveStateVersion {
+            AppLog.conversation.debug(
+                "[ConversationStore] Live channel advanced during agent.get; keeping its streaming state"
+            )
+            return
+        }
+        if raiseOnly {
+            if streaming { isStreaming = true }
+        } else {
+            isStreaming = streaming
         }
     }
 

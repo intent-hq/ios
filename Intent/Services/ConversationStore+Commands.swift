@@ -196,7 +196,7 @@ extension ConversationStore {
         subscriptionId = nil
         currentStreamId = nil
         isSubscribing = false
-        streamEventBuffer.removeAll()
+        clearStreamEventBuffer()
         lastFailedSend = nil
         agentNotFound = false
         clearPendingQuestionRecovery()

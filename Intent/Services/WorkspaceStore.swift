@@ -102,8 +102,9 @@ import Observation
     /// existing row when the id is already present — the live subscription delta
     /// may have added it before the RPC response returned — otherwise inserts at
     /// the top. Also seeds the live reconciler so the row isn't dropped by the
-    /// next delta apply.
+    /// next delta apply. The virtual Chief of Staff workspace is never inserted.
     func addOrUpdate(_ workspace: Workspace) {
+        guard workspace.id != Workspace.chiefWorkspaceId else { return }
         if let index = workspaces.firstIndex(where: { $0.id == workspace.id }) {
             workspaces[index] = workspace
         } else {
@@ -254,8 +255,9 @@ extension WorkspaceStore {
         "attention": .refetch, "autoCommitEnabled": .refetch, "autoUnarchive": .refetch,
         "baseCommitSha": .refetch, "baseRef": .refetch, "branch": .refetch,
         "browserClientId": .refetch, "defaultModel": .refetch, "isRemote": .refetch,
-        "mcpServerToggled": .refetch, "path": .refetch, "prNumber": .refetch,
-        "prStatus": .refetch, "prUrl": .refetch, "pullRequests": .refetch,
+        "mcpServerToggled": .refetch, "members": .refetch, "path": .refetch,
+        "prNumber": .refetch, "prStatus": .refetch, "prUrl": .refetch,
+        "pullRequests": .refetch, "removedPrincipalId": .refetch,
         "repositoryName": .refetch, "repositoryOwner": .refetch,
         "repositoryPath": .refetch, "scope": .refetch, "setupScript": .refetch,
         "skipIsolation": .refetch, "status": .refetch, "statusImageAssetId": .refetch,
